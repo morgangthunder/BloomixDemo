@@ -17,7 +17,53 @@ export const CATEGORIES: Category[] = [
   {
     name: 'Languages',
     lessons: [
-      { id: 9, title: 'Conversational French', description: 'Learn key phrases and cultural nuances to navigate French conversations.', thumbnailUrl: 'https://picsum.photos/400/225?random=9' },
+      { 
+        id: 9, 
+        title: 'Conversational French', 
+        description: 'Learn key phrases and cultural nuances to navigate French conversations.', 
+        thumbnailUrl: 'https://picsum.photos/400/225?random=9',
+        stages: [
+          {
+            id: 101,
+            title: 'Bonjour! Basic Greetings',
+            viewed: true,
+            passed: false,
+            subStages: [
+              { id: 1011, type: 'Engage', title: 'Meet & Greet', content: { type: 'video', url: 'https://example.com/video1.mp4' }, completed: true },
+              { id: 1012, type: 'Explore', title: 'Common Phrases', content: { type: 'interactive' }, completed: true },
+              { id: 1013, type: 'Explain', title: 'Pronunciation Guide', content: { type: 'text', text: 'Detailed guide on French vowels.' }, completed: false },
+              { id: 1014, type: 'Elaborate', title: 'Cultural Context', content: { type: 'text', text: 'When to use "tu" vs. "vous".' }, completed: false },
+              { id: 1015, type: 'Evaluate', title: 'Greeting Challenge', content: { type: 'interactive' }, completed: false },
+            ]
+          },
+          {
+            id: 102,
+            title: 'Au Café: Ordering Coffee',
+            viewed: false,
+            passed: false,
+            subStages: [
+              { id: 1021, type: 'Engage', title: 'At the Cafe', content: { type: 'video', url: 'https://example.com/video2.mp4' }, completed: false },
+              { id: 1022, type: 'Explore', title: 'Menu Vocabulary', content: { type: 'interactive' }, completed: false },
+              { id: 1023, type: 'Explain', title: 'How to Order', content: { type: 'text', text: 'Step-by-step guide to ordering.' }, completed: false },
+              { id: 1024, type: 'Elaborate', title: 'Paying the Bill', content: { type: 'text', text: 'Understanding European tipping culture.' }, completed: false },
+              { id: 1025, type: 'Evaluate', title: 'Roleplay Simulation', content: { type: 'interactive' }, completed: false },
+            ]
+          },
+           {
+            id: 103,
+            title: 'Directions & Getting Around',
+            viewed: false,
+            passed: false,
+            subStages: [
+              { id: 1031, type: 'Engage', title: 'Lost in Paris', content: { type: 'video', url: 'https://example.com/video3.mp4' }, completed: false },
+              { id: 1032, type: 'Explore', title: 'Directional Phrases', content: { type: 'interactive' }, completed: false },
+              { id: 1033, type: 'Explain', title: 'Using a Metro Map', content: { type: 'text', text: 'How to read the Paris Metro map.' }, completed: false },
+              { id: 1034, type: 'Elaborate', title: 'Asking for Help', content: { type: 'text', text: 'Polite ways to interrupt and ask questions.' }, completed: false },
+              { id: 1035, type: 'Evaluate', title: 'Virtual Tourist Challenge', content: { type: 'interactive' }, completed: false },
+            ]
+          }
+        ]
+      },
       { id: 10, title: 'Japanese Hiragana & Katakana', description: 'Master the foundational writing systems of the Japanese language.', thumbnailUrl: 'https://picsum.photos/400/225?random=10' },
       { id: 11, title: 'German Grammar Essentials', description: 'Understand the core grammatical structures of the German language.', thumbnailUrl: 'https://picsum.photos/400/225?random=11' },
       { id: 12, title: 'Mandarin Chinese Tones', description: 'Learn to distinguish and pronounce the four main tones in Mandarin.', thumbnailUrl: 'https://picsum.photos/400/225?random=12' },

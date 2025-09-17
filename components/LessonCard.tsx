@@ -7,14 +7,19 @@ interface LessonCardProps {
   lesson: Lesson;
   onToggleMyList: (lesson: Lesson) => void;
   isInMyList: boolean;
+  onStartLesson: (lesson: Lesson) => void;
   displayMode?: 'carousel' | 'grid';
 }
 
-const LessonCard: React.FC<LessonCardProps> = ({ lesson, onToggleMyList, isInMyList, displayMode = 'carousel' }) => {
+const LessonCard: React.FC<LessonCardProps> = ({ lesson, onToggleMyList, isInMyList, onStartLesson, displayMode = 'carousel' }) => {
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card click when clicking the button
     onToggleMyList(lesson);
   };
+  
+  const handleCardClick = () => {
+    onStartLesson(lesson);
+  }
 
   const modeClasses = {
     carousel: "flex-shrink-0 w-64 h-36 md:w-72 md:h-40 lg:w-80 lg:h-44",
@@ -26,6 +31,7 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, onToggleMyList, isInMyL
   return (
     <div
       className={`${baseClasses} ${modeClasses[displayMode]}`}
+      onClick={handleCardClick}
     >
       <img
         src={lesson.thumbnailUrl}

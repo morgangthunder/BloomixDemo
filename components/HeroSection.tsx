@@ -1,3 +1,4 @@
+
 import React from 'react';
 import type { Lesson } from '../types';
 import { PlayIcon, InfoIcon, PlusIcon, CheckIcon } from './Icon';
@@ -6,9 +7,10 @@ interface HeroSectionProps {
   lesson: Lesson;
   onToggleMyList: (lesson: Lesson) => void;
   isInMyList: boolean;
+  onStartLesson: (lesson: Lesson) => void;
 }
 
-const HeroSection: React.FC<HeroSectionProps> = ({ lesson, onToggleMyList, isInMyList }) => {
+const HeroSection: React.FC<HeroSectionProps> = ({ lesson, onToggleMyList, isInMyList, onStartLesson }) => {
   return (
     <div className="relative h-[56.25vw] min-h-[400px] max-h-[800px] w-full">
       {/* Background Image */}
@@ -31,7 +33,10 @@ const HeroSection: React.FC<HeroSectionProps> = ({ lesson, onToggleMyList, isInM
             {lesson.description}
           </p>
           <div className="mt-6 flex items-center space-x-4">
-            <button className="flex items-center justify-center bg-white text-black font-bold py-2 px-6 rounded hover:bg-opacity-80 transition">
+            <button 
+              onClick={() => onStartLesson(lesson)}
+              className="flex items-center justify-center bg-white text-black font-bold py-2 px-6 rounded hover:bg-opacity-80 transition"
+            >
               <PlayIcon className="h-6 w-6 mr-2" />
               Start Lesson
             </button>

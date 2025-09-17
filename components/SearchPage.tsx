@@ -8,9 +8,10 @@ interface SearchPageProps {
   searchQuery: string;
   onToggleMyList: (lesson: Lesson) => void;
   isInMyList: (lessonId: number) => boolean;
+  onStartLesson: (lesson: Lesson) => void;
 }
 
-const SearchPage: React.FC<SearchPageProps> = ({ lessons, searchQuery, onToggleMyList, isInMyList }) => {
+const SearchPage: React.FC<SearchPageProps> = ({ lessons, searchQuery, onToggleMyList, isInMyList, onStartLesson }) => {
   return (
     <div className="pt-24 min-h-screen container mx-auto px-4 sm:px-6 lg:px-8 pb-16">
       {searchQuery && (
@@ -27,6 +28,7 @@ const SearchPage: React.FC<SearchPageProps> = ({ lessons, searchQuery, onToggleM
               lesson={lesson} 
               onToggleMyList={onToggleMyList} 
               isInMyList={isInMyList(lesson.id)}
+              onStartLesson={onStartLesson}
               displayMode="grid"
             />
           ))}

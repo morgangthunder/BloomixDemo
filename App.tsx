@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import type { Category, Lesson } from './types';
 import { CATEGORIES } from './data/lessons';
@@ -8,6 +9,8 @@ import CategoriesPage from './components/CategoriesPage';
 import MyListPage from './components/MyListPage';
 import SearchPage from './components/SearchPage';
 import LessonBuilderPage from './components/LessonBuilderPage';
+import LessonViewPage from './components/LessonViewPage';
+
 
 const App: React.FC = () => {
   const [categories] = useState<Category[]>(CATEGORIES);
@@ -21,6 +24,8 @@ const App: React.FC = () => {
   });
 
   const [currentPage, setCurrentPage] = useState('home');
+  const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
+
   const [myList, setMyList] = useState<Lesson[]>(() => {
     try {
       const item = window.localStorage.getItem('myList');
@@ -73,6 +78,21 @@ const App: React.FC = () => {
     });
   };
 
+  const handleStartLesson = (lesson: Lesson) => {
+    if (lesson.stages && lesson.stages.length > 0) {
+      setActiveLesson(lesson);
+      setCurrentPage('lessonView');
+    } else {
+      // Maybe show a "coming soon" message for lessons without content
+      alert("This lesson content is not available yet.");
+    }
+  };
+
+  const handleExitLessonView = () => {
+    setActiveLesson(null);
+    setCurrentPage('home');
+  }
+
   const isInMyList = (lessonId: number): boolean => {
     return myList.some(item => item.id === lessonId);
   };
@@ -82,26 +102,29 @@ const App: React.FC = () => {
       categories,
       myList,
       onToggleMyList: handleToggleMyList,
-      isInMyList
+      isInMyList,
+      onStartLesson: handleStartLesson
     };
     
     switch (currentPage) {
+      case 'lessonView':
+         return activeLesson ? <LessonViewPage lesson={activeLesson} onExit={handleExitLessonView} /> : <p>Loading lesson...</p>;
       case 'search':
-        return <SearchPage lessons={searchResults} searchQuery={searchQuery} onToggleMyList={handleToggleMyList} isInMyList={isInMyList} />;
+        return <SearchPage lessons={searchResults} searchQuery={searchQuery} onToggleMyList={handleToggleMyList} isInMyList={isInMyList} onStartLesson={handleStartLesson} />;
       case 'categories':
         return <CategoriesPage {...props} />;
       case 'my-list':
-        return <MyListPage lessons={myList} onToggleMyList={handleToggleMyList} isInMyList={isInMyList} />;
+        return <MyListPage lessons={myList} onToggleMyList={handleToggleMyList} isInMyList={isInMyList} onStartLesson={handleStartLesson}/>;
       case 'lesson-builder':
         return <LessonBuilderPage />;
       case 'home':
       default:
         return (
           <>
-            {featuredLesson && <HeroSection lesson={featuredLesson} onToggleMyList={handleToggleMyList} isInMyList={isInMyList(featuredLesson.id)} />}
+            {featuredLesson && <HeroSection lesson={featuredLesson} onToggleMyList={handleToggleMyList} isInMyList={isInMyList(featuredLesson.id)} onStartLesson={handleStartLesson} />}
             <div className="py-4 md:py-8 lg:py-12 space-y-8 md:space-y-12 lg:space-y-16">
               {categories.map((category) => (
-                <CategoryCarousel key={category.name} category={category} onToggleMyList={handleToggleMyList} isInMyList={isInMyList} />
+                <CategoryCarousel key={category.name} category={category} onToggleMyList={handleToggleMyList} isInMyList={isInMyList} onStartLesson={handleStartLesson} />
               ))}
             </div>
           </>
@@ -111,11 +134,13 @@ const App: React.FC = () => {
 
   return (
     <div className="bg-brand-black min-h-screen text-brand-light-gray font-sans">
-      <Header 
-        setCurrentPage={setCurrentPage} 
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-      />
+      {currentPage !== 'lessonView' && (
+        <Header 
+          setCurrentPage={setCurrentPage} 
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+        />
+      )}
       <main className="overflow-x-hidden">
         {renderPage()}
       </main>

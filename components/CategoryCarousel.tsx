@@ -1,3 +1,4 @@
+
 import React from 'react';
 import type { Category, Lesson } from '../types';
 import LessonCard from './LessonCard';
@@ -6,9 +7,10 @@ interface CategoryCarouselProps {
   category: Category;
   onToggleMyList: (lesson: Lesson) => void;
   isInMyList: (lessonId: number) => boolean;
+  onStartLesson: (lesson: Lesson) => void;
 }
 
-const CategoryCarousel: React.FC<CategoryCarouselProps> = ({ category, onToggleMyList, isInMyList }) => {
+const CategoryCarousel: React.FC<CategoryCarouselProps> = ({ category, onToggleMyList, isInMyList, onStartLesson }) => {
   return (
     <section className="pl-4 sm:pl-8 lg:pl-16">
       <h2 className="text-xl md:text-2xl font-bold text-white mb-4">{category.name}</h2>
@@ -20,6 +22,7 @@ const CategoryCarousel: React.FC<CategoryCarouselProps> = ({ category, onToggleM
               lesson={lesson} 
               onToggleMyList={onToggleMyList} 
               isInMyList={isInMyList(lesson.id)}
+              onStartLesson={onStartLesson}
             />
           ))}
            <div className="flex-shrink-0 w-4 sm:w-8 lg:w-16 h-1"></div>
