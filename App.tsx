@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import type { Category, Lesson } from './types';
 import { CATEGORIES } from './data/lessons';
@@ -10,6 +9,8 @@ import MyListPage from './components/MyListPage';
 import SearchPage from './components/SearchPage';
 import LessonBuilderPage from './components/LessonBuilderPage';
 import LessonViewPage from './components/LessonViewPage';
+import ProfilePage from './components/ProfilePage';
+import LessonBuilderHubPage from './components/LessonBuilderHubPage';
 
 
 const App: React.FC = () => {
@@ -25,6 +26,7 @@ const App: React.FC = () => {
 
   const [currentPage, setCurrentPage] = useState('home');
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
+  const [lessonBuilderSubPage, setLessonBuilderSubPage] = useState<'hub' | 'builder'>('hub');
 
   const [myList, setMyList] = useState<Lesson[]>(() => {
     try {
@@ -92,6 +94,29 @@ const App: React.FC = () => {
     setActiveLesson(null);
     setCurrentPage('home');
   }
+  
+  const handleNavClick = (page: string) => {
+    if (page === 'lesson-builder') {
+      setLessonBuilderSubPage('hub');
+    }
+    setCurrentPage(page);
+  };
+
+  const handleEnterBuilder = () => {
+    setLessonBuilderSubPage('builder');
+  };
+  
+  const handleExitBuilder = () => {
+    setLessonBuilderSubPage('hub');
+  };
+
+  const handleExitBuilderHub = () => {
+    setCurrentPage('home');
+  };
+  
+  const handleExitProfile = () => {
+    setCurrentPage('home');
+  };
 
   const isInMyList = (lessonId: number): boolean => {
     return myList.some(item => item.id === lessonId);
@@ -116,7 +141,12 @@ const App: React.FC = () => {
       case 'my-list':
         return <MyListPage lessons={myList} onToggleMyList={handleToggleMyList} isInMyList={isInMyList} onStartLesson={handleStartLesson}/>;
       case 'lesson-builder':
-        return <LessonBuilderPage />;
+        if (lessonBuilderSubPage === 'hub') {
+          return <LessonBuilderHubPage onExit={handleExitBuilderHub} onEnterBuilder={handleEnterBuilder} />;
+        }
+        return <LessonBuilderPage onExit={handleExitBuilder} />;
+      case 'profile':
+        return <ProfilePage onExit={handleExitProfile} />;
       case 'home':
       default:
         return (
@@ -132,15 +162,24 @@ const App: React.FC = () => {
     }
   };
 
+  const renderHeader = () => {
+    const nonHeaderPages = ['lessonView', 'lesson-builder'];
+    if (nonHeaderPages.includes(currentPage)) {
+      return null;
+    }
+    return (
+      <Header 
+        currentPage={currentPage}
+        onNavClick={handleNavClick}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+      />
+    );
+  }
+
   return (
     <div className="bg-brand-black min-h-screen text-brand-light-gray font-sans">
-      {currentPage !== 'lessonView' && (
-        <Header 
-          setCurrentPage={setCurrentPage} 
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-        />
-      )}
+      {renderHeader()}
       <main className="overflow-x-hidden">
         {renderPage()}
       </main>

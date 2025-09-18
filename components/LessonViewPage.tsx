@@ -1,7 +1,6 @@
-
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import type { Lesson, Stage } from '../types';
-import { HandRaisedIcon, PaperAirplaneIcon, ArrowLeftIcon } from './Icon';
+import { HandRaisedIcon, PaperAirplaneIcon, GripVerticalIcon, ChevronDoubleLeftIcon, ChevronDoubleRightIcon } from './Icon';
 import LessonSidebar from './LessonSidebar';
 
 interface LessonViewPageProps {
@@ -14,6 +13,13 @@ const LessonViewPage: React.FC<LessonViewPageProps> = ({ lesson, onExit }) => {
   
   const [activeStageId, setActiveStageId] = useState<number | null>(lesson.stages?.[0]?.id ?? null);
   const [activeSubStageId, setActiveSubStageId] = useState<number | null>(lesson.stages?.[0]?.subStages?.[0]?.id ?? null);
+
+  // Sidebar resizing and collapsing state
+  const [navWidth, setNavWidth] = useState(384);
+  const navWidthBeforeCollapse = useRef(384);
+  const isResizing = useRef(false);
+  const minNavWidth = 280;
+  const maxNavWidth = 600;
 
   const activeSubStage = useMemo(() => {
     const stage = lessonStages.find(s => s.id === activeStageId);
@@ -39,15 +45,76 @@ const LessonViewPage: React.FC<LessonViewPageProps> = ({ lesson, onExit }) => {
     }));
   };
 
+  const handleMouseDown = (e: React.MouseEvent) => {
+      e.preventDefault();
+      isResizing.current = true;
+  };
+
+  const handleMouseUp = useCallback(() => {
+      isResizing.current = false;
+  }, []);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+      if (isResizing.current) {
+          const newWidth = e.clientX;
+          if (newWidth >= minNavWidth && newWidth <= maxNavWidth) {
+              setNavWidth(newWidth);
+          }
+      }
+  }, [minNavWidth, maxNavWidth]);
+
+  useEffect(() => {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      return () => {
+          window.removeEventListener('mousemove', handleMouseMove);
+          window.removeEventListener('mouseup', handleMouseUp);
+      };
+  }, [handleMouseMove, handleMouseUp]);
+  
+  const toggleNavCollapse = () => {
+    setNavWidth(currentWidth => {
+      if (currentWidth > 0) {
+        navWidthBeforeCollapse.current = currentWidth;
+        return 0;
+      } else {
+        return navWidthBeforeCollapse.current;
+      }
+    });
+  };
+
+  const isNavCollapsed = navWidth === 0;
+
   return (
-    <div className="flex h-screen bg-brand-dark text-white">
-      <LessonSidebar 
-        lessonTitle={lesson.title}
-        stages={lessonStages}
-        activeSubStageId={activeSubStageId}
-        onSelectSubStage={handleSelectSubStage}
-        onExit={onExit}
-      />
+    <div className="flex h-screen bg-brand-dark text-white overflow-hidden">
+      <aside 
+        style={{ width: `${navWidth}px` }}
+        className="h-screen flex-shrink-0 bg-brand-black flex flex-col transition-all duration-300 ease-in-out"
+      >
+        { !isNavCollapsed && (
+          <LessonSidebar 
+            lessonTitle={lesson.title}
+            stages={lessonStages}
+            activeSubStageId={activeSubStageId}
+            onSelectSubStage={handleSelectSubStage}
+            onExit={onExit}
+          />
+        )}
+      </aside>
+
+      <div 
+          onMouseDown={handleMouseDown}
+          className="w-2 h-full bg-gray-900 hover:bg-brand-red cursor-col-resize flex items-center justify-center relative group"
+      >
+          <GripVerticalIcon className="w-5 h-5 text-gray-600" />
+          <button 
+            onClick={toggleNavCollapse}
+            className="absolute z-10 left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 bg-gray-700 hover:bg-brand-red text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+            title={isNavCollapsed ? "Expand" : "Collapse"}
+          >
+            {isNavCollapsed ? <ChevronDoubleRightIcon className="w-4 h-4" /> : <ChevronDoubleLeftIcon className="w-4 h-4" />}
+          </button>
+      </div>
       
       <main className="flex-1 flex flex-col h-screen">
         <div className="flex-1 p-6 md:p-8 lg:p-12 overflow-y-auto">
@@ -85,7 +152,7 @@ const LessonViewPage: React.FC<LessonViewPageProps> = ({ lesson, onExit }) => {
               <input 
                 type="text"
                 placeholder="Ask the AI teacher a question..."
-                className="w-full bg-brand-dark border border-gray-600 rounded-lg py-2 pl-4 pr-12 text-white focus:outline-none focus:ring-2 focus:ring-brand-red"
+                className="w-full bg-brand-dark border border-gray-600 rounded-lg py-2 pl-4 pr-12 text-white placeholder-brand-gray focus:outline-none"
               />
               <button className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-brand-gray hover:text-white transition-colors">
                  <PaperAirplaneIcon className="w-5 h-5" />

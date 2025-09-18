@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import type { Stage } from '../types';
 import { ArrowLeftIcon, ChevronDownIcon, ChevronRightIcon, CheckCircleIcon, EyeIcon } from './Icon';
@@ -63,7 +62,7 @@ const StageItem: React.FC<{
 
 const LessonSidebar: React.FC<LessonSidebarProps> = ({ lessonTitle, stages, activeSubStageId, onSelectSubStage, onExit }) => {
   return (
-    <aside className="w-80 md:w-96 bg-brand-black h-screen flex flex-col p-4 border-r border-gray-700">
+    <aside className="w-full h-full bg-brand-black flex flex-col p-4 border-r border-gray-700">
       <div className="flex-shrink-0 pb-4 border-b border-gray-700">
         <button onClick={onExit} className="flex items-center text-sm text-brand-gray hover:text-white transition-colors mb-3">
             <ArrowLeftIcon className="w-4 h-4 mr-2" />
