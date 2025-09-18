@@ -152,7 +152,7 @@ const LessonViewPage: React.FC<LessonViewPageProps> = ({ lesson, onExit }) => {
               <input 
                 type="text"
                 placeholder="Ask the AI teacher a question..."
-                className="w-full bg-brand-dark border border-gray-600 rounded-lg py-2 pl-4 pr-12 text-white placeholder-brand-gray focus:outline-none"
+                className="w-full bg-brand-dark border border-gray-600 rounded-lg py-2 pl-4 pr-12 text-white placeholder-brand-gray focus:outline-none focus:ring-0"
               />
               <button className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-brand-gray hover:text-white transition-colors">
                  <PaperAirplaneIcon className="w-5 h-5" />

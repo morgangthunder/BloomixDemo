@@ -8,6 +8,9 @@ import ChangeInteractionTypeModal from './ChangeInteractionTypeModal';
 import AddItemModal from './AddItemModal';
 import ConfirmationModal from './ConfirmationModal';
 import { PaperAirplaneIcon, GripVerticalIcon, ChevronDoubleLeftIcon, ChevronDoubleRightIcon } from './Icon';
+import ContentProcessingNav from './ContentProcessingNav';
+import LessonContentBuilder from './LessonContentBuilder';
+
 
 export type SelectedItem = 
   | { type: 'lesson'; id: number }
@@ -24,6 +27,7 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
   const [currentBuilderView, setCurrentBuilderView] = useState<'builder' | 'content'>('builder');
   const [isScriptViewVisible, setIsScriptViewVisible] = useState(false);
   const [isInteractionModalOpen, setIsInteractionModalOpen] = useState(false);
+  const [activeInput, setActiveInput] = useState<string | null>(null);
   
   // Modals state
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
@@ -40,6 +44,7 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
 
   const handleSelectItem = (item: SelectedItem) => {
     setSelectedItem(item);
+    setActiveInput(null); // Clear focused input on new selection
     if(item.type !== 'substage') {
         setIsScriptViewVisible(false);
     }
@@ -142,7 +147,6 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
         return newLesson;
     });
 
-    // Reset selection to parent or lesson
     if (itemToDelete.type === 'substage') {
         setSelectedItem({ type: 'stage', id: itemToDelete.stageId });
     } else {
@@ -153,38 +157,35 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
     setItemToDelete(null);
   };
 
-  const handleReorderSubStage = (stageId: number, draggedId: number, targetId: number) => {
+  // FIX: Updated handleReorderSubStage to accept 3 arguments to match the prop type in child components.
+  // The reordering logic now defaults to inserting 'before' the drop target, which is consistent with the UI feedback.
+  const handleReorderSubStage = (stageId: number, draggedId: number, dropTargetId: number) => {
     setLesson(prevLesson => {
-      const newLesson = { ...prevLesson };
-      const stageIndex = newLesson.stages.findIndex(s => s.id === stageId);
-      if (stageIndex === -1) return prevLesson;
+        const newLesson = { ...prevLesson };
+        const stageIndex = newLesson.stages.findIndex(s => s.id === stageId);
+        if (stageIndex === -1) return prevLesson;
 
-      const stage = { ...newLesson.stages[stageIndex] };
-      const subStages = [...stage.subStages];
+        const stage = { ...newLesson.stages[stageIndex] };
+        const subStages = [...stage.subStages];
 
-      const draggedIndex = subStages.findIndex(ss => ss.id === draggedId);
-      const targetIndex = subStages.findIndex(ss => ss.id === targetId);
+        const draggedIndex = subStages.findIndex(ss => ss.id === draggedId);
+        if (draggedIndex === -1) return prevLesson;
+        
+        const [draggedItem] = subStages.splice(draggedIndex, 1);
+        
+        const dropTargetIndex = subStages.findIndex(ss => ss.id === dropTargetId);
+        if (dropTargetIndex === -1) { // Should not happen if dropping on an item
+            subStages.push(draggedItem);
+        } else {
+            subStages.splice(dropTargetIndex, 0, draggedItem);
+        }
 
-      if (draggedIndex === -1 || targetIndex === -1 || draggedIndex === targetIndex) {
-        return prevLesson;
-      }
-      
-      // Remove the dragged item
-      const [draggedItem] = subStages.splice(draggedIndex, 1);
-      
-      // Determine insertion index based on drag direction
-      const finalTargetIndex = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex;
+        stage.subStages = subStages;
+        newLesson.stages[stageIndex] = stage;
 
-      // Insert it at the new position
-      subStages.splice(finalTargetIndex, 0, draggedItem);
-
-      stage.subStages = subStages;
-      newLesson.stages[stageIndex] = stage;
-
-      return newLesson;
+        return newLesson;
     });
   };
-
 
   const handleMouseDown = (e: React.MouseEvent) => {
       e.preventDefault();
@@ -262,25 +263,32 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
         className="h-screen flex-shrink-0 bg-brand-black flex flex-col transition-all duration-300 ease-in-out"
       >
         { !isNavCollapsed && (
-          isScriptViewVisible ? (
-            <LessonScriptView 
-              subStage={selectedItemData as SubStage}
-              onBack={() => setIsScriptViewVisible(false)}
-            />
-          ) : (
-            <LessonBuilderNav 
-              lesson={lesson}
-              selectedItem={selectedItem}
-              onSelectItem={handleSelectItem}
-              onShowScript={() => setIsScriptViewVisible(true)}
-              onAddStage={() => handleOpenAddItemModal('stage')}
-              onAddSubStage={(stageId) => handleOpenAddItemModal('substage', stageId)}
-              onDelete={handleOpenDeleteModal}
-              onReorderSubStage={handleReorderSubStage}
-              onExit={onExit}
-              onToggleCollapse={toggleNavCollapse}
-            />
-          )
+            currentBuilderView === 'builder' ? (
+                isScriptViewVisible ? (
+                    <LessonScriptView 
+                    subStage={selectedItemData as SubStage}
+                    onBack={() => setIsScriptViewVisible(false)}
+                    />
+                ) : (
+                    <LessonBuilderNav 
+                    lesson={lesson}
+                    selectedItem={selectedItem}
+                    onSelectItem={handleSelectItem}
+                    onShowScript={() => setIsScriptViewVisible(true)}
+                    onAddStage={() => handleOpenAddItemModal('stage')}
+                    onAddSubStage={(stageId) => handleOpenAddItemModal('substage', stageId)}
+                    onDelete={handleOpenDeleteModal}
+                    onReorderSubStage={handleReorderSubStage}
+                    onExit={onExit}
+                    onToggleCollapse={toggleNavCollapse}
+                    />
+                )
+            ) : (
+                <ContentProcessingNav 
+                    onExit={onExit}
+                    onToggleCollapse={toggleNavCollapse}
+                />
+            )
         )}
       </aside>
 
@@ -299,9 +307,9 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
       </div>
       
       <div className="flex-1 flex flex-col h-screen">
-         {currentBuilderView === 'builder' ? (
-            <main className="flex-1 p-6 md:p-8 lg:p-12 overflow-y-auto">
-                {selectedItemData ? (
+        <main className="flex-1 p-6 md:p-8 lg:p-12 overflow-y-auto">
+            {currentBuilderView === 'builder' ? (
+                selectedItemData ? (
                     <ItemConfiguration 
                         item={selectedItemData}
                         itemType={selectedItem.type}
@@ -309,21 +317,18 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
                         onUpdate={updateLessonData}
                         onOpenInteractionModal={() => setIsInteractionModalOpen(true)}
                         onDelete={() => handleOpenDeleteModal(selectedItem)}
+                        activeInput={activeInput}
+                        setActiveInput={setActiveInput}
                     />
                 ) : (
                     <div className="flex items-center justify-center h-full">
                         <p className="text-brand-gray text-xl">Select an item from the left to configure it.</p>
                     </div>
-                )}
-            </main>
-         ) : (
-            <main className="flex-1 p-6 md:p-8 lg:p-12 overflow-y-auto flex items-center justify-center">
-                <div className="text-center">
-                    <h1 className="text-3xl font-bold">Lesson Content Page</h1>
-                    <p className="text-brand-gray mt-2">Upload and manage content for your lesson here.</p>
-                </div>
-            </main>
-         )}
+                )
+            ) : (
+                <LessonContentBuilder />
+            )}
+        </main>
         
         <footer className="p-4 md:p-6 bg-brand-black border-t border-gray-700">
           <div className="flex items-center space-x-4">

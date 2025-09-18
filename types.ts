@@ -18,6 +18,7 @@ export interface SubStage {
   interactionType: string;
   duration: number; // in minutes
   script: ScriptBlock[];
+  contentOutputId?: number;
   content?: { type: 'video' | 'text' | 'interactive'; url?: string; text?: string };
   completed?: boolean;
 }
@@ -42,4 +43,15 @@ export interface Lesson {
 export interface Category {
   name: string;
   lessons: Lesson[];
+}
+
+export interface ContentOutput {
+  id: number;
+  name: string;
+  processType: string;
+  source: {
+      name: string;
+      type: 'file' | 'link';
+  };
+  data: any; // Can be Q&A pairs, summaries, etc.
 }

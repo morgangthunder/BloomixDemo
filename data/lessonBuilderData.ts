@@ -1,4 +1,4 @@
-import type { Lesson, StageType, SubStage } from '../types';
+import type { Lesson, StageType, SubStage, ContentOutput } from '../types';
 
 export const STAGE_TYPES = ['Launch', 'Explore', 'Absorb', 'Refine', 'Nail'] as const;
 
@@ -9,6 +9,38 @@ export const SUB_STAGE_TYPES_MAP: Record<StageType, readonly string[]> = {
   Refine: ['Practice', 'Adapt', 'Challenge', 'Evolve'],
   Nail: ['Retrieve', 'Evaluate', 'Project'],
 };
+
+export const MOCK_CONTENT_OUTPUTS: ContentOutput[] = [
+    {
+        id: 101,
+        name: "Glossophobia Q&A Pairs",
+        processType: "Extract Key Q&A Pairs",
+        source: { name: "Stage Fright Research.docx", type: 'file' },
+        data: [
+            { id: 1, q: "What is glossophobia?", a: "Glossophobia, or the fear of public speaking, is a common social phobia characterized by anxiety when speaking in front of an audience." },
+            { id: 2, q: "What are common symptoms?", a: "Symptoms include increased heart rate, sweating, trembling, nausea, and a desire to flee the situation." },
+        ]
+    },
+    {
+        id: 102,
+        name: "Famous Speeches Summary",
+        processType: "Summarize Sections",
+        source: { name: "https://en.wikipedia.org/wiki/Rhetoric", type: 'link' },
+        data: "A summary of key rhetorical devices used in famous historical speeches, focusing on ethos, pathos, and logos."
+    },
+    {
+        id: 103,
+        name: "Audience Analysis Facts",
+        processType: "Extract Key Facts",
+        source: { name: "Public Speaking 101.pdf", type: 'file' },
+        data: [
+            "Fact 1: Understanding audience demographics (age, gender, education) is crucial.",
+            "Fact 2: Psychographics (values, beliefs, attitudes) provide deeper insights.",
+            "Fact 3: The context of the speech (time, location, occasion) heavily influences reception."
+        ]
+    }
+];
+
 
 const ensureSubStageScripts = (stages: any[]): any[] => {
     return stages.map(stage => ({
@@ -32,9 +64,9 @@ export const SAMPLE_LESSON: Lesson = {
       title: 'Overcoming Stage Fright',
       type: 'Launch',
       subStages: [
-        { id: 3000, title: 'What is Glossophobia?', type: 'Tease', interactionType: 'Provocative Poll', duration: 5, script: [] },
+        { id: 3000, title: 'What is Glossophobia?', type: 'Tease', interactionType: 'Provocative Poll', duration: 5, script: [], contentOutputId: 101 },
         { id: 3001, title: 'Your Speaking Experience', type: 'Evoke', interactionType: 'Memory Prompt Card', duration: 10, script: [] },
-        { id: 3010, title: 'Famous Speeches Analysis', type: 'Ignite', interactionType: 'Teaser Video Clip', duration: 8, script: [] },
+        { id: 3010, title: 'Famous Speeches Analysis', type: 'Ignite', interactionType: 'Teaser Video Clip', duration: 8, script: [], contentOutputId: 102 },
       ]
     },
     {
@@ -42,7 +74,7 @@ export const SAMPLE_LESSON: Lesson = {
         title: 'Understanding Your Audience',
         type: 'Explore',
         subStages: [
-          { id: 3006, title: 'Audience Demographics', type: 'Investigate', interactionType: 'Data Exploration Map', duration: 15, script: [] },
+          { id: 3006, title: 'Audience Demographics', type: 'Investigate', interactionType: 'Data Exploration Map', duration: 15, script: [], contentOutputId: 103 },
           { id: 3007, title: 'Spotting Commonalities', type: 'Spot', interactionType: 'Pattern Matching Puzzle', duration: 10, script: [] },
           { id: 3008, title: 'Hypothesize Motivations', type: 'Ponder', interactionType: 'Voice Hypothesis Recorder', duration: 12, script: [] },
         ]
