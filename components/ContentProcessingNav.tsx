@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { ArrowLeftIcon, ChevronDoubleLeftIcon, PlusCircleIcon, LinkIcon, UploadIcon, DocumentDuplicateIcon } from './Icon';
+import { ArrowLeftIcon, ChevronDoubleLeftIcon, PlusCircleIcon, LinkIcon, UploadIcon, DocumentDuplicateIcon, CloseIcon } from './Icon';
 import ContentBrowserModal from './ContentBrowserModal';
 
 interface ContentProcessingNavProps {
     onExit: () => void;
     onToggleCollapse: () => void;
+    onCloseMobileNav?: () => void;
+    onProcessedContentChange: (content: { id: number; name: string } | null) => void;
 }
 
 const MOCK_QAS = [
@@ -21,7 +23,7 @@ const PROCESS_TYPES = [
 
 const OUTPUT_SETS = ["Key Q&A Pairs", "Section Summaries", "Concept Map Data"];
 
-const ContentProcessingNav: React.FC<ContentProcessingNavProps> = ({ onExit, onToggleCollapse }) => {
+const ContentProcessingNav: React.FC<ContentProcessingNavProps> = ({ onExit, onToggleCollapse, onCloseMobileNav, onProcessedContentChange }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedContent, setSelectedContent] = useState<{name: string, type: 'file' | 'link'} | null>(null);
     const [isProcessed, setIsProcessed] = useState(false);
@@ -32,15 +34,19 @@ const ContentProcessingNav: React.FC<ContentProcessingNavProps> = ({ onExit, onT
         setSelectedContent(content);
         setIsProcessed(false);
         setOutputName(''); // Reset name on new content selection
+        onProcessedContentChange(null); // Clear processed content on new selection
         setIsModalOpen(false);
     }
     
     const handleProcess = () => {
         if (!outputName.trim()) {
-            alert("Please provide a name for the content output.");
+            alert("Please provide a name for the processed content.");
             return;
         }
         setIsProcessed(true);
+        // In a real app, the ID would come from the backend.
+        const newContentOutput = { id: Date.now(), name: outputName.trim() };
+        onProcessedContentChange(newContentOutput);
     };
     
     return (
@@ -56,10 +62,17 @@ const ContentProcessingNav: React.FC<ContentProcessingNavProps> = ({ onExit, onT
                     Back to Hub
                 </button>
                 <div className="flex justify-between items-center">
-                    <h2 className="text-xl font-bold">Content Processing</h2>
-                    <button onClick={onToggleCollapse} className="p-2 rounded-md text-brand-light-gray hover:bg-gray-700 transition-colors" title="Collapse Sidebar">
-                        <ChevronDoubleLeftIcon className="w-5 h-5" />
-                    </button>
+                    <h2 className="text-xl font-bold">Source Content Processing</h2>
+                    <div className="flex items-center">
+                        {onCloseMobileNav && (
+                           <button onClick={onCloseMobileNav} className="p-2 text-brand-gray hover:text-white md:hidden">
+                                <CloseIcon className="w-5 h-5" />
+                           </button>
+                        )}
+                        <button onClick={onToggleCollapse} className="p-2 rounded-md text-brand-light-gray hover:bg-gray-700 transition-colors hidden md:block" title="Collapse Sidebar">
+                            <ChevronDoubleLeftIcon className="w-5 h-5" />
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -72,7 +85,7 @@ const ContentProcessingNav: React.FC<ContentProcessingNavProps> = ({ onExit, onT
                     </div>
                      <button onClick={() => setIsModalOpen(true)} className="w-full flex items-center justify-center bg-brand-dark hover:bg-gray-700 border border-gray-600 text-sm p-2 rounded-md transition-colors">
                         <DocumentDuplicateIcon className="w-4 h-4 mr-2" />
-                        Browse Content
+                        Add/Browse Source Content
                     </button>
                 </section>
                 
@@ -91,7 +104,7 @@ const ContentProcessingNav: React.FC<ContentProcessingNavProps> = ({ onExit, onT
                     </div>
 
                     <div className="space-y-1">
-                        <label htmlFor="output-name" className="text-sm font-medium text-brand-gray">Content Output Name:</label>
+                        <label htmlFor="output-name" className="text-sm font-medium text-brand-gray">Processed Content Name:</label>
                         <input 
                            id="output-name"
                            type="text"

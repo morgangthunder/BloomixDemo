@@ -1,4 +1,3 @@
-
 import React from 'react';
 import type { Lesson } from '../types';
 import LessonCard from './LessonCard';
@@ -8,10 +7,10 @@ interface SearchPageProps {
   searchQuery: string;
   onToggleMyList: (lesson: Lesson) => void;
   isInMyList: (lessonId: number) => boolean;
-  onStartLesson: (lesson: Lesson) => void;
+  onViewLesson: (lesson: Lesson) => void;
 }
 
-const SearchPage: React.FC<SearchPageProps> = ({ lessons, searchQuery, onToggleMyList, isInMyList, onStartLesson }) => {
+const SearchPage: React.FC<SearchPageProps> = ({ lessons, searchQuery, onToggleMyList, isInMyList, onViewLesson }) => {
   return (
     <div className="pt-24 min-h-screen container mx-auto px-4 sm:px-6 lg:px-8 pb-16">
       {searchQuery && (
@@ -28,7 +27,7 @@ const SearchPage: React.FC<SearchPageProps> = ({ lessons, searchQuery, onToggleM
               lesson={lesson} 
               onToggleMyList={onToggleMyList} 
               isInMyList={isInMyList(lesson.id)}
-              onStartLesson={onStartLesson}
+              onViewLesson={onViewLesson}
               displayMode="grid"
             />
           ))}

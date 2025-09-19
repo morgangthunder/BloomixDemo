@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { Stage } from '../types';
-import { ArrowLeftIcon, ChevronDownIcon, ChevronRightIcon, CheckCircleIcon, EyeIcon } from './Icon';
+import { ArrowLeftIcon, ChevronDownIcon, ChevronRightIcon, CheckCircleIcon, EyeIcon, CloseIcon } from './Icon';
 
 interface LessonSidebarProps {
   lessonTitle: string;
@@ -8,6 +8,7 @@ interface LessonSidebarProps {
   activeSubStageId: number | null;
   onSelectSubStage: (stageId: number, subStageId: number) => void;
   onExit: () => void;
+  onCloseMobileNav?: () => void;
 }
 
 const StageItem: React.FC<{
@@ -60,14 +61,21 @@ const StageItem: React.FC<{
 };
 
 
-const LessonSidebar: React.FC<LessonSidebarProps> = ({ lessonTitle, stages, activeSubStageId, onSelectSubStage, onExit }) => {
+const LessonSidebar: React.FC<LessonSidebarProps> = ({ lessonTitle, stages, activeSubStageId, onSelectSubStage, onExit, onCloseMobileNav }) => {
   return (
     <aside className="w-full h-full bg-brand-black flex flex-col p-4 border-r border-gray-700">
       <div className="flex-shrink-0 pb-4 border-b border-gray-700">
-        <button onClick={onExit} className="flex items-center text-sm text-brand-gray hover:text-white transition-colors mb-3">
-            <ArrowLeftIcon className="w-4 h-4 mr-2" />
-            Back to Home
-        </button>
+        <div className="flex items-center justify-between mb-3">
+          <button onClick={onExit} className="flex items-center text-sm text-brand-gray hover:text-white transition-colors">
+              <ArrowLeftIcon className="w-4 h-4 mr-2" />
+              Back to Home
+          </button>
+          {onCloseMobileNav && (
+            <button onClick={onCloseMobileNav} className="p-1 text-brand-gray hover:text-white md:hidden">
+              <CloseIcon className="w-5 h-5" />
+            </button>
+          )}
+        </div>
         <h2 className="text-xl font-bold truncate" title={lessonTitle}>{lessonTitle}</h2>
       </div>
       <nav className="flex-1 overflow-y-auto mt-4 space-y-2">

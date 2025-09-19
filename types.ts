@@ -55,3 +55,32 @@ export interface ContentOutput {
   };
   data: any; // Can be Q&A pairs, summaries, etc.
 }
+
+export type ItemStatus = 'Published' | 'Pending Approval' | 'Build In Progress';
+
+export interface Course {
+  id: number;
+  title: string;
+  status: ItemStatus;
+  stats: {
+    views: number;
+    completionRate: number;
+    completions: number;
+  };
+  earnings: number;
+}
+
+export interface HubLesson {
+  id: number;
+  title: string;
+  stageCount: number;
+  status: ItemStatus;
+  isClickable: boolean;
+  stats: {
+    views: number;
+    completionRate: number;
+    completions: number;
+  };
+  earnings: number;
+  courseId: number | null;
+}

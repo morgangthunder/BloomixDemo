@@ -1,4 +1,3 @@
-
 import React from 'react';
 import type { Lesson } from '../types';
 import { PlayIcon, PlusIcon, CheckIcon } from './Icon';
@@ -7,18 +6,18 @@ interface LessonCardProps {
   lesson: Lesson;
   onToggleMyList: (lesson: Lesson) => void;
   isInMyList: boolean;
-  onStartLesson: (lesson: Lesson) => void;
+  onViewLesson: (lesson: Lesson) => void;
   displayMode?: 'carousel' | 'grid';
 }
 
-const LessonCard: React.FC<LessonCardProps> = ({ lesson, onToggleMyList, isInMyList, onStartLesson, displayMode = 'carousel' }) => {
+const LessonCard: React.FC<LessonCardProps> = ({ lesson, onToggleMyList, isInMyList, onViewLesson, displayMode = 'carousel' }) => {
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card click when clicking the button
     onToggleMyList(lesson);
   };
   
   const handleCardClick = () => {
-    onStartLesson(lesson);
+    onViewLesson(lesson);
   }
 
   const modeClasses = {

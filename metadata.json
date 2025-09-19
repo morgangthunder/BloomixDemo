@@ -1,5 +1,5 @@
 {
-  "name": "Bloomix: Demo",
+  "name": "Upora: Demo",
   "description": "A Netflix-style interface for browsing educational lessons. It features dynamically generated categories and lessons in horizontally scrolling carousels, powered by Gemini.",
   "requestFramePermissions": []
 }

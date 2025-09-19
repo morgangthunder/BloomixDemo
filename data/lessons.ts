@@ -35,7 +35,8 @@ export const CATEGORIES: Category[] = [
             id: 101,
             title: 'Bonjour! Basic Greetings',
             // FIX: Added required 'type' property.
-            type: 'Launch',
+            // FIX: Replaced deprecated 'Launch' stage type with 'Trigger'.
+            type: 'Trigger',
             viewed: true,
             passed: false,
             subStages: [
@@ -73,7 +74,8 @@ export const CATEGORIES: Category[] = [
             id: 103,
             title: 'Directions & Getting Around',
             // FIX: Added required 'type' property.
-            type: 'Refine',
+            // FIX: Replaced deprecated 'Refine' stage type with 'Cultivate'.
+            type: 'Cultivate',
             viewed: false,
             passed: false,
             subStages: [

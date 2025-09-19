@@ -1,4 +1,3 @@
-
 import React from 'react';
 import type { Lesson, Category } from '../types';
 import CategoryCarousel from './CategoryCarousel';
@@ -7,10 +6,10 @@ interface MyListPageProps {
   lessons: Lesson[];
   onToggleMyList: (lesson: Lesson) => void;
   isInMyList: (lessonId: number) => boolean;
-  onStartLesson: (lesson: Lesson) => void;
+  onViewLesson: (lesson: Lesson) => void;
 }
 
-const MyListPage: React.FC<MyListPageProps> = ({ lessons, onToggleMyList, isInMyList, onStartLesson }) => {
+const MyListPage: React.FC<MyListPageProps> = ({ lessons, onToggleMyList, isInMyList, onViewLesson }) => {
   const myListCategory: Category = {
     name: 'My List',
     lessons: lessons,
@@ -24,7 +23,7 @@ const MyListPage: React.FC<MyListPageProps> = ({ lessons, onToggleMyList, isInMy
           <p className="text-brand-gray">Add lessons to your list to see them here.</p>
         </div>
       ) : (
-        <CategoryCarousel category={myListCategory} onToggleMyList={onToggleMyList} isInMyList={isInMyList} onStartLesson={onStartLesson} />
+        <CategoryCarousel category={myListCategory} onToggleMyList={onToggleMyList} isInMyList={isInMyList} onViewLesson={onViewLesson} />
       )}
     </div>
   );

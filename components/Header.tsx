@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { SearchIcon, BellIcon, UserCircleIcon, CloseIcon } from './Icon';
+import { SearchIcon, BellIcon, UserCircleIcon, CloseIcon, MenuIcon } from './Icon';
 
 interface HeaderProps {
   currentPage: string;
@@ -11,6 +11,7 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ currentPage, onNavClick, searchQuery, setSearchQuery }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -39,11 +40,13 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavClick, searchQuery, s
     if (isSearchOpen) {
       handleCloseSearch();
     }
+    setIsMobileMenuOpen(false); // Close mobile menu on nav click
     onNavClick(page);
     window.scrollTo(0, 0);
   };
 
   const handleSearchToggle = () => {
+    setIsMobileMenuOpen(false);
     setIsSearchOpen(true);
   };
 
@@ -54,14 +57,22 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavClick, searchQuery, s
 
   const navLinkClasses = (page: string) => 
     `font-semibold transition-colors ${currentPage === page ? 'text-white' : 'text-brand-gray hover:text-white'}`;
+  
+  const mobileNavLinkClasses = (page: string) => 
+    `block w-full text-left p-3 text-lg rounded-md ${currentPage === page ? 'bg-brand-red text-white' : 'text-brand-light-gray hover:bg-gray-700'}`;
 
   return (
-    <header className={`fixed top-0 left-0 right-0 z-50 transition-colors duration-300 ${isScrolled || isSearchOpen ? 'bg-brand-black' : 'bg-transparent'}`}>
+    <header className={`fixed top-0 left-0 right-0 z-50 transition-colors duration-300 ${isScrolled || isSearchOpen || isMobileMenuOpen ? 'bg-brand-black' : 'bg-transparent'}`}>
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 md:h-20">
-          <div className="flex items-center space-x-8">
+          <div className="flex items-center space-x-4 md:space-x-8">
+            <div className="md:hidden">
+              <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="text-white p-2">
+                {isMobileMenuOpen ? <CloseIcon className="h-6 w-6" /> : <MenuIcon className="h-6 w-6" />}
+              </button>
+            </div>
             <h1 className="text-2xl md:text-3xl font-bold text-brand-red tracking-wider cursor-pointer" onClick={handleNav('home')}>
-              Bloomix
+              Upora
             </h1>
             <nav className="hidden md:flex items-center space-x-4">
               <button onClick={handleNav('home')} className={navLinkClasses('home')}>Home</button>
@@ -102,6 +113,17 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavClick, searchQuery, s
           </div>
         </div>
       </div>
+      {/* Mobile Menu Panel */}
+      {isMobileMenuOpen && (
+        <div className="md:hidden bg-brand-black/95 absolute top-16 left-0 right-0 p-4 border-t border-gray-800">
+          <nav className="flex flex-col space-y-2">
+            <button onClick={handleNav('home')} className={mobileNavLinkClasses('home')}>Home</button>
+            <button onClick={handleNav('categories')} className={mobileNavLinkClasses('categories')}>Categories</button>
+            <button onClick={handleNav('my-list')} className={mobileNavLinkClasses('my-list')}>My List</button>
+            <button onClick={handleNav('lesson-builder')} className={mobileNavLinkClasses('lesson-builder')}>Lesson-builder</button>
+          </nav>
+        </div>
+      )}
     </header>
   );
 };

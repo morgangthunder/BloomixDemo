@@ -28,7 +28,7 @@ const SelectContentOutputModal: React.FC<SelectContentOutputModalProps> = ({ isO
         onClick={e => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-4 pb-4 border-b border-gray-700">
-          <h2 className="text-2xl font-bold text-white">Select Content Output</h2>
+          <h2 className="text-2xl font-bold text-white">Select Processed Content to use in this Sub-Stage</h2>
           <button onClick={onClose} className="text-brand-gray hover:text-white transition-colors">
             <CloseIcon className="w-6 h-6" />
           </button>

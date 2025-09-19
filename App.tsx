@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import type { Category, Lesson } from './types';
+import type { Category, Lesson, Course, HubLesson } from './types';
 import { CATEGORIES } from './data/lessons';
+import { MOCK_COURSES, MOCK_HUB_LESSONS } from './data/hubData';
 import Header from './components/Header';
 import HeroSection from './components/HeroSection';
 import CategoryCarousel from './components/CategoryCarousel';
@@ -11,6 +12,8 @@ import LessonBuilderPage from './components/LessonBuilderPage';
 import LessonViewPage from './components/LessonViewPage';
 import ProfilePage from './components/ProfilePage';
 import LessonBuilderHubPage from './components/LessonBuilderHubPage';
+import LessonOverviewPage from './components/LessonOverviewPage';
+import CourseDetailsPage from './components/CourseDetailsPage';
 
 
 const App: React.FC = () => {
@@ -26,7 +29,14 @@ const App: React.FC = () => {
 
   const [currentPage, setCurrentPage] = useState('home');
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
+  const [overviewLesson, setOverviewLesson] = useState<Lesson | null>(null);
   const [lessonBuilderSubPage, setLessonBuilderSubPage] = useState<'hub' | 'builder'>('hub');
+  
+  // State for Hub and Course pages
+  const [courses, setCourses] = useState<Course[]>(MOCK_COURSES);
+  const [hubLessons, setHubLessons] = useState<HubLesson[]>(MOCK_HUB_LESSONS);
+  const [activeCourse, setActiveCourse] = useState<Course | null>(null);
+
 
   const [myList, setMyList] = useState<Lesson[]>(() => {
     try {
@@ -80,18 +90,29 @@ const App: React.FC = () => {
     });
   };
 
-  const handleStartLesson = (lesson: Lesson) => {
-    if (lesson.stages && lesson.stages.length > 0) {
-      setActiveLesson(lesson);
+  const handleShowOverview = (lesson: Lesson) => {
+    setOverviewLesson(lesson);
+    setCurrentPage('lessonOverview');
+  };
+  
+  const handleStartLessonFromOverview = () => {
+    // Per demo request, all "Start Lesson" buttons link to Conversational French
+    const frenchLesson = CATEGORIES.flatMap(c => c.lessons).find(l => l.id === 9);
+    if (frenchLesson && frenchLesson.stages && frenchLesson.stages.length > 0) {
+      setActiveLesson(frenchLesson);
       setCurrentPage('lessonView');
     } else {
-      // Maybe show a "coming soon" message for lessons without content
-      alert("This lesson content is not available yet.");
+      alert("Conversational French lesson content is not available yet.");
     }
   };
 
   const handleExitLessonView = () => {
     setActiveLesson(null);
+    setCurrentPage('home');
+  }
+  
+  const handleExitOverview = () => {
+    setOverviewLesson(null);
     setCurrentPage('home');
   }
   
@@ -103,6 +124,7 @@ const App: React.FC = () => {
   };
 
   const handleEnterBuilder = () => {
+    setCurrentPage('lesson-builder');
     setLessonBuilderSubPage('builder');
   };
   
@@ -118,6 +140,25 @@ const App: React.FC = () => {
     setCurrentPage('home');
   };
 
+  const handleViewCourse = (course: Course) => {
+    setActiveCourse(course);
+    setCurrentPage('courseDetails');
+  };
+
+  const handleAssignLessonToCourse = (lessonId: number, courseId: number) => {
+    setHubLessons(prevLessons =>
+      prevLessons.map(lesson =>
+        lesson.id === lessonId ? { ...lesson, courseId: courseId } : lesson
+      )
+    );
+  };
+
+  const handleExitCourseDetails = () => {
+    setActiveCourse(null);
+    setCurrentPage('lesson-builder');
+    setLessonBuilderSubPage('hub');
+  };
+
   const isInMyList = (lessonId: number): boolean => {
     return myList.some(item => item.id === lessonId);
   };
@@ -128,33 +169,55 @@ const App: React.FC = () => {
       myList,
       onToggleMyList: handleToggleMyList,
       isInMyList,
-      onStartLesson: handleStartLesson
+      onViewLesson: handleShowOverview,
     };
     
     switch (currentPage) {
+      case 'lessonOverview':
+        return overviewLesson ? <LessonOverviewPage 
+          lesson={overviewLesson} 
+          onExit={handleExitOverview} 
+          onStartLesson={handleStartLessonFromOverview}
+          onToggleMyList={() => handleToggleMyList(overviewLesson)}
+          isInMyList={isInMyList(overviewLesson.id)}
+        /> : <p>Loading lesson overview...</p>;
       case 'lessonView':
          return activeLesson ? <LessonViewPage lesson={activeLesson} onExit={handleExitLessonView} /> : <p>Loading lesson...</p>;
       case 'search':
-        return <SearchPage lessons={searchResults} searchQuery={searchQuery} onToggleMyList={handleToggleMyList} isInMyList={isInMyList} onStartLesson={handleStartLesson} />;
+        return <SearchPage lessons={searchResults} searchQuery={searchQuery} onToggleMyList={handleToggleMyList} isInMyList={isInMyList} onViewLesson={handleShowOverview} />;
       case 'categories':
         return <CategoriesPage {...props} />;
       case 'my-list':
-        return <MyListPage lessons={myList} onToggleMyList={handleToggleMyList} isInMyList={isInMyList} onStartLesson={handleStartLesson}/>;
+        return <MyListPage lessons={myList} onToggleMyList={handleToggleMyList} isInMyList={isInMyList} onViewLesson={handleShowOverview}/>;
       case 'lesson-builder':
         if (lessonBuilderSubPage === 'hub') {
-          return <LessonBuilderHubPage onExit={handleExitBuilderHub} onEnterBuilder={handleEnterBuilder} />;
+          return <LessonBuilderHubPage 
+            onExit={handleExitBuilderHub} 
+            onEnterBuilder={handleEnterBuilder}
+            courses={courses}
+            lessons={hubLessons}
+            onViewCourse={handleViewCourse}
+            onAssignLesson={handleAssignLessonToCourse}
+          />;
         }
         return <LessonBuilderPage onExit={handleExitBuilder} />;
+      case 'courseDetails':
+        return activeCourse ? <CourseDetailsPage
+            course={activeCourse}
+            lessons={hubLessons.filter(l => l.courseId === activeCourse.id)}
+            onExit={handleExitCourseDetails}
+            onEnterBuilder={handleEnterBuilder}
+        /> : <p>Loading course...</p>;
       case 'profile':
         return <ProfilePage onExit={handleExitProfile} />;
       case 'home':
       default:
         return (
           <>
-            {featuredLesson && <HeroSection lesson={featuredLesson} onToggleMyList={handleToggleMyList} isInMyList={isInMyList(featuredLesson.id)} onStartLesson={handleStartLesson} />}
+            {featuredLesson && <HeroSection lesson={featuredLesson} onToggleMyList={handleToggleMyList} isInMyList={isInMyList(featuredLesson.id)} onViewLesson={handleShowOverview} />}
             <div className="py-4 md:py-8 lg:py-12 space-y-8 md:space-y-12 lg:space-y-16">
               {categories.map((category) => (
-                <CategoryCarousel key={category.name} category={category} onToggleMyList={handleToggleMyList} isInMyList={isInMyList} onStartLesson={handleStartLesson} />
+                <CategoryCarousel key={category.name} category={category} onToggleMyList={handleToggleMyList} isInMyList={isInMyList} onViewLesson={handleShowOverview} />
               ))}
             </div>
           </>
@@ -163,7 +226,7 @@ const App: React.FC = () => {
   };
 
   const renderHeader = () => {
-    const nonHeaderPages = ['lessonView', 'lesson-builder'];
+    const nonHeaderPages = ['lessonView', 'lesson-builder', 'lessonOverview', 'courseDetails'];
     if (nonHeaderPages.includes(currentPage)) {
       return null;
     }

@@ -1,15 +1,16 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import type { Lesson, Stage, SubStage, StageType, SubStageType } from '../types';
-import { SAMPLE_LESSON } from '../data/lessonBuilderData';
+import { SAMPLE_LESSON, MOCK_CONTENT_OUTPUTS } from '../data/lessonBuilderData';
 import LessonBuilderNav from './LessonBuilderNav';
 import ItemConfiguration from './ItemConfiguration';
 import LessonScriptView from './LessonScriptView';
 import ChangeInteractionTypeModal from './ChangeInteractionTypeModal';
 import AddItemModal from './AddItemModal';
 import ConfirmationModal from './ConfirmationModal';
-import { PaperAirplaneIcon, GripVerticalIcon, ChevronDoubleLeftIcon, ChevronDoubleRightIcon } from './Icon';
+import { PaperAirplaneIcon, GripVerticalIcon, ChevronDoubleLeftIcon, ChevronDoubleRightIcon, MenuIcon, CloseIcon } from './Icon';
 import ContentProcessingNav from './ContentProcessingNav';
 import LessonContentBuilder from './LessonContentBuilder';
+import SelectContentOutputModal from './SelectContentOutputModal';
 
 
 export type SelectedItem = 
@@ -24,9 +25,10 @@ interface LessonBuilderPageProps {
 const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
   const [lesson, setLesson] = useState<Lesson>(SAMPLE_LESSON);
   const [selectedItem, setSelectedItem] = useState<SelectedItem>({ type: 'lesson', id: lesson.id });
-  const [currentBuilderView, setCurrentBuilderView] = useState<'builder' | 'content'>('builder');
+  const [currentBuilderView, setCurrentBuilderView] = useState<'builder' | 'substageContent'>('builder');
   const [isScriptViewVisible, setIsScriptViewVisible] = useState(false);
   const [isInteractionModalOpen, setIsInteractionModalOpen] = useState(false);
+  const [isContentModalOpen, setIsContentModalOpen] = useState(false);
   const [activeInput, setActiveInput] = useState<string | null>(null);
   
   // Modals state
@@ -35,18 +37,37 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<SelectedItem | null>(null);
 
-  // Sidebar resizing and collapsing state
+  // Snackbar State
+  const [snackbar, setSnackbar] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
+  const snackbarTimeoutRef = useRef<number | null>(null);
+
+  // Sidebar state
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [navWidth, setNavWidth] = useState(384);
   const navWidthBeforeCollapse = useRef(384);
   const isResizing = useRef(false);
   const minNavWidth = 280;
   const maxNavWidth = 600;
+  
+  const showSnackbar = (message: string) => {
+      if (snackbarTimeoutRef.current) {
+          clearTimeout(snackbarTimeoutRef.current);
+      }
+      setSnackbar({ message, visible: true });
+      snackbarTimeoutRef.current = window.setTimeout(() => {
+          setSnackbar({ message: '', visible: false });
+      }, 3000);
+  };
+
 
   const handleSelectItem = (item: SelectedItem) => {
     setSelectedItem(item);
     setActiveInput(null); // Clear focused input on new selection
+    setIsMobileNavOpen(false); // Close mobile nav on selection
     if(item.type !== 'substage') {
         setIsScriptViewVisible(false);
+        // If user selects something other than a substage, switch back to builder view
+        setCurrentBuilderView('builder');
     }
   };
   
@@ -157,8 +178,21 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
     setItemToDelete(null);
   };
 
-  // FIX: Updated handleReorderSubStage to accept 3 arguments to match the prop type in child components.
-  // The reordering logic now defaults to inserting 'before' the drop target, which is consistent with the UI feedback.
+  const handleReorderStage = (draggedId: number, dropTargetId: number) => {
+    setLesson(prevLesson => {
+      const stages = [...prevLesson.stages];
+      const draggedIndex = stages.findIndex(s => s.id === draggedId);
+      const dropTargetIndex = stages.findIndex(s => s.id === dropTargetId);
+
+      if (draggedIndex === -1 || dropTargetIndex === -1) return prevLesson;
+
+      const [draggedItem] = stages.splice(draggedIndex, 1);
+      stages.splice(dropTargetIndex, 0, draggedItem);
+
+      return { ...prevLesson, stages };
+    });
+  };
+
   const handleReorderSubStage = (stageId: number, draggedId: number, dropTargetId: number) => {
     setLesson(prevLesson => {
         const newLesson = { ...prevLesson };
@@ -169,16 +203,12 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
         const subStages = [...stage.subStages];
 
         const draggedIndex = subStages.findIndex(ss => ss.id === draggedId);
-        if (draggedIndex === -1) return prevLesson;
+        const dropTargetIndex = subStages.findIndex(ss => ss.id === dropTargetId);
+
+        if (draggedIndex === -1 || dropTargetIndex === -1) return prevLesson;
         
         const [draggedItem] = subStages.splice(draggedIndex, 1);
-        
-        const dropTargetIndex = subStages.findIndex(ss => ss.id === dropTargetId);
-        if (dropTargetIndex === -1) { // Should not happen if dropping on an item
-            subStages.push(draggedItem);
-        } else {
-            subStages.splice(dropTargetIndex, 0, draggedItem);
-        }
+        subStages.splice(dropTargetIndex, 0, draggedItem);
 
         stage.subStages = subStages;
         newLesson.stages[stageIndex] = stage;
@@ -226,17 +256,32 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
   };
 
   const handleInteractionTypeChange = (newType: string) => {
-    if(selectedItem?.type === 'substage') {
-        updateLessonData({ interactionType: newType });
+    if (selectedItem?.type === 'substage') {
+      updateLessonData({ interactionType: newType });
     }
     setIsInteractionModalOpen(false);
-  }
+  };
+  
+  const handleContentOutputSelect = (contentOutputId: number) => {
+    if (selectedItem?.type === 'substage') {
+      updateLessonData({ contentOutputId });
+    }
+    setIsContentModalOpen(false);
+  };
 
   const selectedItemData = selectionDetails.item;
   const isNavCollapsed = navWidth === 0;
 
+  const selectedSubstage = selectedItem.type === 'substage' ? (selectionDetails.item as SubStage) : null;
+  const linkedContentForBuilder = selectedSubstage?.contentOutputId 
+      ? MOCK_CONTENT_OUTPUTS.find(co => co.id === selectedSubstage.contentOutputId)
+      : null;
+
   return (
-    <div className="flex h-screen bg-brand-dark text-white font-sans overflow-hidden">
+    <div className="h-screen bg-brand-dark text-white font-sans overflow-hidden md:flex">
+       {isMobileNavOpen && (
+            <div onClick={() => setIsMobileNavOpen(false)} className="fixed inset-0 bg-black/60 z-30 md:hidden" />
+        )}
        <ChangeInteractionTypeModal 
          isOpen={isInteractionModalOpen}
          onClose={() => setIsInteractionModalOpen(false)}
@@ -257,10 +302,25 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
          title={`Delete ${itemToDelete?.type || 'item'}`}
          message={`Are you sure you want to permanently delete this ${itemToDelete?.type}? This action cannot be undone.`}
        />
+        <SelectContentOutputModal
+            isOpen={isContentModalOpen}
+            onClose={() => setIsContentModalOpen(false)}
+            onSelect={handleContentOutputSelect}
+        />
+        {/* Snackbar */}
+        <div 
+            className={`fixed bottom-8 left-1/2 -translate-x-1/2 bg-brand-red text-white py-2 px-6 rounded-lg shadow-lg transition-transform duration-300 z-50 ${snackbar.visible ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'}`}
+            role="alert"
+            aria-live="assertive"
+        >
+            {snackbar.message}
+        </div>
 
       <aside 
         style={{ width: `${navWidth}px` }}
-        className="h-screen flex-shrink-0 bg-brand-black flex flex-col transition-all duration-300 ease-in-out"
+        className={`h-screen flex-col bg-brand-black transition-transform duration-300 ease-in-out z-40 
+                   fixed w-80 top-0 left-0 transform ${isMobileNavOpen ? 'translate-x-0' : '-translate-x-full'} 
+                   md:relative md:w-auto md:transform-none md:flex md:flex-shrink-0`}
       >
         { !isNavCollapsed && (
             currentBuilderView === 'builder' ? (
@@ -279,14 +339,25 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
                     onAddSubStage={(stageId) => handleOpenAddItemModal('substage', stageId)}
                     onDelete={handleOpenDeleteModal}
                     onReorderSubStage={handleReorderSubStage}
+                    onReorderStage={handleReorderStage}
                     onExit={onExit}
                     onToggleCollapse={toggleNavCollapse}
+                    onCloseMobileNav={() => setIsMobileNavOpen(false)}
                     />
                 )
             ) : (
                 <ContentProcessingNav 
                     onExit={onExit}
                     onToggleCollapse={toggleNavCollapse}
+                    onCloseMobileNav={() => setIsMobileNavOpen(false)}
+                    onProcessedContentChange={(content) => {
+                      if (content) {
+                          const newContentOutput = { id: content.id, name: content.name };
+                          // This is a mock implementation; in a real app, you'd manage a global list of content outputs
+                          // and then link the ID here.
+                          console.log("New content processed:", newContentOutput);
+                      }
+                    }}
                 />
             )
         )}
@@ -294,7 +365,7 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
 
       <div 
           onMouseDown={handleMouseDown}
-          className="w-2 h-full bg-gray-900 hover:bg-brand-red cursor-col-resize flex items-center justify-center relative group"
+          className="w-2 h-full bg-gray-900 hover:bg-brand-red cursor-col-resize items-center justify-center relative group hidden md:flex"
       >
           <GripVerticalIcon className="w-5 h-5 text-gray-600" />
           <button 
@@ -306,7 +377,25 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
           </button>
       </div>
       
-      <div className="flex-1 flex flex-col h-screen">
+      <div className="flex-1 flex flex-col h-screen relative">
+        {isNavCollapsed && (
+            <button
+                onClick={toggleNavCollapse}
+                className="absolute hidden md:block z-20 top-6 left-4 bg-gray-800 hover:bg-brand-red text-white p-2 rounded-full transition-opacity"
+                title="Expand Navigation"
+            >
+                <ChevronDoubleRightIcon className="w-5 h-5" />
+            </button>
+        )}
+        {/* Mobile Header */}
+        <header className="md:hidden flex items-center justify-between p-4 bg-brand-black border-b border-gray-700 flex-shrink-0">
+            <button onClick={() => setIsMobileNavOpen(true)} className="text-white p-1">
+                <MenuIcon className="w-6 h-6" />
+            </button>
+            <span className="font-semibold text-lg">{currentBuilderView === 'builder' ? 'Lesson Builder' : 'Substage Content'}</span>
+            <div className="w-7"></div>
+        </header>
+
         <main className="flex-1 p-6 md:p-8 lg:p-12 overflow-y-auto">
             {currentBuilderView === 'builder' ? (
                 selectedItemData ? (
@@ -316,6 +405,7 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
                         parentStageType={selectionDetails.parentStageType}
                         onUpdate={updateLessonData}
                         onOpenInteractionModal={() => setIsInteractionModalOpen(true)}
+                        onOpenContentModal={() => setIsContentModalOpen(true)}
                         onDelete={() => handleOpenDeleteModal(selectedItem)}
                         activeInput={activeInput}
                         setActiveInput={setActiveInput}
@@ -326,7 +416,12 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
                     </div>
                 )
             ) : (
-                <LessonContentBuilder />
+                <LessonContentBuilder 
+                  substage={selectedSubstage}
+                  processedContent={linkedContentForBuilder ? { id: linkedContentForBuilder.id, name: linkedContentForBuilder.name } : null}
+                  onOpenInteractionModal={() => setIsInteractionModalOpen(true)}
+                  onOpenContentModal={() => setIsContentModalOpen(true)}
+                />
             )}
         </main>
         
@@ -350,10 +445,17 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
                     Lesson Builder
                 </button>
                 <button 
-                    onClick={() => setCurrentBuilderView('content')}
-                    className={`px-4 py-1 text-sm font-semibold rounded-md transition-colors ${currentBuilderView === 'content' ? 'bg-brand-red text-white' : 'text-brand-gray hover:bg-gray-700'}`}
+                    onClick={() => {
+                        if (selectedItem.type === 'substage') {
+                            setCurrentBuilderView('substageContent');
+                        } else {
+                            showSnackbar("You must select a sub-stage to edit content.");
+                        }
+                    }}
+                    className={`px-4 py-1 text-sm font-semibold rounded-md transition-colors ${currentBuilderView === 'substageContent' ? 'bg-brand-red text-white' : 'text-brand-gray hover:bg-gray-700'}`}
+                    title={selectedItem.type !== 'substage' ? "You must select a sub-stage to edit content" : "Edit Substage Content"}
                 >
-                    Lesson Content
+                    Substage Content
                 </button>
             </div>
           </div>

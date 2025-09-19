@@ -124,7 +124,7 @@ const LessonScriptView: React.FC<LessonScriptViewProps> = ({ subStage, onBack })
       <div className="flex-shrink-0 pb-4 border-b border-gray-700">
          <button onClick={onBack} className="flex items-center text-sm text-brand-gray hover:text-white transition-colors mb-3">
             <ArrowLeftIcon className="w-4 h-4 mr-2" />
-            Back to Navigation
+            Back to Lesson Structure
         </button>
         <h2 className="text-xl font-bold truncate" title={subStage?.title}>
           Script: {subStage?.title || 'No Sub-stage Selected'}

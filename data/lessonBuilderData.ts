@@ -1,13 +1,15 @@
 import type { Lesson, StageType, SubStage, ContentOutput } from '../types';
 
-export const STAGE_TYPES = ['Launch', 'Explore', 'Absorb', 'Refine', 'Nail'] as const;
+// UPDATED: Renamed stages from LEARN to TEACH model.
+export const STAGE_TYPES = ['Trigger', 'Explore', 'Absorb', 'Cultivate', 'Hone'] as const;
 
+// UPDATED: Renamed sub-stages with new acronyms (TIE, HUNT, SIP, GROW, VET).
 export const SUB_STAGE_TYPES_MAP: Record<StageType, readonly string[]> = {
-  Launch: ['Tease', 'Ignite', 'Evoke'],
-  Explore: ['Tinker', 'Investigate', 'Ponder', 'Spot'],
-  Absorb: ['Articulate', 'Present', 'Tie'],
-  Refine: ['Practice', 'Adapt', 'Challenge', 'Evolve'],
-  Nail: ['Retrieve', 'Evaluate', 'Project'],
+  Trigger: ['Tease', 'Ignite', 'Evoke'], // TIE
+  Explore: ['Handle', 'Uncover', 'Noodle', 'Track'], // HUNT
+  Absorb: ['Show', 'Interpret', 'Parallel'], // SIP
+  Cultivate: ['Grip', 'Repurpose', 'Originate', 'Work'], // GROW
+  Hone: ['Verify', 'Evaluate', 'Target'], // VET
 };
 
 export const MOCK_CONTENT_OUTPUTS: ContentOutput[] = [
@@ -53,6 +55,7 @@ const ensureSubStageScripts = (stages: any[]): any[] => {
     }));
 }
 
+// UPDATED: SAMPLE_LESSON updated to use new stage and sub-stage types.
 export const SAMPLE_LESSON: Lesson = {
   id: 1000,
   title: 'The Art of Public Speaking',
@@ -62,7 +65,7 @@ export const SAMPLE_LESSON: Lesson = {
     {
       id: 2000,
       title: 'Overcoming Stage Fright',
-      type: 'Launch',
+      type: 'Trigger', // Was Launch
       subStages: [
         { id: 3000, title: 'What is Glossophobia?', type: 'Tease', interactionType: 'Provocative Poll', duration: 5, script: [], contentOutputId: 101 },
         { id: 3001, title: 'Your Speaking Experience', type: 'Evoke', interactionType: 'Memory Prompt Card', duration: 10, script: [] },
@@ -74,9 +77,9 @@ export const SAMPLE_LESSON: Lesson = {
         title: 'Understanding Your Audience',
         type: 'Explore',
         subStages: [
-          { id: 3006, title: 'Audience Demographics', type: 'Investigate', interactionType: 'Data Exploration Map', duration: 15, script: [], contentOutputId: 103 },
-          { id: 3007, title: 'Spotting Commonalities', type: 'Spot', interactionType: 'Pattern Matching Puzzle', duration: 10, script: [] },
-          { id: 3008, title: 'Hypothesize Motivations', type: 'Ponder', interactionType: 'Voice Hypothesis Recorder', duration: 12, script: [] },
+          { id: 3006, title: 'Audience Demographics', type: 'Uncover', interactionType: 'Data Exploration Map', duration: 15, script: [], contentOutputId: 103 }, // Was Investigate
+          { id: 3007, title: 'Tracking Commonalities', type: 'Track', interactionType: 'Pattern Matching Puzzle', duration: 10, script: [] }, // Was Spotting
+          { id: 3008, title: 'Noodling on Motivations', type: 'Noodle', interactionType: 'Voice Hypothesis Recorder', duration: 12, script: [] }, // Was Ponder
         ]
     },
     {
@@ -84,67 +87,68 @@ export const SAMPLE_LESSON: Lesson = {
       title: 'Crafting Your Message',
       type: 'Absorb',
       subStages: [
-        { id: 3002, title: 'The Power of Three', type: 'Present', interactionType: 'Animated Explainer Video', duration: 15, script: [] },
-        { id: 3003, title: 'Building Your Outline', type: 'Articulate', interactionType: 'Concept Map Builder', duration: 20, script: [] },
-        { id: 3009, title: 'Connecting with Analogies', type: 'Tie', interactionType: 'Analogy Matching Game', duration: 10, script: [] },
+        { id: 3002, title: 'Showing the Power of Three', type: 'Show', interactionType: 'Animated Explainer Video', duration: 15, script: [] }, // Was Present
+        { id: 3003, title: 'Interpreting Your Outline', type: 'Interpret', interactionType: 'Concept Map Builder', duration: 20, script: [] }, // Was Articulate
+        { id: 3009, title: 'Connecting with Parallels', type: 'Parallel', interactionType: 'Analogy Matching Game', duration: 10, script: [] }, // Was Tie
       ]
     },
     {
         id: 2002,
         title: 'Delivery Techniques',
-        type: 'Refine',
+        type: 'Cultivate', // Was Refine
         subStages: [
-          { id: 3004, title: 'Vocal Variety Drill', type: 'Practice', interactionType: 'Flashcard Drill', duration: 10, script: [] },
-          { id: 3005, title: 'Handling Q&A Scenarios', type: 'Adapt', interactionType: 'Role-Play Simulator', duration: 15, script: [] },
-          { id: 3011, title: 'The Impromptu Challenge', type: 'Challenge', interactionType: 'Brainstorm Board', duration: 18, script: [] },
+          { id: 3004, title: 'Getting a Grip on Vocal Variety', type: 'Grip', interactionType: 'Flashcard Drill', duration: 10, script: [] }, // Was Practice
+          { id: 3005, title: 'Repurposing for Q&A Scenarios', type: 'Repurpose', interactionType: 'Role-Play Simulator', duration: 15, script: [] }, // Was Adapt
+          { id: 3011, title: 'Originating an Impromptu Topic', type: 'Originate', interactionType: 'Brainstorm Board', duration: 18, script: [] }, // Was Challenge
         ]
     },
     {
         id: 2004,
         title: 'Final Presentation',
-        type: 'Nail',
+        type: 'Hone', // Was Nail
         subStages: [
-          { id: 3012, title: 'Key Concepts Recall', type: 'Retrieve', interactionType: 'Recall Quiz', duration: 10, script: [] },
+          { id: 3012, title: 'Verifying Key Concepts', type: 'Verify', interactionType: 'Recall Quiz', duration: 10, script: [] }, // Was Retrieve
           { id: 3013, title: 'Self-Evaluation', type: 'Evaluate', interactionType: 'Self-Assessment Rubric', duration: 20, script: [] },
-          { id: 3014, title: 'Your Action Plan', type: 'Project', interactionType: 'Goal-Setting Tracker', duration: 15, script: [] },
+          { id: 3014, title: 'Targeting Your Action Plan', type: 'Target', interactionType: 'Goal-Setting Tracker', duration: 15, script: [] }, // Was Project
         ]
     }
   ]
 };
 
+// UPDATED: INTERACTION_TYPES updated to use new stage/sub-stage terminology.
 export const INTERACTION_TYPES = [
-    { stage: 'Launch', subStage: 'Tease', name: 'Provocative Poll' },
-    { stage: 'Launch', subStage: 'Tease', name: 'Teaser Video Clip' },
-    { stage: 'Launch', subStage: 'Ignite', name: 'Surprise Quiz Teaser' },
-    { stage: 'Launch', subStage: 'Ignite', name: 'Interactive Demo GIF' },
-    { stage: 'Launch', subStage: 'Evoke', name: 'Memory Prompt Card' },
-    { stage: 'Launch', subStage: 'Evoke', name: 'Association Word Cloud' },
-    { stage: 'Explore', subStage: 'Tinker', name: 'Drag-and-Drop Simulator' },
-    { stage: 'Explore', subStage: 'Tinker', name: 'Virtual Experiment Builder' },
-    { stage: 'Explore', subStage: 'Investigate', name: 'Guided Question Branch' },
-    { stage: 'Explore', subStage: 'Investigate', name: 'Data Exploration Map' },
-    { stage: 'Explore', subStage: 'Ponder', name: 'Voice Hypothesis Recorder' },
-    { stage: 'Explore', subStage: 'Ponder', name: 'Prediction Slider Game' },
-    { stage: 'Explore', subStage: 'Spot', name: 'Anomaly Highlight Tool' },
-    { stage: 'Explore', subStage: 'Spot', name: 'Pattern Matching Puzzle' },
-    { stage: 'Absorb', subStage: 'Articulate', name: 'Paraphrase Generator' },
-    { stage: 'Absorb', subStage: 'Articulate', name: 'Concept Map Builder' },
-    { stage: 'Absorb', subStage: 'Present', name: 'Animated Explainer Video' },
-    { stage: 'Absorb', subStage: 'Present', name: 'Interactive Infographic' },
-    { stage: 'Absorb', subStage: 'Tie', name: 'Analogy Matching Game' },
-    { stage: 'Absorb', subStage: 'Tie', name: 'Story Bridge Prompt' },
-    { stage: 'Refine', subStage: 'Practice', name: 'Flashcard Drill' },
-    { stage: 'Refine', subStage: 'Practice', name: 'Timed Problem Solver' },
-    { stage: 'Refine', subStage: 'Adapt', name: 'Scenario Twister' },
-    { stage: 'Refine', subStage: 'Adapt', name: 'Role-Play Simulator' },
-    { stage: 'Refine', subStage: 'Challenge', name: 'Open-Ended Creator' },
-    { stage: 'Refine', subStage: 'Challenge', name: 'Brainstorm Board' },
-    { stage: 'Refine', subStage: 'Evolve', name: 'Feedback Revision Loop' },
-    { stage: 'Refine', subStage: 'Evolve', name: 'Version Comparison Diff' },
-    { stage: 'Nail', subStage: 'Retrieve', name: 'Recall Quiz' },
-    { stage: 'Nail', subStage: 'Retrieve', name: 'Memory Matrix Grid' },
-    { stage: 'Nail', subStage: 'Evaluate', name: 'Self-Assessment Rubric' },
-    { stage: 'Nail', subStage: 'Evaluate', name: 'Gap Identification Journal' },
-    { stage: 'Nail', subStage: 'Project', name: 'Goal-Setting Tracker' },
-    { stage: 'Nail', subStage: 'Project', name: 'Action Roadmap Map' },
+    { stage: 'Trigger', subStage: 'Tease', name: 'Provocative Poll' },
+    { stage: 'Trigger', subStage: 'Tease', name: 'Teaser Video Clip' },
+    { stage: 'Trigger', subStage: 'Ignite', name: 'Surprise Quiz Teaser' },
+    { stage: 'Trigger', subStage: 'Ignite', name: 'Interactive Demo GIF' },
+    { stage: 'Trigger', subStage: 'Evoke', name: 'Memory Prompt Card' },
+    { stage: 'Trigger', subStage: 'Evoke', name: 'Association Word Cloud' },
+    { stage: 'Explore', subStage: 'Handle', name: 'Drag-and-Drop Simulator' },
+    { stage: 'Explore', subStage: 'Handle', name: 'Virtual Experiment Builder' },
+    { stage: 'Explore', subStage: 'Uncover', name: 'Guided Question Branch' },
+    { stage: 'Explore', subStage: 'Uncover', name: 'Data Exploration Map' },
+    { stage: 'Explore', subStage: 'Noodle', name: 'Voice Hypothesis Recorder' },
+    { stage: 'Explore', subStage: 'Noodle', name: 'Prediction Slider Game' },
+    { stage: 'Explore', subStage: 'Track', name: 'Anomaly Highlight Tool' },
+    { stage: 'Explore', subStage: 'Track', name: 'Pattern Matching Puzzle' },
+    { stage: 'Absorb', subStage: 'Interpret', name: 'Paraphrase Generator' },
+    { stage: 'Absorb', subStage: 'Interpret', name: 'Concept Map Builder' },
+    { stage: 'Absorb', subStage: 'Show', name: 'Animated Explainer Video' },
+    { stage: 'Absorb', subStage: 'Show', name: 'Interactive Infographic' },
+    { stage: 'Absorb', subStage: 'Parallel', name: 'Analogy Matching Game' },
+    { stage: 'Absorb', subStage: 'Parallel', name: 'Story Bridge Prompt' },
+    { stage: 'Cultivate', subStage: 'Grip', name: 'Flashcard Drill' },
+    { stage: 'Cultivate', subStage: 'Grip', name: 'Timed Problem Solver' },
+    { stage: 'Cultivate', subStage: 'Repurpose', name: 'Scenario Twister' },
+    { stage: 'Cultivate', subStage: 'Repurpose', name: 'Role-Play Simulator' },
+    { stage: 'Cultivate', subStage: 'Originate', name: 'Open-Ended Creator' },
+    { stage: 'Cultivate', subStage: 'Originate', name: 'Brainstorm Board' },
+    { stage: 'Cultivate', subStage: 'Work', name: 'Feedback Revision Loop' },
+    { stage: 'Cultivate', subStage: 'Work', name: 'Version Comparison Diff' },
+    { stage: 'Hone', subStage: 'Verify', name: 'Recall Quiz' },
+    { stage: 'Hone', subStage: 'Verify', name: 'Memory Matrix Grid' },
+    { stage: 'Hone', subStage: 'Evaluate', name: 'Self-Assessment Rubric' },
+    { stage: 'Hone', subStage: 'Evaluate', name: 'Gap Identification Journal' },
+    { stage: 'Hone', subStage: 'Target', name: 'Goal-Setting Tracker' },
+    { stage: 'Hone', subStage: 'Target', name: 'Action Roadmap Map' },
 ];

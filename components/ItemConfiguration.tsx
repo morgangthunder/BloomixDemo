@@ -1,9 +1,8 @@
-import React, { useState, useMemo } from 'react';
-import type { Lesson, Stage, SubStage, StageType, SubStageType } from '../types';
+import React, { useMemo } from 'react';
+import type { Lesson, Stage, SubStage, StageType } from '../types';
 import { STAGE_TYPES, SUB_STAGE_TYPES_MAP, MOCK_CONTENT_OUTPUTS } from '../data/lessonBuilderData';
 import TypeChip from './TypeChip';
 import { TrashIcon } from './Icon';
-import SelectContentOutputModal from './SelectContentOutputModal';
 
 interface ItemConfigurationProps {
   item: Lesson | Stage | SubStage;
@@ -11,6 +10,7 @@ interface ItemConfigurationProps {
   parentStageType?: StageType;
   onUpdate: (updatedData: Partial<Lesson | Stage | SubStage>) => void;
   onOpenInteractionModal: () => void;
+  onOpenContentModal: () => void;
   onDelete: () => void;
   activeInput: string | null;
   setActiveInput: (id: string | null) => void;
@@ -21,9 +21,8 @@ const commonLabelClasses = "block text-sm font-medium text-brand-gray mb-1";
 
 
 const ItemConfiguration: React.FC<ItemConfigurationProps> = ({ 
-    item, itemType, parentStageType, onUpdate, onOpenInteractionModal, onDelete, activeInput, setActiveInput 
+    item, itemType, parentStageType, onUpdate, onOpenInteractionModal, onOpenContentModal, onDelete, activeInput, setActiveInput 
 }) => {
-  const [isContentModalOpen, setIsContentModalOpen] = useState(false);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -44,10 +43,6 @@ const ItemConfiguration: React.FC<ItemConfigurationProps> = ({
   const getInputClasses = (id: string) => {
     return `${commonInputClasses} ${activeInput === id ? 'ring-2 ring-brand-red' : ''}`;
   };
-
-  const handleContentOutputSelect = (contentOutputId: number) => {
-    onUpdate({ contentOutputId });
-  }
 
   const linkedContentOutput = useMemo(() => {
       if (itemType === 'substage') {
@@ -172,13 +167,6 @@ const ItemConfiguration: React.FC<ItemConfigurationProps> = ({
   
   return (
     <>
-      {itemType === 'substage' && (
-          <SelectContentOutputModal
-              isOpen={isContentModalOpen}
-              onClose={() => setIsContentModalOpen(false)}
-              onSelect={handleContentOutputSelect}
-          />
-      )}
       <div className="space-y-8">
         {/* --- Top Configuration Section --- */}
         <section className="bg-brand-black p-6 rounded-lg border border-gray-700 space-y-4">
@@ -211,30 +199,30 @@ const ItemConfiguration: React.FC<ItemConfigurationProps> = ({
 
         {/* --- Preview Section --- */}
         <section>
-            <div className="flex flex-col md:flex-row justify-between md:items-center mb-4 gap-4">
+            <div className="flex flex-wrap justify-between items-baseline mb-4 gap-x-6 gap-y-2">
               <h2 className="text-2xl font-bold">Student Preview</h2>
               {itemType === 'substage' && (
-                  <div className="flex flex-col md:flex-row md:items-center space-y-2 md:space-y-0 md:space-x-4 text-sm md:text-right">
+                  <div className="flex flex-wrap flex-col sm:flex-row sm:items-center justify-end gap-y-2 gap-x-4 text-sm text-right">
                       {/* Interaction Type */}
                       <div className="flex items-center justify-end">
-                          <span className="text-brand-gray mr-2">Interaction Type:</span>
+                          <span className="text-brand-gray mr-2 shrink-0">Interaction Type:</span>
                           <strong className="text-white">{hasInteraction ? (item as SubStage).interactionType : 'None'}</strong>
-                          <button onClick={onOpenInteractionModal} className="ml-2 bg-gray-700 hover:bg-gray-600 text-white font-bold py-1 px-3 rounded text-xs transition-colors">
+                          <button onClick={onOpenInteractionModal} className="ml-2 bg-gray-700 hover:bg-gray-600 text-white font-bold py-1 px-3 rounded text-xs transition-colors shrink-0">
                               {hasInteraction ? 'Change' : 'Add'}
                           </button>
                       </div>
                       {/* Content Section */}
                       <div className="flex items-center justify-end">
-                          <span className="text-brand-gray mr-2">Content:</span>
+                          <span className="text-brand-gray mr-2 shrink-0">Processed Content:</span>
                           {linkedContentOutput ? (
                               <div className="flex items-center space-x-2">
-                                  <strong className="text-white truncate" title={linkedContentOutput.name}>{linkedContentOutput.name}</strong>
+                                  <strong className="text-white" title={linkedContentOutput.name}>{linkedContentOutput.name}</strong>
                                   <TypeChip type={linkedContentOutput.processType} />
                               </div>
                           ) : (
                               <strong className="text-white">None</strong>
                           )}
-                          <button onClick={() => setIsContentModalOpen(true)} className="ml-2 bg-gray-700 hover:bg-gray-600 text-white font-bold py-1 px-3 rounded text-xs transition-colors">
+                          <button onClick={onOpenContentModal} className="ml-2 bg-gray-700 hover:bg-gray-600 text-white font-bold py-1 px-3 rounded text-xs transition-colors shrink-0">
                               {linkedContentOutput ? 'Change' : 'Select'}
                           </button>
                       </div>

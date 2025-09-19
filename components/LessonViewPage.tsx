@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import type { Lesson, Stage } from '../types';
-import { HandRaisedIcon, PaperAirplaneIcon, GripVerticalIcon, ChevronDoubleLeftIcon, ChevronDoubleRightIcon } from './Icon';
+import { HandRaisedIcon, PaperAirplaneIcon, GripVerticalIcon, ChevronDoubleLeftIcon, ChevronDoubleRightIcon, MenuIcon } from './Icon';
 import LessonSidebar from './LessonSidebar';
 
 interface LessonViewPageProps {
@@ -14,7 +14,8 @@ const LessonViewPage: React.FC<LessonViewPageProps> = ({ lesson, onExit }) => {
   const [activeStageId, setActiveStageId] = useState<number | null>(lesson.stages?.[0]?.id ?? null);
   const [activeSubStageId, setActiveSubStageId] = useState<number | null>(lesson.stages?.[0]?.subStages?.[0]?.id ?? null);
 
-  // Sidebar resizing and collapsing state
+  // Sidebar state
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [navWidth, setNavWidth] = useState(384);
   const navWidthBeforeCollapse = useRef(384);
   const isResizing = useRef(false);
@@ -29,6 +30,7 @@ const LessonViewPage: React.FC<LessonViewPageProps> = ({ lesson, onExit }) => {
   const handleSelectSubStage = (stageId: number, subStageId: number) => {
     setActiveStageId(stageId);
     setActiveSubStageId(subStageId);
+    setIsMobileNavOpen(false); // Close mobile nav on selection
     
     // Mark stage as viewed when a substage is selected
     setLessonStages(prevStages => prevStages.map(stage => 
@@ -86,10 +88,15 @@ const LessonViewPage: React.FC<LessonViewPageProps> = ({ lesson, onExit }) => {
   const isNavCollapsed = navWidth === 0;
 
   return (
-    <div className="flex h-screen bg-brand-dark text-white overflow-hidden">
+    <div className="h-screen bg-brand-dark text-white overflow-hidden md:flex">
+      {isMobileNavOpen && (
+          <div onClick={() => setIsMobileNavOpen(false)} className="fixed inset-0 bg-black/60 z-30 md:hidden" />
+      )}
       <aside 
         style={{ width: `${navWidth}px` }}
-        className="h-screen flex-shrink-0 bg-brand-black flex flex-col transition-all duration-300 ease-in-out"
+        className={`h-screen flex-col bg-brand-black transition-transform duration-300 ease-in-out z-40 
+                   fixed w-80 top-0 left-0 transform ${isMobileNavOpen ? 'translate-x-0' : '-translate-x-full'} 
+                   md:relative md:w-auto md:transform-none md:flex md:flex-shrink-0`}
       >
         { !isNavCollapsed && (
           <LessonSidebar 
@@ -98,13 +105,14 @@ const LessonViewPage: React.FC<LessonViewPageProps> = ({ lesson, onExit }) => {
             activeSubStageId={activeSubStageId}
             onSelectSubStage={handleSelectSubStage}
             onExit={onExit}
+            onCloseMobileNav={() => setIsMobileNavOpen(false)}
           />
         )}
       </aside>
 
       <div 
           onMouseDown={handleMouseDown}
-          className="w-2 h-full bg-gray-900 hover:bg-brand-red cursor-col-resize flex items-center justify-center relative group"
+          className="w-2 h-full bg-gray-900 hover:bg-brand-red cursor-col-resize items-center justify-center relative group hidden md:flex"
       >
           <GripVerticalIcon className="w-5 h-5 text-gray-600" />
           <button 
@@ -116,7 +124,24 @@ const LessonViewPage: React.FC<LessonViewPageProps> = ({ lesson, onExit }) => {
           </button>
       </div>
       
-      <main className="flex-1 flex flex-col h-screen">
+      <main className="flex-1 flex flex-col h-screen relative">
+        {isNavCollapsed && (
+            <button
+                onClick={toggleNavCollapse}
+                className="absolute hidden md:block z-20 top-6 left-4 bg-gray-800 hover:bg-brand-red text-white p-2 rounded-full transition-opacity"
+                title="Expand Navigation"
+            >
+                <ChevronDoubleRightIcon className="w-5 h-5" />
+            </button>
+        )}
+        <header className="md:hidden flex items-center justify-between p-4 bg-brand-black border-b border-gray-700 flex-shrink-0">
+            <button onClick={() => setIsMobileNavOpen(true)} className="text-white p-1">
+                <MenuIcon className="w-6 h-6" />
+            </button>
+            <h1 className="font-semibold text-lg truncate px-2">{lesson.title}</h1>
+            <div className="w-7"></div>
+        </header>
+
         <div className="flex-1 p-6 md:p-8 lg:p-12 overflow-y-auto">
           {activeSubStage ? (
             <div>
