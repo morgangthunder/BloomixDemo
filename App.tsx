@@ -15,16 +15,13 @@ import LessonBuilderHubPage from './components/LessonBuilderHubPage';
 import LessonOverviewPage from './components/LessonOverviewPage';
 import CourseDetailsPage from './components/CourseDetailsPage';
 
-
 const App: React.FC = () => {
   const [categories] = useState<Category[]>(CATEGORIES);
   const [featuredLesson, setFeaturedLesson] = useState<Lesson | null>(() => {
+    // Lazy initializer to ensure this runs only once on initial render.
     const allLessons = CATEGORIES.flatMap(cat => cat.lessons);
-    if (allLessons.length > 0) {
-      const randomIndex = Math.floor(Math.random() * allLessons.length);
-      return allLessons[randomIndex];
-    }
-    return null;
+    // Freeze the hero lesson to "The Art of Storytelling" (id: 4) as requested.
+    return allLessons.find(l => l.id === 4) || allLessons[0] || null;
   });
 
   const [currentPage, setCurrentPage] = useState('home');

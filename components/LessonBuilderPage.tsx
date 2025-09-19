@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
-import type { Lesson, Stage, SubStage, StageType, SubStageType } from '../types';
+import type { Lesson, Stage, SubStage, StageType, SubStageType, ScriptBlock } from '../types';
 import { SAMPLE_LESSON, MOCK_CONTENT_OUTPUTS } from '../data/lessonBuilderData';
 import LessonBuilderNav from './LessonBuilderNav';
 import ItemConfiguration from './ItemConfiguration';
@@ -30,6 +30,8 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
   const [isInteractionModalOpen, setIsInteractionModalOpen] = useState(false);
   const [isContentModalOpen, setIsContentModalOpen] = useState(false);
   const [activeInput, setActiveInput] = useState<string | null>(null);
+  const [activeScriptBlockId, setActiveScriptBlockId] = useState<number | null>(null);
+  const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
   
   // Modals state
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
@@ -59,10 +61,18 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
       }, 3000);
   };
 
+  const handleToggleFullscreen = () => setIsPreviewFullscreen(p => !p);
+
+  // Reset fullscreen when view changes or item is deselected
+  useEffect(() => {
+    setIsPreviewFullscreen(false);
+  }, [currentBuilderView, selectedItem]);
+
 
   const handleSelectItem = (item: SelectedItem) => {
     setSelectedItem(item);
     setActiveInput(null); // Clear focused input on new selection
+    setActiveScriptBlockId(null); // Clear active script block on new selection
     setIsMobileNavOpen(false); // Close mobile nav on selection
     if(item.type !== 'substage') {
         setIsScriptViewVisible(false);
@@ -112,6 +122,28 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
       return newLesson;
     });
   };
+
+  const handleUpdateScript = (newScript: ScriptBlock[]) => {
+    if (selectedItem?.type !== 'substage') return;
+    const { stageId, id: subStageId } = selectedItem;
+
+    setLesson(prevLesson => {
+        const newLesson = { ...prevLesson };
+        const stageIndex = newLesson.stages.findIndex(s => s.id === stageId);
+        if (stageIndex === -1) return prevLesson;
+
+        const subStageIndex = newLesson.stages[stageIndex].subStages.findIndex(ss => ss.id === subStageId);
+        if (subStageIndex === -1) return prevLesson;
+        
+        const newStages = [...newLesson.stages];
+        const newSubStages = [...newStages[stageIndex].subStages];
+        newSubStages[subStageIndex] = { ...newSubStages[subStageIndex], script: newScript };
+        newStages[stageIndex] = { ...newStages[stageIndex], subStages: newSubStages };
+        
+        return { ...newLesson, stages: newStages };
+    });
+  };
+
 
   const handleOpenAddItemModal = (mode: 'stage' | 'substage', stageId?: number) => {
     if (mode === 'substage' && stageId) {
@@ -323,28 +355,29 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
                    md:relative md:w-auto md:transform-none md:flex md:flex-shrink-0`}
       >
         { !isNavCollapsed && (
-            currentBuilderView === 'builder' ? (
-                isScriptViewVisible ? (
-                    <LessonScriptView 
-                    subStage={selectedItemData as SubStage}
-                    onBack={() => setIsScriptViewVisible(false)}
-                    />
-                ) : (
-                    <LessonBuilderNav 
-                    lesson={lesson}
-                    selectedItem={selectedItem}
-                    onSelectItem={handleSelectItem}
-                    onShowScript={() => setIsScriptViewVisible(true)}
-                    onAddStage={() => handleOpenAddItemModal('stage')}
-                    onAddSubStage={(stageId) => handleOpenAddItemModal('substage', stageId)}
-                    onDelete={handleOpenDeleteModal}
-                    onReorderSubStage={handleReorderSubStage}
-                    onReorderStage={handleReorderStage}
-                    onExit={onExit}
-                    onToggleCollapse={toggleNavCollapse}
-                    onCloseMobileNav={() => setIsMobileNavOpen(false)}
-                    />
-                )
+            isScriptViewVisible ? (
+                <LessonScriptView 
+                  subStage={selectedItemData as SubStage}
+                  onBack={() => setIsScriptViewVisible(false)}
+                  onUpdateScript={handleUpdateScript}
+                  activeScriptBlockId={activeScriptBlockId}
+                  setActiveScriptBlockId={setActiveScriptBlockId}
+                />
+            ) : currentBuilderView === 'builder' ? (
+                <LessonBuilderNav 
+                  lesson={lesson}
+                  selectedItem={selectedItem}
+                  onSelectItem={handleSelectItem}
+                  onShowScript={() => setIsScriptViewVisible(true)}
+                  onAddStage={() => handleOpenAddItemModal('stage')}
+                  onAddSubStage={(stageId) => handleOpenAddItemModal('substage', stageId)}
+                  onDelete={handleOpenDeleteModal}
+                  onReorderSubStage={handleReorderSubStage}
+                  onReorderStage={handleReorderStage}
+                  onExit={onExit}
+                  onToggleCollapse={toggleNavCollapse}
+                  onCloseMobileNav={() => setIsMobileNavOpen(false)}
+                />
             ) : (
                 <ContentProcessingNav 
                     onExit={onExit}
@@ -358,6 +391,8 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
                           console.log("New content processed:", newContentOutput);
                       }
                     }}
+                    selectedItem={selectedItem}
+                    onShowScript={() => setIsScriptViewVisible(true)}
                 />
             )
         )}
@@ -409,6 +444,8 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
                         onDelete={() => handleOpenDeleteModal(selectedItem)}
                         activeInput={activeInput}
                         setActiveInput={setActiveInput}
+                        isPreviewFullscreen={isPreviewFullscreen}
+                        onToggleFullscreen={handleToggleFullscreen}
                     />
                 ) : (
                     <div className="flex items-center justify-center h-full">
@@ -421,6 +458,8 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
                   processedContent={linkedContentForBuilder ? { id: linkedContentForBuilder.id, name: linkedContentForBuilder.name } : null}
                   onOpenInteractionModal={() => setIsInteractionModalOpen(true)}
                   onOpenContentModal={() => setIsContentModalOpen(true)}
+                  isPreviewFullscreen={isPreviewFullscreen}
+                  onToggleFullscreen={handleToggleFullscreen}
                 />
             )}
         </main>

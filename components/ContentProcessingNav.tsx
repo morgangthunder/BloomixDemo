@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { ArrowLeftIcon, ChevronDoubleLeftIcon, PlusCircleIcon, LinkIcon, UploadIcon, DocumentDuplicateIcon, CloseIcon } from './Icon';
 import ContentBrowserModal from './ContentBrowserModal';
+import type { SelectedItem } from './LessonBuilderPage';
 
 interface ContentProcessingNavProps {
     onExit: () => void;
     onToggleCollapse: () => void;
     onCloseMobileNav?: () => void;
     onProcessedContentChange: (content: { id: number; name: string } | null) => void;
+    selectedItem: SelectedItem | null;
+    onShowScript: () => void;
 }
 
 const MOCK_QAS = [
@@ -23,12 +26,14 @@ const PROCESS_TYPES = [
 
 const OUTPUT_SETS = ["Key Q&A Pairs", "Section Summaries", "Concept Map Data"];
 
-const ContentProcessingNav: React.FC<ContentProcessingNavProps> = ({ onExit, onToggleCollapse, onCloseMobileNav, onProcessedContentChange }) => {
+const ContentProcessingNav: React.FC<ContentProcessingNavProps> = ({ onExit, onToggleCollapse, onCloseMobileNav, onProcessedContentChange, selectedItem, onShowScript }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedContent, setSelectedContent] = useState<{name: string, type: 'file' | 'link'} | null>(null);
     const [isProcessed, setIsProcessed] = useState(false);
     const [processType, setProcessType] = useState(PROCESS_TYPES[2]); // Default to Q&A
     const [outputName, setOutputName] = useState('');
+
+    const canShowScript = selectedItem?.type === 'substage';
 
     const handleSelectContent = (content: {name: string, type: 'file' | 'link'}) => {
         setSelectedContent(content);
@@ -61,8 +66,18 @@ const ContentProcessingNav: React.FC<ContentProcessingNavProps> = ({ onExit, onT
                     <ArrowLeftIcon className="w-4 h-4 mr-2" />
                     Back to Hub
                 </button>
-                <div className="flex justify-between items-center">
-                    <h2 className="text-xl font-bold">Source Content Processing</h2>
+                <div className="flex justify-between items-start">
+                    <div>
+                        <h2 className="text-xl font-bold">Source Content Processing</h2>
+                        <button 
+                            onClick={onShowScript} 
+                            disabled={!canShowScript}
+                            className={`text-sm mt-1 text-brand-red hover:underline disabled:text-gray-600 disabled:no-underline disabled:cursor-not-allowed transition-colors`}
+                            title="View Substage Script"
+                        >
+                            View Substage Script
+                        </button>
+                    </div>
                     <div className="flex items-center">
                         {onCloseMobileNav && (
                            <button onClick={onCloseMobileNav} className="p-2 text-brand-gray hover:text-white md:hidden">
@@ -79,10 +94,6 @@ const ContentProcessingNav: React.FC<ContentProcessingNavProps> = ({ onExit, onT
             <div className="flex-1 mt-4 space-y-4 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-700">
                 {/* Content Input */}
                 <section className="space-y-2">
-                    <div className="flex items-center space-x-2">
-                        <button className="flex-1 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-sm p-2 rounded-md transition-colors"><UploadIcon className="w-4 h-4 mr-2" /> Upload</button>
-                        <button className="flex-1 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-sm p-2 rounded-md transition-colors"><LinkIcon className="w-4 h-4 mr-2" /> Paste Link</button>
-                    </div>
                      <button onClick={() => setIsModalOpen(true)} className="w-full flex items-center justify-center bg-brand-dark hover:bg-gray-700 border border-gray-600 text-sm p-2 rounded-md transition-colors">
                         <DocumentDuplicateIcon className="w-4 h-4 mr-2" />
                         Add/Browse Source Content
@@ -91,12 +102,12 @@ const ContentProcessingNav: React.FC<ContentProcessingNavProps> = ({ onExit, onT
                 
                 {/* Processing */}
                 <section className="bg-brand-dark p-3 rounded-lg border border-gray-700 space-y-3">
-                    <div className="flex justify-between items-center">
-                        <label className="text-sm font-medium text-brand-gray">Selected:</label>
-                        {selectedContent ? (
-                            <div className="flex items-center space-x-2">
-                                <span className="text-sm text-white truncate">{selectedContent.name}</span>
-                                <span className={`px-1.5 py-0.5 text-xs rounded-full ${isProcessed ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'}`}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <label className="text-sm font-medium text-brand-gray shrink-0">Source Content:</label>
+                         {selectedContent ? (
+                            <div className="flex items-center space-x-2 min-w-0">
+                                <span className="text-sm text-white truncate" title={selectedContent.name}>{selectedContent.name}</span>
+                                <span className={`px-1.5 py-0.5 text-xs rounded-full shrink-0 ${isProcessed ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'}`}>
                                     {isProcessed ? "Processed" : "Not Processed"}
                                 </span>
                             </div>

@@ -228,9 +228,9 @@ const LessonBuilderNav: React.FC<LessonBuilderNavProps> = ({ lesson, selectedIte
                         onClick={onShowScript} 
                         disabled={!canShowScript}
                         className={`text-sm mt-1 text-brand-red hover:underline disabled:text-gray-600 disabled:no-underline disabled:cursor-not-allowed transition-colors`}
-                        title="View Script"
+                        title="View Substage Script"
                     >
-                        View Script
+                        View Substage Script
                     </button>
                 </div>
                 <div className="flex items-center space-x-2">

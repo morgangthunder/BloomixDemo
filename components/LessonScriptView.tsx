@@ -5,6 +5,9 @@ import { ArrowLeftIcon, PlusCircleIcon, TrashIcon } from './Icon';
 interface LessonScriptViewProps {
   subStage: SubStage | null;
   onBack: () => void;
+  onUpdateScript: (newScript: ScriptBlock[]) => void;
+  activeScriptBlockId: number | null;
+  setActiveScriptBlockId: (id: number | null) => void;
 }
 
 const formatTime = (totalSeconds: number): string => {
@@ -18,7 +21,9 @@ const ScriptBlockEditor: React.FC<{
   onUpdate: (id: number, updatedBlock: Partial<ScriptBlock>) => void;
   onDelete: (id: number) => void;
   maxTime: number; // in seconds
-}> = ({ block, onUpdate, onDelete, maxTime }) => {
+  isActive: boolean;
+  onFocus: () => void;
+}> = ({ block, onUpdate, onDelete, maxTime, isActive, onFocus }) => {
 
   const handleTimeChange = (field: 'startTime' | 'endTime', value: string) => {
     const timeInSeconds = parseInt(value, 10);
@@ -28,6 +33,8 @@ const ScriptBlockEditor: React.FC<{
       onUpdate(block.id, { [field]: timeInSeconds });
     }
   };
+
+  const dynamicInputClasses = `w-full bg-gray-800 border rounded-md p-2 text-white text-sm outline-none ring-0 transition-colors ${isActive ? 'bg-gray-900 border-red-500/50' : 'border-gray-600'}`;
   
   return (
     <div className="bg-brand-dark p-3 rounded-lg border border-gray-700 space-y-3">
@@ -61,7 +68,8 @@ const ScriptBlockEditor: React.FC<{
         <select 
           value={block.content}
           onChange={(e) => onUpdate(block.id, { content: e.target.value })}
-          className="w-full bg-gray-800 border border-gray-600 rounded-md p-2 text-white text-sm"
+          onFocus={onFocus}
+          className={dynamicInputClasses}
         >
           <option value="">Select an Action</option>
           <option value="Action 1">Placeholder Action 1</option>
@@ -73,7 +81,8 @@ const ScriptBlockEditor: React.FC<{
           placeholder="Enter teacher talk here..."
           value={block.content}
           onChange={(e) => onUpdate(block.id, { content: e.target.value })}
-          className="w-full bg-gray-800 border border-gray-600 rounded-md p-2 text-white text-sm h-24 resize-none focus:bg-gray-900 focus:border-red-500/50 outline-none ring-0"
+          onFocus={onFocus}
+          className={`${dynamicInputClasses} h-24 resize-none`}
         />
       )}
     </div>
@@ -81,7 +90,7 @@ const ScriptBlockEditor: React.FC<{
 };
 
 
-const LessonScriptView: React.FC<LessonScriptViewProps> = ({ subStage, onBack }) => {
+const LessonScriptView: React.FC<LessonScriptViewProps> = ({ subStage, onBack, onUpdateScript, activeScriptBlockId, setActiveScriptBlockId }) => {
   const [script, setScript] = useState<ScriptBlock[]>(subStage?.script || []);
 
   useEffect(() => {
@@ -108,15 +117,21 @@ const LessonScriptView: React.FC<LessonScriptViewProps> = ({ subStage, onBack })
       startTime: newStartTime,
       endTime: Math.min(newStartTime + 60, subStageDurationSecs)
     };
-    setScript([...script, newBlock]);
+    const newScript = [...script, newBlock];
+    setScript(newScript);
+    onUpdateScript(newScript);
   };
   
   const updateBlock = (id: number, updatedBlock: Partial<ScriptBlock>) => {
-    setScript(script.map(block => block.id === id ? { ...block, ...updatedBlock } : block));
+    const newScript = script.map(block => block.id === id ? { ...block, ...updatedBlock } : block)
+    setScript(newScript);
+    onUpdateScript(newScript);
   }
 
   const deleteBlock = (id: number) => {
-    setScript(script.filter(block => block.id !== id));
+    const newScript = script.filter(block => block.id !== id);
+    setScript(newScript);
+    onUpdateScript(newScript);
   }
 
   return (
@@ -146,6 +161,8 @@ const LessonScriptView: React.FC<LessonScriptViewProps> = ({ subStage, onBack })
                 onUpdate={updateBlock}
                 onDelete={deleteBlock}
                 maxTime={subStageDurationSecs}
+                isActive={block.id === activeScriptBlockId}
+                onFocus={() => setActiveScriptBlockId(block.id)}
             />
         ))}
 

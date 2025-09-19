@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import type { Lesson, Stage, SubStage, StageType } from '../types';
 import { STAGE_TYPES, SUB_STAGE_TYPES_MAP, MOCK_CONTENT_OUTPUTS } from '../data/lessonBuilderData';
 import TypeChip from './TypeChip';
-import { TrashIcon } from './Icon';
+import { TrashIcon, ExpandIcon, MinimizeIcon } from './Icon';
 
 interface ItemConfigurationProps {
   item: Lesson | Stage | SubStage;
@@ -14,6 +14,8 @@ interface ItemConfigurationProps {
   onDelete: () => void;
   activeInput: string | null;
   setActiveInput: (id: string | null) => void;
+  isPreviewFullscreen: boolean;
+  onToggleFullscreen: () => void;
 }
 
 const commonInputClasses = "w-full bg-brand-dark border border-gray-600 rounded-md p-2 text-white focus:outline-none";
@@ -21,7 +23,7 @@ const commonLabelClasses = "block text-sm font-medium text-brand-gray mb-1";
 
 
 const ItemConfiguration: React.FC<ItemConfigurationProps> = ({ 
-    item, itemType, parentStageType, onUpdate, onOpenInteractionModal, onOpenContentModal, onDelete, activeInput, setActiveInput 
+    item, itemType, parentStageType, onUpdate, onOpenInteractionModal, onOpenContentModal, onDelete, activeInput, setActiveInput, isPreviewFullscreen, onToggleFullscreen
 }) => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -166,39 +168,41 @@ const ItemConfiguration: React.FC<ItemConfigurationProps> = ({
   const hasInteraction = itemType === 'substage' && (item as SubStage).interactionType && (item as SubStage).interactionType !== 'None';
   
   return (
-    <>
-      <div className="space-y-8">
+    <div className={isPreviewFullscreen ? 'fixed inset-0 bg-brand-dark z-50 p-8 flex flex-col' : ''}>
+      <div className={`space-y-8 ${isPreviewFullscreen ? 'flex flex-col flex-1' : ''}`}>
         {/* --- Top Configuration Section --- */}
-        <section className="bg-brand-black p-6 rounded-lg border border-gray-700 space-y-4">
-            <div className="flex justify-between items-start">
-              <div>
-                  <h1 className="text-3xl font-bold capitalize">{itemType} Configuration</h1>
-                  {itemType === 'stage' && <TypeChip type={(item as Stage).type} className="mt-2" />}
+        {!isPreviewFullscreen && (
+          <section className="bg-brand-black p-6 rounded-lg border border-gray-700 space-y-4">
+              <div className="flex justify-between items-start">
+                <div>
+                    <h1 className="text-3xl font-bold capitalize">{itemType} Configuration</h1>
+                    {itemType === 'stage' && <TypeChip type={(item as Stage).type} className="mt-2" />}
+                </div>
+                 <div className="flex items-start space-x-4">
+                    <div className="text-right">
+                        <span className={commonLabelClasses}>Total Duration</span>
+                        <p className="text-xl font-semibold text-brand-red">{calculateDuration()} min</p>
+                    </div>
+                    {itemType !== 'lesson' && (
+                         <button 
+                            onClick={onDelete} 
+                            className="p-2 text-brand-gray hover:text-white hover:bg-red-500/50 rounded-full transition-colors"
+                            title={`Delete ${itemType}`}
+                        >
+                            <TrashIcon className="w-5 h-5" />
+                        </button>
+                    )}
+                 </div>
               </div>
-               <div className="flex items-start space-x-4">
-                  <div className="text-right">
-                      <span className={commonLabelClasses}>Total Duration</span>
-                      <p className="text-2xl font-semibold text-brand-red">{calculateDuration()} min</p>
-                  </div>
-                  {itemType !== 'lesson' && (
-                       <button 
-                          onClick={onDelete} 
-                          className="p-2 text-brand-gray hover:text-white hover:bg-red-500/50 rounded-full transition-colors"
-                          title={`Delete ${itemType}`}
-                      >
-                          <TrashIcon className="w-5 h-5" />
-                      </button>
-                  )}
-               </div>
-            </div>
-          
-          {itemType === 'lesson' && renderLessonConfig()}
-          {itemType === 'stage' && renderStageConfig()}
-          {itemType === 'substage' && renderSubStageConfig()}
-        </section>
+            
+            {itemType === 'lesson' && renderLessonConfig()}
+            {itemType === 'stage' && renderStageConfig()}
+            {itemType === 'substage' && renderSubStageConfig()}
+          </section>
+        )}
 
         {/* --- Preview Section --- */}
-        <section>
+        <section className={isPreviewFullscreen ? 'flex flex-col flex-1' : ''}>
             <div className="flex flex-wrap justify-between items-baseline mb-4 gap-x-6 gap-y-2">
               <h2 className="text-2xl font-bold">Student Preview</h2>
               {itemType === 'substage' && (
@@ -230,7 +234,7 @@ const ItemConfiguration: React.FC<ItemConfigurationProps> = ({
               )}
             </div>
           
-            <div className="bg-brand-black rounded-lg min-h-[40vh] flex flex-col border border-gray-700">
+            <div className={`bg-brand-black rounded-lg flex flex-col border border-gray-700 ${isPreviewFullscreen ? 'flex-1' : 'min-h-[40vh]'} relative`}>
                <div className="flex-1 flex items-center justify-center text-brand-gray text-center p-8">
                   {itemType === 'substage' ? (
                       hasInteraction ? (
@@ -245,10 +249,19 @@ const ItemConfiguration: React.FC<ItemConfigurationProps> = ({
                <div className="p-4 border-t border-gray-700 h-20 flex items-center justify-center">
                   <p className="text-sm text-brand-gray">Timeline placeholder</p>
                </div>
+                {isPreviewFullscreen ? (
+                    <button onClick={onToggleFullscreen} className="absolute bottom-4 left-4 p-2 bg-black/50 rounded-full text-white hover:bg-brand-red transition-colors" title="Minimize">
+                        <MinimizeIcon className="w-6 h-6" />
+                    </button>
+                ) : (
+                     <button onClick={onToggleFullscreen} className="absolute bottom-4 right-4 p-2 bg-black/50 rounded-full text-white hover:bg-brand-red transition-colors" title="Expand">
+                        <ExpandIcon className="w-6 h-6" />
+                    </button>
+                )}
             </div>
         </section>
       </div>
-    </>
+    </div>
   );
 };
 
