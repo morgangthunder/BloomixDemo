@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import type { Lesson, Stage } from '../types';
-import { HandRaisedIcon, PaperAirplaneIcon, GripVerticalIcon, ChevronDoubleLeftIcon, ChevronDoubleRightIcon, MenuIcon } from './Icon';
+import { HandRaisedIcon, PaperAirplaneIcon, GripVerticalIcon, ChevronDoubleLeftIcon, ChevronDoubleRightIcon, MenuIcon, ExpandIcon, MinimizeIcon } from './Icon';
 import LessonSidebar from './LessonSidebar';
 
 interface LessonViewPageProps {
@@ -13,14 +13,17 @@ const LessonViewPage: React.FC<LessonViewPageProps> = ({ lesson, onExit }) => {
   
   const [activeStageId, setActiveStageId] = useState<number | null>(lesson.stages?.[0]?.id ?? null);
   const [activeSubStageId, setActiveSubStageId] = useState<number | null>(lesson.stages?.[0]?.subStages?.[0]?.id ?? null);
+  const [isContentFullscreen, setIsContentFullscreen] = useState(false);
 
   // Sidebar state
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
-  const [navWidth, setNavWidth] = useState(384);
-  const navWidthBeforeCollapse = useRef(384);
+  const [navWidth, setNavWidth] = useState(280);
+  const navWidthBeforeCollapse = useRef(280);
   const isResizing = useRef(false);
   const minNavWidth = 280;
   const maxNavWidth = 600;
+
+  const handleToggleFullscreen = () => setIsContentFullscreen(p => !p);
 
   const activeSubStage = useMemo(() => {
     const stage = lessonStages.find(s => s.id === activeStageId);
@@ -89,14 +92,15 @@ const LessonViewPage: React.FC<LessonViewPageProps> = ({ lesson, onExit }) => {
 
   return (
     <div className="h-screen bg-brand-dark text-white overflow-hidden md:flex">
-      {isMobileNavOpen && (
+      {isMobileNavOpen && !isContentFullscreen && (
           <div onClick={() => setIsMobileNavOpen(false)} className="fixed inset-0 bg-black/60 z-30 md:hidden" />
       )}
       <aside 
         style={{ width: `${navWidth}px` }}
         className={`h-screen flex-col bg-brand-black transition-transform duration-300 ease-in-out z-40 
                    fixed w-80 top-0 left-0 transform ${isMobileNavOpen ? 'translate-x-0' : '-translate-x-full'} 
-                   md:relative md:w-auto md:transform-none md:flex md:flex-shrink-0`}
+                   md:relative md:w-auto md:transform-none md:flex md:flex-shrink-0
+                   ${isContentFullscreen ? 'hidden' : ''}`}
       >
         { !isNavCollapsed && (
           <LessonSidebar 
@@ -112,7 +116,7 @@ const LessonViewPage: React.FC<LessonViewPageProps> = ({ lesson, onExit }) => {
 
       <div 
           onMouseDown={handleMouseDown}
-          className="w-2 h-full bg-gray-900 hover:bg-brand-red cursor-col-resize items-center justify-center relative group hidden md:flex"
+          className={`w-2 h-full bg-gray-900 hover:bg-brand-red cursor-col-resize items-center justify-center relative group hidden md:flex ${isContentFullscreen ? '!hidden' : ''}`}
       >
           <GripVerticalIcon className="w-5 h-5 text-gray-600" />
           <button 
@@ -124,8 +128,8 @@ const LessonViewPage: React.FC<LessonViewPageProps> = ({ lesson, onExit }) => {
           </button>
       </div>
       
-      <main className="flex-1 flex flex-col h-screen relative">
-        {isNavCollapsed && (
+      <main className={`flex-1 flex flex-col h-screen ${isContentFullscreen ? 'fixed inset-0 z-50 bg-brand-dark' : 'relative'}`}>
+        {isNavCollapsed && !isContentFullscreen && (
             <button
                 onClick={toggleNavCollapse}
                 className="absolute hidden md:block z-20 top-6 left-4 bg-gray-800 hover:bg-brand-red text-white p-2 rounded-full transition-opacity"
@@ -134,7 +138,7 @@ const LessonViewPage: React.FC<LessonViewPageProps> = ({ lesson, onExit }) => {
                 <ChevronDoubleRightIcon className="w-5 h-5" />
             </button>
         )}
-        <header className="md:hidden flex items-center justify-between p-4 bg-brand-black border-b border-gray-700 flex-shrink-0">
+        <header className={`md:hidden flex items-center justify-between p-4 bg-brand-black border-b border-gray-700 flex-shrink-0 ${isContentFullscreen ? 'hidden' : ''}`}>
             <button onClick={() => setIsMobileNavOpen(true)} className="text-white p-1">
                 <MenuIcon className="w-6 h-6" />
             </button>
@@ -183,6 +187,15 @@ const LessonViewPage: React.FC<LessonViewPageProps> = ({ lesson, onExit }) => {
                  <PaperAirplaneIcon className="w-5 h-5" />
               </button>
             </div>
+             {isContentFullscreen ? (
+                <button onClick={handleToggleFullscreen} className="p-2 bg-gray-700 rounded-full text-white hover:bg-brand-red transition-colors" title="Minimize">
+                    <MinimizeIcon className="w-6 h-6" />
+                </button>
+            ) : (
+                 <button onClick={handleToggleFullscreen} className="p-2 bg-gray-700 rounded-full text-white hover:bg-brand-red transition-colors" title="Expand">
+                    <ExpandIcon className="w-6 h-6" />
+                </button>
+            )}
           </div>
         </div>
       </main>
