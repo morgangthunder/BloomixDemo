@@ -52,12 +52,12 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onExit }) => {
 
     return (
         <div className="pt-24 min-h-screen container mx-auto px-4 sm:px-6 lg:px-8 pb-16">
-            <div className="flex items-center justify-between mb-12">
-                 <h1 className="text-4xl font-bold text-white">My Profile</h1>
-                 <button onClick={onExit} className="flex items-center text-sm text-brand-gray hover:text-white transition-colors">
+            <div className="mb-12">
+                 <button onClick={onExit} className="flex items-center text-sm text-brand-gray hover:text-white transition-colors mb-4">
                     <ArrowLeftIcon className="w-4 h-4 mr-2" />
                     Back to Home
                 </button>
+                <h1 className="text-4xl font-bold text-white">My Profile</h1>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
