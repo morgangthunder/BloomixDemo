@@ -14,10 +14,11 @@ import ProfilePage from './components/ProfilePage';
 import LessonBuilderHubPage from './components/LessonBuilderHubPage';
 import LessonOverviewPage from './components/LessonOverviewPage';
 import CourseDetailsPage from './components/CourseDetailsPage';
+import InteractionBuilderPage from './components/InteractionBuilderPage';
 
 const App: React.FC = () => {
   const [categories] = useState<Category[]>(CATEGORIES);
-  const [featuredLesson, setFeaturedLesson] = useState<Lesson | null>(() => {
+  const [featuredLesson] = useState<Lesson | null>(() => {
     // Lazy initializer to ensure this runs only once on initial render.
     const allLessons = CATEGORIES.flatMap(cat => cat.lessons);
     // Freeze the hero lesson to "The Art of Storytelling" (id: 4) as requested.
@@ -198,6 +199,8 @@ const App: React.FC = () => {
           />;
         }
         return <LessonBuilderPage onExit={handleExitBuilder} />;
+      case 'interaction-builder':
+        return <InteractionBuilderPage onExit={() => setCurrentPage('home')} />;
       case 'courseDetails':
         return activeCourse ? <CourseDetailsPage
             course={activeCourse}
@@ -223,7 +226,7 @@ const App: React.FC = () => {
   };
 
   const renderHeader = () => {
-    const nonHeaderPages = ['lessonView', 'lesson-builder', 'lessonOverview', 'courseDetails'];
+    const nonHeaderPages = ['lessonView', 'lesson-builder', 'interaction-builder', 'lessonOverview', 'courseDetails'];
     if (nonHeaderPages.includes(currentPage)) {
       return null;
     }

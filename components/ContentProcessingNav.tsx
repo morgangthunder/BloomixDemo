@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import { ArrowLeftIcon, ChevronDoubleLeftIcon, PlusCircleIcon, LinkIcon, UploadIcon, DocumentDuplicateIcon, CloseIcon } from './Icon';
 import ContentBrowserModal from './ContentBrowserModal';
 import type { SelectedItem } from './LessonBuilderPage';
+import UploadN8NJsonModal from './UploadN8NJsonModal';
+import SelectOutputModal from './SelectOutputModal';
+import type { ContentOutput } from '../types';
+
 
 interface ContentProcessingNavProps {
     onExit: () => void;
@@ -10,6 +14,7 @@ interface ContentProcessingNavProps {
     onProcessedContentChange: (content: { id: number; name: string } | null) => void;
     selectedItem: SelectedItem | null;
     onShowScript: () => void;
+    showSnackbar: (message: string) => void;
 }
 
 const MOCK_QAS = [
@@ -19,6 +24,7 @@ const MOCK_QAS = [
 ];
 
 const PROCESS_TYPES = [
+    "Upload N8N JSON",
     "Vectorize", "Extract Key Facts", "Extract Key Q&A Pairs", "Summarize Sections",
     "Chunk Content", "Identify Concepts & Skills", "Generate Interaction Prompts",
     "Annotate Entities", "Extract Multimedia Elements", "Classify Difficulty",
@@ -26,32 +32,59 @@ const PROCESS_TYPES = [
 
 const OUTPUT_SETS = ["Key Q&A Pairs", "Section Summaries", "Concept Map Data"];
 
-const ContentProcessingNav: React.FC<ContentProcessingNavProps> = ({ onExit, onToggleCollapse, onCloseMobileNav, onProcessedContentChange, selectedItem, onShowScript }) => {
+const ContentProcessingNav: React.FC<ContentProcessingNavProps> = ({ onExit, onToggleCollapse, onCloseMobileNav, onProcessedContentChange, selectedItem, onShowScript, showSnackbar }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedContent, setSelectedContent] = useState<{name: string, type: 'file' | 'link'} | null>(null);
     const [isProcessed, setIsProcessed] = useState(false);
-    const [processType, setProcessType] = useState(PROCESS_TYPES[2]); // Default to Q&A
+    const [processType, setProcessType] = useState(PROCESS_TYPES[0]);
     const [outputName, setOutputName] = useState('');
+    
+    const [isUploadN8NModalOpen, setIsUploadN8NModalOpen] = useState(false);
+    const [isSelectOutputModalOpen, setIsSelectOutputModalOpen] = useState(false);
+    const [selectedOutput, setSelectedOutput] = useState<ContentOutput | null>(null);
+
 
     const canShowScript = selectedItem?.type === 'substage';
+    
+    const handleInteractionAttempt = () => {
+        if (!selectedContent) {
+            showSnackbar("You must add or select some source content first");
+            return true; // Indicates an error occurred
+        }
+        return false;
+    };
 
     const handleSelectContent = (content: {name: string, type: 'file' | 'link'}) => {
         setSelectedContent(content);
         setIsProcessed(false);
-        setOutputName(''); // Reset name on new content selection
-        onProcessedContentChange(null); // Clear processed content on new selection
+        setOutputName('');
+        setSelectedOutput(null);
+        onProcessedContentChange(null);
         setIsModalOpen(false);
     }
     
     const handleProcess = () => {
+        if (handleInteractionAttempt()) return;
+        
+        if (processType === 'Upload N8N JSON') return;
+
         if (!outputName.trim()) {
-            alert("Please provide a name for the processed content.");
+            showSnackbar("Please provide a name for the processed content.");
             return;
         }
         setIsProcessed(true);
-        // In a real app, the ID would come from the backend.
-        const newContentOutput = { id: Date.now(), name: outputName.trim() };
+        // In a real app, this would be a backend call and the data would be real.
+        const newContentOutput: ContentOutput = {
+            id: Date.now(),
+            name: outputName.trim(),
+            processType: processType,
+            source: selectedContent!, // We can use ! because handleInteractionAttempt checks it
+            data: MOCK_QAS,
+        };
+        // Automatically select the new output for viewing and clear the name field.
+        setSelectedOutput(newContentOutput);
         onProcessedContentChange(newContentOutput);
+        setOutputName('');
     };
     
     return (
@@ -60,6 +93,20 @@ const ContentProcessingNav: React.FC<ContentProcessingNavProps> = ({ onExit, onT
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
                 onSelect={handleSelectContent}
+            />
+            <UploadN8NJsonModal
+                isOpen={isUploadN8NModalOpen}
+                onClose={() => setIsUploadN8NModalOpen(false)}
+                onSave={(json) => console.log('N8N JSON Saved:', json)}
+            />
+            <SelectOutputModal
+                isOpen={isSelectOutputModalOpen}
+                onClose={() => setIsSelectOutputModalOpen(false)}
+                onSelect={(output) => {
+                    setSelectedOutput(output);
+                    setIsProcessed(true); // Assume viewing an output means its "processed"
+                    onProcessedContentChange(output);
+                }}
             />
             <div className="flex-shrink-0 pb-4 border-b border-gray-700">
                 <button onClick={onExit} className="flex items-center text-sm text-brand-gray hover:text-white transition-colors mb-4">
@@ -121,9 +168,9 @@ const ContentProcessingNav: React.FC<ContentProcessingNavProps> = ({ onExit, onT
                            type="text"
                            value={outputName}
                            onChange={(e) => setOutputName(e.target.value)}
+                           onFocus={handleInteractionAttempt}
                            placeholder="e.g., Key Q&A for Intro"
-                           className="w-full bg-gray-800 border border-gray-600 rounded-md p-1.5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-brand-red" 
-                           disabled={!selectedContent}
+                           className="w-full bg-gray-800 border border-gray-600 rounded-md p-1.5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-brand-red"
                         />
                     </div>
 
@@ -132,21 +179,57 @@ const ContentProcessingNav: React.FC<ContentProcessingNavProps> = ({ onExit, onT
                          <select 
                             id="process-type"
                             value={processType}
+                            onMouseDown={(e) => {
+                                if (handleInteractionAttempt()) {
+                                    e.preventDefault();
+                                    (e.target as HTMLSelectElement).blur();
+                                }
+                            }}
                             onChange={(e) => setProcessType(e.target.value)}
                             className="w-full bg-gray-800 border border-gray-600 rounded-md p-1.5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-brand-red"
-                            disabled={!selectedContent}>
+                         >
                            {PROCESS_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
                         </select>
                      </div>
-                     <button onClick={handleProcess} disabled={!selectedContent} className="w-full bg-brand-red text-white font-bold py-2 rounded hover:bg-opacity-80 transition-all disabled:bg-gray-600 disabled:cursor-not-allowed">
+                      {processType === 'Upload N8N JSON' && (
+                        <button
+                            onClick={() => {
+                                if (handleInteractionAttempt()) return;
+                                setIsUploadN8NModalOpen(true);
+                            }}
+                            className="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-500 transition-all"
+                        >
+                            Upload N8N JSON
+                        </button>
+                    )}
+                     <button 
+                        onClick={handleProcess} 
+                        className={`w-full text-white font-bold py-2 rounded transition-all ${processType === 'Upload N8N JSON' ? 'bg-gray-600 cursor-not-allowed opacity-50' : 'bg-brand-red hover:bg-opacity-80'}`}
+                     >
                         Process Content
                     </button>
                 </section>
                 
+                {/* Select Output */}
+                 <section className="bg-brand-dark p-3 rounded-lg border border-gray-700 space-y-2">
+                    <div>
+                        <label className="text-sm font-medium text-brand-gray block mb-1">Current Processed Content:</label>
+                        <div className="p-2 bg-gray-800 rounded-md min-h-[40px] flex items-center">
+                            <span className="text-white text-sm font-semibold truncate">{selectedOutput ? selectedOutput.name : 'None Selected'}</span>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => setIsSelectOutputModalOpen(true)}
+                        className="w-full bg-gray-600 text-white font-bold py-2 rounded hover:bg-gray-500 transition-colors text-sm"
+                    >
+                        Select Processed Content
+                    </button>
+                </section>
+                
                 {/* Output */}
-                {isProcessed && (
+                {selectedOutput && (
                     <section className="space-y-3">
-                        <h3 className="text-lg font-semibold text-white">Output</h3>
+                        <h3 className="text-lg font-semibold text-white">Viewing: {selectedOutput.name}</h3>
                         <div>
                             <label htmlFor="output-set" className="text-sm font-medium text-brand-gray mb-1 block">View Output Set:</label>
                             <select id="output-set" className="w-full bg-gray-800 border border-gray-600 rounded-md p-1.5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-brand-red">

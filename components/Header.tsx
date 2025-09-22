@@ -78,7 +78,8 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavClick, searchQuery, s
               <button onClick={handleNav('home')} className={navLinkClasses('home')}>Home</button>
               <button onClick={handleNav('categories')} className={navLinkClasses('categories')}>Categories</button>
               <button onClick={handleNav('my-list')} className={navLinkClasses('my-list')}>My List</button>
-              <button onClick={handleNav('lesson-builder')} className={navLinkClasses('lesson-builder')}>Lesson-builder</button>
+              <button onClick={handleNav('lesson-builder')} className={navLinkClasses('lesson-builder')}>Lesson Builder</button>
+              <button onClick={handleNav('interaction-builder')} className={navLinkClasses('interaction-builder')}>Interaction Builder</button>
             </nav>
           </div>
           <div className="flex items-center space-x-4">
@@ -120,7 +121,8 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavClick, searchQuery, s
             <button onClick={handleNav('home')} className={mobileNavLinkClasses('home')}>Home</button>
             <button onClick={handleNav('categories')} className={mobileNavLinkClasses('categories')}>Categories</button>
             <button onClick={handleNav('my-list')} className={mobileNavLinkClasses('my-list')}>My List</button>
-            <button onClick={handleNav('lesson-builder')} className={mobileNavLinkClasses('lesson-builder')}>Lesson-builder</button>
+            <button onClick={handleNav('lesson-builder')} className={mobileNavLinkClasses('lesson-builder')}>Lesson Builder</button>
+            <button onClick={handleNav('interaction-builder')} className={mobileNavLinkClasses('interaction-builder')}>Interaction Builder</button>
           </nav>
         </div>
       )}

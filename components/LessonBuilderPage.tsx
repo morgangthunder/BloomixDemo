@@ -393,6 +393,7 @@ const LessonBuilderPage: React.FC<LessonBuilderPageProps> = ({ onExit }) => {
                     }}
                     selectedItem={selectedItem}
                     onShowScript={() => setIsScriptViewVisible(true)}
+                    showSnackbar={showSnackbar}
                 />
             )
         )}
