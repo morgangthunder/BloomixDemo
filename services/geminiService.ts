@@ -2,13 +2,21 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { Category } from '../types';
 
-const API_KEY = process.env.API_KEY;
+// Gracefully handle missing API key so the app runs without Gemini
+const API_KEY = process.env.API_KEY || process.env.GEMINI_API_KEY;
 
-if (!API_KEY) {
-  throw new Error("API_KEY environment variable not set");
-}
+// Lazily create the client only if a key is provided
+const getAiClient = () => {
+  if (!API_KEY) return null;
+  try {
+    return new GoogleGenAI({ apiKey: API_KEY });
+  } catch (e) {
+    console.warn("Gemini client init failed; running without AI:", e);
+    return null;
+  }
+};
 
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+const ai = getAiClient();
 
 const lessonSchema = {
   type: Type.OBJECT,
@@ -49,6 +57,22 @@ export const fetchLessonData = async (): Promise<Category[]> => {
     Return the data strictly as a JSON array matching the provided schema.
   `;
 
+  // If AI client is not available, return placeholders so the app still runs
+  if (!ai) {
+    console.warn("Gemini API key not set; returning placeholder categories.");
+    const placeholder: Category[] = Array.from({ length: 5 }).map((_, ci) => ({
+      name: `Category ${ci + 1}`,
+      lessons: Array.from({ length: 8 }).map((__, li) => ({
+        id: ci * 100 + li + 1,
+        title: `Sample Lesson ${ci + 1}-${li + 1}`,
+        description: 'Placeholder description for this lesson.',
+        thumbnailUrl: `https://picsum.photos/400/225?random=${ci * 10 + li + 1}`,
+        stages: []
+      }))
+    }));
+    return placeholder;
+  }
+
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
@@ -70,6 +94,17 @@ export const fetchLessonData = async (): Promise<Category[]> => {
 
   } catch (error) {
     console.error("Error fetching or parsing data from Gemini API:", error);
-    throw new Error("Failed to communicate with the AI model.");
+    // Fallback to placeholders on error
+    const placeholder: Category[] = Array.from({ length: 5 }).map((_, ci) => ({
+      name: `Category ${ci + 1}`,
+      lessons: Array.from({ length: 8 }).map((__, li) => ({
+        id: ci * 100 + li + 1,
+        title: `Sample Lesson ${ci + 1}-${li + 1}`,
+        description: 'Placeholder description for this lesson.',
+        thumbnailUrl: `https://picsum.photos/400/225?random=${ci * 10 + li + 1}`,
+        stages: []
+      }))
+    }));
+    return placeholder;
   }
 };
