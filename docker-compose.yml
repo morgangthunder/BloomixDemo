@@ -1,0 +1,179 @@
+services:
+  # Frontend - Angular + Ionic
+  frontend:
+    build:
+      context: ./Upora/frontend
+      dockerfile: Dockerfile.dev
+    container_name: upora-frontend
+    ports:
+      - "8100:8100"
+    environment:
+      - NODE_ENV=development
+      - API_URL=http://backend:3000/api
+      - WS_URL=ws://backend:3000
+    volumes:
+      - ./Upora/frontend/src:/app/src
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - upora-network
+
+  # Backend - NestJS API
+  backend:
+    build:
+      context: ./Upora/backend
+      dockerfile: Dockerfile.dev
+    container_name: upora-backend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USER=upora_user
+      - DATABASE_PASSWORD=upora_password
+      - DATABASE_NAME=upora_dev
+      - DATABASE_SYNCHRONIZE=false
+      - DATABASE_LOGGING=true
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
+      - S3_BUCKET=upora-uploads
+      - N8N_WEBHOOK_URL=http://n8n:5678/webhook
+      - JWT_SECRET=dev-jwt-secret-change-in-production
+      - COGNITO_REGION=us-east-1
+      - COGNITO_USER_POOL_ID=mock-pool-id
+      - COGNITO_CLIENT_ID=mock-client-id
+      - GROK_API_KEY=mock-grok-key
+      - GROK_API_URL=https://api.x.ai/v1
+      - CORS_ORIGINS=http://localhost:8100,http://localhost:4200
+    volumes:
+      - ./Upora/backend/src:/app/src
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - upora-network
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: upora-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=upora_user
+      - POSTGRES_PASSWORD=upora_password
+      - POSTGRES_DB=upora_dev
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d
+    networks:
+      - upora-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U upora_user -d upora_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis - Caching & Queue
+  redis:
+    image: redis:7-alpine
+    container_name: upora-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - upora-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO - Local S3 Storage
+  minio:
+    image: minio/minio:latest
+    container_name: upora-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio-data:/data
+    networks:
+      - upora-network
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # MinIO Client - Create buckets on startup
+  minio-client:
+    image: minio/mc:latest
+    container_name: upora-minio-client
+    depends_on:
+      - minio
+    networks:
+      - upora-network
+    entrypoint: >
+      /bin/sh -c "
+      sleep 10;
+      /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      /usr/bin/mc mb myminio/upora-uploads --ignore-existing;
+      /usr/bin/mc policy set public myminio/upora-uploads;
+      exit 0;
+      "
+
+  # n8n - Workflow Automation
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: upora-n8n
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=admin123
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://n8n:5678/
+      - GENERIC_TIMEZONE=America/New_York
+    volumes:
+      - n8n-data:/home/node/.n8n
+      - ./docker/n8n/workflows:/workflows
+    networks:
+      - upora-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  upora-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  minio-data:
+    driver: local
+  n8n-data:
+    driver: local
+
