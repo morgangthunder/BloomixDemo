@@ -59,4 +59,12 @@ export class UsersController {
   ) {
     return this.usersService.incrementTokenUsage(id, tokensUsed);
   }
+
+  @Get(':id/token-usage')
+  async getTokenUsage(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Headers('x-tenant-id') tenantId?: string,
+  ) {
+    return this.usersService.getTokenUsage(id, tenantId);
+  }
 }

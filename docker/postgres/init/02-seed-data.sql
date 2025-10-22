@@ -275,6 +275,22 @@ INSERT INTO token_tracking (tenant_id, user_id, usage_type, resource_type, resou
 ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000011', 'content_processing', 'workflow', '20000000-0000-0000-0000-000000000001', 1500, 30);
 
 -- =====================================================
+-- TOKEN PRICING CONFIGURATION
+-- =====================================================
+
+-- Subscription tiers
+INSERT INTO token_pricing (tier, monthly_tokens, price_cents, margin_multiplier, base_cost_per_1k_tokens, customer_cost_per_1k_tokens) VALUES
+('free', 10000, 0, 1.5, 0.0015, 0.00225),
+('pro', 50000, 999, 1.5, 0.0015, 0.00225),
+('enterprise', 200000, 4999, 1.5, 0.0015, 0.00225);
+
+-- Global pricing configuration per LLM provider
+INSERT INTO pricing_config (provider, base_cost_per_1k, margin_multiplier, customer_cost_per_1k) VALUES
+('xai', 0.0015, 1.5, 0.00225),      -- Grok API (hypothetical pricing)
+('openai', 0.03, 1.5, 0.045),       -- GPT-4 (actual pricing)
+('anthropic', 0.015, 1.5, 0.0225);  -- Claude (actual pricing)
+
+-- =====================================================
 -- USER SESSIONS (Active learning sessions)
 -- =====================================================
 

@@ -5,9 +5,11 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: ['log', 'error', 'warn', 'debug'],
+  });
   
-  // Enable CORS for frontend
+  // Enable CORS for frontend (including WebSocket)
   const corsOrigins = process.env.CORS_ORIGINS 
     ? process.env.CORS_ORIGINS.split(',')
     : ['http://localhost:4200', 'http://localhost:3000', 'http://localhost:8100'];

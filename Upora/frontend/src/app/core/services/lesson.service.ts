@@ -258,15 +258,15 @@ export class LessonService {
   }
 
   startLessonFromOverview() {
-    const frenchLesson = this.categoriesSubject.value
-      .flatMap(c => c.lessons)
-      .find(l => l.id === 9);
+    // Get the current overview lesson
+    const currentLesson = this.overviewLessonSubject.value;
     
-    if (frenchLesson && frenchLesson.stages && frenchLesson.stages.length > 0) {
-      this.activeLessonSubject.next(frenchLesson);
+    if (currentLesson) {
+      console.log('[LessonService] Starting lesson:', currentLesson.title);
+      this.activeLessonSubject.next(currentLesson);
       this.setCurrentPage('lessonView');
     } else {
-      alert("Conversational French lesson content is not available yet.");
+      alert("Please select a lesson first.");
     }
   }
 

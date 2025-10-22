@@ -4,9 +4,11 @@ import { Router, ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { IonContent } from '@ionic/angular/standalone';
 import { LessonService } from '../../core/services/lesson.service';
+import { WebSocketService, ChatMessage } from '../../core/services/websocket.service';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { Lesson, Stage, SubStage } from '../../core/models/lesson.model';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-lesson-view',
@@ -47,7 +49,7 @@ import { Lesson, Stage, SubStage } from '../../core/models/lesson.model';
               <div class="flex items-center justify-between">
                 <div class="flex-1">
                   <h3 class="font-semibold text-white">{{ stage.title }}</h3>
-                  <p class="text-sm text-gray-400">{{ stage.type }} • {{ stage.subStages.length }} sub-stages</p>
+                  <p class="text-sm text-gray-400">{{ stage.type || 'Stage' }}<span *ngIf="stage.subStages"> • {{ stage.subStages.length }} sub-stages</span></p>
                 </div>
                 <div class="flex items-center space-x-2">
                   <span *ngIf="stage.passed" class="text-green-500">✓</span>
@@ -80,7 +82,19 @@ import { Lesson, Stage, SubStage } from '../../core/models/lesson.model';
         </div>
 
         <!-- Exit Button -->
-        <div class="p-4 border-t border-gray-700">
+        <div class="p-4 border-t border-gray-700 space-y-2">
+          <button 
+            *ngIf="lesson"
+            (click)="toggleMyList()"
+            class="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded transition flex items-center justify-center">
+            <svg *ngIf="!isInMyList()" class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+            </svg>
+            <svg *ngIf="isInMyList()" class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+            </svg>
+            {{ isInMyList() ? 'In My List' : 'Add to List' }}
+          </button>
           <button 
             (click)="exitLesson()"
             class="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded transition">
@@ -153,8 +167,52 @@ import { Lesson, Stage, SubStage } from '../../core/models/lesson.model';
           </ng-template>
         </div>
 
+        <!-- Chat History (if messages exist) -->
+        <div *ngIf="chatMessages.length > 0" class="border-t border-gray-700 bg-brand-black/50 max-h-64 overflow-y-auto">
+          <div class="p-4 space-y-3">
+            <div *ngFor="let msg of chatMessages" 
+                 [class]="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'">
+              <div [class]="msg.role === 'user' 
+                ? 'bg-brand-red text-white rounded-lg py-2 px-4 max-w-[80%]'
+                : 'bg-gray-700 text-white rounded-lg py-2 px-4 max-w-[80%]'">
+                <div class="flex items-start space-x-2">
+                  <svg *ngIf="msg.role === 'assistant'" class="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+                  </svg>
+                  <div class="flex-1">
+                    <p class="text-sm whitespace-pre-wrap">{{ msg.content }}</p>
+                    <p class="text-xs opacity-60 mt-1">
+                      {{ msg.timestamp | date:'short' }}
+                      <span *ngIf="msg.tokensUsed"> • {{ msg.tokensUsed }} tokens</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- AI Typing Indicator -->
+            <div *ngIf="isAITyping" class="flex justify-start">
+              <div class="bg-gray-700 text-white rounded-lg py-2 px-4">
+                <div class="flex space-x-1">
+                  <div class="w-2 h-2 bg-white rounded-full animate-bounce" style="animation-delay: 0ms"></div>
+                  <div class="w-2 h-2 bg-white rounded-full animate-bounce" style="animation-delay: 150ms"></div>
+                  <div class="w-2 h-2 bg-white rounded-full animate-bounce" style="animation-delay: 300ms"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Bottom Controls -->
         <div class="p-4 md:p-6 bg-brand-black border-t border-gray-700">
+          <!-- Connection Status -->
+          <div *ngIf="!isConnected" class="mb-2 text-xs text-yellow-500 flex items-center">
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            AI Teacher offline - connecting...
+          </div>
+          
           <div class="flex items-center space-x-4">
             <button class="flex items-center justify-center bg-gray-700 text-white font-bold py-2 px-4 rounded hover:bg-gray-600 transition">
               <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -168,10 +226,12 @@ import { Lesson, Stage, SubStage } from '../../core/models/lesson.model';
                 (keyup.enter)="sendMessage()"
                 type="text"
                 placeholder="Ask the AI teacher a question..."
-                class="w-full bg-brand-dark border border-gray-600 rounded-lg py-2 pl-4 pr-12 text-white placeholder-brand-gray focus:outline-none focus:ring-2 focus:ring-brand-red"
+                [disabled]="!isConnected"
+                class="w-full bg-brand-dark border border-gray-600 rounded-lg py-2 pl-4 pr-12 text-white placeholder-brand-gray focus:outline-none focus:ring-2 focus:ring-brand-red disabled:opacity-50 disabled:cursor-not-allowed"
               />
               <button (click)="sendMessage()" 
-                      class="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-brand-gray hover:text-white transition-colors">
+                      [disabled]="!isConnected || !chatMessage.trim()"
+                      class="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-brand-gray hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
                 </svg>
@@ -209,22 +269,33 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   
   // Chat
   chatMessage = '';
+  chatMessages: ChatMessage[] = [];
+  isAITyping = false;
+  isConnected = false;
   
   private destroy$ = new Subject<void>();
 
   constructor(
     private lessonService: LessonService,
     private router: Router,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private wsService: WebSocketService
   ) {}
 
   ngOnInit() {
+    console.log('[LessonView] ngOnInit called');
+    console.log('[LessonView] enableWebSockets:', environment.enableWebSockets);
+    
     this.lessonService.activeLesson$
       .pipe(takeUntil(this.destroy$))
       .subscribe(lesson => {
+        console.log('[LessonView] activeLesson$ emitted:', lesson?.title || 'null');
+        
         if (lesson) {
           this.lesson = lesson;
           this.lessonStages = lesson.stages || [];
+          
+          console.log('[LessonView] Lesson set - ID:', lesson.id, 'Stages:', this.lessonStages.length);
           
           // Auto-select first stage and substage if available
           if (this.lessonStages.length > 0) {
@@ -232,20 +303,70 @@ export class LessonViewComponent implements OnInit, OnDestroy {
             this.activeStageId = firstStage.id;
             this.expandedStages.add(firstStage.id);
             
-            if (firstStage.subStages.length > 0) {
+            if (firstStage.subStages && firstStage.subStages.length > 0) {
               this.activeSubStageId = firstStage.subStages[0].id;
               this.updateActiveSubStage();
             }
           }
+          
+          // Connect to WebSocket for AI chat if enabled
+          console.log('[LessonView] Checking WebSocket connection - enabled:', environment.enableWebSockets, 'lesson.id:', lesson.id);
+          
+          if (environment.enableWebSockets && lesson.id) {
+            console.log('[LessonView] ✅ Conditions met - calling connectToChat()');
+            this.connectToChat();
+          } else {
+            console.warn('[LessonView] ❌ WebSocket not enabled or no lesson ID');
+          }
         }
       });
+
+    // Subscribe to WebSocket events
+    this.wsService.connected$.pipe(takeUntil(this.destroy$)).subscribe(connected => {
+      this.isConnected = connected;
+      console.log('[LessonView] WebSocket connected:', connected);
+    });
+
+    this.wsService.messages$.pipe(takeUntil(this.destroy$)).subscribe(messages => {
+      this.chatMessages = messages;
+      console.log('[LessonView] Chat messages updated:', messages.length);
+    });
+
+    this.wsService.typing$.pipe(takeUntil(this.destroy$)).subscribe(typing => {
+      this.isAITyping = typing;
+    });
 
     // Setup mouse listeners for resize
     window.addEventListener('mousemove', this.handleMouseMove.bind(this));
     window.addEventListener('mouseup', this.handleMouseUp.bind(this));
   }
 
+  /**
+   * Connect to WebSocket chat for this lesson
+   */
+  connectToChat() {
+    if (!this.lesson?.id) {
+      console.warn('[LessonView] Cannot connect to chat - no lesson ID');
+      return;
+    }
+
+    const lessonId = this.lesson.id.toString();
+    const userId = environment.defaultUserId;
+    const tenantId = environment.tenantId;
+
+    console.log('[LessonView] 🔌 Attempting to connect to chat for lesson:', lessonId);
+    console.log('[LessonView] 🔌 WebSocket URL:', environment.wsUrl);
+    console.log('[LessonView] 🔌 User ID:', userId, 'Tenant ID:', tenantId);
+    
+    this.wsService.connect();
+    this.wsService.joinLesson(lessonId, userId, tenantId);
+  }
+
   ngOnDestroy() {
+    // Disconnect from WebSocket
+    this.wsService.leaveLesson();
+    this.wsService.disconnect();
+    
     this.destroy$.next();
     this.destroy$.complete();
     window.removeEventListener('mousemove', this.handleMouseMove.bind(this));
@@ -328,10 +449,26 @@ export class LessonViewComponent implements OnInit, OnDestroy {
 
   sendMessage() {
     if (this.chatMessage.trim()) {
-      console.log('AI chat message:', this.chatMessage);
-      // TODO: Implement AI chat functionality
+      console.log('[LessonView] Sending message via WebSocket:', this.chatMessage);
+      
+      // Send message through WebSocket
+      this.wsService.sendMessage(this.chatMessage);
+      
+      // Clear input
       this.chatMessage = '';
     }
+  }
+
+  toggleMyList() {
+    if (this.lesson) {
+      console.log('[LessonView] Toggle my list for:', this.lesson.title);
+      this.lessonService.toggleMyList(this.lesson);
+    }
+  }
+
+  isInMyList(): boolean {
+    if (!this.lesson) return false;
+    return this.lessonService.isInMyList(this.lesson.id);
   }
 
   exitLesson() {

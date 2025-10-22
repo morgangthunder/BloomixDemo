@@ -168,6 +168,54 @@ CREATE TABLE payouts (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Token pricing configuration (super admin managed)
+CREATE TABLE token_pricing (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tier VARCHAR(50) NOT NULL UNIQUE, -- 'free', 'pro', 'enterprise'
+    monthly_tokens INTEGER NOT NULL,
+    price_cents INTEGER NOT NULL,
+    margin_multiplier DECIMAL(4,2) DEFAULT 1.5,
+    base_cost_per_1k_tokens DECIMAL(10,6) DEFAULT 0.0015,
+    customer_cost_per_1k_tokens DECIMAL(10,6),
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Token top-ups (pay-as-you-go)
+CREATE TABLE token_topups (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    tokens_purchased INTEGER NOT NULL,
+    price_cents INTEGER NOT NULL,
+    payment_id VARCHAR(255),
+    status VARCHAR(50) DEFAULT 'pending', -- 'pending', 'completed', 'failed'
+    expires_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Monthly usage reset tracking
+CREATE TABLE token_resets (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    reset_date DATE NOT NULL,
+    tokens_before_reset INTEGER,
+    tokens_after_reset INTEGER,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Global pricing configuration
+CREATE TABLE pricing_config (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    provider VARCHAR(50) NOT NULL UNIQUE, -- 'xai', 'openai', 'anthropic'
+    base_cost_per_1k DECIMAL(10,6) NOT NULL,
+    margin_multiplier DECIMAL(4,2) DEFAULT 1.5,
+    customer_cost_per_1k DECIMAL(10,6),
+    is_active BOOLEAN DEFAULT true,
+    updated_by UUID,
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
 -- =====================================================
 -- INDEXES
 -- =====================================================

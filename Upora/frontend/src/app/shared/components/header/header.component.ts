@@ -3,8 +3,22 @@ import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { LessonService } from '../../../core/services/lesson.service';
+import { ApiService } from '../../../core/services/api.service';
+import { WebSocketService } from '../../../core/services/websocket.service';
+import { environment } from '../../../../environments/environment';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
+
+interface TokenUsage {
+  monthlyUsage: number;
+  monthlyLimit: number;
+  percentUsed: number;
+  remaining: number;
+  subscriptionTier: string;
+  resetDate: string;
+  daysUntilReset: number;
+  warningLevel: 'ok' | 'warning' | 'critical';
+}
 
 @Component({
   selector: 'app-header',
@@ -61,6 +75,30 @@ import { takeUntil } from 'rxjs/operators';
           
           <!-- Right side actions -->
           <div class="flex items-center space-x-4">
+            <!-- Token Usage Indicator -->
+            <div *ngIf="tokenUsage" 
+                 class="hidden md:flex items-center space-x-2 px-3 py-1 rounded-full text-sm font-medium transition-colors cursor-pointer"
+                 [class.bg-green-900]="tokenUsage.warningLevel === 'ok'"
+                 [class.bg-yellow-900]="tokenUsage.warningLevel === 'warning'"
+                 [class.bg-red-900]="tokenUsage.warningLevel === 'critical'"
+                 [class.text-green-300]="tokenUsage.warningLevel === 'ok'"
+                 [class.text-yellow-300]="tokenUsage.warningLevel === 'warning'"
+                 [class.text-red-300]="tokenUsage.warningLevel === 'critical'"
+                 (click)="navigateTo('profile')"
+                 title="Click to view usage details">
+              <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M10 2a8 8 0 100 16 8 8 0 000-16zM8 11a2 2 0 114 0 2 2 0 01-4 0z"/>
+              </svg>
+              <span>{{ formatTokens(tokenUsage.monthlyUsage) }} / {{ formatTokens(tokenUsage.monthlyLimit) }}</span>
+              <div class="w-16 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                <div class="h-full transition-all duration-300"
+                     [class.bg-green-400]="tokenUsage.warningLevel === 'ok'"
+                     [class.bg-yellow-400]="tokenUsage.warningLevel === 'warning'"
+                     [class.bg-red-400]="tokenUsage.warningLevel === 'critical'"
+                     [style.width.%]="tokenUsage.percentUsed"></div>
+              </div>
+            </div>
+            
             <!-- Search -->
             <div *ngIf="isSearchOpen" class="flex items-center space-x-2 animate-fade-in">
               <svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -146,12 +184,15 @@ export class HeaderComponent implements OnInit, OnDestroy {
   isMobileMenuOpen = false;
   searchQuery = '';
   currentPage = 'home';
+  tokenUsage: TokenUsage | null = null;
   
   private destroy$ = new Subject<void>();
 
   constructor(
     private lessonService: LessonService,
-    private router: Router
+    private router: Router,
+    private apiService: ApiService,
+    private wsService: WebSocketService
   ) {}
 
   ngOnInit() {
@@ -165,6 +206,12 @@ export class HeaderComponent implements OnInit, OnDestroy {
       .subscribe(scrollTop => {
         this.isScrolled = scrollTop > 10;
       });
+
+    // Load token usage
+    this.loadTokenUsage();
+
+    // TODO: Subscribe to real-time token usage updates from WebSocket (Phase 3 enhancement)
+    // Will be implemented when backend emits 'token-usage-update' events
   }
 
   ngOnDestroy() {
@@ -205,5 +252,29 @@ export class HeaderComponent implements OnInit, OnDestroy {
 
   getMobileNavLinkClasses(page: string): string {
     return `block w-full text-left p-3 text-lg rounded-md ${this.currentPage === page ? 'bg-brand-red text-white' : 'text-brand-light-gray hover:bg-gray-700'}`;
+  }
+
+  async loadTokenUsage() {
+    try {
+      const userId = environment.defaultUserId;
+      const tenantId = environment.tenantId;
+      
+      const usage = await this.apiService.get<TokenUsage>(`users/${userId}/token-usage`, {
+        headers: { 'x-tenant-id': tenantId }
+      }).toPromise();
+      
+      this.tokenUsage = usage || null;
+      console.log('[HeaderComponent] Token usage loaded:', usage);
+    } catch (error) {
+      console.error('[HeaderComponent] Failed to load token usage:', error);
+      // Fail gracefully - just don't show the indicator
+    }
+  }
+
+  formatTokens(tokens: number): string {
+    if (tokens >= 1000) {
+      return `${(tokens / 1000).toFixed(1)}K`;
+    }
+    return tokens.toString();
   }
 }

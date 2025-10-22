@@ -11,6 +11,7 @@ import { Workflow } from './entities/workflow.entity';
 import { Usage } from './entities/usage.entity';
 import { UsersModule } from './modules/users/users.module';
 import { LessonsModule } from './modules/lessons/lessons.module';
+import { ChatModule } from './modules/chat/chat.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { LessonsModule } from './modules/lessons/lessons.module';
     }),
     UsersModule,
     LessonsModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -117,7 +117,7 @@ import { Lesson } from '../../core/models/lesson.model';
                 <div class="space-y-2">
                   <div *ngFor="let stage of lesson.stages" class="bg-gray-800 p-4 rounded hover:bg-gray-700 transition-colors">
                     <h4 class="font-semibold text-white">{{ stage.title }}</h4>
-                    <p class="text-sm text-gray-400">{{ stage.type }} • {{ stage.subStages.length }} sub-stages</p>
+                    <p class="text-sm text-gray-400">{{ stage.type || 'Stage' }}<span *ngIf="stage.subStages"> • {{ stage.subStages.length }} sub-stages</span></p>
                   </div>
                 </div>
               </div>
@@ -152,22 +152,51 @@ export class LessonOverviewComponent implements OnInit {
   }
 
   getDuration(lesson: Lesson): number {
+    // If lesson has duration string (e.g., "45 min"), parse it
+    if (lesson.duration) {
+      const match = lesson.duration.match(/\d+/);
+      return match ? parseInt(match[0], 10) : 45;
+    }
+    
+    // Otherwise try to calculate from stages
     if (!lesson.stages || lesson.stages.length === 0) return 45;
-    return lesson.stages.reduce((total, stage) => 
-      total + stage.subStages.reduce((subTotal, subStage) => 
-        subTotal + subStage.duration, 0), 0);
+    
+    try {
+      return lesson.stages.reduce((total, stage) => {
+        if (!stage.subStages || stage.subStages.length === 0) return total;
+        return total + stage.subStages.reduce((subTotal, subStage) => 
+          subTotal + (subStage.duration || 0), 0);
+      }, 0) || 45;
+    } catch (error) {
+      console.warn('[LessonOverview] Error calculating duration:', error);
+      return 45;
+    }
   }
 
   startLesson() {
-    this.lessonService.startLessonFromOverview();
+    console.log('[LessonOverview] Start lesson button clicked');
+    
+    // Get the current lesson from service
+    this.lessonService.overviewLesson$.subscribe(lesson => {
+      if (lesson) {
+        console.log('[LessonOverview] Starting lesson:', lesson.title, 'ID:', lesson.id);
+        this.lessonService.startLessonFromOverview();
+        
+        // Navigate to lesson view with ID
+        this.router.navigate(['/lesson-view', lesson.id]);
+      }
+    }).unsubscribe(); // Immediate unsubscribe since we only need current value
   }
 
   toggleMyList(lesson: Lesson) {
+    console.log('[LessonOverview] Toggle my list for:', lesson.title);
     this.lessonService.toggleMyList(lesson);
   }
 
   isInMyList(lessonId: number): boolean {
-    return this.lessonService.isInMyList(lessonId);
+    const inList = this.lessonService.isInMyList(lessonId);
+    console.log('[LessonOverview] Is lesson', lessonId, 'in my list?', inList);
+    return inList;
   }
 
   goBack() {

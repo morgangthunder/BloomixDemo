@@ -58,6 +58,35 @@ export class UsersService {
     return await this.usersRepository.save(user);
   }
 
+  async getTokenUsage(userId: string, tenantId?: string) {
+    const user = await this.findOne(userId, tenantId);
+    
+    const monthlyUsage = user.grokTokensUsed || 0;
+    const monthlyLimit = user.grokTokenLimit || 10000;
+    const percentUsed = Math.round((monthlyUsage / monthlyLimit) * 100);
+    const remaining = monthlyLimit - monthlyUsage;
+    
+    // Calculate reset date (30 days from user creation)
+    const createdDate = new Date(user.createdAt);
+    const now = new Date();
+    const daysSinceCreation = Math.floor((now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
+    const cyclesCompleted = Math.floor(daysSinceCreation / 30);
+    const nextResetDate = new Date(createdDate);
+    nextResetDate.setDate(nextResetDate.getDate() + (cyclesCompleted + 1) * 30);
+    const daysUntilReset = Math.ceil((nextResetDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    
+    return {
+      monthlyUsage,
+      monthlyLimit,
+      percentUsed,
+      remaining,
+      subscriptionTier: user.subscription || 'free',
+      resetDate: nextResetDate.toISOString(),
+      daysUntilReset,
+      warningLevel: percentUsed >= 90 ? 'critical' : percentUsed >= 75 ? 'warning' : 'ok'
+    };
+  }
+
   // TODO: Implement earnings tracking via payouts table in Phase 7
   // async updateEarnings(userId: string, earnings: number): Promise<User> {
   //   const user = await this.findOne(userId);
