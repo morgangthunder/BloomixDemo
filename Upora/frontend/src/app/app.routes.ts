@@ -36,7 +36,7 @@ export const routes: Routes = [
   },
   {
     path: 'lesson-editor/:id',
-    loadComponent: () => import('./features/lesson-editor/lesson-editor.component').then(m => m.LessonEditorComponent)
+    loadComponent: () => import('./features/lesson-editor/lesson-editor-v2.component').then(m => m.LessonEditorV2Component)
   },
   {
     path: 'interaction-builder',
