@@ -1546,10 +1546,14 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   addSubStage(stageId: string) {
     const stage = this.stages.find(s => s.id === stageId);
     if (stage) {
+      // Get first available substage type for this stage
+      const availableTypes = this.getAvailableSubStageTypes(stage.type);
+      const defaultType = availableTypes[0] || 'default';
+      
       const newSubStage: SubStage = {
         id: `substage-${Date.now()}`,
         title: `Substage ${stage.subStages.length + 1}`,
-        type: 'default',
+        type: defaultType,
         duration: 5,
         scriptBlocks: []
       };
