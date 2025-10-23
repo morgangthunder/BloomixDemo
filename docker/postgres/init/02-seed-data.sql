@@ -300,6 +300,49 @@ INSERT INTO user_sessions (tenant_id, user_id, lesson_id, progress, started_at, 
 NOW() - INTERVAL '1 hour', NOW() - INTERVAL '10 minutes');
 
 -- =====================================================
+-- CONTENT SOURCES (Semantic Search Data)
+-- =====================================================
+
+-- Approved content source: React Hooks Documentation
+INSERT INTO content_sources (id, tenant_id, type, source_url, title, summary, full_text, status, metadata, created_by, approved_by, approved_at) VALUES
+('40000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'url', 
+ 'https://react.dev/reference/react/hooks', 
+ 'React Hooks Documentation',
+ 'Comprehensive guide to React Hooks including useState, useEffect, useContext, and custom hooks. Explains functional component state management and side effects.',
+ 'Hooks let you use state and other React features without writing a class. Hooks are functions that let you "hook into" React state and lifecycle features from function components...',
+ 'approved',
+ '{"topics": ["React", "Hooks", "JavaScript", "State Management"], "keywords": ["useState", "useEffect", "useContext", "useReducer", "custom hooks"], "extractedDate": "2025-10-23"}',
+ '00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000010', NOW());
+
+-- Approved content source: Python Functions Tutorial
+INSERT INTO content_sources (id, tenant_id, type, source_url, title, summary, full_text, status, metadata, created_by, approved_by, approved_at) VALUES
+('40000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001', 'url',
+ 'https://docs.python.org/3/tutorial/controlflow.html#defining-functions',
+ 'Python Functions Tutorial',
+ 'Official Python documentation on defining and using functions, including parameters, default arguments, keyword arguments, and lambda expressions.',
+ 'Defining Functions. We can create a function that writes the Fibonacci series to an arbitrary boundary...',
+ 'approved',
+ '{"topics": ["Python", "Functions", "Programming"], "keywords": ["def", "return", "parameters", "arguments", "lambda"], "extractedDate": "2025-10-23"}',
+ '00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000010', NOW());
+
+-- Pending content source (waiting for approval)
+INSERT INTO content_sources (id, tenant_id, type, source_url, title, summary, status, created_by) VALUES
+('40000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000001', 'url',
+ 'https://javascript.info/variables',
+ 'JavaScript Variables Guide',
+ 'Comprehensive tutorial on JavaScript variable declarations using var, let, and const.',
+ 'pending',
+ '00000000-0000-0000-0000-000000000011');
+
+-- Link content source to JavaScript lesson
+INSERT INTO lesson_data_links (lesson_id, content_source_id, relevance_score, use_in_context) VALUES
+('30000000-0000-0000-0000-000000000002', '40000000-0000-0000-0000-000000000001', 0.85, true);
+
+-- Link content source to Python lesson
+INSERT INTO lesson_data_links (lesson_id, content_source_id, relevance_score, use_in_context) VALUES
+('30000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000002', 0.92, true);
+
+-- =====================================================
 -- UPDATE STATISTICS
 -- =====================================================
 

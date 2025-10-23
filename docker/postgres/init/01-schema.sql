@@ -216,6 +216,38 @@ CREATE TABLE pricing_config (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Content sources (URLs, PDFs, images for semantic search)
+CREATE TABLE content_sources (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL,
+    type VARCHAR(50) NOT NULL, -- 'url', 'pdf', 'image', 'api', 'text'
+    source_url TEXT,
+    file_path TEXT,
+    title VARCHAR(500),
+    summary TEXT,
+    full_text TEXT,
+    status approval_status DEFAULT 'pending',
+    metadata JSONB DEFAULT '{}', -- { fileSize, mimeType, pageCount, extractedTopics, keywords }
+    weaviate_id UUID, -- Link to Weaviate object
+    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    approved_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    rejection_reason TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    approved_at TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Many-to-many relationship: Lessons ↔ Content Sources
+CREATE TABLE lesson_data_links (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    lesson_id UUID REFERENCES lessons(id) ON DELETE CASCADE,
+    content_source_id UUID REFERENCES content_sources(id) ON DELETE CASCADE,
+    relevance_score DECIMAL(3,2), -- 0.00-1.00 from Weaviate semantic search
+    use_in_context BOOLEAN DEFAULT true, -- Include in LLM context?
+    linked_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(lesson_id, content_source_id)
+);
+
 -- =====================================================
 -- INDEXES
 -- =====================================================
@@ -255,6 +287,19 @@ CREATE INDEX idx_token_tracking_tenant_id ON token_tracking(tenant_id);
 CREATE INDEX idx_token_tracking_user_id ON token_tracking(user_id);
 CREATE INDEX idx_token_tracking_created_at ON token_tracking(created_at DESC);
 
+-- Content sources indexes
+CREATE INDEX idx_content_sources_tenant_id ON content_sources(tenant_id);
+CREATE INDEX idx_content_sources_status ON content_sources(status);
+CREATE INDEX idx_content_sources_type ON content_sources(type);
+CREATE INDEX idx_content_sources_created_by ON content_sources(created_by);
+CREATE INDEX idx_content_sources_weaviate_id ON content_sources(weaviate_id);
+CREATE INDEX idx_content_sources_created_at ON content_sources(created_at DESC);
+
+-- Lesson data links indexes
+CREATE INDEX idx_lesson_data_links_lesson_id ON lesson_data_links(lesson_id);
+CREATE INDEX idx_lesson_data_links_content_source_id ON lesson_data_links(content_source_id);
+CREATE INDEX idx_lesson_data_links_relevance ON lesson_data_links(relevance_score DESC);
+
 -- =====================================================
 -- ROW-LEVEL SECURITY (RLS)
 -- =====================================================
@@ -268,6 +313,7 @@ ALTER TABLE usages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE token_tracking ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payouts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE content_sources ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for users table
 CREATE POLICY tenant_isolation_users ON users
@@ -312,6 +358,11 @@ CREATE POLICY tenant_isolation_payouts ON payouts
     FOR ALL
     USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
 
+-- RLS Policies for content_sources table
+CREATE POLICY tenant_isolation_content_sources ON content_sources
+    FOR ALL
+    USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+
 -- =====================================================
 -- FUNCTIONS & TRIGGERS
 -- =====================================================
@@ -336,6 +387,9 @@ CREATE TRIGGER update_interaction_types_updated_at BEFORE UPDATE ON interaction_
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_workflows_updated_at BEFORE UPDATE ON interaction_workflows
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_content_sources_updated_at BEFORE UPDATE ON content_sources
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Function to update token usage

@@ -1,0 +1,147 @@
+{
+  "name": "Content Processing Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "content-process",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook - Content Submitted",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "content-processing"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.sourceUrl }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "fetch-url",
+      "name": "Fetch URL Content",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract text from HTML\nconst html = $input.item.json.data;\nconst text = html.replace(/<[^>]*>/g, ' ').replace(/\\s+/g, ' ').trim();\n\nreturn {\n  fullText: text,\n  excerpt: text.substring(0, 1000)\n};"
+      },
+      "id": "extract-text",
+      "name": "Extract Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://backend:3000/api/grok/summarize",
+        "authentication": "none",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{ $json.fullText }}"
+            },
+            {
+              "name": "maxTokens",
+              "value": 500
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "grok-summarize",
+      "name": "Grok - Summarize Content",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [850, 300],
+      "notes": "Calls Grok API (mocked) to summarize and extract topics/keywords"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Grok response and extract topics/keywords\nconst grokResponse = $input.item.json;\n\n// Mock response structure:\n// { summary: '...', topics: [...], keywords: [...] }\n\nreturn {\n  summary: grokResponse.summary || '',\n  topics: grokResponse.topics || [],\n  keywords: grokResponse.keywords || [],\n  processedAt: new Date().toISOString()\n};"
+      },
+      "id": "parse-results",
+      "name": "Parse Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "http://backend:3000/api/content-sources/={{ $('Webhook - Content Submitted').item.json.contentSourceId }}",
+        "authentication": "none",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "summary",
+              "value": "={{ $json.summary }}"
+            },
+            {
+              "name": "fullText",
+              "value": "={{ $('Extract Text').item.json.fullText }}"
+            },
+            {
+              "name": "metadata",
+              "value": "={{ { topics: $json.topics, keywords: $json.keywords, processedAt: $json.processedAt } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-backend",
+      "name": "Update Backend with Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1450, 300]
+    }
+  ],
+  "connections": {
+    "Webhook - Content Submitted": {
+      "main": [[{ "node": "Fetch URL Content", "type": "main", "index": 0 }]]
+    },
+    "Fetch URL Content": {
+      "main": [[{ "node": "Extract Text", "type": "main", "index": 0 }]]
+    },
+    "Extract Text": {
+      "main": [[{ "node": "Grok - Summarize Content", "type": "main", "index": 0 }]]
+    },
+    "Grok - Summarize Content": {
+      "main": [[{ "node": "Parse Results", "type": "main", "index": 0 }]]
+    },
+    "Parse Results": {
+      "main": [[{ "node": "Update Backend with Results", "type": "main", "index": 0 }]]
+    },
+    "Update Backend with Results": {
+      "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-10-23T00:00:00.000Z",
+  "versionId": "1"
+}
+

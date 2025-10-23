@@ -9,9 +9,13 @@ import { Lesson } from './entities/lesson.entity';
 import { InteractionType } from './entities/interaction-type.entity';
 import { Workflow } from './entities/workflow.entity';
 import { Usage } from './entities/usage.entity';
+import { ContentSource } from './entities/content-source.entity';
+import { LessonDataLink } from './entities/lesson-data-link.entity';
 import { UsersModule } from './modules/users/users.module';
 import { LessonsModule } from './modules/lessons/lessons.module';
 import { ChatModule } from './modules/chat/chat.module';
+import { ContentSourcesModule } from './modules/content-sources/content-sources.module';
+import { WeaviateService } from './services/weaviate.service';
 
 @Module({
   imports: [
@@ -29,7 +33,7 @@ import { ChatModule } from './modules/chat/chat.module';
         username: configService.get('database.username'),
         password: configService.get('database.password'),
         database: configService.get('database.database'),
-        entities: [User, Lesson, InteractionType, Workflow, Usage],
+        entities: [User, Lesson, InteractionType, Workflow, Usage, ContentSource, LessonDataLink],
         synchronize: configService.get('database.synchronize'),
         logging: configService.get('database.logging'),
       }),
@@ -37,8 +41,10 @@ import { ChatModule } from './modules/chat/chat.module';
     UsersModule,
     LessonsModule,
     ChatModule,
+    ContentSourcesModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, WeaviateService],
+  exports: [WeaviateService],
 })
 export class AppModule {}
