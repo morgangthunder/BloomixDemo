@@ -12,7 +12,7 @@ import { Course, HubLesson } from '../../core/models/lesson.model';
   standalone: true,
   imports: [CommonModule, FormsModule, IonContent],
   template: `
-    <div class="h-screen bg-brand-dark text-white font-sans overflow-hidden flex flex-col" style="background-color: #0a0a0a;">
+    <div class="h-screen bg-brand-dark text-white font-sans overflow-hidden flex flex-col lesson-builder-wrapper" style="background-color: #0a0a0a;">
       <!-- Header -->
       <header class="flex items-center justify-between p-4 md:p-6 bg-brand-black border-b border-gray-700 flex-shrink-0">
         <div class="flex items-center space-x-4">
@@ -167,7 +167,17 @@ import { Course, HubLesson } from '../../core/models/lesson.model';
         </div>
       </ion-content>
     </div>
-  `
+  `,
+  styles: [`
+    .lesson-builder-wrapper {
+      padding-top: 64px;
+    }
+    @media (min-width: 768px) {
+      .lesson-builder-wrapper {
+        padding-top: 80px;
+      }
+    }
+  `]
 })
 export class LessonBuilderComponent implements OnInit {
   courses$: Observable<Course[]>;

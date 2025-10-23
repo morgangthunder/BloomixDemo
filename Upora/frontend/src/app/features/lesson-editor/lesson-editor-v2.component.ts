@@ -66,12 +66,15 @@ interface ProcessedContentOutput {
           </div>
         </div>
         <div class="header-actions">
-          <button (click)="saveDraft()" class="btn-secondary" [disabled]="saving">
-            <span *ngIf="!saving">💾 Save Draft</span>
-            <span *ngIf="saving">Saving...</span>
+          <!-- Desktop: Full buttons -->
+          <button (click)="saveDraft()" class="btn-secondary desktop-full mobile-icon" [disabled]="saving" title="Save Draft">
+            <span class="desktop-only" *ngIf="!saving">💾 Save Draft</span>
+            <span class="desktop-only" *ngIf="saving">Saving...</span>
+            <span class="mobile-only">💾</span>
           </button>
-          <button (click)="submitForApproval()" class="btn-primary" [disabled]="saving || !canSubmit()">
-            ✓ Submit for Approval
+          <button (click)="submitForApproval()" class="btn-primary desktop-full mobile-icon" [disabled]="saving || !canSubmit()" title="Submit for Approval">
+            <span class="desktop-only">✓ Submit for Approval</span>
+            <span class="mobile-only">✓</span>
           </button>
         </div>
       </header>
@@ -515,6 +518,16 @@ interface ProcessedContentOutput {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
         </svg>
       </button>
+
+      <!-- Mobile Bottom Bar (Tabs Only) -->
+      <div class="mobile-bottom-bar">
+        <button *ngFor="let tab of tabs" 
+                (click)="activeTab = tab.id"
+                class="mobile-tab-btn"
+                [class.active]="activeTab === tab.id">
+          <span class="tab-icon">{{tab.icon}}</span>
+        </button>
+      </div>
     </div>
   `,
   styles: [`
@@ -1076,6 +1089,36 @@ interface ProcessedContentOutput {
 
     /* MOBILE */
     @media (max-width: 1024px) {
+      /* Show/hide based on viewport */
+      .desktop-only {
+        display: none !important;
+      }
+      .mobile-only {
+        display: inline !important;
+      }
+      .desktop-full {
+        padding: 0.5rem !important;
+        min-width: auto !important;
+      }
+      .mobile-icon {
+        width: 40px;
+        height: 40px;
+        padding: 0.5rem !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .tab-nav {
+        display: none; /* Hide desktop tabs */
+      }
+      .header-title h1 {
+        font-size: 1rem;
+      }
+      .header-title .subtitle {
+        display: none; /* Hide subtitle on mobile for space */
+      }
+      
+      /* Sidebar - completely hidden when not open */
       .structure-sidebar {
         position: fixed;
         left: 0;
@@ -1084,19 +1127,34 @@ interface ProcessedContentOutput {
         z-index: 100;
         transform: translateX(-100%);
         transition: transform 0.3s ease;
+        width: 320px !important; /* Force width on mobile */
+      }
+      .structure-sidebar.collapsed {
+        transform: translateX(-100%); /* Completely hidden */
+        width: 0 !important;
       }
       .structure-sidebar.mobile-open {
         transform: translateX(0);
       }
+      .sidebar-collapsed-content {
+        display: none !important; /* Hide burger icon when collapsed */
+      }
+      .sidebar-resize-handle {
+        display: none !important; /* Hide resize handle on mobile */
+      }
+      
+      /* Overlay */
       .mobile-overlay {
         position: fixed;
         inset: 0;
         background: rgba(0,0,0,0.7);
         z-index: 99;
       }
+      
+      /* FAB */
       .mobile-fab {
         position: fixed;
-        bottom: 1.5rem;
+        bottom: 5.5rem; /* Above mobile bottom bar */
         right: 1.5rem;
         width: 56px;
         height: 56px;
@@ -1111,13 +1169,49 @@ interface ProcessedContentOutput {
         cursor: pointer;
         z-index: 50;
       }
-      .tab-label {
-        display: none;
+      
+      /* Mobile Bottom Bar */
+      .mobile-bottom-bar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: #1a1a1a;
+        border-top: 1px solid #333;
+        display: flex;
+        gap: 0.25rem;
+        padding: 0.5rem;
+        z-index: 200;
+        overflow-x: auto;
+      }
+      .mobile-tab-btn {
+        background: none;
+        border: none;
+        padding: 0.75rem 1rem;
+        color: #999;
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s;
+        flex-shrink: 0;
+        min-width: 48px;
+      }
+      .mobile-tab-btn.active {
+        color: white;
+        border-bottom-color: #cc0000;
+      }
+      .mobile-tab-btn .tab-icon {
+        font-size: 1.25rem;
       }
     }
     @media (min-width: 1025px) {
       .mobile-fab {
         display: none;
+      }
+      .mobile-bottom-bar {
+        display: none;
+      }
+      .mobile-only {
+        display: none !important;
       }
     }
 
