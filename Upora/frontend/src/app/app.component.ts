@@ -26,12 +26,8 @@ import { Lesson } from './core/models/lesson.model';
       font-family: system-ui, -apple-system, sans-serif;
     }
     .main-content {
-      padding-top: 64px; /* Header height on mobile */
-    }
-    @media (min-width: 768px) {
-      .main-content {
-        padding-top: 80px; /* Header height on desktop */
-      }
+      /* Removed global padding - each page controls its own spacing */
+      /* This prevents overlay issues on full-page layouts */
     }
   `]
 })

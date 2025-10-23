@@ -520,21 +520,20 @@ interface ProcessedContentOutput {
   styles: [`
     :host {
       display: block;
-      margin-top: -64px; /* Offset global .main-content padding */
-    }
-    @media (min-width: 768px) {
-      :host {
-        margin-top: -80px;
-      }
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 1000; /* Above main nav */
     }
     
     .lesson-editor-v2 {
-      min-height: 100vh;
+      height: 100vh;
       background: #0a0a0a;
       color: #e5e5e5;
       display: flex;
       flex-direction: column;
-      padding-top: 0 !important; /* Prevent additional padding */
     }
 
     /* HEADER */
@@ -547,6 +546,7 @@ interface ProcessedContentOutput {
       align-items: center;
       gap: 1rem;
       flex-wrap: wrap;
+      flex-shrink: 0;
     }
     .header-left {
       display: flex;

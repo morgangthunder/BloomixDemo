@@ -12,7 +12,7 @@ import { Lesson } from '../../core/models/lesson.model';
   imports: [CommonModule, IonContent],
   template: `
     <ion-content [scrollEvents]="true" (ionScroll)="onScroll($event)">
-      <div class="min-h-screen bg-brand-black text-white">
+      <div class="min-h-screen bg-brand-black text-white page-with-header">
         <div *ngIf="overviewLesson$ | async as lesson">
           <!-- Hero Image -->
           <div class="relative h-[45vh] md:h-[60vh] w-full">
@@ -126,7 +126,17 @@ import { Lesson } from '../../core/models/lesson.model';
         </div>
       </div>
     </ion-content>
-  `
+  `,
+  styles: [`
+    .page-with-header {
+      padding-top: 64px;
+    }
+    @media (min-width: 768px) {
+      .page-with-header {
+        padding-top: 80px;
+      }
+    }
+  `]
 })
 export class LessonOverviewComponent implements OnInit {
   overviewLesson$: Observable<Lesson | null>;

@@ -15,7 +15,7 @@ import { environment } from '../../../environments/environment';
   standalone: true,
   imports: [CommonModule, FormsModule, IonContent],
   template: `
-    <div class="h-screen bg-brand-dark text-white overflow-hidden flex flex-col md:flex-row">
+    <div class="h-screen bg-brand-dark text-white overflow-hidden flex flex-col md:flex-row lesson-view-wrapper">
       <!-- Mobile overlay -->
       <div *ngIf="isMobileNavOpen" 
            (click)="closeMobileNav()"

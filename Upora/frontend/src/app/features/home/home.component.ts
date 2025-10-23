@@ -11,7 +11,7 @@ import { Category, Lesson } from '../../core/models/lesson.model';
   imports: [CommonModule, IonContent],
   template: `
     <ion-content [scrollEvents]="true" (ionScroll)="onScroll($event)">
-      <div class="bg-brand-black min-h-screen text-brand-light-gray font-sans">
+      <div class="bg-brand-black min-h-screen text-brand-light-gray font-sans page-with-header">
         <main class="overflow-x-hidden">
           <!-- Hero Section -->
           <div *ngIf="featuredLesson" class="relative h-[500px] md:h-[600px] lg:h-[700px]">
@@ -89,6 +89,14 @@ import { Category, Lesson } from '../../core/models/lesson.model';
     </ion-content>
   `,
   styles: [`
+    .page-with-header {
+      padding-top: 64px;
+    }
+    @media (min-width: 768px) {
+      .page-with-header {
+        padding-top: 80px;
+      }
+    }
     .line-clamp-2 {
       display: -webkit-box;
       -webkit-line-clamp: 2;
