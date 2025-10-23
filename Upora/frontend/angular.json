@@ -92,12 +92,20 @@
         },
         "serve": {
           "builder": "@angular/build:dev-server",
+          "options": {
+            "poll": 500,
+            "liveReload": true,
+            "hmr": false,
+            "watch": true
+          },
           "configurations": {
             "production": {
               "buildTarget": "Upora:build:production"
             },
             "development": {
-              "buildTarget": "Upora:build:development"
+              "buildTarget": "Upora:build:development",
+              "poll": 500,
+              "liveReload": true
             }
           },
           "defaultConfiguration": "development"

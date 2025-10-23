@@ -15,6 +15,6 @@ COPY . .
 # Expose port
 EXPOSE 8100
 
-# Start Ionic dev server on port 8100
-CMD ["npm", "start", "--", "--host", "0.0.0.0", "--port", "8100", "--poll"]
+# Start Ionic dev server on port 8100 with aggressive polling for Docker on Windows
+CMD ["npm", "run", "start:docker"]
 
