@@ -79,7 +79,7 @@ interface ProcessedContentOutput {
       <!-- Main Layout: Sidebar + Tab Content -->
       <div class="editor-layout">
         <!-- Left Sidebar: Lesson Structure Tree -->
-        <aside class="structure-sidebar" [class.collapsed]="sidebarCollapsed" [class.mobile-open]="mobileSidebarOpen">
+        <aside class="structure-sidebar" [class.collapsed]="sidebarCollapsed" [class.mobile-open]="mobileSidebarOpen" [style.width.px]="sidebarCollapsed ? 60 : sidebarWidth">
           <div class="sidebar-header">
             <h3>Lesson Structure</h3>
             <div class="sidebar-controls">
@@ -105,6 +105,12 @@ interface ProcessedContentOutput {
             <div *ngFor="let stage of stages; let i = index" class="tree-item-group">
               <div class="tree-item stage-item"
                    [class.selected]="selectedItem.type === 'stage' && selectedItem.id === stage.id"
+                   [class.drag-over]="dragOverStageId === stage.id"
+                   draggable="true"
+                   (dragstart)="onStageDragStart(stage, $event)"
+                   (dragover)="onStageDragOver(stage.id, $event)"
+                   (dragleave)="onStageDragLeave()"
+                   (drop)="onStageDrop(stage, $event)"
                    (click)="selectItem({type: 'stage', id: stage.id})">
                 <button (click)="toggleStageExpanded(stage.id, $event)" class="expand-btn">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -112,6 +118,7 @@ interface ProcessedContentOutput {
                       [attr.d]="stage.expanded ? 'M19 9l-7 7-7-7' : 'M9 5l7 7-7 7'"></path>
                   </svg>
                 </button>
+                <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
                 <span class="item-icon">{{getStageIcon(stage.type)}}</span>
                 <span class="item-label">{{stage.title || 'Stage ' + (i+1)}}</span>
                 <button (click)="deleteStage(stage.id, $event)" class="delete-btn" title="Delete stage">
@@ -126,7 +133,14 @@ interface ProcessedContentOutput {
                 <div *ngFor="let substage of stage.subStages; let j = index" 
                      class="tree-item substage-item"
                      [class.selected]="selectedItem.type === 'substage' && selectedItem.id === substage.id"
+                     [class.drag-over]="dragOverSubStageId === substage.id"
+                     draggable="true"
+                     (dragstart)="onSubStageDragStart(substage, stage.id, $event)"
+                     (dragover)="onSubStageDragOver(substage.id, $event)"
+                     (dragleave)="onSubStageDragLeave()"
+                     (drop)="onSubStageDrop(substage, stage.id, $event)"
                      (click)="selectItem({type: 'substage', id: substage.id, stageId: stage.id})">
+                  <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
                   <span class="item-icon">▪</span>
                   <span class="item-label">{{substage.title || 'Substage ' + (j+1)}}</span>
                   <button (click)="deleteSubStage(stage.id, substage.id, $event)" class="delete-btn" title="Delete substage">
@@ -161,6 +175,9 @@ interface ProcessedContentOutput {
               </svg>
             </button>
           </div>
+          
+          <!-- Resize Handle -->
+          <div *ngIf="!sidebarCollapsed" class="sidebar-resize-handle" (mousedown)="onResizeMouseDown($event)" title="Drag to resize"></div>
         </aside>
 
         <!-- Main Content Area: Tabs + Panel -->
@@ -279,6 +296,16 @@ interface ProcessedContentOutput {
                 <div class="form-group">
                   <label for="substage-title">Title</label>
                   <input id="substage-title" type="text" [(ngModel)]="getSelectedSubStage()!.title" placeholder="Substage title" />
+                </div>
+                <div class="form-group">
+                  <label for="substage-type">Substage Type (TEACH)</label>
+                  <select id="substage-type" [(ngModel)]="getSelectedSubStage()!.type">
+                    <option value="">Select type...</option>
+                    <option *ngFor="let type of getAvailableSubStageTypes(getSelectedStage()?.type || 'trigger')" [value]="type">
+                      {{getSubStageTypeLabel(type)}}
+                    </option>
+                  </select>
+                  <small class="hint">Based on parent stage type: {{getSelectedStage()?.type | uppercase}}</small>
                 </div>
                 <div class="form-group">
                   <label for="substage-duration">Duration (minutes)</label>
@@ -493,7 +520,7 @@ interface ProcessedContentOutput {
   styles: [`
     :host {
       display: block;
-      margin-top: -64px;
+      margin-top: -64px; /* Offset global .main-content padding */
     }
     @media (min-width: 768px) {
       :host {
@@ -507,6 +534,7 @@ interface ProcessedContentOutput {
       color: #e5e5e5;
       display: flex;
       flex-direction: column;
+      padding-top: 0 !important; /* Prevent additional padding */
     }
 
     /* HEADER */
@@ -549,16 +577,16 @@ interface ProcessedContentOutput {
 
     /* SIDEBAR */
     .structure-sidebar {
-      width: 320px;
       background: #141414;
       border-right: 1px solid #333;
       display: flex;
       flex-direction: column;
-      transition: width 0.3s ease;
+      transition: none; /* Disable transition for smooth resize */
       overflow: hidden;
+      position: relative;
     }
     .structure-sidebar.collapsed {
-      width: 60px;
+      width: 60px !important;
     }
     .sidebar-header {
       padding: 1rem;
@@ -582,6 +610,23 @@ interface ProcessedContentOutput {
       display: flex;
       justify-content: center;
     }
+    .sidebar-resize-handle {
+      position: absolute;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: transparent;
+      cursor: ew-resize;
+      transition: background 0.2s;
+      z-index: 10;
+    }
+    .sidebar-resize-handle:hover {
+      background: #cc0000;
+    }
+    .sidebar-resize-handle:active {
+      background: #ff0000;
+    }
 
     /* TREE */
     .tree-item {
@@ -590,7 +635,7 @@ interface ProcessedContentOutput {
       gap: 0.5rem;
       padding: 0.625rem 0.75rem;
       border-radius: 6px;
-      cursor: pointer;
+      cursor: move;
       transition: background 0.2s;
       position: relative;
     }
@@ -600,6 +645,25 @@ interface ProcessedContentOutput {
     .tree-item.selected {
       background: #cc0000;
       color: white;
+    }
+    .tree-item.drag-over {
+      background: #1a1a1a;
+      border: 2px dashed #cc0000;
+      padding: 0.525rem 0.65rem; /* Adjust for border */
+    }
+    .drag-handle {
+      color: #666;
+      font-size: 0.75rem;
+      cursor: grab;
+      user-select: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .tree-item:hover .drag-handle {
+      opacity: 1;
+    }
+    .drag-handle:active {
+      cursor: grabbing;
     }
     .tree-item .item-icon {
       flex-shrink: 0;
@@ -1247,6 +1311,14 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   activeTab: EditorTab = 'details';
   sidebarCollapsed: boolean = false;
   mobileSidebarOpen: boolean = false;
+  sidebarWidth: number = 320;
+  isResizingSidebar: boolean = false;
+  
+  // Drag and drop state
+  draggedStage: Stage | null = null;
+  draggedSubStage: {substage: SubStage, stageId: string} | null = null;
+  dragOverStageId: string | null = null;
+  dragOverSubStageId: string | null = null;
   
   // Lesson Structure
   stages: Stage[] = [];
@@ -1275,6 +1347,40 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     { id: 'preview' as EditorTab, label: 'Preview', icon: '🔍' },
     { id: 'ai-assistant' as EditorTab, label: 'AI Assistant', icon: '🤖' }
   ];
+  
+  // TEACH Stage-SubStage Mapping
+  stageSubStageMap: Record<string, string[]> = {
+    'trigger': ['trigger', 'ignite', 'evoke'], // TIE
+    'explore': ['handle', 'uncover', 'noodle', 'track'], // HUNT
+    'absorb': ['show', 'interpret', 'parallel'], // SIP
+    'cultivate': ['grip', 'repurpose', 'originate', 'work'], // GROW
+    'hone': ['verify', 'evaluate', 'target'] // VET
+  };
+  
+  substageTypeLabels: Record<string, string> = {
+    // TIE (Trigger)
+    'trigger': 'Trigger - Provocative question/teaser',
+    'ignite': 'Ignite - Surprising visual/demo',
+    'evoke': 'Evoke - Personal connection',
+    // HUNT (Explore)
+    'handle': 'Handle - Interactive manipulation',
+    'uncover': 'Uncover - Guided questioning',
+    'noodle': 'Noodle - Hypothesis-sharing',
+    'track': 'Track - Identify patterns',
+    // SIP (Absorb)
+    'show': 'Show - Concise explanation/visual',
+    'interpret': 'Interpret - Active summarization',
+    'parallel': 'Parallel - Analogy/example',
+    // GROW (Cultivate)
+    'grip': 'Grip - Basic task application',
+    'repurpose': 'Repurpose - New context twist',
+    'originate': 'Originate - Creative extension',
+    'work': 'Work - Revise with feedback',
+    // VET (Hone)
+    'verify': 'Verify - Quiz/recall',
+    'evaluate': 'Evaluate - Self-assess gaps',
+    'target': 'Target - Forward-looking action'
+  };
 
   constructor(
     private route: ActivatedRoute,
@@ -1467,7 +1573,15 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   // Getters
   getSelectedStage(): Stage | undefined {
-    return this.stages.find(s => s.id === this.selectedItem.id);
+    // If stage is selected, return it
+    if (this.selectedItem.type === 'stage') {
+      return this.stages.find(s => s.id === this.selectedItem.id);
+    }
+    // If substage is selected, return parent stage
+    if (this.selectedItem.type === 'substage' && this.selectedItem.stageId) {
+      return this.stages.find(s => s.id === this.selectedItem.stageId);
+    }
+    return undefined;
   }
 
   getSelectedSubStage(): SubStage | undefined {
@@ -1585,6 +1699,121 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     console.log('AI Message:', this.aiChatInput);
     // TODO: Send to AI API
     this.aiChatInput = '';
+  }
+  
+  // ========== Drag and Drop ==========
+  
+  onStageDragStart(stage: Stage, event: DragEvent) {
+    this.draggedStage = stage;
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+    }
+  }
+  
+  onStageDragOver(stageId: string, event: DragEvent) {
+    event.preventDefault();
+    if (this.draggedStage && this.draggedStage.id !== stageId) {
+      this.dragOverStageId = stageId;
+    }
+  }
+  
+  onStageDragLeave() {
+    this.dragOverStageId = null;
+  }
+  
+  onStageDrop(targetStage: Stage, event: DragEvent) {
+    event.preventDefault();
+    this.dragOverStageId = null;
+    
+    if (this.draggedStage && this.draggedStage.id !== targetStage.id) {
+      const draggedIndex = this.stages.findIndex(s => s.id === this.draggedStage!.id);
+      const targetIndex = this.stages.findIndex(s => s.id === targetStage.id);
+      
+      if (draggedIndex !== -1 && targetIndex !== -1) {
+        const [removed] = this.stages.splice(draggedIndex, 1);
+        this.stages.splice(targetIndex, 0, removed);
+      }
+    }
+    
+    this.draggedStage = null;
+  }
+  
+  onSubStageDragStart(substage: SubStage, stageId: string, event: DragEvent) {
+    this.draggedSubStage = { substage, stageId };
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+    }
+  }
+  
+  onSubStageDragOver(substageId: string, event: DragEvent) {
+    event.preventDefault();
+    if (this.draggedSubStage && this.draggedSubStage.substage.id !== substageId) {
+      this.dragOverSubStageId = substageId;
+    }
+  }
+  
+  onSubStageDragLeave() {
+    this.dragOverSubStageId = null;
+  }
+  
+  onSubStageDrop(targetSubstage: SubStage, targetStageId: string, event: DragEvent) {
+    event.preventDefault();
+    this.dragOverSubStageId = null;
+    
+    if (this.draggedSubStage && this.draggedSubStage.substage.id !== targetSubstage.id) {
+      const sourceStageId = this.draggedSubStage.stageId;
+      const sourceStage = this.stages.find(s => s.id === sourceStageId);
+      const targetStage = this.stages.find(s => s.id === targetStageId);
+      
+      if (sourceStage && targetStage) {
+        const draggedIndex = sourceStage.subStages.findIndex(ss => ss.id === this.draggedSubStage!.substage.id);
+        const targetIndex = targetStage.subStages.findIndex(ss => ss.id === targetSubstage.id);
+        
+        if (draggedIndex !== -1 && targetIndex !== -1) {
+          // Remove from source
+          const [removed] = sourceStage.subStages.splice(draggedIndex, 1);
+          
+          // Add to target
+          targetStage.subStages.splice(targetIndex, 0, removed);
+        }
+      }
+    }
+    
+    this.draggedSubStage = null;
+  }
+  
+  // ========== Sidebar Resize ==========
+  
+  onResizeMouseDown(event: MouseEvent) {
+    event.preventDefault();
+    this.isResizingSidebar = true;
+    document.addEventListener('mousemove', this.onResizeMouseMove);
+    document.addEventListener('mouseup', this.onResizeMouseUp);
+  }
+  
+  onResizeMouseMove = (event: MouseEvent) => {
+    if (this.isResizingSidebar) {
+      const newWidth = event.clientX;
+      if (newWidth >= 280 && newWidth <= 600) {
+        this.sidebarWidth = newWidth;
+      }
+    }
+  }
+  
+  onResizeMouseUp = () => {
+    this.isResizingSidebar = false;
+    document.removeEventListener('mousemove', this.onResizeMouseMove);
+    document.removeEventListener('mouseup', this.onResizeMouseUp);
+  }
+  
+  // ========== TEACH Substage Types ==========
+  
+  getAvailableSubStageTypes(stageType: string): string[] {
+    return this.stageSubStageMap[stageType] || [];
+  }
+  
+  getSubStageTypeLabel(type: string): string {
+    return this.substageTypeLabels[type] || type;
   }
 }
 
