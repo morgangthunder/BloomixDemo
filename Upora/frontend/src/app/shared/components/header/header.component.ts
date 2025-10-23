@@ -62,15 +62,18 @@ interface TokenUsage {
                       [class]="getNavLinkClasses('my-list')">
                 My List
               </button>
-              <button (click)="navigateTo('content-library')" 
+              <button *ngIf="isLessonBuilder()" 
+                      (click)="navigateTo('content-library')" 
                       [class]="getNavLinkClasses('content-library')">
                 Content Library
               </button>
-              <button (click)="navigateTo('lesson-builder')" 
+              <button *ngIf="isLessonBuilder()" 
+                      (click)="navigateTo('lesson-builder')" 
                       [class]="getNavLinkClasses('lesson-builder')">
                 Lesson Builder
               </button>
-              <button (click)="navigateTo('interaction-builder')" 
+              <button *ngIf="isInteractionBuilder()" 
+                      (click)="navigateTo('interaction-builder')" 
                       [class]="getNavLinkClasses('interaction-builder')">
                 Interaction Builder
               </button>
@@ -159,9 +162,9 @@ interface TokenUsage {
           <button (click)="navigateTo('home')" [class]="getMobileNavLinkClasses('home')">Home</button>
           <button (click)="navigateTo('categories')" [class]="getMobileNavLinkClasses('categories')">Categories</button>
           <button (click)="navigateTo('my-list')" [class]="getMobileNavLinkClasses('my-list')">My List</button>
-          <button (click)="navigateTo('content-library')" [class]="getMobileNavLinkClasses('content-library')">Content Library</button>
-          <button (click)="navigateTo('lesson-builder')" [class]="getMobileNavLinkClasses('lesson-builder')">Lesson Builder</button>
-          <button (click)="navigateTo('interaction-builder')" [class]="getMobileNavLinkClasses('interaction-builder')">Interaction Builder</button>
+          <button *ngIf="isLessonBuilder()" (click)="navigateTo('content-library')" [class]="getMobileNavLinkClasses('content-library')">Content Library</button>
+          <button *ngIf="isLessonBuilder()" (click)="navigateTo('lesson-builder')" [class]="getMobileNavLinkClasses('lesson-builder')">Lesson Builder</button>
+          <button *ngIf="isInteractionBuilder()" (click)="navigateTo('interaction-builder')" [class]="getMobileNavLinkClasses('interaction-builder')">Interaction Builder</button>
         </nav>
       </div>
     </header>
@@ -281,5 +284,15 @@ export class HeaderComponent implements OnInit, OnDestroy {
       return `${(tokens / 1000).toFixed(1)}K`;
     }
     return tokens.toString();
+  }
+
+  isLessonBuilder(): boolean {
+    const role = environment.userRole;
+    return role === 'lesson-builder' || role === 'admin';
+  }
+
+  isInteractionBuilder(): boolean {
+    const role = environment.userRole;
+    return role === 'interaction-builder' || role === 'admin';
   }
 }

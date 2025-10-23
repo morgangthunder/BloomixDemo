@@ -12,7 +12,7 @@ import { Course, HubLesson } from '../../core/models/lesson.model';
   standalone: true,
   imports: [CommonModule, FormsModule, IonContent],
   template: `
-    <div class="h-screen bg-brand-dark text-white font-sans overflow-hidden flex flex-col">
+    <div class="h-screen bg-brand-dark text-white font-sans overflow-hidden flex flex-col" style="background-color: #0a0a0a;">
       <!-- Header -->
       <header class="flex items-center justify-between p-4 md:p-6 bg-brand-black border-b border-gray-700 flex-shrink-0">
         <div class="flex items-center space-x-4">
@@ -90,8 +90,9 @@ import { Course, HubLesson } from '../../core/models/lesson.model';
           <div class="mb-12">
             <h2 class="text-2xl font-bold text-white mb-6">My Lessons</h2>
 
+            <!-- Use real lessons if available, otherwise fall back to mock -->
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div *ngFor="let lesson of hubLessons$ | async"
+              <div *ngFor="let lesson of realLessons.length > 0 ? realLessons : (hubLessons$ | async)"
                    class="bg-brand-black border border-gray-700 rounded-lg p-6 hover:border-brand-red transition-colors"
                    [class.cursor-pointer]="lesson.isClickable"
                    [class.cursor-not-allowed]="!lesson.isClickable"
@@ -172,6 +173,8 @@ export class LessonBuilderComponent implements OnInit {
   courses$: Observable<Course[]>;
   hubLessons$: Observable<HubLesson[]>;
   unassignedLessons: HubLesson[] = [];
+  realLessons: any[] = [];
+  loading = false;
 
   constructor(
     private lessonService: LessonService,
@@ -181,14 +184,55 @@ export class LessonBuilderComponent implements OnInit {
     this.hubLessons$ = this.lessonService.hubLessons$;
   }
 
-  ngOnInit() {
+  async ngOnInit() {
     this.lessonService.setCurrentPage('lesson-builder');
     this.lessonService.setLessonBuilderSubPage('hub');
     
-    // Get unassigned lessons
+    // Load real lessons from API
+    await this.loadRealLessons();
+    
+    // Get unassigned lessons (from mock data for now)
     this.lessonService.hubLessons$.subscribe(lessons => {
       this.unassignedLessons = lessons.filter(l => l.courseId === null);
     });
+  }
+
+  async loadRealLessons() {
+    this.loading = true;
+    try {
+      // Load lessons from the API (all lessons created by this user)
+      await this.lessonService.loadLessonsFromAPI();
+      
+      // Transform API lessons to HubLesson format
+      this.lessonService.categories$.subscribe(categories => {
+        const allLessons = categories.flatMap(cat => cat.lessons);
+        
+        // Map to HubLesson format for display
+        const hubLessons: HubLesson[] = allLessons.map(lesson => ({
+          id: parseInt(lesson.id) || 0, // Convert UUID to number for mock compatibility
+          title: lesson.title,
+          status: lesson.status === 'approved' ? 'Published' : 
+                  lesson.status === 'pending' ? 'Pending Approval' : 
+                  'Build In Progress',
+          stageCount: lesson.data?.stages?.length || 0,
+          courseId: null,
+          stats: {
+            views: lesson.views || 0,
+            completionRate: Math.round(parseFloat(lesson.completionRate || '0')),
+            completions: lesson.completions || 0,
+          },
+          isClickable: true,
+          realId: lesson.id // Store real UUID for navigation
+        }));
+
+        this.realLessons = hubLessons;
+        console.log('[LessonBuilder] Loaded', hubLessons.length, 'real lessons from API');
+      });
+    } catch (error) {
+      console.error('[LessonBuilder] Failed to load lessons:', error);
+    } finally {
+      this.loading = false;
+    }
   }
 
   goBack() {
@@ -198,14 +242,15 @@ export class LessonBuilderComponent implements OnInit {
 
   createNewLesson() {
     this.lessonService.enterBuilder();
-    // For now, navigate to placeholder - will build full editor next
-    alert('Full lesson editor coming next!');
+    this.router.navigate(['/lesson-editor', 'new']);
   }
 
-  editLesson(lesson: HubLesson) {
+  editLesson(lesson: any) {
     if (lesson.isClickable) {
       this.lessonService.enterBuilder();
-      alert(`Editing lesson: ${lesson.title} - Full editor coming next!`);
+      // Use realId (UUID) if available, otherwise use numeric id
+      const lessonId = lesson.realId || lesson.id;
+      this.router.navigate(['/lesson-editor', lessonId]);
     }
   }
 

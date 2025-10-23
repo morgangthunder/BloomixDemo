@@ -7,6 +7,7 @@ export const environment = {
   // Multi-tenancy configuration (override with build-time variables)
   tenantId: '', // Set during build or runtime
   defaultUserId: '',
+  userRole: 'student', // Set during build or runtime
   
   // Feature flags
   enableMockData: false,

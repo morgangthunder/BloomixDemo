@@ -35,6 +35,10 @@ export const routes: Routes = [
     loadComponent: () => import('./features/lesson-builder/lesson-builder.component').then(m => m.LessonBuilderComponent)
   },
   {
+    path: 'lesson-editor/:id',
+    loadComponent: () => import('./features/lesson-editor/lesson-editor.component').then(m => m.LessonEditorComponent)
+  },
+  {
     path: 'interaction-builder',
     loadComponent: () => import('./features/interaction-builder/interaction-builder.component').then(m => m.InteractionBuilderComponent)
   },
