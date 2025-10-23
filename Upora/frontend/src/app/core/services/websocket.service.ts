@@ -125,18 +125,7 @@ export class WebSocketService {
 
     console.log(`[WebSocketService] Sending message: ${message.substring(0, 50)}...`);
 
-    // Add user message to local state immediately
-    const userMessage: ChatMessage = {
-      role: 'user',
-      content: message,
-      timestamp: new Date(),
-      userId: this.currentUserId || undefined,
-    };
-
-    const currentMessages = this.messagesSubject.value;
-    this.messagesSubject.next([...currentMessages, userMessage]);
-
-    // Send to server
+    // Send to server (server will echo back the user message)
     this.socket.emit('send-message', {
       lessonId: this.currentLessonId,
       userId: this.currentUserId,

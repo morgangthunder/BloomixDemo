@@ -13,6 +13,7 @@ import { ContentSource } from './entities/content-source.entity';
 import { LessonDataLink } from './entities/lesson-data-link.entity';
 import { ProcessedContentOutput } from './entities/processed-content-output.entity';
 import { ScriptBlock } from './entities/script-block.entity';
+import { Course } from './entities/course.entity';
 import { UsersModule } from './modules/users/users.module';
 import { LessonsModule } from './modules/lessons/lessons.module';
 import { ChatModule } from './modules/chat/chat.module';
@@ -36,7 +37,7 @@ import { WeaviateService } from './services/weaviate.service';
         username: configService.get('database.username'),
         password: configService.get('database.password'),
         database: configService.get('database.database'),
-        entities: [User, Lesson, InteractionType, Workflow, Usage, ContentSource, LessonDataLink, ProcessedContentOutput, ScriptBlock],
+        entities: [User, Lesson, InteractionType, Workflow, Usage, ContentSource, LessonDataLink, ProcessedContentOutput, ScriptBlock, Course],
         synchronize: configService.get('database.synchronize'),
         logging: configService.get('database.logging'),
       }),

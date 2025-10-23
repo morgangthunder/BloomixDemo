@@ -93,7 +93,9 @@ export interface HubLesson {
     completions: number;
   };
   earnings: number;
-  courseId: number | null;
+  courseId: number | null; // Legacy numeric ID
+  realId?: string; // Real UUID from backend
+  realCourseId?: string | null; // Real course UUID from backend
 }
 
 // Stage and SubStage types

@@ -15,18 +15,27 @@ import { environment } from '../../../environments/environment';
   standalone: true,
   imports: [CommonModule, FormsModule, IonContent],
   template: `
-    <div class="h-screen bg-brand-dark text-white overflow-hidden flex flex-col md:flex-row lesson-view-wrapper">
+    <div class="bg-brand-dark text-white overflow-hidden flex flex-col md:flex-row lesson-view-wrapper">
       <!-- Mobile overlay -->
       <div *ngIf="isMobileNavOpen" 
            (click)="closeMobileNav()"
            class="fixed inset-0 bg-black/60 z-30 md:hidden"></div>
 
+      <!-- Mobile FAB for Stages -->
+      <button 
+        (click)="toggleMobileNav()"
+        class="mobile-fab md:hidden"
+        aria-label="Toggle stages menu">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
+        </svg>
+      </button>
+
       <!-- Sidebar -->
       <aside 
         [style.width.px]="navWidth"
         [class.hidden]="navWidth === 0"
-        class="h-screen bg-brand-black transition-all duration-300 ease-in-out z-40 
-               fixed w-80 top-0 left-0 transform md:relative md:transform-none flex flex-col
+        class="sidebar bg-brand-black transition-all duration-300 ease-in-out z-40 
                md:flex md:flex-shrink-0"
         [class.-translate-x-full]="!isMobileNavOpen"
         [class.translate-x-0]="isMobileNavOpen">
@@ -118,7 +127,7 @@ import { environment } from '../../../environments/environment';
       </div>
 
       <!-- Main Content -->
-      <main class="flex-1 flex flex-col h-screen relative">
+      <main class="flex-1 flex flex-col overflow-hidden relative">
         <!-- Collapse button (Desktop) -->
         <button *ngIf="navWidth === 0"
                 (click)="toggleNavCollapse()"
@@ -128,19 +137,13 @@ import { environment } from '../../../environments/environment';
           </svg>
         </button>
 
-        <!-- Mobile Header -->
-        <header class="md:hidden flex items-center justify-between p-4 bg-brand-black border-b border-gray-700 flex-shrink-0">
-          <button (click)="openMobileNav()" class="text-white p-1">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-            </svg>
-          </button>
-          <h1 class="font-semibold text-lg truncate px-2">{{ lesson?.title }}</h1>
-          <div class="w-7"></div>
+        <!-- Mobile Header (No burger - FAB handles stages) -->
+        <header class="md:hidden flex items-center justify-center px-4 bg-brand-black border-b border-gray-700 flex-shrink-0" style="height: 48px;">
+          <h1 class="font-semibold text-sm truncate">{{ lesson?.title }}</h1>
         </header>
 
         <!-- Content Area -->
-        <div class="flex-1 p-6 md:p-8 lg:p-12 overflow-y-auto">
+        <div class="flex-1 p-6 md:p-8 lg:p-12 overflow-y-auto pb-32 md:pb-8">
           <div *ngIf="activeSubStage; else selectPrompt">
             <h1 class="text-3xl md:text-4xl font-bold text-white mb-2">{{ activeSubStage.title }}</h1>
             <p class="text-brand-gray mb-8">{{ activeSubStage.type }} • {{ activeSubStage.interactionType }} • {{ activeSubStage.duration }} minutes</p>
@@ -168,7 +171,7 @@ import { environment } from '../../../environments/environment';
         </div>
 
         <!-- Chat History (if messages exist) -->
-        <div *ngIf="chatMessages.length > 0" class="border-t border-gray-700 bg-brand-black/50 max-h-64 overflow-y-auto">
+        <div *ngIf="chatMessages.length > 0 && isChatExpanded" class="border-t border-gray-700 bg-brand-black/50 max-h-64 overflow-y-auto">
           <div class="p-4 space-y-3">
             <div *ngFor="let msg of chatMessages" 
                  [class]="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'">
@@ -204,13 +207,21 @@ import { environment } from '../../../environments/environment';
         </div>
 
         <!-- Bottom Controls -->
-        <div class="p-4 md:p-6 bg-brand-black border-t border-gray-700">
-          <!-- Connection Status -->
-          <div *ngIf="!isConnected" class="mb-2 text-xs text-yellow-500 flex items-center">
-            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-            </svg>
-            AI Teacher offline - connecting...
+        <div class="flex-shrink-0 p-4 md:p-6 bg-brand-black border-t border-gray-700">
+          <!-- Chat Toggle Button -->
+          <div class="flex items-center justify-between mb-3">
+            <button 
+              (click)="toggleChatExpanded()"
+              class="flex items-center space-x-2 text-sm text-gray-400 hover:text-white transition-colors">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+              </svg>
+              <span>{{ isChatExpanded ? 'Hide Chat' : 'Show Chat' }}</span>
+              <svg class="w-4 h-4 transition-transform" [class.rotate-180]="isChatExpanded" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+              </svg>
+            </button>
+            <span *ngIf="chatMessages.length > 0" class="text-xs text-gray-500">{{ chatMessages.length }} message{{ chatMessages.length === 1 ? '' : 's' }}</span>
           </div>
           
           <div class="flex items-center space-x-4">
@@ -247,6 +258,69 @@ import { environment } from '../../../environments/environment';
       display: block;
       height: 100vh;
       overflow: hidden;
+      padding-top: 64px;
+    }
+    @media (min-width: 768px) {
+      :host {
+        padding-top: 80px;
+      }
+    }
+    .lesson-view-wrapper {
+      height: 100%;
+      max-height: 100%;
+    }
+    
+    /* Mobile FAB - hidden on desktop/tablet */
+    .mobile-fab {
+      position: fixed;
+      bottom: 100px;
+      left: 1rem;
+      width: 56px;
+      height: 56px;
+      background: #cc0000;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      cursor: pointer;
+      z-index: 50;
+      transition: all 0.3s;
+    }
+    .mobile-fab:hover {
+      background: #990000;
+      transform: scale(1.1);
+    }
+    @media (min-width: 768px) {
+      .mobile-fab {
+        display: none !important;
+      }
+    }
+    
+    /* Sidebar */
+    .sidebar {
+      position: fixed;
+      top: 64px;
+      left: 0;
+      bottom: 0;
+      width: 280px;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar.hidden {
+      display: none;
+    }
+    @media (min-width: 768px) {
+      .sidebar {
+        position: relative;
+        top: 0;
+        display: flex !important;
+      }
+      .sidebar.-translate-x-full {
+        transform: none;
+      }
     }
   `]
 })
@@ -272,6 +346,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   chatMessages: ChatMessage[] = [];
   isAITyping = false;
   isConnected = false;
+  isChatExpanded = false;
   
   private destroy$ = new Subject<void>();
 
@@ -286,38 +361,24 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     console.log('[LessonView] ngOnInit called');
     console.log('[LessonView] enableWebSockets:', environment.enableWebSockets);
     
+    // Get lesson ID from route params
+    this.route.params.subscribe(params => {
+      const lessonId = params['id'];
+      console.log('[LessonView] Route lesson ID:', lessonId);
+      
+      if (lessonId && !this.lesson) {
+        // Load lesson data from API if not already loaded
+        this.loadLessonData(lessonId);
+      }
+    });
+    
     this.lessonService.activeLesson$
       .pipe(takeUntil(this.destroy$))
       .subscribe(lesson => {
         console.log('[LessonView] activeLesson$ emitted:', lesson?.title || 'null');
         
         if (lesson) {
-          this.lesson = lesson;
-          this.lessonStages = lesson.stages || [];
-          
-          console.log('[LessonView] Lesson set - ID:', lesson.id, 'Stages:', this.lessonStages.length);
-          
-          // Auto-select first stage and substage if available
-          if (this.lessonStages.length > 0) {
-            const firstStage = this.lessonStages[0];
-            this.activeStageId = firstStage.id;
-            this.expandedStages.add(firstStage.id);
-            
-            if (firstStage.subStages && firstStage.subStages.length > 0) {
-              this.activeSubStageId = firstStage.subStages[0].id;
-              this.updateActiveSubStage();
-            }
-          }
-          
-          // Connect to WebSocket for AI chat if enabled
-          console.log('[LessonView] Checking WebSocket connection - enabled:', environment.enableWebSockets, 'lesson.id:', lesson.id);
-          
-          if (environment.enableWebSockets && lesson.id) {
-            console.log('[LessonView] ✅ Conditions met - calling connectToChat()');
-            this.connectToChat();
-          } else {
-            console.warn('[LessonView] ❌ WebSocket not enabled or no lesson ID');
-          }
+          this.setLessonData(lesson);
         }
       });
 
@@ -339,6 +400,61 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // Setup mouse listeners for resize
     window.addEventListener('mousemove', this.handleMouseMove.bind(this));
     window.addEventListener('mouseup', this.handleMouseUp.bind(this));
+  }
+
+  /**
+   * Load lesson data from API
+   */
+  private loadLessonData(lessonId: string) {
+    console.log('[LessonView] Loading lesson data for ID:', lessonId);
+    
+    // Fetch lesson from API
+    fetch(`http://localhost:3000/api/lessons/${lessonId}`)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then(lesson => {
+        console.log('[LessonView] Loaded lesson from API:', lesson.title);
+        this.setLessonData(lesson);
+      })
+      .catch(error => {
+        console.error('[LessonView] Error loading lesson:', error);
+      });
+  }
+
+  /**
+   * Set lesson data and initialize
+   */
+  private setLessonData(lesson: Lesson) {
+    this.lesson = lesson;
+    this.lessonStages = lesson.stages || [];
+    
+    console.log('[LessonView] Lesson set - ID:', lesson.id, 'Stages:', this.lessonStages.length);
+    
+    // Auto-select first stage and substage if available
+    if (this.lessonStages.length > 0) {
+      const firstStage = this.lessonStages[0];
+      this.activeStageId = firstStage.id;
+      this.expandedStages.add(firstStage.id);
+      
+      if (firstStage.subStages && firstStage.subStages.length > 0) {
+        this.activeSubStageId = firstStage.subStages[0].id;
+        this.updateActiveSubStage();
+      }
+    }
+    
+    // Connect to WebSocket for AI chat if enabled
+    console.log('[LessonView] Checking WebSocket connection - enabled:', environment.enableWebSockets, 'lesson.id:', lesson.id);
+    
+    if (environment.enableWebSockets && lesson.id) {
+      console.log('[LessonView] ✅ Conditions met - calling connectToChat()');
+      this.connectToChat();
+    } else {
+      console.warn('[LessonView] ❌ WebSocket not enabled or no lesson ID');
+    }
   }
 
   /**
@@ -447,11 +563,22 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     this.isMobileNavOpen = false;
   }
 
+  toggleMobileNav() {
+    this.isMobileNavOpen = !this.isMobileNavOpen;
+  }
+
+  toggleChatExpanded() {
+    this.isChatExpanded = !this.isChatExpanded;
+  }
+
   sendMessage() {
     if (this.chatMessage.trim()) {
       console.log('[LessonView] Sending message via WebSocket:', this.chatMessage);
       
-      // Send message through WebSocket
+      // Expand chat when user sends message
+      this.isChatExpanded = true;
+      
+      // Send message through WebSocket (it will handle adding to chatMessages)
       this.wsService.sendMessage(this.chatMessage);
       
       // Clear input

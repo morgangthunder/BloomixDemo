@@ -45,7 +45,8 @@ export class LessonsService {
       status: l.status,
       thumbnailUrl: l.thumbnailUrl,
       category: l.category,
-      difficulty: l.difficulty 
+      difficulty: l.difficulty,
+      courseId: l.courseId
     })));
     
     return lessons;

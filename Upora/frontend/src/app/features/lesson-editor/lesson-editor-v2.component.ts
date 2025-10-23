@@ -67,13 +67,21 @@ interface ProcessedContentOutput {
         </div>
         <div class="header-actions">
           <!-- Desktop: Full buttons -->
-          <button (click)="saveDraft()" class="btn-secondary desktop-full mobile-icon" [disabled]="saving" title="Save Draft">
-            <span class="desktop-only" *ngIf="!saving">💾 Save Draft</span>
+          <button (click)="saveDraft()" 
+                  class="btn-secondary desktop-full mobile-icon" 
+                  [disabled]="saving || (!hasUnsavedChanges && lastSaved)" 
+                  [class.saved]="!hasUnsavedChanges && lastSaved"
+                  title="{{!hasUnsavedChanges && lastSaved ? 'No changes to save' : 'Save Draft'}}">
+            <span class="desktop-only" *ngIf="!saving">💾 {{hasUnsavedChanges ? 'Save Draft' : 'Saved'}}</span>
             <span class="desktop-only" *ngIf="saving">Saving...</span>
             <span class="mobile-only">💾</span>
           </button>
-          <button (click)="submitForApproval()" class="btn-primary desktop-full mobile-icon" [disabled]="saving || !canSubmit()" title="Submit for Approval">
-            <span class="desktop-only">✓ Submit for Approval</span>
+          <button (click)="submitForApproval()" 
+                  class="btn-primary desktop-full mobile-icon" 
+                  [disabled]="hasBeenSubmitted || saving || !canSubmit()" 
+                  [class.submitted]="hasBeenSubmitted"
+                  title="{{hasBeenSubmitted ? 'Already submitted' : 'Submit for Approval'}}">
+            <span class="desktop-only">{{hasBeenSubmitted ? '✓ Submitted' : '✓ Submit for Approval'}}</span>
             <span class="mobile-only">✓</span>
           </button>
         </div>
@@ -206,15 +214,15 @@ interface ProcessedContentOutput {
               <div class="form-grid">
                 <div class="form-group full-width">
                   <label for="title">Title *</label>
-                  <input id="title" type="text" [(ngModel)]="lesson.title" placeholder="e.g., JavaScript Fundamentals" required />
+                  <input id="title" type="text" [(ngModel)]="lesson.title" (ngModelChange)="markAsChanged()" placeholder="e.g., JavaScript Fundamentals" required />
                 </div>
                 <div class="form-group full-width">
                   <label for="description">Description *</label>
-                  <textarea id="description" [(ngModel)]="lesson.description" rows="3" placeholder="Brief overview of what students will learn" required></textarea>
+                  <textarea id="description" [(ngModel)]="lesson.description" (ngModelChange)="markAsChanged()" rows="3" placeholder="Brief overview of what students will learn" required></textarea>
                 </div>
                 <div class="form-group">
                   <label for="category">Category *</label>
-                  <select id="category" [(ngModel)]="lesson.category" required>
+                  <select id="category" [(ngModel)]="lesson.category" (ngModelChange)="markAsChanged()" required>
                     <option value="">Select category</option>
                     <option value="Programming">Programming</option>
                     <option value="Design">Design</option>
@@ -226,7 +234,7 @@ interface ProcessedContentOutput {
                 </div>
                 <div class="form-group">
                   <label for="difficulty">Difficulty *</label>
-                  <select id="difficulty" [(ngModel)]="lesson.difficulty" required>
+                  <select id="difficulty" [(ngModel)]="lesson.difficulty" (ngModelChange)="markAsChanged()" required>
                     <option value="">Select difficulty</option>
                     <option value="Beginner">Beginner</option>
                     <option value="Intermediate">Intermediate</option>
@@ -474,33 +482,38 @@ interface ProcessedContentOutput {
             </div>
 
             <!-- AI Assistant Panel -->
-            <div *ngIf="activeTab === 'ai-assistant'" class="panel ai-panel">
-              <h2 class="panel-title">AI Lesson Assistant</h2>
-              <p class="panel-description">Get help building your lesson, writing scripts, and refining content.</p>
-              
-              <div class="ai-context">
-                <strong>Context:</strong> 
-                <span *ngIf="selectedItem.type === 'lesson'">Entire lesson</span>
-                <span *ngIf="selectedItem.type === 'stage'">Stage: {{getSelectedStage()?.title}}</span>
-                <span *ngIf="selectedItem.type === 'substage'">Substage: {{getSelectedSubStage()?.title}}</span>
+            <div *ngIf="activeTab === 'ai-assistant'" class="panel ai-panel-wrapper">
+              <div class="ai-panel-header">
+                <h2 class="panel-title">AI Lesson Assistant</h2>
+                <p class="panel-description">Get help building your lesson, writing scripts, and refining content.</p>
+                
+                <div class="ai-context">
+                  <strong>Context:</strong> 
+                  <span *ngIf="selectedItem.type === 'lesson'">Entire lesson</span>
+                  <span *ngIf="selectedItem.type === 'stage'">Stage: {{getSelectedStage()?.title}}</span>
+                  <span *ngIf="selectedItem.type === 'substage'">Substage: {{getSelectedSubStage()?.title}}</span>
+                </div>
               </div>
 
-              <div class="chat-container">
+              <div class="ai-chat-scrollable">
                 <div class="chat-messages">
                   <div class="chat-message ai">
                     <span class="avatar">🤖</span>
-                    <p>Hi! I'm your AI lesson assistant. How can I help you build this lesson?</p>
+                    <div>
+                      <p>Hi! I'm your AI lesson assistant. How can I help you build this lesson?</p>
+                      <div class="quick-actions">
+                        <button class="quick-action-btn">Help write script</button>
+                        <button class="quick-action-btn">Suggest interaction type</button>
+                        <button class="quick-action-btn">Improve content</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                
-                <div class="quick-actions">
-                  <button class="quick-action-btn">Help write script</button>
-                  <button class="quick-action-btn">Suggest interaction type</button>
-                  <button class="quick-action-btn">Improve content</button>
-                </div>
+              </div>
 
+              <div class="ai-chat-input-sticky">
                 <div class="chat-input">
-                  <input type="text" placeholder="Ask me anything about your lesson..." [(ngModel)]="aiChatInput" />
+                  <input type="text" placeholder="Ask me anything about your lesson..." [(ngModel)]="aiChatInput" (keyup.enter)="sendAIMessage()" />
                   <button (click)="sendAIMessage()" class="btn-primary">Send</button>
                 </div>
               </div>
@@ -510,12 +523,13 @@ interface ProcessedContentOutput {
       </div>
 
       <!-- Mobile Sidebar Overlay -->
-      <div *ngIf="mobileSidebarOpen" class="mobile-overlay" (click)="mobileSidebarOpen = false"></div>
+      <div *ngIf="mobileSidebarOpen" class="mobile-overlay" (click)="closeMobileSidebar()"></div>
 
       <!-- Mobile FAB -->
-      <button class="mobile-fab" (click)="mobileSidebarOpen = !mobileSidebarOpen">
+      <button class="mobile-fab" (click)="toggleMobileSidebar()" title="Lesson Structure">
+        <!-- Document/Script Icon -->
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
         </svg>
       </button>
 
@@ -527,6 +541,11 @@ interface ProcessedContentOutput {
                 [class.active]="activeTab === tab.id">
           <span class="tab-icon">{{tab.icon}}</span>
         </button>
+      </div>
+
+      <!-- Snackbar -->
+      <div class="snackbar" [class.visible]="snackbarVisible">
+        {{snackbarMessage}}
       </div>
     </div>
   `,
@@ -808,10 +827,15 @@ interface ProcessedContentOutput {
     .tab-content {
       flex: 1;
       overflow-y: auto;
+      display: flex;
+      flex-direction: column;
     }
     .panel {
       padding: 2rem;
       max-width: 1200px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
     }
     .panel-title {
       font-size: 1.5rem;
@@ -1179,28 +1203,36 @@ interface ProcessedContentOutput {
         background: #1a1a1a;
         border-top: 1px solid #333;
         display: flex;
-        gap: 0.25rem;
-        padding: 0.5rem;
+        justify-content: space-evenly; /* Distribute evenly, no scroll */
+        padding: 0.5rem 0;
         z-index: 200;
-        overflow-x: auto;
       }
       .mobile-tab-btn {
         background: none;
         border: none;
-        padding: 0.75rem 1rem;
+        padding: 0.75rem 0.25rem;
         color: #999;
         cursor: pointer;
         border-bottom: 2px solid transparent;
         transition: all 0.2s;
-        flex-shrink: 0;
-        min-width: 48px;
+        flex: 1; /* Equal width for all tabs - no scrolling! */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 0; /* Allow shrinking below content size */
       }
       .mobile-tab-btn.active {
         color: white;
         border-bottom-color: #cc0000;
+        background: rgba(204, 0, 0, 0.1);
       }
       .mobile-tab-btn .tab-icon {
         font-size: 1.25rem;
+      }
+      @media (max-width: 380px) {
+        .mobile-tab-btn .tab-icon {
+          font-size: 1.125rem; /* Slightly smaller on very small screens */
+        }
       }
     }
     @media (min-width: 1025px) {
@@ -1317,26 +1349,34 @@ interface ProcessedContentOutput {
     }
 
     /* AI PANEL */
+    .ai-panel-wrapper {
+      padding: 0 !important;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      max-width: 100%;
+    }
+    .ai-panel-header {
+      padding: 2rem 2rem 1rem;
+      flex-shrink: 0;
+    }
     .ai-context {
       background: #1a1a1a;
       padding: 0.75rem 1rem;
       border-radius: 6px;
-      margin-bottom: 1.5rem;
+      margin-top: 1rem;
       font-size: 0.875rem;
     }
-    .chat-container {
-      background: #1a1a1a;
-      border: 1px solid #333;
-      border-radius: 8px;
-      padding: 1.5rem;
-      min-height: 500px;
-      display: flex;
-      flex-direction: column;
+    .ai-chat-scrollable {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 0 2rem 1rem;
+      min-height: 0; /* Important for flexbox scrolling */
     }
     .chat-messages {
-      flex: 1;
-      margin-bottom: 1rem;
-      overflow-y: auto;
+      min-height: 200px;
     }
     .chat-message {
       display: flex;
@@ -1357,7 +1397,7 @@ interface ProcessedContentOutput {
       display: flex;
       flex-wrap: wrap;
       gap: 0.5rem;
-      margin-bottom: 1rem;
+      margin-top: 0.75rem;
     }
     .quick-action-btn {
       background: #0a0a0a;
@@ -1373,13 +1413,20 @@ interface ProcessedContentOutput {
       background: #222;
       border-color: #cc0000;
     }
+    .ai-chat-input-sticky {
+      flex-shrink: 0;
+      background: #0a0a0a;
+      border-top: 1px solid #333;
+      padding: 1rem 2rem;
+      z-index: 10;
+    }
     .chat-input {
       display: flex;
       gap: 0.75rem;
     }
     .chat-input input {
       flex: 1;
-      background: #0a0a0a;
+      background: #1a1a1a;
       border: 1px solid #333;
       border-radius: 6px;
       padding: 0.75rem;
@@ -1389,6 +1436,22 @@ interface ProcessedContentOutput {
     .chat-input input:focus {
       outline: none;
       border-color: #cc0000;
+      box-shadow: 0 0 0 2px rgba(204, 0, 0, 0.1);
+    }
+    @media (max-width: 1024px) {
+      .ai-chat-input-sticky {
+        padding: 0.75rem 1rem 0.75rem;
+        position: fixed;
+        bottom: 62px; /* Sits directly above mobile bottom bar (60px + 2px border) */
+        left: 0;
+        right: 0;
+        background: #0a0a0a;
+        border-top: 1px solid #333;
+        z-index: 150;
+      }
+      .ai-chat-scrollable {
+        padding-bottom: 140px; /* Space for fixed input + bottom bar */
+      }
     }
 
     .full-width {
@@ -1396,6 +1459,39 @@ interface ProcessedContentOutput {
     }
     .mt-4 {
       margin-top: 1rem;
+    }
+
+    /* SNACKBAR */
+    .snackbar {
+      position: fixed;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #1a1a1a;
+      color: white;
+      padding: 1rem 1.5rem;
+      border-radius: 8px;
+      border: 1px solid #333;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      z-index: 1000;
+      transition: transform 0.3s ease;
+      font-size: 0.875rem;
+      white-space: nowrap;
+    }
+    .snackbar.visible {
+      transform: translateX(-50%) translateY(0);
+    }
+    @media (max-width: 1024px) {
+      .snackbar {
+        bottom: 5rem; /* Above mobile bottom bar */
+      }
+    }
+
+    /* BUTTON STATES */
+    .btn-secondary.saved,
+    .btn-primary.submitted {
+      opacity: 0.6;
+      cursor: not-allowed;
     }
   `]
 })
@@ -1405,6 +1501,14 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   lesson: Lesson | null = null;
   isNewLesson: boolean = false;
   saving: boolean = false;
+  hasUnsavedChanges: boolean = false;
+  hasBeenSubmitted: boolean = false;
+  lastSaved: Date | null = null;
+  
+  // Snackbar state
+  snackbarMessage: string = '';
+  snackbarVisible: boolean = false;
+  private snackbarTimeout: any = null;
   
   // UI State
   activeTab: EditorTab = 'details';
@@ -1525,31 +1629,52 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     this.selectedItem = { type: 'lesson', id: String(this.lesson?.id || '') };
   }
 
-  loadLesson(id: string) {
-    // TODO: Load from API
-    // For now, create a dummy lesson
-    this.lesson = {
-      id: id as any,
-      title: 'JavaScript Fundamentals',
-      description: 'Master JavaScript with hands-on examples',
-      category: 'Programming',
-      difficulty: 'Beginner',
-      durationMinutes: 60,
-      thumbnailUrl: 'https://images.unsplash.com/photo-1579468118864-1b9ea3c0db4a?w=300',
-      tags: ['javascript', 'programming', 'web-development'],
-      data: { stages: [] },
-      status: 'approved',
-      views: 1,
-      completions: 0,
-      completionRate: '0',
-      createdBy: ''
-    };
-    
-    this.tagsString = this.lesson?.tags?.join(', ') || '';
-    this.selectedItem = { type: 'lesson', id: String(this.lesson?.id || '') };
-    
-    // Load stages from lesson.data
-    this.loadStagesFromLesson();
+  async loadLesson(id: string) {
+    try {
+      // Load from API
+      console.log('[LessonEditor] Loading lesson:', id);
+      const response = await fetch(`http://localhost:3000/api/lessons/${id}`, {
+        headers: {
+          'x-tenant-id': '00000000-0000-0000-0000-000000000001'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Lesson not found');
+      }
+      
+      const apiLesson = await response.json();
+      console.log('[LessonEditor] ✅ Loaded lesson from API:', apiLesson);
+      
+      this.lesson = {
+        id: apiLesson.id,
+        title: apiLesson.title,
+        description: apiLesson.description,
+        category: apiLesson.category,
+        difficulty: apiLesson.difficulty,
+        durationMinutes: apiLesson.durationMinutes,
+        thumbnailUrl: apiLesson.thumbnailUrl,
+        tags: apiLesson.tags || [],
+        data: apiLesson.data || { stages: [] },
+        status: apiLesson.status,
+        views: apiLesson.views || 0,
+        completions: apiLesson.completions || 0,
+        completionRate: apiLesson.completionRate || '0',
+        createdBy: apiLesson.createdBy
+      };
+      
+      this.tagsString = this.lesson?.tags?.join(', ') || '';
+      this.selectedItem = { type: 'lesson', id: String(this.lesson?.id || '') };
+      
+      console.log('[LessonEditor] ✅ Lesson loaded:', this.lesson.title);
+      
+      // Load stages from lesson.data
+      this.loadStagesFromLesson();
+    } catch (error) {
+      console.error('[LessonEditor] Failed to load lesson:', error);
+      alert('Failed to load lesson. Please try again.');
+      this.router.navigate(['/lesson-builder']);
+    }
   }
 
   loadStagesFromLesson() {
@@ -1560,34 +1685,85 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   }
 
   goBack() {
-    this.router.navigate(['/lesson-builder']);
+    if (this.hasUnsavedChanges) {
+      if (confirm('You have unsaved changes. Are you sure you want to leave?')) {
+        this.router.navigate(['/lesson-builder']);
+      }
+    } else {
+      this.router.navigate(['/lesson-builder']);
+    }
   }
 
   saveDraft() {
+    if (!this.hasUnsavedChanges && this.lastSaved) {
+      this.showSnackbar('No changes to save');
+      return;
+    }
+    
     this.saving = true;
     // TODO: Save to API
     setTimeout(() => {
       this.saving = false;
+      this.hasUnsavedChanges = false;
+      this.lastSaved = new Date();
+      this.showSnackbar('Lesson saved');
       console.log('Draft saved');
     }, 1000);
   }
 
   submitForApproval() {
+    if (this.hasBeenSubmitted) {
+      this.showSnackbar('Already submitted for approval');
+      return;
+    }
+    
+    if (!this.canSubmit()) {
+      this.showSnackbar('Please fill in all required fields');
+      return;
+    }
+    
     this.saving = true;
     // TODO: Submit to API
     setTimeout(() => {
       this.saving = false;
+      this.hasBeenSubmitted = true;
+      this.hasUnsavedChanges = false;
+      this.showSnackbar('Submitted for approval');
       console.log('Submitted for approval');
-      this.router.navigate(['/lesson-builder']);
+      // Navigate after short delay so user sees the snackbar
+      setTimeout(() => {
+        this.router.navigate(['/lesson-builder']);
+      }, 1500);
     }, 1000);
   }
 
   canSubmit(): boolean {
     return !!(this.lesson?.title && this.lesson?.description && this.lesson?.category && this.lesson?.difficulty);
   }
+  
+  showSnackbar(message: string) {
+    this.snackbarMessage = message;
+    this.snackbarVisible = true;
+    
+    if (this.snackbarTimeout) {
+      clearTimeout(this.snackbarTimeout);
+    }
+    
+    this.snackbarTimeout = setTimeout(() => {
+      this.snackbarVisible = false;
+    }, 3000);
+  }
+  
+  markAsChanged() {
+    this.hasUnsavedChanges = true;
+  }
 
   toggleSidebar() {
     this.sidebarCollapsed = !this.sidebarCollapsed;
+    // Ensure mobile sidebar is closed when toggling collapse
+    if (this.sidebarCollapsed) {
+      this.mobileSidebarOpen = false;
+    }
   }
 
   selectItem(item: {type: 'lesson' | 'stage' | 'substage', id: string, stageId?: string}) {
@@ -1607,7 +1783,19 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     }
     
     // Close mobile sidebar after selection
+    this.closeMobileSidebar();
+  }
+  
+  closeMobileSidebar() {
     this.mobileSidebarOpen = false;
+  }
+  
+  openMobileSidebar() {
+    this.mobileSidebarOpen = true;
+  }
+  
+  toggleMobileSidebar() {
+    this.mobileSidebarOpen = !this.mobileSidebarOpen;
   }
 
   // Stage Management
@@ -1621,6 +1809,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     };
     this.stages.push(newStage);
     this.selectItem({ type: 'stage', id: newStage.id });
+    this.markAsChanged();
   }
 
   deleteStage(stageId: string, event: Event) {
@@ -1630,6 +1819,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       if (this.selectedItem.type === 'stage' && this.selectedItem.id === stageId) {
         this.selectItem({ type: 'lesson', id: String(this.lesson?.id || '') });
       }
+      this.markAsChanged();
     }
   }
 
@@ -1658,6 +1848,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       };
       stage.subStages.push(newSubStage);
       this.selectItem({ type: 'substage', id: newSubStage.id, stageId: stageId });
+      this.markAsChanged();
     }
   }
 
@@ -1670,6 +1861,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
         if (this.selectedItem.type === 'substage' && this.selectedItem.id === substageId) {
           this.selectItem({ type: 'stage', id: stageId });
         }
+        this.markAsChanged();
       }
     }
   }
@@ -1758,6 +1950,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
         endTime: endTime,
         metadata: {}
       });
+      this.markAsChanged();
     }
   }
 
@@ -1765,6 +1958,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     const substage = this.getSelectedSubStage();
     if (substage && substage.scriptBlocks) {
       substage.scriptBlocks.splice(index, 1);
+      this.markAsChanged();
     }
   }
 

@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { ApprovalStatus } from '../common/enums/approval-status.enum';
 import { User } from './user.entity';
+import { Course } from './course.entity';
 
 @Entity('lessons')
 export class Lesson {
@@ -68,6 +69,13 @@ export class Lesson {
 
   @Column({ type: 'decimal', precision: 5, scale: 2, default: 0, name: 'rating_average' })
   completionRate: number;
+
+  @Column({ name: 'course_id', type: 'uuid', nullable: true })
+  courseId: string | null;
+
+  @ManyToOne(() => Course, course => course.lessons, { nullable: true })
+  @JoinColumn({ name: 'course_id' })
+  course: Course;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
