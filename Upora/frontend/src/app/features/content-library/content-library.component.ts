@@ -79,7 +79,7 @@ import { ContentSource, SearchResult } from '../../core/models/content-source.mo
             <p class="summary">{{result.summary}}</p>
             <div class="metadata">
               <span class="relevance">Match: {{(result.relevanceScore * 100).toFixed(0)}}%</span>
-              <div class="topics" *ngIf="result.topics?.length > 0">
+              <div class="topics" *ngIf="result.topics && result.topics.length > 0">
                 <span *ngFor="let topic of result.topics" class="topic-tag">{{topic}}</span>
               </div>
             </div>
@@ -114,10 +114,10 @@ import { ContentSource, SearchResult } from '../../core/models/content-source.mo
             <h4>{{source.title || 'Untitled'}}</h4>
             <p class="summary">{{source.summary || 'No summary available'}}</p>
             
-            <div class="metadata" *ngIf="source.metadata?.topics && source.metadata.topics.length > 0">
+            <div class="metadata" *ngIf="source.metadata && source.metadata.topics && source.metadata.topics.length > 0">
               <div class="topics">
-                <span *ngFor="let topic of source.metadata!.topics!.slice(0, 3)" class="topic-tag">{{topic}}</span>
-                <span *ngIf="source.metadata!.topics!.length > 3" class="more">+{{source.metadata!.topics!.length - 3}} more</span>
+                <span *ngFor="let topic of source.metadata.topics.slice(0, 3)" class="topic-tag">{{topic}}</span>
+                <span *ngIf="source.metadata.topics.length > 3" class="more">+{{source.metadata.topics.length - 3}} more</span>
               </div>
             </div>
 

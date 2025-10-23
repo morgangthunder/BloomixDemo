@@ -49,21 +49,14 @@ export class ContentSourceService {
    * Get single content source
    */
   async getContentSource(id: string): Promise<ContentSource> {
-    return await this.apiService.get<ContentSource>(`content-sources/${id}`, {
-      headers: { 'x-tenant-id': environment.tenantId }
-    }).toPromise() as ContentSource;
+    return await this.apiService.get<ContentSource>(`content-sources/${id}`).toPromise() as ContentSource;
   }
 
   /**
    * Create new content source
    */
   async createContentSource(data: Partial<ContentSource>): Promise<ContentSource> {
-    const created = await this.apiService.post<ContentSource>('content-sources', data, {
-      headers: {
-        'x-tenant-id': environment.tenantId,
-        'x-user-id': environment.defaultUserId
-      }
-    }).toPromise();
+    const created = await this.apiService.post<ContentSource>('content-sources', data).toPromise();
 
     console.log(`[ContentSourceService] Created content source: ${created?.id}`);
     await this.loadContentSources(); // Reload list
@@ -74,9 +67,7 @@ export class ContentSourceService {
    * Update content source
    */
   async updateContentSource(id: string, data: Partial<ContentSource>): Promise<ContentSource> {
-    const updated = await this.apiService.patch<ContentSource>(`content-sources/${id}`, data, {
-      headers: { 'x-tenant-id': environment.tenantId }
-    }).toPromise();
+    const updated = await this.apiService.patch<ContentSource>(`content-sources/${id}`, data).toPromise();
 
     await this.loadContentSources();
     return updated!;
@@ -86,9 +77,7 @@ export class ContentSourceService {
    * Submit content for approval
    */
   async submitForApproval(id: string): Promise<ContentSource> {
-    const submitted = await this.apiService.post<ContentSource>(`content-sources/${id}/submit`, {}, {
-      headers: { 'x-tenant-id': environment.tenantId }
-    }).toPromise();
+    const submitted = await this.apiService.post<ContentSource>(`content-sources/${id}/submit`, {}).toPromise();
 
     console.log(`[ContentSourceService] Submitted for approval: ${id}`);
     await this.loadContentSources();
@@ -99,12 +88,7 @@ export class ContentSourceService {
    * Approve content source (admin only)
    */
   async approveContent(id: string): Promise<ContentSource> {
-    const approved = await this.apiService.post<ContentSource>(`content-sources/${id}/approve`, {}, {
-      headers: {
-        'x-tenant-id': environment.tenantId,
-        'x-user-id': environment.defaultUserId
-      }
-    }).toPromise();
+    const approved = await this.apiService.post<ContentSource>(`content-sources/${id}/approve`, {}).toPromise();
 
     console.log(`[ContentSourceService] ✅ Approved and indexed: ${id}`);
     console.log(`  Weaviate ID: ${approved?.weaviateId}`);
@@ -117,15 +101,7 @@ export class ContentSourceService {
    * Reject content source (admin only)
    */
   async rejectContent(id: string, reason: string): Promise<ContentSource> {
-    const rejected = await this.apiService.post<ContentSource>(`content-sources/${id}/reject`, 
-      { reason }, 
-      {
-        headers: {
-          'x-tenant-id': environment.tenantId,
-          'x-user-id': environment.defaultUserId
-        }
-      }
-    ).toPromise();
+    const rejected = await this.apiService.post<ContentSource>(`content-sources/${id}/reject`, { reason }).toPromise();
 
     console.log(`[ContentSourceService] Rejected: ${id} - ${reason}`);
     await this.loadContentSources('pending');
@@ -136,9 +112,7 @@ export class ContentSourceService {
    * Delete content source
    */
   async deleteContentSource(id: string): Promise<void> {
-    await this.apiService.delete(`content-sources/${id}`, {
-      headers: { 'x-tenant-id': environment.tenantId }
-    }).toPromise();
+    await this.apiService.delete(`content-sources/${id}`).toPromise();
 
     console.log(`[ContentSourceService] Deleted: ${id}`);
     await this.loadContentSources();
@@ -185,7 +159,7 @@ export class ContentSourceService {
    * Unlink content from lesson
    */
   async unlinkFromLesson(lessonId: string, contentSourceId: string): Promise<void> {
-    await this.apiService.delete(`content-sources/lesson/${lessonId}/content/${contentSourceId}`).toPromise();
+    await this.apiService.delete<void>(`content-sources/lesson/${lessonId}/content/${contentSourceId}`).toPromise();
     console.log(`[ContentSourceService] Unlinked content ${contentSourceId} from lesson ${lessonId}`);
   }
 }

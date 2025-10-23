@@ -71,17 +71,17 @@ import { ContentSource } from '../../core/models/content-source.model';
             </div>
 
             <!-- Metadata -->
-            <div class="field" *ngIf="source.metadata?.topics?.length">
+            <div class="field" *ngIf="source.metadata && source.metadata.topics && source.metadata.topics.length > 0">
               <label>Topics:</label>
               <div class="topics">
                 <span *ngFor="let topic of source.metadata.topics" class="topic-tag">{{topic}}</span>
               </div>
             </div>
 
-            <div class="field" *ngIf="source.metadata?.keywords?.length">
+            <div class="field" *ngIf="source.metadata && source.metadata.keywords && source.metadata.keywords.length > 0">
               <label>Keywords:</label>
               <div class="keywords">
-                <span *ngFor="let keyword of source.metadata.keywords?.slice(0, 10)" class="keyword-tag">{{keyword}}</span>
+                <span *ngFor="let keyword of source.metadata.keywords.slice(0, 10)" class="keyword-tag">{{keyword}}</span>
               </div>
             </div>
 
