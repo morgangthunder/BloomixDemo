@@ -39,6 +39,14 @@ export const routes: Routes = [
     loadComponent: () => import('./features/interaction-builder/interaction-builder.component').then(m => m.InteractionBuilderComponent)
   },
   {
+    path: 'content-library',
+    loadComponent: () => import('./features/content-library/content-library.component').then(m => m.ContentLibraryComponent)
+  },
+  {
+    path: 'content-approvals',
+    loadComponent: () => import('./features/content-approvals/content-approvals.component').then(m => m.ContentApprovalsComponent)
+  },
+  {
     path: 'profile',
     loadComponent: () => import('./features/profile/profile.component').then(m => m.ProfileComponent)
   },

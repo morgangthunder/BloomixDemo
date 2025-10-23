@@ -62,6 +62,10 @@ interface TokenUsage {
                       [class]="getNavLinkClasses('my-list')">
                 My List
               </button>
+              <button (click)="navigateTo('content-library')" 
+                      [class]="getNavLinkClasses('content-library')">
+                Content Library
+              </button>
               <button (click)="navigateTo('lesson-builder')" 
                       [class]="getNavLinkClasses('lesson-builder')">
                 Lesson Builder
@@ -155,6 +159,7 @@ interface TokenUsage {
           <button (click)="navigateTo('home')" [class]="getMobileNavLinkClasses('home')">Home</button>
           <button (click)="navigateTo('categories')" [class]="getMobileNavLinkClasses('categories')">Categories</button>
           <button (click)="navigateTo('my-list')" [class]="getMobileNavLinkClasses('my-list')">My List</button>
+          <button (click)="navigateTo('content-library')" [class]="getMobileNavLinkClasses('content-library')">Content Library</button>
           <button (click)="navigateTo('lesson-builder')" [class]="getMobileNavLinkClasses('lesson-builder')">Lesson Builder</button>
           <button (click)="navigateTo('interaction-builder')" [class]="getMobileNavLinkClasses('interaction-builder')">Interaction Builder</button>
         </nav>
