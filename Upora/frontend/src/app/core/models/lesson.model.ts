@@ -28,7 +28,7 @@ export interface Stage {
 }
 
 export interface Lesson {
-  id: number;
+  id: number; // Numeric ID for frontend (generated from UUID hash)
   title: string;
   description: string;
   thumbnailUrl?: string; // Optional for backward compatibility
@@ -40,6 +40,15 @@ export interface Lesson {
   tags?: string[]; // Tags for the lesson
   views?: number; // View count
   stages?: Stage[]; // Optional for listing views
+  status?: 'pending' | 'approved' | 'rejected'; // Approval status from backend
+  data?: { stages?: any[] }; // Lesson content data (JSONB from backend)
+  completionRate?: string | number; // From backend
+  completions?: number; // From backend
+  durationMinutes?: number; // From backend
+  createdAt?: string; // From backend
+  updatedAt?: string; // From backend
+  createdBy?: string; // From backend
+  realId?: string; // Real UUID from backend API (for navigation)
 }
 
 export interface Category {

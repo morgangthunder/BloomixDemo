@@ -79,9 +79,9 @@ export class LessonService {
   }
 
   /**
-   * Load lessons from backend API
+   * Load lessons from backend API (public for lesson-builder)
    */
-  private loadLessonsFromAPI() {
+  loadLessonsFromAPI() {
     console.log('[LessonService] 🚀 Starting API call to load lessons...');
     this.loadingSubject.next(true);
     this.errorSubject.next(null);

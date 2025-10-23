@@ -14,7 +14,9 @@ import { Lesson } from './core/models/lesson.model';
   template: `
     <ion-app>
       <app-header></app-header>
-      <ion-router-outlet></ion-router-outlet>
+      <div class="main-content">
+        <ion-router-outlet></ion-router-outlet>
+      </div>
     </ion-app>
   `,
   styles: [`
@@ -22,6 +24,14 @@ import { Lesson } from './core/models/lesson.model';
       background-color: #141414;
       color: #e5e5e5;
       font-family: system-ui, -apple-system, sans-serif;
+    }
+    .main-content {
+      padding-top: 64px; /* Header height on mobile */
+    }
+    @media (min-width: 768px) {
+      .main-content {
+        padding-top: 80px; /* Header height on desktop */
+      }
     }
   `]
 })

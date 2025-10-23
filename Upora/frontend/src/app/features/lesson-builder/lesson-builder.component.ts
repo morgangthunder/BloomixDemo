@@ -208,8 +208,8 @@ export class LessonBuilderComponent implements OnInit {
         const allLessons = categories.flatMap(cat => cat.lessons);
         
         // Map to HubLesson format for display
-        const hubLessons: HubLesson[] = allLessons.map(lesson => ({
-          id: parseInt(lesson.id) || 0, // Convert UUID to number for mock compatibility
+        const hubLessons: HubLesson[] = allLessons.map((lesson, index) => ({
+          id: index + 1000, // Generate numeric ID from index
           title: lesson.title,
           status: lesson.status === 'approved' ? 'Published' : 
                   lesson.status === 'pending' ? 'Pending Approval' : 
@@ -218,12 +218,13 @@ export class LessonBuilderComponent implements OnInit {
           courseId: null,
           stats: {
             views: lesson.views || 0,
-            completionRate: Math.round(parseFloat(lesson.completionRate || '0')),
+            completionRate: lesson.completionRate ? Math.round(parseFloat(String(lesson.completionRate))) : 0,
             completions: lesson.completions || 0,
           },
           isClickable: true,
-          realId: lesson.id // Store real UUID for navigation
-        }));
+          realId: typeof lesson.id === 'string' ? lesson.id : String(lesson.id), // Store real UUID
+          earnings: 0
+        } as HubLesson & { realId?: string }));
 
         this.realLessons = hubLessons;
         console.log('[LessonBuilder] Loaded', hubLessons.length, 'real lessons from API');

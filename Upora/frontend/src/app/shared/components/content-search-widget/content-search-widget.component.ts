@@ -57,7 +57,7 @@ import { SearchResult } from '../../../core/models/content-source.model';
             <h6>{{result.title}}</h6>
             <p class="result-summary">{{result.summary}}</p>
             
-            <div class="result-topics" *ngIf="result.topics?.length > 0">
+            <div class="result-topics" *ngIf="result.topics && result.topics.length > 0">
               <span *ngFor="let topic of result.topics.slice(0, 3)" class="topic">{{topic}}</span>
             </div>
 
