@@ -11,7 +11,7 @@ import { Lesson } from '../../core/models/lesson.model';
   standalone: true,
   imports: [CommonModule, FormsModule, ContentSearchWidgetComponent],
   template: `
-    <div class="lesson-editor bg-brand-dark min-h-screen text-white">
+    <div class="lesson-editor bg-brand-dark min-h-screen text-white full-page-layout">
       <!-- Header -->
       <header class="bg-brand-black border-b border-gray-700 p-4 md:p-6">
         <div class="container mx-auto flex items-center justify-between">
@@ -190,6 +190,15 @@ import { Lesson } from '../../core/models/lesson.model';
     </div>
   `,
   styles: [`
+    :host {
+      display: block;
+      margin-top: -64px; /* Negative margin to offset global padding */
+    }
+    @media (min-width: 768px) {
+      :host {
+        margin-top: -80px;
+      }
+    }
     .card {
       background: rgba(255,255,255,0.05);
       border: 1px solid rgba(255,255,255,0.1);
