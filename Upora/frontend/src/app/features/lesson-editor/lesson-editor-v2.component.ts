@@ -96,7 +96,7 @@ interface ProcessedContentOutput {
             <!-- Lesson root -->
             <div class="tree-item lesson-item" 
                  [class.selected]="selectedItem.type === 'lesson'"
-                 (click)="selectItem({type: 'lesson', id: lesson.id})">
+                 (click)="selectItem({type: 'lesson', id: (lesson.id || '') + ''})">
               <span class="item-icon">📚</span>
               <span class="item-label">{{lesson.title || 'Lesson'}}</span>
             </div>
@@ -371,7 +371,7 @@ interface ProcessedContentOutput {
                       </div>
                     </div>
 
-                    <p *ngIf="!getSelectedSubStage()?.scriptBlocks || getSelectedSubStage()?.scriptBlocks.length === 0" class="empty-state">
+                    <p *ngIf="!getSelectedSubStage()?.scriptBlocks || getSelectedSubStage()?.scriptBlocks?.length === 0" class="empty-state">
                       No script blocks yet. Click "Add Block" to start building your script timeline.
                     </p>
                   </div>
@@ -1302,29 +1302,29 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   initializeNewLesson() {
     this.lesson = {
-      id: '',
+      id: 0 as any,
       title: '',
       description: '',
       category: '',
-      difficulty: '',
+      difficulty: undefined,
       durationMinutes: 30,
       thumbnailUrl: '',
       tags: [],
       data: { stages: [] },
-      status: 'draft',
+      status: 'pending',
       views: 0,
       completions: 0,
       completionRate: '0',
       createdBy: ''
     };
-    this.selectedItem = { type: 'lesson', id: this.lesson.id as string };
+    this.selectedItem = { type: 'lesson', id: String(this.lesson?.id || '') };
   }
 
   loadLesson(id: string) {
     // TODO: Load from API
     // For now, create a dummy lesson
     this.lesson = {
-      id: id,
+      id: id as any,
       title: 'JavaScript Fundamentals',
       description: 'Master JavaScript with hands-on examples',
       category: 'Programming',
@@ -1340,8 +1340,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       createdBy: ''
     };
     
-    this.tagsString = this.lesson.tags?.join(', ') || '';
-    this.selectedItem = { type: 'lesson', id: this.lesson.id as string };
+    this.tagsString = this.lesson?.tags?.join(', ') || '';
+    this.selectedItem = { type: 'lesson', id: String(this.lesson?.id || '') };
     
     // Load stages from lesson.data
     this.loadStagesFromLesson();
@@ -1423,7 +1423,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     if (confirm('Delete this stage and all its substages?')) {
       this.stages = this.stages.filter(s => s.id !== stageId);
       if (this.selectedItem.type === 'stage' && this.selectedItem.id === stageId) {
-        this.selectItem({ type: 'lesson', id: this.lesson?.id as string });
+        this.selectItem({ type: 'lesson', id: String(this.lesson?.id || '') });
       }
     }
   }
