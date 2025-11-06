@@ -128,5 +128,16 @@ export class ContentSourcesController {
   ) {
     return this.contentSourcesService.unlinkFromLesson(lessonId, contentSourceId);
   }
+
+  @Post('process-youtube')
+  @HttpCode(HttpStatus.OK)
+  async processYouTube(
+    @Body('url') url: string,
+    @Body('startTime') startTime?: number,
+    @Body('endTime') endTime?: number,
+    @Headers('x-tenant-id') tenantId?: string,
+  ) {
+    return this.contentSourcesService.processYouTubeUrl(url, startTime, endTime, tenantId);
+  }
 }
 

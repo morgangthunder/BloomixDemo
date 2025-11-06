@@ -47,6 +47,40 @@ export class ProcessedContentOutput {
   @Column({ type: 'text', nullable: true })
   notes: string | null;
 
+  // YouTube-specific fields
+  @Column({ name: 'video_id', type: 'varchar', length: 50, nullable: true })
+  videoId: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  title: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  description: string | null;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  thumbnail: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  channel: string | null;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  duration: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  transcript: string | null;
+
+  @Column({ name: 'start_time', type: 'int', nullable: true })
+  startTime: number | null;
+
+  @Column({ name: 'end_time', type: 'int', nullable: true })
+  endTime: number | null;
+
+  @Column({ name: 'validation_score', type: 'int', nullable: true })
+  validationScore: number | null;
+
+  @Column({ name: 'created_by', type: 'uuid', nullable: true })
+  createdBy: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

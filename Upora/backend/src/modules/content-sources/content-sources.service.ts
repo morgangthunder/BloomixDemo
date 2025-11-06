@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { ContentSource } from '../../entities/content-source.entity';
 import { LessonDataLink } from '../../entities/lesson-data-link.entity';
 import { WeaviateService } from '../../services/weaviate.service';
+import { YouTubeService } from '../../services/youtube.service';
 import { CreateContentSourceDto } from './dto/create-content-source.dto';
 import { UpdateContentSourceDto } from './dto/update-content-source.dto';
 import { SearchContentDto } from './dto/search-content.dto';
@@ -18,6 +19,7 @@ export class ContentSourcesService {
     @InjectRepository(LessonDataLink)
     private lessonDataLinksRepository: Repository<LessonDataLink>,
     private weaviateService: WeaviateService,
+    private youtubeService: YouTubeService,
   ) {}
 
   /**
@@ -263,6 +265,20 @@ export class ContentSourcesService {
   async unlinkFromLesson(lessonId: string, contentSourceId: string): Promise<void> {
     await this.lessonDataLinksRepository.delete({ lessonId, contentSourceId });
     this.logger.log(`Unlinked content ${contentSourceId} from lesson ${lessonId}`);
+  }
+
+  /**
+   * Process YouTube URL and return video data
+   */
+  async processYouTubeUrl(url: string, startTime?: number, endTime?: number, tenantId?: string) {
+    const videoData = await this.youtubeService.processYouTubeUrl(url, startTime, endTime);
+    
+    this.logger.log(`Processed YouTube video: ${videoData.videoId} - ${videoData.title}`);
+    
+    return {
+      success: true,
+      data: videoData,
+    };
   }
 }
 

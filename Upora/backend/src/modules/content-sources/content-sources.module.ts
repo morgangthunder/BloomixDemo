@@ -5,13 +5,14 @@ import { ContentSourcesService } from './content-sources.service';
 import { ContentSource } from '../../entities/content-source.entity';
 import { LessonDataLink } from '../../entities/lesson-data-link.entity';
 import { WeaviateService } from '../../services/weaviate.service';
+import { YouTubeService } from '../../services/youtube.service';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([ContentSource, LessonDataLink]),
   ],
   controllers: [ContentSourcesController],
-  providers: [ContentSourcesService, WeaviateService],
+  providers: [ContentSourcesService, WeaviateService, YouTubeService],
   exports: [ContentSourcesService],
 })
 export class ContentSourcesModule {}

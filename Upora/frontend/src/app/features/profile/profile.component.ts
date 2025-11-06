@@ -7,7 +7,7 @@ import { LessonService } from '../../core/services/lesson.service';
 import { CATEGORIES } from '../../core/data/lessons.data';
 
 interface LessonProgress {
-  id: number;
+  id: string;
   title: string;
   description: string;
   thumbnailUrl?: string; // Optional to match Lesson model
@@ -206,11 +206,11 @@ export class ProfileComponent implements OnInit {
   ];
 
   mockLessonProgress = [
-    { id: 9, status: 'completed' as const, passed: true, public: true },
-    { id: 1, status: 'completed' as const, passed: true, public: false },
-    { id: 2, status: 'in-progress' as const, passed: false, public: false },
-    { id: 17, status: 'in-progress' as const, passed: false, public: false },
-    { id: 25, status: 'not-started' as const, passed: false, public: false },
+    { id: '9', status: 'completed' as const, passed: true, public: true },
+    { id: '1', status: 'completed' as const, passed: true, public: false },
+    { id: '2', status: 'in-progress' as const, passed: false, public: false },
+    { id: '17', status: 'in-progress' as const, passed: false, public: false },
+    { id: '25', status: 'not-started' as const, passed: false, public: false },
   ];
 
   lessonsWithProgress: LessonProgress[] = [];
@@ -242,9 +242,15 @@ export class ProfileComponent implements OnInit {
       .map(lesson => {
         const progress = this.mockLessonProgress.find(p => p.id === lesson.id)!;
         return {
-          ...lesson,
-          ...progress
-        };
+          id: lesson.id,
+          title: lesson.title,
+          description: lesson.description,
+          thumbnailUrl: lesson.thumbnailUrl,
+          image: lesson.image,
+          status: progress.status,
+          passed: progress.passed,
+          public: progress.public
+        } as LessonProgress;
       });
   }
 

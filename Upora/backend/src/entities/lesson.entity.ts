@@ -8,6 +8,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { ApprovalStatus } from '../common/enums/approval-status.enum';
+import { Stage, ContentSourceReference, MediaAssetReference, ScriptBlock } from '../services/lesson-data.service';
 import { User } from './user.entity';
 import { Course } from './course.entity';
 
@@ -42,9 +43,77 @@ export class Lesson {
 
   @Column({ type: 'jsonb' })
   data: {
-    stages: any[];
-    prompts?: any[];
-    metadata?: any;
+    // Lesson Metadata
+    metadata: {
+      version: string;
+      created: string;
+      updated: string;
+      lessonId: string;
+      tenantId: string;
+      createdBy: string;
+    };
+    
+    // Lesson Configuration
+    config: {
+      title: string;
+      description: string;
+      category: string;
+      difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
+      durationMinutes: number;
+      thumbnailUrl?: string;
+      tags: string[];
+      status: 'draft' | 'pending' | 'approved' | 'rejected';
+    };
+    
+    // AI Context & Prompts
+    aiContext: {
+      generalPrompt: string;
+      defaultSubStagePrompts: { [key: string]: string };
+      customPrompts: { [key: string]: string };
+      contextData: {
+        lessonObjectives: string[];
+        prerequisites: string[];
+        keyConcepts: string[];
+      };
+    };
+    
+    // Lesson Structure (TEACH Methodology)
+    structure: {
+      stages: Stage[];
+      totalDuration: number;
+      learningObjectives: string[];
+    };
+    
+    // Content Library References
+    contentReferences: {
+      contentSources: ContentSourceReference[];
+      mediaAssets: MediaAssetReference[];
+    };
+    
+    // Processed Content (Embedded JSON Data)
+    processedContent: {
+      [contentId: string]: any;
+    };
+    
+    // Interaction Configuration
+    interactions: {
+      interactionTypes: any[];
+      customInteractions: any[];
+    };
+    
+    // Script & Timing
+    script: {
+      blocks: ScriptBlock[];
+      totalDuration: number;
+      timing: any;
+    };
+    
+    // Assessment & Progress
+    assessment: {
+      checkpoints: any[];
+      evaluationCriteria: any[];
+      progressTracking: any;
+    };
   };
 
   @Column({

@@ -18,6 +18,9 @@ export const environment = {
   // External services
   grokApiUrl: 'https://api.x.ai/v1',
   
+  // YouTube API Key is now stored in backend environment variables (docker-compose.yml)
+  // Frontend no longer needs YouTube credentials - backend handles all YouTube API calls
+  
   // Logging
   logLevel: 'debug',
 };

@@ -160,7 +160,7 @@ export class HomeComponent implements OnInit {
     this.lessonService.toggleMyList(lesson);
   }
 
-  isInMyList(lessonId: number): boolean {
+  isInMyList(lessonId: string): boolean {
     return this.lessonService.isInMyList(lessonId);
   }
 }

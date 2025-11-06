@@ -203,7 +203,7 @@ export class LessonOverviewComponent implements OnInit {
     this.lessonService.toggleMyList(lesson);
   }
 
-  isInMyList(lessonId: number): boolean {
+  isInMyList(lessonId: string): boolean {
     const inList = this.lessonService.isInMyList(lessonId);
     console.log('[LessonOverview] Is lesson', lessonId, 'in my list?', inList);
     return inList;

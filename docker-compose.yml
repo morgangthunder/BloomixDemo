@@ -50,6 +50,7 @@ services:
       - COGNITO_CLIENT_ID=mock-client-id
       - GROK_API_KEY=mock-grok-key
       - GROK_API_URL=https://api.x.ai/v1
+      - YOUTUBE_API_KEY=AIzaSyBprurusg3XWfp83G2Cx-V3dz0aIADGSYQ
       - CORS_ORIGINS=http://localhost:8100,http://localhost:4200
       - WEAVIATE_HOST=weaviate
       - WEAVIATE_PORT=8080

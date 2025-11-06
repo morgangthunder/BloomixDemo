@@ -1,6 +1,8 @@
+// CACHE BUST v2.3.0 - LESSON EDITOR COMPONENT - FORCE CACHE CLEAR - ID: abc123def
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
 import { LessonService } from '../../core/services/lesson.service';
 import { ContentSourceService } from '../../core/services/content-source.service';
@@ -8,6 +10,11 @@ import { Lesson } from '../../core/models/lesson.model';
 import { ContentSource } from '../../core/models/content-source.model';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
+import { environment } from '../../../environments/environment';
+import { ContentProcessorModalComponent } from '../../shared/components/content-processor-modal/content-processor-modal.component';
+import { ApprovalQueueModalComponent } from '../../shared/components/approval-queue-modal/approval-queue-modal.component';
+import { ProcessedContentService, ProcessedContentItem } from '../../core/services/processed-content.service';
+import { YouTubeOAuthService } from '../../core/services/youtube-oauth.service';
 
 type EditorTab = 'details' | 'structure' | 'script' | 'content' | 'preview' | 'ai-assistant';
 
@@ -46,10 +53,14 @@ interface ProcessedContentOutput {
   workflowName: string;
 }
 
+        // VERSION CHECK: This component should show "VERSION 2.3.0" in console logs
+        const LESSON_EDITOR_VERSION = '2.3.0';
+        const LESSON_EDITOR_VERSION_CHECK_MESSAGE = `🚀 LESSON EDITOR COMPONENT VERSION ${LESSON_EDITOR_VERSION} LOADED - ${new Date().toISOString()} - CACHE BUST ID: ${Math.random().toString(36).substr(2, 9)}`;
+
 @Component({
   selector: 'app-lesson-editor-v2',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ContentProcessorModalComponent, ApprovalQueueModalComponent],
   template: `
     <div class="lesson-editor-v2" *ngIf="lesson">
       <!-- Top Header -->
@@ -426,27 +437,26 @@ interface ProcessedContentOutput {
                 <h3>Add & Process Content</h3>
                 <button (click)="searchContentLibrary()" class="btn-secondary">📚 Search Library</button>
                 <button class="btn-secondary">📄 Upload File</button>
-                <button class="btn-secondary">🔗 Paste URL</button>
+                <button (click)="openContentProcessor()" class="btn-secondary">🔗 Paste URL</button>
+                <button (click)="openApprovalQueue()" class="btn-secondary">⏳ Approval Queue</button>
               </div>
 
-              <div class="processed-outputs" *ngIf="processedOutputs.length > 0">
-                <h3>Processed Outputs ({{processedOutputs.length}})</h3>
+              <div class="processed-outputs" *ngIf="processedContentItems.length > 0">
+                <h3>Processed Content ({{processedContentItems.length}})</h3>
                 <div class="output-list">
-                  <div *ngFor="let output of processedOutputs" class="output-card">
-                    <div class="output-header">
-                      <span class="output-name">{{output.name}}</span>
-                      <span class="output-type">{{output.type}}</span>
+                  <div *ngFor="let content of processedContentItems" class="output-card-compact">
+                    <div class="output-header-compact">
+                      <span class="output-name-compact">{{content.title}}</span>
+                      <span class="output-type-compact">{{content.type}}</span>
                     </div>
-                    <p class="output-workflow">{{output.workflowName}}</p>
-                    <div class="output-actions">
-                      <button class="btn-small">View</button>
-                      <button class="btn-small">Use in Substage</button>
-                      <button class="btn-small">Delete</button>
+                    <div class="output-actions-compact">
+                      <button (click)="viewProcessedContent(content)" class="btn-small">View</button>
+                      <button (click)="deleteProcessedContent(content)" class="btn-small btn-danger">Delete</button>
                     </div>
                   </div>
                 </div>
               </div>
-              <p *ngIf="processedOutputs.length === 0" class="empty-state">
+              <p *ngIf="processedContentItems.length === 0" class="empty-state">
                 No processed content outputs yet. Add and process source content to create outputs.
               </p>
             </div>
@@ -546,6 +556,80 @@ interface ProcessedContentOutput {
       <!-- Snackbar -->
       <div class="snackbar" [class.visible]="snackbarVisible">
         {{snackbarMessage}}
+      </div>
+
+      <!-- Content Processor Modal -->
+      <app-content-processor-modal 
+        [isOpen]="showContentProcessor"
+        [lessonId]="lesson?.id"
+        [videoId]="contentProcessorVideoId"
+        [resumeProcessing]="contentProcessorResumeProcessing"
+        (contentProcessed)="onContentProcessed($event)"
+        (contentSubmittedForApproval)="onContentSubmittedForApproval($event)"
+        (closed)="closeContentProcessor()">
+      </app-content-processor-modal>
+
+      <!-- Approval Queue Modal -->
+      <app-approval-queue-modal 
+        [isOpen]="showApprovalQueue"
+        (itemApproved)="onItemApproved($event)"
+        (itemRejected)="onItemRejected($event)"
+        (close)="closeApprovalQueue()">
+      </app-approval-queue-modal>
+
+      <!-- Processed Content Viewer Modal -->
+      <div class="modal-overlay" *ngIf="selectedProcessedContent" (click)="closeProcessedContentViewer()">
+        <div class="modal-content" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h2>🔍 Processed Content Details</h2>
+            <button (click)="closeProcessedContentViewer()" class="close-btn">✕</button>
+          </div>
+          <div class="modal-body" *ngIf="selectedProcessedContent">
+            <div class="content-details">
+              <div class="content-header">
+                <h3>{{selectedProcessedContent.title}}</h3>
+                <div class="content-meta">
+                  <span class="content-type">{{selectedProcessedContent.type}}</span>
+                  <span class="content-status" [class]="'status-' + selectedProcessedContent.status">
+                    {{selectedProcessedContent.status}}
+                  </span>
+                </div>
+              </div>
+              
+              <div class="content-info" *ngIf="selectedProcessedContent.channel || selectedProcessedContent.duration">
+                <div class="info-item" *ngIf="selectedProcessedContent.channel">
+                  <label>Channel:</label>
+                  <span>{{selectedProcessedContent.channel}}</span>
+                </div>
+                <div class="info-item" *ngIf="selectedProcessedContent.duration">
+                  <label>Duration:</label>
+                  <span>{{formatDuration(selectedProcessedContent.duration)}}</span>
+                </div>
+                <div class="info-item" *ngIf="selectedProcessedContent.startTime || selectedProcessedContent.endTime">
+                  <label>Time Range:</label>
+                  <span>{{formatTime(selectedProcessedContent.startTime || 0)}} - {{formatTime(selectedProcessedContent.endTime || selectedProcessedContent.duration || 0)}}</span>
+                </div>
+              </div>
+
+              <div class="content-description" *ngIf="selectedProcessedContent.description">
+                <h4>Description</h4>
+                <p>{{selectedProcessedContent.description}}</p>
+              </div>
+
+              <div class="content-transcript" *ngIf="selectedProcessedContent.transcript">
+                <h4>Transcript</h4>
+                <div class="transcript-content">
+                  <p>{{selectedProcessedContent.transcript}}</p>
+                </div>
+              </div>
+
+              <div class="content-thumbnail" *ngIf="selectedProcessedContent.thumbnail">
+                <h4>Thumbnail</h4>
+                <img [src]="selectedProcessedContent.thumbnail" [alt]="selectedProcessedContent.title" class="thumbnail">
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   `,
@@ -1103,6 +1187,15 @@ interface ProcessedContentOutput {
       border-color: #cc0000;
     }
 
+    .btn-danger {
+      background: #cc0000;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #ff0000;
+    }
+
     /* EMPTY STATES */
     .empty-state {
       text-align: center;
@@ -1279,20 +1372,47 @@ interface ProcessedContentOutput {
       border-radius: 8px;
       padding: 1rem;
     }
+    .output-card-compact {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 0.75rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+    }
     .output-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 0.5rem;
     }
+    .output-header-compact {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      flex: 1;
+    }
     .output-name {
       font-weight: 500;
+    }
+    .output-name-compact {
+      font-weight: 500;
+      font-size: 0.875rem;
     }
     .output-type {
       background: #333;
       padding: 0.25rem 0.5rem;
       border-radius: 4px;
       font-size: 0.75rem;
+    }
+    .output-type-compact {
+      background: #333;
+      padding: 0.125rem 0.375rem;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      color: #aaa;
     }
     .output-workflow {
       font-size: 0.875rem;
@@ -1302,6 +1422,11 @@ interface ProcessedContentOutput {
     .output-actions {
       display: flex;
       gap: 0.5rem;
+    }
+    .output-actions-compact {
+      display: flex;
+      gap: 0.5rem;
+      flex-shrink: 0;
     }
 
     /* PREVIEW PANEL */
@@ -1493,6 +1618,176 @@ interface ProcessedContentOutput {
       opacity: 0.6;
       cursor: not-allowed;
     }
+
+    /* PROCESSED CONTENT MODAL */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999999;
+      padding: 20px;
+    }
+
+    .modal-content {
+      background: #1f2937;
+      border-radius: 16px;
+      max-width: 800px;
+      max-height: 80vh;
+      width: 90%;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 24px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .modal-header h2 {
+      color: white;
+      font-size: 18px;
+      font-weight: 600;
+      margin: 0;
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      color: #9ca3af;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 4px;
+    }
+
+    .close-btn:hover {
+      color: white;
+    }
+
+    .modal-body {
+      padding: 24px;
+      overflow-y: auto;
+      max-height: 60vh;
+    }
+
+    .content-details {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .content-header h3 {
+      color: white;
+      font-size: 20px;
+      font-weight: 600;
+      margin: 0 0 8px 0;
+    }
+
+    .content-meta {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .content-type {
+      background: rgba(59,130,246,0.2);
+      color: #60a5fa;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .content-status {
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .content-status.status-ready {
+      background: rgba(16,185,129,0.2);
+      color: #10b981;
+    }
+
+    .content-status.status-processing {
+      background: rgba(251,191,36,0.2);
+      color: #fbbf24;
+    }
+
+    .content-status.status-error {
+      background: rgba(239,68,68,0.2);
+      color: #ef4444;
+    }
+
+    .content-info {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    .info-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .info-item label {
+      color: #9ca3af;
+      font-size: 12px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .info-item span {
+      color: white;
+      font-size: 14px;
+    }
+
+    .content-description h4,
+    .content-transcript h4,
+    .content-thumbnail h4 {
+      color: white;
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0 0 12px 0;
+    }
+
+    .content-description p {
+      color: #d1d5db;
+      line-height: 1.6;
+      margin: 0;
+    }
+
+    .transcript-content {
+      background: #111827;
+      border-radius: 8px;
+      padding: 16px;
+      border: 1px solid #374151;
+    }
+
+    .transcript-content p {
+      color: #d1d5db;
+      line-height: 1.6;
+      margin: 0;
+    }
+
+    .thumbnail {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+    }
   `]
 })
 export class LessonEditorV2Component implements OnInit, OnDestroy {
@@ -1541,6 +1836,16 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   // AI Chat
   aiChatInput: string = '';
   
+  // Modal State
+  showContentProcessor: boolean = false;
+  showApprovalQueue: boolean = false;
+  contentProcessorVideoId?: string; // For resuming OAuth processing
+  contentProcessorResumeProcessing: boolean = false; // Flag to resume processing after OAuth
+  
+  // Processed Content
+  processedContentItems: ProcessedContentItem[] = [];
+  selectedProcessedContent: ProcessedContentItem | null = null;
+  
   // Tab Configuration
   tabs = [
     { id: 'details' as EditorTab, label: 'Details', icon: '📋' },
@@ -1586,22 +1891,166 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   };
 
   constructor(
+    private http: HttpClient,
     private route: ActivatedRoute,
     private router: Router,
     private lessonService: LessonService,
-    private contentSourceService: ContentSourceService
+    private contentSourceService: ContentSourceService,
+    private processedContentService: ProcessedContentService,
+    private oauthService: YouTubeOAuthService
   ) {}
 
   ngOnInit() {
+    // VERSION CHECK: This log should always appear when new code is loaded
+    console.log('🔥🔥🔥 LESSON EDITOR VERSION 0.0.2 - CODE UPDATED 🔥🔥🔥');
+    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 0.0.2');
+    console.log('[LessonEditor] 🔍 Fixed event binding: (close) -> (closed) - Version 0.0.2');
+    
     // Get lesson ID from route
     const lessonId = this.route.snapshot.paramMap.get('id');
+    const queryParams = this.route.snapshot.queryParams;
     
-    if (lessonId === 'new') {
-      this.isNewLesson = true;
-      this.initializeNewLesson();
-    } else if (lessonId) {
-      this.loadLesson(lessonId);
+    console.log('[LessonEditor] 🚀 ngOnInit - Lesson ID from route:', lessonId);
+    console.log('[LessonEditor] 🚀 Query parameters:', queryParams);
+    console.log('[LessonEditor] 🚀 Current URL:', window.location.href);
+    
+    // Check if lessonId contains query parameters (shouldn't happen with proper routing)
+    if (lessonId && lessonId.includes('?')) {
+      console.warn('[LessonEditor] ⚠️ Lesson ID contains query parameters, extracting clean ID');
+      const cleanLessonId = lessonId.split('?')[0];
+      console.log('[LessonEditor] 🔧 Using clean lesson ID:', cleanLessonId);
+      
+      if (cleanLessonId === 'new') {
+        console.log('[LessonEditor] 🆕 Creating new lesson');
+        this.isNewLesson = true;
+        this.initializeNewLesson();
+      } else if (cleanLessonId) {
+        console.log('[LessonEditor] 📖 Loading existing lesson:', cleanLessonId);
+        this.loadLesson(cleanLessonId);
+      }
+    } else {
+      // Normal flow
+      if (lessonId === 'new') {
+        console.log('[LessonEditor] 🆕 Creating new lesson');
+        this.isNewLesson = true;
+        this.initializeNewLesson();
+      } else if (lessonId) {
+        console.log('[LessonEditor] 📖 Loading existing lesson:', lessonId);
+        this.loadLesson(lessonId);
+      } else {
+        console.log('[LessonEditor] ❌ No lesson ID provided');
+      }
     }
+    
+    // Load processed content for this lesson
+    this.loadProcessedContent();
+    
+    // Handle OAuth callback - switch to content processing tab and resume processing
+    const isOAuthCallback = queryParams['oauth_message'] && queryParams['tab'] === 'content-processing';
+    
+    console.log('[LessonEditor] 🔍 isOAuthCallback:', isOAuthCallback);
+    console.log('[LessonEditor] 🔍 oauth_message:', queryParams['oauth_message']);
+    console.log('[LessonEditor] 🔍 tab:', queryParams['tab']);
+    
+    // NEVER clear OAuth data in ngOnInit - only clear AFTER successful processing
+    // The token is needed to complete processing after OAuth callback
+    // We'll clear it AFTER processing completes in onContentProcessed()
+    // DON'T call forceClearOAuthData() here at all!
+    
+    this.handleOAuthCallback(queryParams);
+  }
+
+  loadProcessedContent() {
+    const lessonId = this.route.snapshot.paramMap.get('id');
+    console.log('[LessonEditor] 🔍 Loading processed content for lesson:', lessonId);
+    if (lessonId && lessonId !== 'new') {
+      // Load from backend API instead of localStorage
+      this.http.get<any[]>(`${environment.apiUrl}/lesson-editor/lessons/${lessonId}/processed-outputs`)
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: (items) => {
+            console.log('[LessonEditor] 🔍 Processed content items loaded from backend:', items);
+            this.processedContentItems = items;
+          },
+          error: (error) => {
+            console.error('[LessonEditor] ❌ Failed to load processed content:', error);
+            this.processedContentItems = [];
+          }
+        });
+    } else {
+      console.log('[LessonEditor] ⚠️ No lesson ID or new lesson, skipping processed content load');
+    }
+  }
+
+  handleOAuthCallback(queryParams: any) {
+    console.log('[LessonEditor] 🔍 Handling OAuth callback with params:', queryParams);
+    
+    // Check if this is an OAuth callback
+    if (queryParams['oauth_message'] && queryParams['tab'] === 'content-processing') {
+      console.log('[LessonEditor] 🎯 OAuth callback detected - switching to content processing tab');
+      
+      // Switch to content processing tab
+      this.activeTab = 'content';
+      
+      // Show OAuth success message
+      if (queryParams['oauth_message']) {
+        console.log('[LessonEditor] ✅ OAuth message:', queryParams['oauth_message']);
+        // You could show a snackbar here if needed
+      }
+      
+      // Extract videoId from query params instead of localStorage
+      // The OAuth callback already consumed the localStorage state
+      if (queryParams['videoId']) {
+        console.log('[LessonEditor] 🎬 Found videoId in query params:', queryParams['videoId']);
+        this.contentProcessorVideoId = queryParams['videoId'];
+        console.log('[LessonEditor] 🎬 Set contentProcessorVideoId to:', this.contentProcessorVideoId);
+        
+        // Check if we should resume processing (complete the OAuth flow)
+        if (queryParams['resumeProcessing'] === 'true') {
+          console.log('[LessonEditor] 🚀 Resume processing flag detected - will complete processing');
+          this.contentProcessorResumeProcessing = true;
+        }
+      } else {
+        console.log('[LessonEditor] ⚠️ No videoId found in query params');
+      }
+      
+      // Auto-open the modal after OAuth so user can click Process to use the token
+      console.log('[LessonEditor] 🎯 OAuth complete - auto-opening modal with pre-filled URL');
+      setTimeout(() => {
+        this.openContentProcessor();
+      }, 500);
+    }
+  }
+
+  viewProcessedContent(content: ProcessedContentItem) {
+    this.selectedProcessedContent = content;
+  }
+
+  closeProcessedContentViewer() {
+    this.selectedProcessedContent = null;
+  }
+
+  deleteProcessedContent(content: any) {
+    const contentTitle = content.title || content.outputName || 'this item';
+    const confirmed = confirm(`Are you sure you want to delete "${contentTitle}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    console.log('[LessonEditor] 🗑️ Deleting processed content:', content.id);
+    
+    this.http.delete(`${environment.apiUrl}/lesson-editor/processed-outputs/${content.id}`)
+      .subscribe({
+        next: () => {
+          console.log('[LessonEditor] ✅ Deleted successfully');
+          // Reload the list
+          this.loadProcessedContent();
+        },
+        error: (error) => {
+          console.error('[LessonEditor] ❌ Failed to delete:', error);
+          alert('Failed to delete processed content');
+        }
+      });
   }
 
   ngOnDestroy() {
@@ -1632,19 +2081,29 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   async loadLesson(id: string) {
     try {
       // Load from API
-      console.log('[LessonEditor] Loading lesson:', id);
+      console.log('[LessonEditor] 🔍 Attempting to load lesson with ID:', id);
+      console.log('[LessonEditor] 🔍 Making request to:', `http://localhost:3000/api/lessons/${id}`);
+      
       const response = await fetch(`http://localhost:3000/api/lessons/${id}`, {
         headers: {
           'x-tenant-id': '00000000-0000-0000-0000-000000000001'
         }
       });
       
+      console.log('[LessonEditor] 🔍 Response status:', response.status, response.statusText);
+      
       if (!response.ok) {
-        throw new Error('Lesson not found');
+        if (response.status === 404) {
+          console.log('[LessonEditor] ❌ Lesson not found (404), creating new lesson instead');
+          this.isNewLesson = true;
+          this.initializeNewLesson();
+          return;
+        }
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
       const apiLesson = await response.json();
-      console.log('[LessonEditor] ✅ Loaded lesson from API:', apiLesson);
+      console.log('[LessonEditor] ✅ Successfully loaded lesson from API:', apiLesson);
       
       this.lesson = {
         id: apiLesson.id,
@@ -1666,12 +2125,36 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       this.tagsString = this.lesson?.tags?.join(', ') || '';
       this.selectedItem = { type: 'lesson', id: String(this.lesson?.id || '') };
       
-      console.log('[LessonEditor] ✅ Lesson loaded:', this.lesson.title);
+      console.log('[LessonEditor] ✅ Lesson loaded successfully:', this.lesson.title);
       
       // Load stages from lesson.data
       this.loadStagesFromLesson();
-    } catch (error) {
-      console.error('[LessonEditor] Failed to load lesson:', error);
+    } catch (error: any) {
+      console.error('[LessonEditor] ❌ Failed to load lesson:', error);
+      console.error('[LessonEditor] ❌ Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+      
+      // Check if it's a network error (backend not running)
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        console.log('[LessonEditor] 🌐 Backend not available, creating new lesson');
+        this.isNewLesson = true;
+        this.initializeNewLesson();
+        return;
+      }
+      
+      // Check if it's a lesson not found error
+      if (error.message && error.message.includes('Lesson not found')) {
+        console.log('[LessonEditor] ❌ Lesson not found, creating new lesson');
+        this.isNewLesson = true;
+        this.initializeNewLesson();
+        return;
+      }
+      
+      // For other errors, show alert and redirect
+      console.error('[LessonEditor] ❌ Unexpected error:', error);
       alert('Failed to load lesson. Please try again.');
       this.router.navigate(['/lesson-builder']);
     }
@@ -1990,6 +2473,84 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     // TODO: Open content library modal
   }
 
+  // Content Processing Modal Methods
+  openContentProcessor() {
+    console.log('[LessonEditor] 🟢 openContentProcessor called - VERSION 0.0.2');
+    console.log('[LessonEditor] 🔍 Before open - showContentProcessor:', this.showContentProcessor);
+    console.log('[LessonEditor] 🔍 Before open - contentProcessorVideoId:', this.contentProcessorVideoId);
+    
+    this.showContentProcessor = true;
+    
+    console.log('[LessonEditor] 🔍 After open - showContentProcessor:', this.showContentProcessor);
+  }
+
+  closeContentProcessor() {
+    console.log('[LessonEditor] 🔴 closeContentProcessor called - VERSION 0.0.2');
+    console.log('[LessonEditor] 🔍 Before close - showContentProcessor:', this.showContentProcessor);
+    console.log('[LessonEditor] 🔍 Before close - contentProcessorVideoId:', this.contentProcessorVideoId);
+    
+    this.showContentProcessor = false;
+    // Clear videoId when closing modal to allow Paste URL button to work again
+    this.contentProcessorVideoId = undefined;
+    this.contentProcessorResumeProcessing = false;
+    
+    console.log('[LessonEditor] 🔍 After close - showContentProcessor:', this.showContentProcessor);
+    console.log('[LessonEditor] 🔍 After close - contentProcessorVideoId:', this.contentProcessorVideoId);
+  }
+
+  onContentProcessed(content: any) {
+    console.log('[LessonEditor] ✅ Content processed:', content);
+    
+    // Reload processed content from service
+    this.loadProcessedContent();
+    
+    // Also add to processed outputs for backward compatibility
+    this.processedOutputs.push({
+      id: `output-${Date.now()}`,
+      name: content.name || 'Processed Content',
+      type: content.type || 'unknown',
+      data: content.data,
+      workflowName: content.workflowName || 'Unknown Workflow'
+    });
+    
+    this.markAsChanged();
+    
+    // Clear videoId and resumeProcessing flag now that processing is complete
+    this.contentProcessorVideoId = undefined;
+    this.contentProcessorResumeProcessing = false;
+    
+    // NOW clear OAuth data after processing is complete
+    this.oauthService.forceClearOAuthData();
+    
+    // DON'T close the modal automatically - let the user click "Submit for Approval" or close manually
+    // this.closeContentProcessor();
+  }
+
+  onContentSubmittedForApproval(content: any) {
+    console.log('Content submitted for approval:', content);
+    this.showSnackbar('Content submitted for approval');
+    this.closeContentProcessor();
+  }
+
+  // Approval Queue Modal Methods
+  openApprovalQueue() {
+    this.showApprovalQueue = true;
+  }
+
+  closeApprovalQueue() {
+    this.showApprovalQueue = false;
+  }
+
+  onItemApproved(item: any) {
+    console.log('Item approved:', item);
+    this.showSnackbar('Item approved');
+  }
+
+  onItemRejected(item: any) {
+    console.log('Item rejected:', item);
+    this.showSnackbar('Item rejected');
+  }
+
   // AI Assistant
   sendAIMessage() {
     if (!this.aiChatInput.trim()) return;
@@ -2111,6 +2672,17 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   
   getSubStageTypeLabel(type: string): string {
     return this.substageTypeLabels[type] || type;
+  }
+
+  formatDuration(seconds: number): string {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
   }
 }
 

@@ -32,7 +32,7 @@ export const MOCK_CONTENT_OUTPUTS: ContentOutput[] = [
 ];
 
 export const SAMPLE_LESSON: Lesson = {
-  id: 1000,
+  id: '1000',
   title: 'The Art of Public Speaking',
   description: 'A comprehensive guide to becoming a confident and effective public speaker.',
   thumbnailUrl: 'https://picsum.photos/400/225?random=1000',

@@ -126,7 +126,7 @@ export class LessonService {
     
     const transformed = backendLessons.map((bl, index) => {
       const lesson = {
-        id: parseInt(bl.id.split('-')[0], 16) % 10000 || index + 1, // Convert UUID to number for now
+        id: bl.id, // Keep the full UUID instead of converting to number
         title: bl.title,
         description: bl.description || '',
         image: bl.thumbnailUrl || 'https://picsum.photos/400/200', // Fixed: use camelCase
@@ -140,7 +140,7 @@ export class LessonService {
         stages: bl.data?.stages || [],
       };
       
-      console.log(`[LessonService] Transformed: ${lesson.title} (image: ${lesson.image?.substring(0, 50)}...)`);
+      console.log(`[LessonService] Transformed: ${lesson.title} (ID: ${lesson.id}, image: ${lesson.image?.substring(0, 50)}...)`);
       return lesson;
     });
     
@@ -228,7 +228,7 @@ export class LessonService {
     this.saveMyListToStorage();
   }
 
-  isInMyList(lessonId: number): boolean {
+  isInMyList(lessonId: string): boolean {
     return this.myListSubject.value.some(item => item.id === lessonId);
   }
 

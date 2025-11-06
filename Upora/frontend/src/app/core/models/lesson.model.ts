@@ -28,7 +28,7 @@ export interface Stage {
 }
 
 export interface Lesson {
-  id: number; // Numeric ID for frontend (generated from UUID hash)
+  id: string; // UUID string ID from backend
   title: string;
   description: string;
   thumbnailUrl?: string; // Optional for backward compatibility
@@ -113,6 +113,6 @@ export const SUB_STAGE_TYPES_MAP: Record<StageType, readonly string[]> = {
 export type SubStageType = typeof SUB_STAGE_TYPES_MAP[StageType][number];
 
 export type SelectedItem = 
-  | { type: 'lesson'; id: number }
-  | { type: 'stage'; id: number }
-  | { type: 'substage'; id: number; stageId: number };
+  | { type: 'lesson'; id: string }
+  | { type: 'stage'; id: string }
+  | { type: 'substage'; id: string; stageId: string };

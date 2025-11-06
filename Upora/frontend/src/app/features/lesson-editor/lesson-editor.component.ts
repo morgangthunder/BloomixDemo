@@ -1,361 +1,427 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
-import { LessonService } from '../../core/services/lesson.service';
-import { ContentSearchWidgetComponent } from '../../shared/components/content-search-widget/content-search-widget.component';
-import { Lesson } from '../../core/models/lesson.model';
+import { Router, ActivatedRoute } from '@angular/router';
+import { ContentProcessorModalComponent } from '../../shared/components/content-processor-modal/content-processor-modal.component';
+import { ApprovalQueueModalComponent } from '../../shared/components/approval-queue-modal/approval-queue-modal.component';
 
 @Component({
   selector: 'app-lesson-editor',
   standalone: true,
-  imports: [CommonModule, FormsModule, ContentSearchWidgetComponent],
+  imports: [CommonModule, FormsModule, ContentProcessorModalComponent, ApprovalQueueModalComponent],
   template: `
-    <div class="lesson-editor bg-brand-dark min-h-screen text-white full-page-layout">
+    <div class="lesson-editor" style="background-color: #000; min-height: 100vh; color: white; padding-top: 80px;">
       <!-- Header -->
-      <header class="bg-brand-black border-b border-gray-700 p-4 md:p-6">
-        <div class="container mx-auto flex items-center justify-between">
+      <div class="editor-header" style="background-color: #0a0a0a; padding: 20px; border-bottom: 1px solid #333;">
+        <div class="flex items-center justify-between">
           <div class="flex items-center space-x-4">
             <button (click)="goBack()" class="text-white hover:text-brand-red transition-colors">
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
               </svg>
             </button>
-            <div>
-              <h1 class="text-2xl font-bold">{{isNewLesson ? 'Create New Lesson' : 'Edit Lesson'}}</h1>
-              <p class="text-sm text-gray-400" *ngIf="lesson">{{lesson.status}} • {{lesson.category}}</p>
-            </div>
+            <h1 class="text-2xl font-bold">Edit Lesson</h1>
           </div>
-          <div class="flex items-center space-x-3">
-            <button 
-              (click)="saveDraft()"
-              class="bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-6 rounded transition">
-              💾 Save Draft
-            </button>
-            <button 
-              (click)="submitForApproval()"
-              [disabled]="!canSubmit()"
-              class="bg-brand-red hover:bg-opacity-80 text-white font-semibold py-2 px-6 rounded transition disabled:opacity-50">
-              ✓ Submit for Approval
-            </button>
+          <div class="flex items-center space-x-4">
+            <button (click)="saveDraft()" class="btn-secondary">Save Draft</button>
+            <button (click)="submitForApproval()" class="btn-primary">Submit for Approval</button>
           </div>
         </div>
-      </header>
+      </div>
 
-      <!-- Main Editor -->
-      <div class="container mx-auto px-4 md:px-6 py-8">
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <!-- Left Column: Lesson Details -->
-          <div class="lg:col-span-2 space-y-6">
-            <!-- Basic Info -->
-            <div class="card">
-              <h3 class="card-title">Basic Information</h3>
-              
-              <div class="form-group">
-                <label>Lesson Title *</label>
-                <input 
-                  type="text" 
-                  [(ngModel)]="lesson.title"
-                  placeholder="e.g., JavaScript Fundamentals"
-                  class="form-control">
-              </div>
-
-              <div class="form-group">
-                <label>Description *</label>
-                <textarea 
-                  [(ngModel)]="lesson.description"
-                  rows="3"
-                  placeholder="Brief description of what students will learn..."
-                  class="form-control">
-                </textarea>
-              </div>
-
-              <div class="grid grid-cols-2 gap-4">
-                <div class="form-group">
-                  <label>Category *</label>
-                  <select [(ngModel)]="lesson.category" class="form-control">
-                    <option value="">Select category</option>
-                    <option value="Programming">Programming</option>
-                    <option value="Web Development">Web Development</option>
-                    <option value="Data Science">Data Science</option>
-                    <option value="Design">Design</option>
-                    <option value="Business">Business</option>
-                  </select>
-                </div>
-
-                <div class="form-group">
-                  <label>Difficulty *</label>
-                  <select [(ngModel)]="lesson.difficulty" class="form-control">
-                    <option value="">Select difficulty</option>
-                    <option value="Beginner">Beginner</option>
-                    <option value="Intermediate">Intermediate</option>
-                    <option value="Advanced">Advanced</option>
-                  </select>
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label>Duration (minutes)</label>
-                <input 
-                  type="number" 
-                  [(ngModel)]="lesson.durationMinutes"
-                  placeholder="60"
-                  class="form-control">
-              </div>
-
-              <div class="form-group">
-                <label>Tags (comma separated)</label>
-                <input 
-                  type="text" 
-                  [(ngModel)]="tagsInput"
-                  placeholder="javascript, programming, web-development"
-                  class="form-control">
-              </div>
-
-              <div class="form-group">
-                <label>Thumbnail URL</label>
-                <input 
-                  type="url" 
-                  [(ngModel)]="lesson.thumbnailUrl"
-                  placeholder="https://images.unsplash.com/..."
-                  class="form-control">
-                <small class="text-gray-400">Or leave blank to generate with AI (Phase 5)</small>
-              </div>
-            </div>
-
-            <!-- Lesson Content (Stages) -->
-            <div class="card">
-              <h3 class="card-title">Lesson Content</h3>
-              <p class="text-gray-400 text-sm mb-4">
-                This lesson has {{lesson.data?.stages?.length || 0}} stages.
-              </p>
-              <div class="bg-yellow-900/20 border border-yellow-600/30 rounded-lg p-4 mb-4">
-                <p class="text-yellow-200 text-sm">
-                  ℹ️ Full stage editor coming in Phase 5. For now, stages are managed via JSON.
-                </p>
-              </div>
-              <div class="form-group">
-                <label>Lesson JSON Data</label>
-                <textarea 
-                  [(ngModel)]="lessonDataJson"
-                  rows="10"
-                  class="form-control font-mono text-sm"
-                  placeholder='{"stages": []}'>
-                </textarea>
+      <!-- Main Content -->
+      <div class="editor-content" style="display: flex; min-height: calc(100vh - 160px);">
+        <!-- Sidebar -->
+        <div class="editor-sidebar" style="width: 300px; background-color: #111; border-right: 1px solid #333; padding: 20px;">
+          <h2 class="text-lg font-semibold mb-4">Lesson Structure</h2>
+          
+          <!-- Stages -->
+          <div class="stages-section mb-6">
+            <h3 class="text-sm font-medium text-gray-400 mb-2">Stages</h3>
+            <div class="stage-list">
+              <div *ngFor="let stage of stages; let i = index" 
+                   class="stage-item" 
+                   [class.active]="selectedStage === i"
+                   (click)="selectStage(i)">
+                {{stage.name}}
               </div>
             </div>
           </div>
 
-          <!-- Right Column: Content Library & Settings -->
-          <div class="space-y-6">
-            <!-- Content Search Widget -->
-            <div class="card">
-              <app-content-search-widget
-                [lessonId]="lesson.id"
-                (contentLinked)="onContentLinked($event)"
-                (contentUnlinked)="onContentUnlinked($event)">
-              </app-content-search-widget>
+          <!-- Sub-stages -->
+          <div class="substages-section" *ngIf="selectedStage !== null">
+            <h3 class="text-sm font-medium text-gray-400 mb-2">Sub-stages</h3>
+            <div class="substage-list">
+              <div *ngFor="let substage of getCurrentSubStages(); let i = index" 
+                   class="substage-item"
+                   [class.active]="selectedSubStage === i"
+                   (click)="selectSubStage(i)">
+                {{substage.name}}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Main Panel -->
+        <div class="editor-main" style="flex: 1; padding: 20px;">
+          <!-- Tool Tabs -->
+          <div class="tool-tabs" style="display: flex; gap: 10px; margin-bottom: 20px;">
+            <button *ngFor="let tab of toolTabs" 
+                    class="tool-tab"
+                    [class.active]="activeTab === tab.id"
+                    (click)="setActiveTab(tab.id)">
+              {{tab.icon}} {{tab.name}}
+            </button>
+          </div>
+
+          <!-- Tab Content -->
+          <div class="tab-content">
+            <!-- Content Processing Tab -->
+            <div *ngIf="activeTab === 'content-processing'" class="tab-panel">
+              <h3 class="text-xl font-semibold mb-4">Content Processing</h3>
+              <p class="text-gray-400 mb-6">Process and manage content for your lesson.</p>
+              
+              <div class="content-actions">
+                <button (click)="openContentProcessor()" class="btn-primary">
+                  🔗 Paste URL
+                </button>
+                <button (click)="openApprovalQueue()" class="btn-secondary">
+                  📋 Approval Queue
+                </button>
+              </div>
             </div>
 
-            <!-- Preview -->
-            <div class="card">
-              <h3 class="card-title">Quick Info</h3>
-              <div class="space-y-3 text-sm">
-                <div>
-                  <label class="text-gray-400">Status:</label>
-                  <span class="ml-2 font-semibold" 
-                        [class.text-green-400]="lesson.status === 'approved'"
-                        [class.text-yellow-400]="lesson.status === 'pending'"
-                        [class.text-red-400]="lesson.status === 'rejected'">
-                    {{lesson.status}}
-                  </span>
+            <!-- Lesson Structure Tab -->
+            <div *ngIf="activeTab === 'lesson-structure'" class="tab-panel">
+              <h3 class="text-xl font-semibold mb-4">Lesson Structure</h3>
+              <p class="text-gray-400 mb-6">Configure the structure and flow of your lesson.</p>
+              
+              <div class="structure-editor">
+                <div class="stage-editor" *ngIf="selectedStage !== null">
+                  <h4 class="text-lg font-medium mb-3">{{stages[selectedStage].name}}</h4>
+                  <div class="form-group">
+                    <label>Stage Name:</label>
+                    <input type="text" [(ngModel)]="stages[selectedStage].name" class="form-input">
+                  </div>
+                  <div class="form-group">
+                    <label>Description:</label>
+                    <textarea [(ngModel)]="stages[selectedStage].description" class="form-textarea"></textarea>
+                  </div>
                 </div>
-                <div *ngIf="lesson.id">
-                  <label class="text-gray-400">Lesson ID:</label>
-                  <span class="ml-2 text-xs font-mono">{{lesson.id}}</span>
+              </div>
+            </div>
+
+            <!-- Sub-stage Config Tab -->
+            <div *ngIf="activeTab === 'substage-config'" class="tab-panel">
+              <h3 class="text-xl font-semibold mb-4">Sub-stage Configuration</h3>
+              <p class="text-gray-400 mb-6">Configure interaction types and content for this sub-stage.</p>
+              
+              <div class="substage-editor" *ngIf="selectedSubStage !== null">
+                <div class="form-group">
+                  <label>Interaction Type:</label>
+                  <select [(ngModel)]="getCurrentSubStages()[selectedSubStage].interactionType" class="form-select">
+                    <option value="video">Video Player</option>
+                    <option value="quiz">Quiz</option>
+                    <option value="text">Text Content</option>
+                  </select>
                 </div>
-                <div *ngIf="lesson.createdAt">
-                  <label class="text-gray-400">Created:</label>
-                  <span class="ml-2">{{formatDate(lesson.createdAt)}}</span>
+                
+                <div class="form-group">
+                  <label>Content:</label>
+                  <textarea [(ngModel)]="getCurrentSubStages()[selectedSubStage].content" class="form-textarea"></textarea>
                 </div>
-                <div *ngIf="lesson.updatedAt">
-                  <label class="text-gray-400">Last Updated:</label>
-                  <span class="ml-2">{{formatDate(lesson.updatedAt)}}</span>
+              </div>
+            </div>
+
+            <!-- Preview Tab -->
+            <div *ngIf="activeTab === 'preview'" class="tab-panel">
+              <h3 class="text-xl font-semibold mb-4">Preview</h3>
+              <p class="text-gray-400 mb-6">Preview how your lesson will appear to students.</p>
+              
+              <div class="preview-content">
+                <div class="preview-stage" *ngIf="selectedStage !== null">
+                  <h4>{{stages[selectedStage].name}}</h4>
+                  <p>{{stages[selectedStage].description}}</p>
+                  
+                  <div class="preview-substages">
+                    <div *ngFor="let substage of getCurrentSubStages()" class="preview-substage">
+                      <h5>{{substage.name}}</h5>
+                      <p>{{substage.content}}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI Assistant Tab -->
+            <div *ngIf="activeTab === 'ai-assistant'" class="tab-panel">
+              <h3 class="text-xl font-semibold mb-4">AI Assistant</h3>
+              <p class="text-gray-400 mb-6">Get help with your lesson content and structure.</p>
+              
+              <div class="ai-chat">
+                <div class="chat-messages">
+                  <div class="message ai-message">
+                    <p>Hello! I'm here to help you create an engaging lesson. What would you like to work on?</p>
+                  </div>
+                </div>
+                
+                <div class="chat-input">
+                  <input type="text" placeholder="Ask me anything about your lesson..." class="form-input">
+                  <button class="btn-primary">Send</button>
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      <!-- Modals -->
+      <app-content-processor-modal
+        [isOpen]="showContentProcessor"
+        [lessonId]="lessonId"
+        (closed)="closeContentProcessor()"
+        (contentProcessed)="onContentProcessed($event)"
+        (contentSubmittedForApproval)="onContentSubmittedForApproval($event)">
+      </app-content-processor-modal>
+
+      <app-approval-queue-modal
+        [isOpen]="showApprovalQueue"
+        (closed)="closeApprovalQueue()"
+        (itemApproved)="onItemApproved($event)"
+        (itemRejected)="onItemRejected($event)">
+      </app-approval-queue-modal>
     </div>
   `,
   styles: [`
-    :host {
-      display: block;
-      margin-top: -64px; /* Negative margin to offset global padding */
+    .lesson-editor {
+      font-family: 'Inter', sans-serif;
     }
-    @media (min-width: 768px) {
-      :host {
-        margin-top: -80px;
-      }
-    }
-    .card {
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 12px;
-      padding: 24px;
-    }
-    .card-title {
-      font-size: 18px;
-      font-weight: 600;
+    
+    .btn-primary {
+      background: #ef4444;
       color: white;
-      margin-bottom: 16px;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
     }
-    .form-group {
-      margin-bottom: 20px;
+    
+    .btn-primary:hover {
+      background: #dc2626;
     }
-    .form-group label {
-      display: block;
-      color: #d1d5db;
-      font-size: 14px;
-      font-weight: 500;
+    
+    .btn-secondary {
+      background: #374151;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn-secondary:hover {
+      background: #4b5563;
+    }
+    
+    .stage-item, .substage-item {
+      padding: 12px;
       margin-bottom: 8px;
+      background: #1f2937;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
     }
-    .form-control {
+    
+    .stage-item:hover, .substage-item:hover {
+      background: #374151;
+    }
+    
+    .stage-item.active, .substage-item.active {
+      background: #ef4444;
+    }
+    
+    .tool-tab {
+      background: #1f2937;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .tool-tab:hover {
+      background: #374151;
+    }
+    
+    .tool-tab.active {
+      background: #ef4444;
+    }
+    
+    .form-input, .form-select, .form-textarea {
       width: 100%;
       padding: 12px;
-      background: rgba(0,0,0,0.3);
-      border: 1px solid rgba(255,255,255,0.2);
+      background: #1f2937;
+      border: 1px solid #374151;
       border-radius: 8px;
       color: white;
       font-size: 14px;
     }
-    .form-control:focus {
-      outline: none;
-      border-color: #ef4444;
-    }
-    textarea.form-control {
+    
+    .form-textarea {
+      min-height: 100px;
       resize: vertical;
-      font-family: inherit;
     }
-    select.form-control {
-      cursor: pointer;
+    
+    .content-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+    }
+    
+    .ai-chat {
+      background: #1f2937;
+      border-radius: 12px;
+      padding: 20px;
+    }
+    
+    .chat-messages {
+      min-height: 200px;
+      margin-bottom: 20px;
+    }
+    
+    .message {
+      padding: 12px;
+      margin-bottom: 12px;
+      border-radius: 8px;
+    }
+    
+    .ai-message {
+      background: #374151;
+    }
+    
+    .chat-input {
+      display: flex;
+      gap: 12px;
+    }
+    
+    .chat-input input {
+      flex: 1;
     }
   `]
 })
 export class LessonEditorComponent implements OnInit {
-  lesson: any = {
-    title: '',
-    description: '',
-    category: '',
-    difficulty: '',
-    durationMinutes: 60,
-    thumbnailUrl: '',
-    status: 'pending',
-    data: { stages: [] }
-  };
+  lessonId: string = '';
+  selectedStage: number | null = null;
+  selectedSubStage: number | null = null;
+  activeTab: string = 'content-processing';
   
-  isNewLesson = true;
-  lessonId: string | null = null;
-  lessonDataJson = '';
-  tagsInput = '';
+  showContentProcessor = false;
+  showApprovalQueue = false;
+  
+  toolTabs = [
+    { id: 'content-processing', name: 'Content Processing', icon: '🔗' },
+    { id: 'lesson-structure', name: 'Lesson Structure', icon: '📚' },
+    { id: 'substage-config', name: 'Sub-stage Config', icon: '⚙️' },
+    { id: 'preview', name: 'Preview', icon: '👁️' },
+    { id: 'ai-assistant', name: 'AI Assistant', icon: '🤖' }
+  ];
+  
+  stages = [
+    { name: 'Introduction', description: 'Welcome and overview', substages: [
+      { name: 'Welcome', content: 'Welcome to this lesson', interactionType: 'text' },
+      { name: 'Objectives', content: 'What you will learn', interactionType: 'text' }
+    ]},
+    { name: 'Main Content', description: 'Core learning material', substages: [
+      { name: 'Video Lesson', content: 'Watch this video', interactionType: 'video' },
+      { name: 'Interactive Quiz', content: 'Test your knowledge', interactionType: 'quiz' }
+    ]},
+    { name: 'Conclusion', description: 'Summary and next steps', substages: [
+      { name: 'Summary', content: 'Key takeaways', interactionType: 'text' },
+      { name: 'Next Steps', content: 'What to do next', interactionType: 'text' }
+    ]}
+  ];
 
   constructor(
-    private route: ActivatedRoute,
     private router: Router,
-    private lessonService: LessonService
+    private route: ActivatedRoute
   ) {}
 
-  async ngOnInit() {
-    this.lessonId = this.route.snapshot.paramMap.get('id');
-    
-    if (this.lessonId && this.lessonId !== 'new') {
-      // Load existing lesson
-      await this.loadLesson(this.lessonId);
-      this.isNewLesson = false;
-    } else {
-      // New lesson
-      this.isNewLesson = true;
-      this.lessonDataJson = JSON.stringify({ stages: [] }, null, 2);
-    }
-  }
-
-  async loadLesson(id: string) {
-    try {
-      // TODO: Load from API
-      console.log('[LessonEditor] Loading lesson:', id);
-      // For now, use mock structure
-      this.lesson = {
-        id: id,
-        title: 'Lesson Title',
-        description: 'Description here',
-        category: 'Programming',
-        difficulty: 'Beginner',
-        status: 'pending',
-        data: { stages: [] }
-      };
-      this.lessonDataJson = JSON.stringify(this.lesson.data, null, 2);
-    } catch (error) {
-      console.error('Failed to load lesson:', error);
-    }
-  }
-
-  async saveDraft() {
-    try {
-      // Parse JSON
-      if (this.lessonDataJson) {
-        this.lesson.data = JSON.parse(this.lessonDataJson);
-      }
-      
-      // Parse tags
-      if (this.tagsInput) {
-        this.lesson.tags = this.tagsInput.split(',').map(t => t.trim());
-      }
-
-      console.log('[LessonEditor] Saving draft:', this.lesson);
-      
-      // TODO: POST/PATCH to API
-      alert('Draft saved! (Full API integration in next update)');
-    } catch (error) {
-      console.error('Failed to save:', error);
-      alert('Failed to save lesson. Check JSON syntax.');
-    }
-  }
-
-  async submitForApproval() {
-    if (!this.canSubmit()) return;
-
-    try {
-      await this.saveDraft();
-      // TODO: POST /api/lessons/:id/submit
-      alert('Lesson submitted for approval!');
-      this.router.navigate(['/lesson-builder']);
-    } catch (error) {
-      console.error('Failed to submit:', error);
-      alert('Failed to submit lesson');
-    }
-  }
-
-  canSubmit(): boolean {
-    return !!(this.lesson.title && this.lesson.description && this.lesson.category);
+  ngOnInit() {
+    this.route.params.subscribe(params => {
+      this.lessonId = params['id'] || 'new-lesson';
+    });
   }
 
   goBack() {
-    if (confirm('Discard unsaved changes?')) {
-      this.router.navigate(['/lesson-builder']);
-    }
+    this.router.navigate(['/lesson-builder']);
   }
 
-  onContentLinked(contentId: string) {
-    console.log('[LessonEditor] Content linked:', contentId);
+  selectStage(index: number) {
+    this.selectedStage = index;
+    this.selectedSubStage = null;
   }
 
-  onContentUnlinked(contentId: string) {
-    console.log('[LessonEditor] Content unlinked:', contentId);
+  selectSubStage(index: number) {
+    this.selectedSubStage = index;
   }
 
-  formatDate(dateString: string): string {
-    return new Date(dateString).toLocaleDateString();
+  getCurrentSubStages() {
+    if (this.selectedStage === null) return [];
+    return this.stages[this.selectedStage].substages;
+  }
+
+  setActiveTab(tabId: string) {
+    this.activeTab = tabId;
+  }
+
+  openContentProcessor() {
+    this.showContentProcessor = true;
+  }
+
+  closeContentProcessor() {
+    this.showContentProcessor = false;
+  }
+
+  openApprovalQueue() {
+    this.showApprovalQueue = true;
+  }
+
+  closeApprovalQueue() {
+    this.showApprovalQueue = false;
+  }
+
+  onContentProcessed(content: any) {
+    console.log('Content processed:', content);
+    // Handle processed content
+  }
+
+  onContentSubmittedForApproval(submission: any) {
+    console.log('Content submitted for approval:', submission);
+    // Handle approval submission
+  }
+
+  onItemApproved(item: any) {
+    console.log('Item approved:', item);
+    // Handle item approval
+  }
+
+  onItemRejected(item: any) {
+    console.log('Item rejected:', item);
+    // Handle item rejection
+  }
+
+  saveDraft() {
+    console.log('Saving draft...');
+    // Implement save functionality
+  }
+
+  submitForApproval() {
+    console.log('Submitting for approval...');
+    // Implement submission functionality
   }
 }
-

@@ -1,0 +1,31 @@
+[33mcommit a13aa8357e85527580d67f72e3bd063a09b0c696[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: Morgan <morganthunder@bubblbook.com>
+Date:   Thu Oct 23 23:30:46 2025 +0100
+
+    Phase 4: Lesson Editor V2 Complete + Lesson View Fixes
+    
+     Completed:
+    - Built comprehensive Lesson Editor V2 with 6-panel system (Details, Structure, Script, Content, Preview, AI)
+    - Created backend entities (ProcessedContentOutput, ScriptBlock) with full CRUD API
+    - Added database tables for processed_content_outputs and script_blocks
+    - Updated lesson-builder to use real API data with black background
+    - Implemented role-based navigation (Content Library visible to lesson-builders only)
+    - Fixed lesson-view mobile header spacing and FAB positioning
+    - Fixed chat message duplication issue
+    - Added data persistence on lesson-view page reload
+    - Optimized mobile header height (48px fixed)
+    - Added chat collapse/expand functionality
+    - Fixed FAB positioning and icon (checklist icon)
+    
+     Next Phase: Data persistence testing and content processing integration
+
+Upora/backend/src/app.module.ts
+Upora/backend/src/entities/course.entity.ts
+Upora/backend/src/entities/lesson.entity.ts
+Upora/backend/src/modules/lessons/lessons.service.ts
+Upora/frontend/src/app/core/models/lesson.model.ts
+Upora/frontend/src/app/core/services/websocket.service.ts
+Upora/frontend/src/app/features/lesson-builder/lesson-builder.component.ts
+Upora/frontend/src/app/features/lesson-editor/lesson-editor-v2.component.ts
+Upora/frontend/src/app/features/lesson-view/lesson-view.component.ts
+docker/postgres/init/04-courses-seed.sql

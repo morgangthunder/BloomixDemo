@@ -4,6 +4,8 @@ import { Repository } from 'typeorm';
 import { ProcessedContentOutput } from '../../entities/processed-content-output.entity';
 import { ScriptBlock } from '../../entities/script-block.entity';
 import { Lesson } from '../../entities/lesson.entity';
+import { LessonDataService, LessonDataSchema, ProcessedContentData } from '../../services/lesson-data.service';
+import { ContentValidationService } from '../../services/content-validation.service';
 
 @Injectable()
 export class LessonEditorService {
@@ -14,6 +16,8 @@ export class LessonEditorService {
     private scriptBlockRepo: Repository<ScriptBlock>,
     @InjectRepository(Lesson)
     private lessonRepo: Repository<Lesson>,
+    private lessonDataService: LessonDataService,
+    private contentValidationService: ContentValidationService,
   ) {}
 
   // ========== Processed Content Outputs ==========
@@ -137,9 +141,41 @@ export class LessonEditorService {
 
   // ========== Lesson Data Management ==========
 
-  async updateLessonStages(
+  async getLessonData(lessonId: string): Promise<LessonDataSchema> {
+    const lesson = await this.lessonRepo.findOne({ where: { id: lessonId } });
+    
+    if (!lesson) {
+      throw new NotFoundException(`Lesson ${lessonId} not found`);
+    }
+
+    // If lesson.data is empty or doesn't follow the new schema, initialize it
+    if (!lesson.data || !lesson.data.metadata) {
+      const newLessonData = this.lessonDataService.createNewLesson(
+        lesson.tenantId,
+        lesson.createdBy,
+        lesson.title
+      );
+      
+      // Update the lesson with the new schema
+      await this.lessonRepo.update(lessonId, { 
+        data: newLessonData,
+        description: lesson.description || '',
+        category: lesson.category || '',
+        difficulty: lesson.difficulty || 'Beginner',
+        durationMinutes: lesson.durationMinutes || 0,
+        thumbnailUrl: lesson.thumbnailUrl,
+        tags: lesson.tags || [],
+      });
+      
+      return newLessonData;
+    }
+
+    return lesson.data as LessonDataSchema;
+  }
+
+  async updateLessonData(
     lessonId: string,
-    stagesData: any,
+    lessonData: LessonDataSchema,
   ): Promise<Lesson> {
     const lesson = await this.lessonRepo.findOne({ where: { id: lessonId } });
     
@@ -147,19 +183,117 @@ export class LessonEditorService {
       throw new NotFoundException(`Lesson ${lessonId} not found`);
     }
 
-    // Update lesson.data.stages
-    const updatedData = {
-      ...lesson.data,
-      stages: stagesData,
-    };
-
-    await this.lessonRepo.update(lessonId, { data: updatedData });
+    // Update lesson with data from the comprehensive schema
+    await this.lessonRepo.update(lessonId, {
+      title: lessonData.config.title,
+      description: lessonData.config.description,
+      category: lessonData.config.category,
+      difficulty: lessonData.config.difficulty,
+      durationMinutes: lessonData.config.durationMinutes,
+      thumbnailUrl: lessonData.config.thumbnailUrl,
+      tags: lessonData.config.tags,
+      data: lessonData,
+    });
 
     const updatedLesson = await this.lessonRepo.findOne({ where: { id: lessonId } });
     if (!updatedLesson) {
       throw new NotFoundException(`Lesson ${lessonId} not found after update`);
     }
     return updatedLesson;
+  }
+
+  async addProcessedContent(
+    lessonId: string,
+    processedContent: ProcessedContentData,
+  ): Promise<Lesson> {
+    const lessonData = await this.getLessonData(lessonId);
+    const updatedLessonData = this.lessonDataService.addProcessedContent(
+      lessonData,
+      processedContent
+    );
+    
+    return this.updateLessonData(lessonId, updatedLessonData);
+  }
+
+  async removeProcessedContent(
+    lessonId: string,
+    contentId: string,
+  ): Promise<Lesson> {
+    const lessonData = await this.getLessonData(lessonId);
+    
+    // Remove the content from processedContent
+    const { [contentId]: removed, ...remainingContent } = lessonData.processedContent;
+    
+    const updatedLessonData = {
+      ...lessonData,
+      processedContent: remainingContent,
+    };
+    
+    return this.updateLessonData(lessonId, updatedLessonData);
+  }
+
+  async updateLessonStages(
+    lessonId: string,
+    stagesData: any,
+  ): Promise<Lesson> {
+    const lessonData = await this.getLessonData(lessonId);
+    
+    const updatedLessonData = {
+      ...lessonData,
+      structure: {
+        ...lessonData.structure,
+        stages: stagesData,
+      },
+    };
+    
+    return this.updateLessonData(lessonId, updatedLessonData);
+  }
+
+  async validateContentForInteraction(
+    lessonId: string,
+    contentId: string,
+    interactionType: string,
+  ): Promise<{ isValid: boolean; errors: string[] }> {
+    const lessonData = await this.getLessonData(lessonId);
+    const content = lessonData.processedContent[contentId];
+    
+    if (!content) {
+      return {
+        isValid: false,
+        errors: [`Content ${contentId} not found in lesson`],
+      };
+    }
+    
+    const validationResult = this.contentValidationService.validateContentForInteraction(
+      content,
+      interactionType
+    );
+    
+    return {
+      isValid: validationResult.isValid,
+      errors: validationResult.errors.map(error => error.message)
+    };
+  }
+
+  /**
+   * Get all available interaction types
+   */
+  async getInteractionTypes(): Promise<any[]> {
+    return this.contentValidationService.getAllInteractionTypes();
+  }
+
+  /**
+   * Add a new interaction type
+   */
+  async addInteractionType(interactionType: any): Promise<void> {
+    this.contentValidationService.addInteractionType(interactionType);
+  }
+
+  /**
+   * Remove an interaction type
+   */
+  async removeInteractionType(interactionTypeId: string): Promise<void> {
+    this.contentValidationService.removeInteractionType(interactionTypeId);
   }
 }
 

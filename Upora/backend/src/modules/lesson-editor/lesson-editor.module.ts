@@ -6,6 +6,8 @@ import { ProcessedContentOutput } from '../../entities/processed-content-output.
 import { ScriptBlock } from '../../entities/script-block.entity';
 import { Lesson } from '../../entities/lesson.entity';
 import { ContentSource } from '../../entities/content-source.entity';
+import { LessonDataService } from '../../services/lesson-data.service';
+import { ContentValidationService } from '../../services/content-validation.service';
 
 @Module({
   imports: [
@@ -17,8 +19,8 @@ import { ContentSource } from '../../entities/content-source.entity';
     ]),
   ],
   controllers: [LessonEditorController],
-  providers: [LessonEditorService],
-  exports: [LessonEditorService],
+  providers: [LessonEditorService, LessonDataService, ContentValidationService],
+  exports: [LessonEditorService, LessonDataService, ContentValidationService],
 })
 export class LessonEditorModule {}
 
