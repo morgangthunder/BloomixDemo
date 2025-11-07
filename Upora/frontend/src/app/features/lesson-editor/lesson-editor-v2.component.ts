@@ -81,11 +81,14 @@ interface ProcessedContentOutput {
                   class="btn-secondary desktop-full mobile-icon" 
                   [disabled]="saving || (!hasUnsavedChanges && lastSaved)" 
                   [class.saved]="!hasUnsavedChanges && lastSaved"
-                  title="{{!hasUnsavedChanges && lastSaved ? 'No changes to save' : 'Save Draft'}}">
+                  title="{{!hasUnsavedChanges && lastSaved ? 'Saved ' + (lastSaved | date:'short') : saving ? 'Saving...' : 'Save Draft'}}">
             <span class="desktop-only" *ngIf="!saving">💾 {{hasUnsavedChanges ? 'Save Draft' : 'Saved'}}</span>
-            <span class="desktop-only" *ngIf="saving">Saving...</span>
+            <span class="desktop-only" *ngIf="saving">💾 Saving...</span>
             <span class="mobile-only">💾</span>
           </button>
+          <span class="desktop-only save-status" *ngIf="lastSaved && !saving && !hasUnsavedChanges">
+            <small style="color: #999;">Saved {{lastSaved | date:'short'}}</small>
+          </span>
           <button (click)="submitForApproval()" 
                   class="btn-primary desktop-full mobile-icon" 
                   [disabled]="hasBeenSubmitted || saving || !canSubmit()" 
@@ -1900,9 +1903,12 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   ngOnInit() {
     // VERSION CHECK: This log should always appear when new code is loaded
-    console.log('🔥🔥🔥 LESSON EDITOR VERSION 0.0.2 - CODE UPDATED 🔥🔥🔥');
-    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 0.0.2');
-    console.log('[LessonEditor] 🔍 Fixed event binding: (close) -> (closed) - Version 0.0.2');
+    console.log('🔥🔥🔥 LESSON EDITOR VERSION 0.0.3 - CODE UPDATED 🔥🔥🔥');
+    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 0.0.3');
+    console.log('[LessonEditor] 🔍 Data persistence implemented - Version 0.0.3');
+    
+    // Add browser-level unsaved changes warning
+    window.addEventListener('beforeunload', this.handleBeforeUnload);
     
     // Get lesson ID from route
     const lessonId = this.route.snapshot.paramMap.get('id');
@@ -1998,8 +2004,23 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    // Remove browser-level unsaved changes warning
+    window.removeEventListener('beforeunload', this.handleBeforeUnload);
+    
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  /**
+   * Browser-level unsaved changes warning
+   */
+  handleBeforeUnload = (event: BeforeUnloadEvent) => {
+    if (this.hasUnsavedChanges) {
+      event.preventDefault();
+      event.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+      return event.returnValue;
+    }
+    return undefined;
   }
 
   initializeNewLesson() {
@@ -2105,10 +2126,112 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   }
 
   loadStagesFromLesson() {
-    // Parse stages from lesson.data.stages if they exist
-    if (this.lesson?.data?.stages) {
-      // TODO: Map from backend format to Stage[] format
+    console.log('[LessonEditor] 🔄 Loading stages from lesson.data');
+    
+    // Parse stages from lesson.data
+    if (this.lesson?.data) {
+      // Handle both old format (data.stages) and new format (data.structure.stages)
+      const stagesData = (this.lesson.data as any).structure?.stages || (this.lesson.data as any).stages || [];
+      
+      console.log('[LessonEditor] 📊 Found stages data:', stagesData);
+      
+      if (stagesData && stagesData.length > 0) {
+        this.stages = this.parseStagesFromJSON(stagesData);
+        console.log('[LessonEditor] ✅ Loaded', this.stages.length, 'stages');
+      } else {
+        console.log('[LessonEditor] ⚠️ No stages found in lesson data');
+        this.stages = [];
+      }
+    } else {
+      console.log('[LessonEditor] ⚠️ No lesson data found');
+      this.stages = [];
     }
+  }
+
+  /**
+   * Parse stages from backend JSON format to frontend Stage[] format
+   */
+  parseStagesFromJSON(stagesData: any[]): Stage[] {
+    return stagesData.map((stageData, index) => {
+      const stage: Stage = {
+        id: stageData.id || `stage-${Date.now()}-${index}`,
+        title: stageData.title || `Stage ${index + 1}`,
+        type: stageData.type || 'trigger',
+        subStages: [],
+        expanded: false
+      };
+
+      // Parse substages if they exist
+      if (stageData.subStages && Array.isArray(stageData.subStages)) {
+        stage.subStages = stageData.subStages.map((subStageData: any, subIndex: number) => {
+          const subStage: SubStage = {
+            id: subStageData.id || `substage-${Date.now()}-${subIndex}`,
+            title: subStageData.title || `Substage ${subIndex + 1}`,
+            type: subStageData.type || 'default',
+            duration: subStageData.duration || 5,
+            interactionType: subStageData.interactionType,
+            contentOutputId: subStageData.contentOutputId,
+            scriptBlocks: []
+          };
+
+          // Parse script blocks if they exist
+          if (subStageData.scriptBlocks && Array.isArray(subStageData.scriptBlocks)) {
+            subStage.scriptBlocks = subStageData.scriptBlocks.map((blockData: any) => ({
+              id: blockData.id || `block-${Date.now()}`,
+              type: blockData.type || 'teacher_talk',
+              content: blockData.content || '',
+              startTime: blockData.startTime || 0,
+              endTime: blockData.endTime || 30,
+              metadata: blockData.metadata || {}
+            }));
+          }
+
+          return subStage;
+        });
+      }
+
+      return stage;
+    });
+  }
+
+  /**
+   * Convert frontend Stage[] format to backend JSON format
+   */
+  convertStagesToJSON(): any[] {
+    return this.stages.map((stage, index) => ({
+      id: stage.id,
+      title: stage.title,
+      type: stage.type,
+      description: this.getStageTypeDescription(stage.type),
+      duration: stage.subStages.reduce((total, ss) => total + (ss.duration || 0), 0),
+      order: index,
+      subStages: stage.subStages.map((subStage, subIndex) => ({
+        id: subStage.id,
+        title: subStage.title,
+        type: subStage.type,
+        duration: subStage.duration,
+        order: subIndex,
+        interactionType: subStage.interactionType || 'none',
+        contentOutputId: subStage.contentOutputId,
+        scriptBlocks: (subStage.scriptBlocks || []).map((block, blockIndex) => ({
+          id: block.id,
+          type: block.type,
+          content: block.content,
+          startTime: block.startTime,
+          endTime: block.endTime,
+          duration: block.endTime - block.startTime,
+          order: blockIndex,
+          metadata: block.metadata || {}
+        })),
+        metadata: {
+          learningObjectives: [],
+          keyPoints: [],
+          difficulty: 'medium' as const
+        }
+      })),
+      aiPrompt: '',
+      prerequisites: []
+    }));
   }
 
   goBack() {
@@ -2121,21 +2244,75 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     }
   }
 
-  saveDraft() {
+  async saveDraft() {
     if (!this.hasUnsavedChanges && this.lastSaved) {
       this.showSnackbar('No changes to save');
       return;
     }
     
+    if (!this.lesson || !this.lesson.id) {
+      this.showSnackbar('Cannot save: No lesson ID');
+      return;
+    }
+    
+    console.log('[LessonEditor] 💾 Saving draft...');
     this.saving = true;
-    // TODO: Save to API
-    setTimeout(() => {
+    
+    try {
+      // Prepare the lesson data with updated stages
+      const stagesJSON = this.convertStagesToJSON();
+      
+      // Create the payload with updated data
+      const payload = {
+        title: this.lesson.title,
+        description: this.lesson.description,
+        category: this.lesson.category,
+        difficulty: this.lesson.difficulty,
+        durationMinutes: this.calculateTotalDuration(),
+        thumbnailUrl: this.lesson.thumbnailUrl,
+        tags: this.lesson.tags || [],
+        data: {
+          ...(this.lesson.data || {}),
+          stages: stagesJSON, // Support old format
+          structure: {
+            stages: stagesJSON,
+            totalDuration: this.calculateTotalDuration(),
+            learningObjectives: []
+          },
+          metadata: {
+            ...(this.lesson.data as any)?.metadata,
+            updated: new Date().toISOString()
+          }
+        }
+      };
+      
+      console.log('[LessonEditor] 📤 Sending payload to API:', payload);
+      
+      // Send PATCH request to update lesson
+      const response = await this.http.patch(
+        `${environment.apiUrl}/lessons/${this.lesson.id}`,
+        payload,
+        {
+          headers: {
+            'x-tenant-id': environment.tenantId,
+            'x-user-id': environment.defaultUserId
+          }
+        }
+      ).toPromise();
+      
+      console.log('[LessonEditor] ✅ Save successful:', response);
+      
+      // Update state
       this.saving = false;
       this.hasUnsavedChanges = false;
       this.lastSaved = new Date();
-      this.showSnackbar('Lesson saved');
-      console.log('Draft saved');
-    }, 1000);
+      this.showSnackbar('Lesson saved successfully');
+      
+    } catch (error: any) {
+      console.error('[LessonEditor] ❌ Save failed:', error);
+      this.saving = false;
+      this.showSnackbar(`Failed to save: ${error.message || 'Unknown error'}`);
+    }
   }
 
   submitForApproval() {
