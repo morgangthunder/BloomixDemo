@@ -136,8 +136,10 @@ export class ContentSourcesController {
     @Body('startTime') startTime?: number,
     @Body('endTime') endTime?: number,
     @Headers('x-tenant-id') tenantId?: string,
+    @Headers('x-user-id') userId?: string,
   ) {
-    return this.contentSourcesService.processYouTubeUrl(url, startTime, endTime, tenantId);
+    console.log('[ContentSourcesController] 🎬 Processing YouTube URL...');
+    return this.contentSourcesService.processYouTubeUrl(url, startTime, endTime, tenantId, userId);
   }
 }
 

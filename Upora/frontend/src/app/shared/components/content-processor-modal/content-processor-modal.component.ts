@@ -1399,8 +1399,22 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
         endTime: endTimeSec
       };
       
-      console.log('[ContentProcessor] 📤 Calling backend API to process YouTube URL');
-      const result = await this.http.post<any>(`${environment.apiUrl}/content-sources/process-youtube`, payload).toPromise();
+      console.log('[ContentProcessor] 📤 Calling backend API to process YouTube URL - VERSION 0.0.2');
+      console.log('[ContentProcessor] 🎬 Two-step flow: URL → source content → processed output');
+      
+      const result = await this.http.post<any>(
+        `${environment.apiUrl}/content-sources/process-youtube`,
+        payload,
+        {
+          headers: {
+            'x-tenant-id': environment.tenantId,
+            'x-user-id': environment.defaultUserId
+          }
+        }
+      ).toPromise();
+      
+      console.log('[ContentProcessor] ✅ Backend response:', result);
+      console.log('[ContentProcessor] 📚 Source content ID:', result.sourceContentId);
       
       if (result?.success && result.data) {
         this.videoData = result.data;
@@ -1473,9 +1487,10 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
           console.log('[ContentProcessor] 💾 Saving processed content to backend:', processedContentItem);
           console.log('[ContentProcessor] 🔍 lessonId:', this.lessonId, 'type:', typeof this.lessonId);
           
-          // Save to backend API instead of localStorage
+          // Save to backend API with link to source content
           const payload = {
             lessonId: this.lessonId,
+            contentSourceId: result.sourceContentId, // Link to source content created by backend
             outputName: this.videoData!.title,
             outputType: 'youtube_video',
             outputData: {
@@ -1496,8 +1511,10 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
             startTime: this.startTime,
             endTime: this.endTime,
             validationScore: this.validationScore,
-            createdBy: '00000000-0000-0000-0000-000000000011', // TODO: Get from auth service
+            createdBy: environment.defaultUserId,
           };
+          
+          console.log('[ContentProcessor] 🔗 Linking processed output to source:', result.sourceContentId);
           
           console.log('[ContentProcessor] 📤 Sending payload:', payload);
           

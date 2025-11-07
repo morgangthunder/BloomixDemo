@@ -285,16 +285,74 @@ export class ContentSourcesService {
   }
 
   /**
-   * Process YouTube URL and return video data
+   * Process YouTube URL - Two-step flow:
+   * Step 1: Save URL as source content
+   * Step 2: Return processed data (frontend will save as processed_content_output)
    */
-  async processYouTubeUrl(url: string, startTime?: number, endTime?: number, tenantId?: string) {
+  async processYouTubeUrl(url: string, startTime?: number, endTime?: number, tenantId?: string, userId?: string) {
+    this.logger.log(`🎬 Processing YouTube URL: ${url}`);
+    
+    // Step 1: Fetch video data from YouTube API
     const videoData = await this.youtubeService.processYouTubeUrl(url, startTime, endTime);
     
-    this.logger.log(`Processed YouTube video: ${videoData.videoId} - ${videoData.title}`);
+    this.logger.log(`✅ Fetched video data: ${videoData.videoId} - ${videoData.title}`);
     
+    // Step 2: Save URL as source content (auto-approved for MVP)
+    const sourceContent = this.contentSourcesRepository.create({
+      tenantId: tenantId || '00000000-0000-0000-0000-000000000001',
+      createdBy: userId || '00000000-0000-0000-0000-000000000011',
+      type: 'youtube_video',
+      sourceUrl: url,
+      title: videoData.title,
+      summary: videoData.description || `YouTube video: ${videoData.title}`,
+      fullText: videoData.transcript || '',
+      status: 'approved', // Auto-approve for MVP (can add approval workflow later)
+      metadata: {
+        videoId: videoData.videoId,
+        channel: videoData.channel,
+        duration: videoData.duration,
+        publishedAt: videoData.publishedAt,
+        topics: [],
+        keywords: videoData.title.split(' ').filter(w => w.length > 3),
+        difficulty: 'beginner',
+        language: 'en',
+      },
+    });
+    
+    const savedSource = await this.contentSourcesRepository.save(sourceContent);
+    this.logger.log(`📚 Saved source content: ${savedSource.id}`);
+    
+    // Step 3: Index source content in Weaviate
+    try {
+      const weaviateId = await this.weaviateService.indexContent({
+        contentSourceId: savedSource.id,
+        tenantId: savedSource.tenantId,
+        summary: savedSource.summary,
+        fullText: savedSource.fullText || '',
+        topics: savedSource.metadata?.topics || [],
+        keywords: savedSource.metadata?.keywords || [],
+        type: savedSource.type,
+        status: savedSource.status,
+        title: savedSource.title,
+        sourceUrl: savedSource.sourceUrl || '',
+        contentCategory: 'source_content',
+        videoId: videoData.videoId,
+        channel: videoData.channel,
+        transcript: videoData.transcript,
+      });
+      
+      savedSource.weaviateId = weaviateId;
+      await this.contentSourcesRepository.save(savedSource);
+      this.logger.log(`🔍 Indexed in Weaviate: ${weaviateId}`);
+    } catch (error) {
+      this.logger.error(`Failed to index in Weaviate: ${error.message}`);
+    }
+    
+    // Step 4: Return video data + source content ID for frontend to save as processed output
     return {
       success: true,
       data: videoData,
+      sourceContentId: savedSource.id, // Frontend will use this when saving processed output
     };
   }
 }

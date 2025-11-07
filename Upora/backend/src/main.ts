@@ -41,12 +41,12 @@ async function bootstrap() {
   await app.listen(port);
   
   // ========================================
-  // 🔥 BACKEND VERSION 0.0.3 🔥
+  // 🔥 BACKEND VERSION 0.0.4 🔥
   // ========================================
   console.log('');
   console.log('═══════════════════════════════════════════════════════════');
-  console.log('🔥🔥🔥 BACKEND VERSION 0.0.3 STARTED 🔥🔥🔥');
-  console.log('🔧 Unified search: Source + Processed content in Weaviate');
+  console.log('🔥🔥🔥 BACKEND VERSION 0.0.4 STARTED 🔥🔥🔥');
+  console.log('🔧 Two-step content flow: URL → source → processed output');
   console.log(`🚀 API running on: http://localhost:${port}/api`);
   console.log(`📅 Timestamp: ${new Date().toISOString()}`);
   console.log('═══════════════════════════════════════════════════════════');
