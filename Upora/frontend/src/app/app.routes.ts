@@ -57,9 +57,5 @@ export const routes: Routes = [
   {
     path: 'course-details/:id',
     loadComponent: () => import('./features/course-details/course-details.component').then(m => m.CourseDetailsComponent)
-  },
-  {
-    path: 'oauth/callback',
-    loadComponent: () => import('./features/oauth-callback/oauth-callback.component').then(m => m.OAuthCallbackComponent_v3_0_0)
   }
 ];

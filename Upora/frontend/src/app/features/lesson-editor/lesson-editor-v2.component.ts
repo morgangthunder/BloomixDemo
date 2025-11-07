@@ -14,7 +14,6 @@ import { environment } from '../../../environments/environment';
 import { ContentProcessorModalComponent } from '../../shared/components/content-processor-modal/content-processor-modal.component';
 import { ApprovalQueueModalComponent } from '../../shared/components/approval-queue-modal/approval-queue-modal.component';
 import { ProcessedContentService, ProcessedContentItem } from '../../core/services/processed-content.service';
-import { YouTubeOAuthService } from '../../core/services/youtube-oauth.service';
 
 type EditorTab = 'details' | 'structure' | 'script' | 'content' | 'preview' | 'ai-assistant';
 
@@ -1839,8 +1838,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   // Modal State
   showContentProcessor: boolean = false;
   showApprovalQueue: boolean = false;
-  contentProcessorVideoId?: string; // For resuming OAuth processing
-  contentProcessorResumeProcessing: boolean = false; // Flag to resume processing after OAuth
+  contentProcessorVideoId?: string;
+  contentProcessorResumeProcessing: boolean = false;
   
   // Processed Content
   processedContentItems: ProcessedContentItem[] = [];
@@ -1896,8 +1895,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     private router: Router,
     private lessonService: LessonService,
     private contentSourceService: ContentSourceService,
-    private processedContentService: ProcessedContentService,
-    private oauthService: YouTubeOAuthService
+    private processedContentService: ProcessedContentService
   ) {}
 
   ngOnInit() {
@@ -1944,20 +1942,6 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     
     // Load processed content for this lesson
     this.loadProcessedContent();
-    
-    // Handle OAuth callback - switch to content processing tab and resume processing
-    const isOAuthCallback = queryParams['oauth_message'] && queryParams['tab'] === 'content-processing';
-    
-    console.log('[LessonEditor] 🔍 isOAuthCallback:', isOAuthCallback);
-    console.log('[LessonEditor] 🔍 oauth_message:', queryParams['oauth_message']);
-    console.log('[LessonEditor] 🔍 tab:', queryParams['tab']);
-    
-    // NEVER clear OAuth data in ngOnInit - only clear AFTER successful processing
-    // The token is needed to complete processing after OAuth callback
-    // We'll clear it AFTER processing completes in onContentProcessed()
-    // DON'T call forceClearOAuthData() here at all!
-    
-    this.handleOAuthCallback(queryParams);
   }
 
   loadProcessedContent() {
@@ -1979,46 +1963,6 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
         });
     } else {
       console.log('[LessonEditor] ⚠️ No lesson ID or new lesson, skipping processed content load');
-    }
-  }
-
-  handleOAuthCallback(queryParams: any) {
-    console.log('[LessonEditor] 🔍 Handling OAuth callback with params:', queryParams);
-    
-    // Check if this is an OAuth callback
-    if (queryParams['oauth_message'] && queryParams['tab'] === 'content-processing') {
-      console.log('[LessonEditor] 🎯 OAuth callback detected - switching to content processing tab');
-      
-      // Switch to content processing tab
-      this.activeTab = 'content';
-      
-      // Show OAuth success message
-      if (queryParams['oauth_message']) {
-        console.log('[LessonEditor] ✅ OAuth message:', queryParams['oauth_message']);
-        // You could show a snackbar here if needed
-      }
-      
-      // Extract videoId from query params instead of localStorage
-      // The OAuth callback already consumed the localStorage state
-      if (queryParams['videoId']) {
-        console.log('[LessonEditor] 🎬 Found videoId in query params:', queryParams['videoId']);
-        this.contentProcessorVideoId = queryParams['videoId'];
-        console.log('[LessonEditor] 🎬 Set contentProcessorVideoId to:', this.contentProcessorVideoId);
-        
-        // Check if we should resume processing (complete the OAuth flow)
-        if (queryParams['resumeProcessing'] === 'true') {
-          console.log('[LessonEditor] 🚀 Resume processing flag detected - will complete processing');
-          this.contentProcessorResumeProcessing = true;
-        }
-      } else {
-        console.log('[LessonEditor] ⚠️ No videoId found in query params');
-      }
-      
-      // Auto-open the modal after OAuth so user can click Process to use the token
-      console.log('[LessonEditor] 🎯 OAuth complete - auto-opening modal with pre-filled URL');
-      setTimeout(() => {
-        this.openContentProcessor();
-      }, 500);
     }
   }
 
@@ -2518,9 +2462,6 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     // Clear videoId and resumeProcessing flag now that processing is complete
     this.contentProcessorVideoId = undefined;
     this.contentProcessorResumeProcessing = false;
-    
-    // NOW clear OAuth data after processing is complete
-    this.oauthService.forceClearOAuthData();
     
     // DON'T close the modal automatically - let the user click "Submit for Approval" or close manually
     // this.closeContentProcessor();
