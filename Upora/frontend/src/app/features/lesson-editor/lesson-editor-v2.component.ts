@@ -14,6 +14,7 @@ import { environment } from '../../../environments/environment';
 import { ContentProcessorModalComponent } from '../../shared/components/content-processor-modal/content-processor-modal.component';
 import { ApprovalQueueModalComponent } from '../../shared/components/approval-queue-modal/approval-queue-modal.component';
 import { ProcessedContentService, ProcessedContentItem } from '../../core/services/processed-content.service';
+import { ContentLibraryModalComponent } from '../../shared/components/content-library-modal/content-library-modal.component';
 
 type EditorTab = 'details' | 'structure' | 'script' | 'content' | 'preview' | 'ai-assistant';
 
@@ -59,7 +60,7 @@ interface ProcessedContentOutput {
 @Component({
   selector: 'app-lesson-editor-v2',
   standalone: true,
-  imports: [CommonModule, FormsModule, ContentProcessorModalComponent, ApprovalQueueModalComponent],
+  imports: [CommonModule, FormsModule, ContentProcessorModalComponent, ApprovalQueueModalComponent, ContentLibraryModalComponent],
   template: `
     <div class="lesson-editor-v2" *ngIf="lesson">
       <!-- Top Header -->
@@ -578,6 +579,14 @@ interface ProcessedContentOutput {
         (itemRejected)="onItemRejected($event)"
         (close)="closeApprovalQueue()">
       </app-approval-queue-modal>
+
+      <!-- Content Library Modal -->
+      <app-content-library-modal
+        [isOpen]="showContentLibrary"
+        [lessonId]="lesson?.id"
+        (contentAdded)="onContentAdded($event)"
+        (closed)="closeContentLibrary()">
+      </app-content-library-modal>
 
       <!-- Processed Content Viewer Modal -->
       <div class="modal-overlay" *ngIf="selectedProcessedContent" (click)="closeProcessedContentViewer()">
@@ -1841,6 +1850,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   // Modal State
   showContentProcessor: boolean = false;
   showApprovalQueue: boolean = false;
+  showContentLibrary: boolean = false;
   contentProcessorVideoId?: string;
   contentProcessorResumeProcessing: boolean = false;
   
@@ -2604,8 +2614,19 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   }
 
   searchContentLibrary() {
-    console.log('Open content library search');
-    // TODO: Open content library modal
+    console.log('[LessonEditor] 📚 Opening content library search');
+    this.showContentLibrary = true;
+  }
+
+  closeContentLibrary() {
+    console.log('[LessonEditor] 📚 Closing content library');
+    this.showContentLibrary = false;
+  }
+
+  onContentAdded(event: any) {
+    console.log('[LessonEditor] ✅ Content added to lesson:', event);
+    this.showSnackbar(`Content "${event.content.title}" added to lesson`);
+    // Could reload linked content here if needed
   }
 
   // Content Processing Modal Methods
