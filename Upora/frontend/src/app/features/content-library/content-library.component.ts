@@ -4,11 +4,24 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ContentSourceService } from '../../core/services/content-source.service';
 import { ContentSource, SearchResult } from '../../core/models/content-source.model';
+import { ContentProcessorModalComponent } from '../../shared/components/content-processor-modal/content-processor-modal.component';
+import { AddTextContentModalComponent } from '../../shared/components/add-text-content-modal/add-text-content-modal.component';
+import { AddImageModalComponent } from '../../shared/components/add-image-modal/add-image-modal.component';
+import { AddPdfModalComponent } from '../../shared/components/add-pdf-modal/add-pdf-modal.component';
+import { ApprovalQueueModalComponent } from '../../shared/components/approval-queue-modal/approval-queue-modal.component';
 
 @Component({
   selector: 'app-content-library',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [
+    CommonModule, 
+    FormsModule, 
+    ContentProcessorModalComponent,
+    AddTextContentModalComponent,
+    AddImageModalComponent,
+    AddPdfModalComponent,
+    ApprovalQueueModalComponent
+  ],
   template: `
     <div class="content-library">
       <!-- Header -->
@@ -16,12 +29,30 @@ import { ContentSource, SearchResult } from '../../core/models/content-source.mo
         <h1>Content Library</h1>
         <p>Manage and search your learning content sources</p>
         <div class="header-actions">
-          <button (click)="showAddModal = true" class="btn-primary">
+          <button (click)="toggleAddMenu()" class="btn-primary">
             + Add Content Source
           </button>
           <button (click)="navigateToApprovals()" class="btn-secondary" *ngIf="pendingCount > 0">
             ⏳ {{pendingCount}} Pending Approval
           </button>
+        </div>
+        
+        <!-- Add Content Menu -->
+        <div class="add-menu" *ngIf="showAddMenu" (click)="closeAddMenu()">
+          <div class="add-menu-content" (click)="$event.stopPropagation()">
+            <h3>Add & Process Content</h3>
+            <div class="add-menu-section">
+              <h4>Add Source Content</h4>
+              <button (click)="openUrlModal()" class="menu-item-btn">🔗 Paste URL</button>
+              <button (click)="openPdfModal()" class="menu-item-btn">📄 Upload PDF</button>
+              <button (click)="openTextModal()" class="menu-item-btn">📝 Add Text Content</button>
+              <button (click)="openImageModal()" class="menu-item-btn">🖼️ Upload Image</button>
+            </div>
+            <div class="add-menu-section separator">
+              <h4>Browse Existing</h4>
+              <button (click)="navigateToApprovals()" class="menu-item-btn">⏳ Approval Queue</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -101,7 +132,7 @@ import { ContentSource, SearchResult } from '../../core/models/content-source.mo
           </svg>
           <h3>No content sources yet</h3>
           <p>Start by adding URLs, PDFs, or other learning materials</p>
-          <button (click)="showAddModal = true" class="btn-primary">Add Your First Source</button>
+          <button (click)="toggleAddMenu()" class="btn-primary">Add Your First Source</button>
         </div>
 
         <div class="content-grid" *ngIf="contentSources.length > 0">
@@ -125,6 +156,19 @@ import { ContentSource, SearchResult } from '../../core/models/content-source.mo
               <a [href]="source.sourceUrl" target="_blank" rel="noopener">{{truncateUrl(source.sourceUrl)}}</a>
             </div>
 
+            <div class="lesson-usage" *ngIf="source.lessons && source.lessons.length > 0">
+              <div class="usage-label">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+                </svg>
+                Used in {{source.lessonCount}} lesson{{source.lessonCount !== 1 ? 's' : ''}}:
+              </div>
+              <div class="lesson-tags">
+                <span *ngFor="let lesson of source.lessons.slice(0, 3)" class="lesson-tag">{{lesson.title}}</span>
+                <span *ngIf="source.lessons.length > 3" class="more-tag">+{{source.lessons.length - 3}} more</span>
+              </div>
+            </div>
+
             <div class="card-footer">
               <div class="creator" *ngIf="source.creator">
                 <small>By {{source.creator.username}}</small>
@@ -139,60 +183,38 @@ import { ContentSource, SearchResult } from '../../core/models/content-source.mo
         </div>
       </div>
 
-      <!-- Add Content Modal -->
-      <div class="modal-overlay" *ngIf="showAddModal" (click)="showAddModal = false">
-        <div class="modal-content" (click)="$event.stopPropagation()">
-          <h2>Add Content Source</h2>
-          
-          <div class="form-group">
-            <label>Type</label>
-            <select [(ngModel)]="newContent.type" class="form-control">
-              <option value="url">URL / Web Page</option>
-              <option value="pdf">PDF Document</option>
-              <option value="text">Text Content</option>
-              <option value="image">Image</option>
-            </select>
-          </div>
+      <!-- Content Modals -->
+      <app-content-processor-modal
+        [isOpen]="showUrlModal"
+        (closed)="closeUrlModal()"
+        (contentProcessed)="onContentProcessed($event)"
+        (contentSubmittedForApproval)="onContentSubmitted($event)">
+      </app-content-processor-modal>
 
-          <div class="form-group" *ngIf="newContent.type === 'url'">
-            <label>URL</label>
-            <input 
-              type="url" 
-              [(ngModel)]="newContent.sourceUrl"
-              placeholder="https://example.com/article"
-              class="form-control">
-          </div>
+      <app-add-pdf-modal
+        [isOpen]="showPdfModal"
+        (close)="closePdfModal()"
+        (contentAdded)="onContentAdded($event)">
+      </app-add-pdf-modal>
 
-          <div class="form-group">
-            <label>Title</label>
-            <input 
-              type="text" 
-              [(ngModel)]="newContent.title"
-              placeholder="e.g., React Hooks Tutorial"
-              class="form-control">
-          </div>
+      <app-add-text-content-modal
+        [isOpen]="showTextModal"
+        (close)="closeTextModal()"
+        (contentAdded)="onContentAdded($event)">
+      </app-add-text-content-modal>
 
-          <div class="form-group">
-            <label>Summary (Optional)</label>
-            <textarea 
-              [(ngModel)]="newContent.summary"
-              rows="4"
-              placeholder="Brief description of the content..."
-              class="form-control">
-            </textarea>
-          </div>
+      <app-add-image-modal
+        [isOpen]="showImageModal"
+        (close)="closeImageModal()"
+        (contentAdded)="onContentAdded($event)">
+      </app-add-image-modal>
 
-          <div class="modal-actions">
-            <button 
-              (click)="submitNewContent()" 
-              [disabled]="!canSubmit()"
-              class="btn-primary">
-              {{submitting ? 'Adding...' : 'Add Content'}}
-            </button>
-            <button (click)="closeAddModal()" class="btn-secondary">Cancel</button>
-          </div>
-        </div>
-      </div>
+      <app-approval-queue-modal
+        [isOpen]="showApprovalModal"
+        (close)="closeApprovalModal()"
+        (itemApproved)="onItemApproved($event)"
+        (itemRejected)="onItemRejected($event)">
+      </app-approval-queue-modal>
     </div>
   `,
   styles: [`
@@ -220,6 +242,7 @@ import { ContentSource, SearchResult } from '../../core/models/content-source.mo
     }
     .header {
       margin-bottom: 30px;
+      position: relative;
     }
     .header h1 {
       font-size: 32px;
@@ -391,6 +414,46 @@ import { ContentSource, SearchResult } from '../../core/models/content-source.mo
     .source-url a:hover {
       text-decoration: underline;
     }
+    .lesson-usage {
+      margin: 12px 0;
+      padding: 10px;
+      background: rgba(59,130,246,0.1);
+      border-left: 3px solid rgba(59,130,246,0.5);
+      border-radius: 4px;
+    }
+    .usage-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #60a5fa;
+      margin-bottom: 8px;
+    }
+    .usage-label .icon {
+      flex-shrink: 0;
+    }
+    .lesson-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .lesson-tag {
+      background: rgba(59,130,246,0.2);
+      color: #93c5fd;
+      padding: 3px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .more-tag {
+      background: rgba(156,163,175,0.2);
+      color: #9ca3af;
+      padding: 3px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 500;
+    }
     .card-footer {
       display: flex;
       justify-content: space-between;
@@ -547,6 +610,73 @@ import { ContentSource, SearchResult } from '../../core/models/content-source.mo
     .btn-secondary:hover {
       background: rgba(255,255,255,0.15);
     }
+
+    /* Add Menu Dropdown */
+    .add-menu {
+      position: absolute;
+      top: 60px;
+      right: 20px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+      min-width: 280px;
+      z-index: 100;
+    }
+
+    .add-menu-content {
+      padding: 16px;
+    }
+
+    .add-menu-content h3 {
+      margin: 0 0 16px 0;
+      font-size: 18px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .add-menu-section {
+      margin-bottom: 12px;
+    }
+
+    .add-menu-section.separator {
+      border-top: 1px solid #eee;
+      padding-top: 12px;
+    }
+
+    .add-menu-section h4 {
+      margin: 0 0 8px 0;
+      font-size: 12px;
+      font-weight: 600;
+      color: #999;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .menu-item-btn {
+      width: 100%;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+      border: 1px solid #ddd;
+      background: white;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      text-align: left;
+      transition: all 0.2s;
+      display: block;
+    }
+
+    .menu-item-btn:hover {
+      background: #f8f9fa;
+      border-color: #0066cc;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(0, 102, 204, 0.1);
+    }
+
+    .menu-item-btn:last-child {
+      margin-bottom: 0;
+    }
   `]
 })
 export class ContentLibraryComponent implements OnInit {
@@ -558,15 +688,13 @@ export class ContentLibraryComponent implements OnInit {
   loading = false;
   pendingCount = 0;
 
-  // Add content modal
-  showAddModal = false;
-  submitting = false;
-  newContent: Partial<ContentSource> = {
-    type: 'url',
-    title: '',
-    summary: '',
-    sourceUrl: '',
-  };
+  // Modal states
+  showAddMenu = false;
+  showUrlModal = false;
+  showPdfModal = false;
+  showTextModal = false;
+  showImageModal = false;
+  showApprovalModal = false;
 
   constructor(
     private contentSourceService: ContentSourceService,
@@ -629,37 +757,97 @@ export class ContentLibraryComponent implements OnInit {
     await this.loadContent();
   }
 
-  async submitNewContent() {
-    if (!this.canSubmit()) return;
+  // Add Menu Methods
+  toggleAddMenu() {
+    this.showAddMenu = !this.showAddMenu;
+  }
 
-    this.submitting = true;
+  closeAddMenu() {
+    this.showAddMenu = false;
+  }
+
+  // Modal open methods
+  openUrlModal() {
+    this.closeAddMenu();
+    this.showUrlModal = true;
+  }
+
+  openPdfModal() {
+    this.closeAddMenu();
+    this.showPdfModal = true;
+  }
+
+  openTextModal() {
+    this.closeAddMenu();
+    this.showTextModal = true;
+  }
+
+  openImageModal() {
+    this.closeAddMenu();
+    this.showImageModal = true;
+  }
+
+  openApprovalModal() {
+    this.closeAddMenu();
+    this.showApprovalModal = true;
+  }
+
+  // Modal close methods
+  closeUrlModal() {
+    this.showUrlModal = false;
+  }
+
+  closePdfModal() {
+    this.showPdfModal = false;
+  }
+
+  closeTextModal() {
+    this.showTextModal = false;
+  }
+
+  closeImageModal() {
+    this.showImageModal = false;
+  }
+
+  closeApprovalModal() {
+    this.showApprovalModal = false;
+  }
+
+  // Content event handlers
+  async onContentProcessed(data: any) {
+    console.log('[ContentLibrary] Content processed:', data);
+    await this.loadContent();
+    await this.loadPendingCount();
+  }
+
+  async onContentSubmitted(data: any) {
+    console.log('[ContentLibrary] Content submitted for approval:', data);
+    await this.loadContent();
+    await this.loadPendingCount();
+  }
+
+  async onContentAdded(contentData: any) {
+    console.log('[ContentLibrary] Adding content:', contentData);
     try {
-      await this.contentSourceService.createContentSource(this.newContent);
-      this.closeAddModal();
-      // Reload content
+      await this.contentSourceService.createContentSource(contentData);
       await this.loadContent();
       await this.loadPendingCount();
     } catch (error) {
       console.error('Failed to create content:', error);
       alert('Failed to add content source');
-    } finally {
-      this.submitting = false;
     }
   }
 
-  canSubmit(): boolean {
-    return !!(this.newContent.title && 
-      (this.newContent.sourceUrl || this.newContent.type === 'text'));
+  onItemApproved(item: any) {
+    console.log('[ContentLibrary] Item approved:', item);
+    this.loadContent();
+    this.loadPendingCount();
   }
 
-  closeAddModal() {
-    this.showAddModal = false;
-    this.newContent = {
-      type: 'url',
-      title: '',
-      summary: '',
-      sourceUrl: '',
-    };
+  onItemRejected(item: any) {
+    console.log('[ContentLibrary] Item rejected:', item);
+    this.loadContent();
+    this.loadPendingCount();
   }
 
   viewContent(source: ContentSource | undefined) {

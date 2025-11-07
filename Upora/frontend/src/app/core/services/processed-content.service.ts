@@ -20,6 +20,13 @@ export interface ProcessedContentItem {
   createdAt: string;
   lessonId: string;
   metadata?: any;
+  contentSourceId?: string;
+  contentSource?: {
+    id: string;
+    title: string;
+    type: string;
+    sourceUrl?: string;
+  };
 }
 
 @Injectable({

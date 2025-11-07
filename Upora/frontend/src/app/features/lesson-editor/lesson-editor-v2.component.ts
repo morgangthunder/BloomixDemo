@@ -15,6 +15,9 @@ import { ContentProcessorModalComponent } from '../../shared/components/content-
 import { ApprovalQueueModalComponent } from '../../shared/components/approval-queue-modal/approval-queue-modal.component';
 import { ProcessedContentService, ProcessedContentItem } from '../../core/services/processed-content.service';
 import { ContentLibraryModalComponent } from '../../shared/components/content-library-modal/content-library-modal.component';
+import { AddTextContentModalComponent } from '../../shared/components/add-text-content-modal/add-text-content-modal.component';
+import { AddImageModalComponent } from '../../shared/components/add-image-modal/add-image-modal.component';
+import { AddPdfModalComponent } from '../../shared/components/add-pdf-modal/add-pdf-modal.component';
 
 type EditorTab = 'details' | 'structure' | 'script' | 'content' | 'preview' | 'ai-assistant';
 
@@ -60,7 +63,16 @@ interface ProcessedContentOutput {
 @Component({
   selector: 'app-lesson-editor-v2',
   standalone: true,
-  imports: [CommonModule, FormsModule, ContentProcessorModalComponent, ApprovalQueueModalComponent, ContentLibraryModalComponent],
+  imports: [
+    CommonModule, 
+    FormsModule, 
+    ContentProcessorModalComponent, 
+    ApprovalQueueModalComponent, 
+    ContentLibraryModalComponent,
+    AddTextContentModalComponent,
+    AddImageModalComponent,
+    AddPdfModalComponent
+  ],
   template: `
     <div class="lesson-editor-v2" *ngIf="lesson">
       <!-- Top Header -->
@@ -438,10 +450,18 @@ interface ProcessedContentOutput {
               
               <div class="content-workflow">
                 <h3>Add & Process Content</h3>
-                <button (click)="searchContentLibrary()" class="btn-secondary">📚 Search Library</button>
-                <button class="btn-secondary">📄 Upload File</button>
-                <button (click)="openContentProcessor()" class="btn-secondary">🔗 Paste URL</button>
-                <button (click)="openApprovalQueue()" class="btn-secondary">⏳ Approval Queue</button>
+                <div class="workflow-section">
+                  <h4 class="section-label">Add Source Content</h4>
+                  <button (click)="openContentProcessor()" class="btn-secondary">🔗 Paste URL</button>
+                  <button (click)="openPdfModal()" class="btn-secondary">📄 Upload PDF</button>
+                  <button (click)="openTextModal()" class="btn-secondary">📝 Add Text Content</button>
+                  <button (click)="openImageModal()" class="btn-secondary">🖼️ Upload Image</button>
+                </div>
+                <div class="workflow-section separator">
+                  <h4 class="section-label">Browse Existing</h4>
+                  <button (click)="searchContentLibrary()" class="btn-secondary">📚 Search Library</button>
+                  <button (click)="openApprovalQueue()" class="btn-secondary">⏳ Approval Queue</button>
+                </div>
               </div>
 
               <div class="processed-outputs" *ngIf="processedContentItems.length > 0">
@@ -449,8 +469,16 @@ interface ProcessedContentOutput {
                 <div class="output-list">
                   <div *ngFor="let content of processedContentItems" class="output-card-compact">
                     <div class="output-header-compact">
-                      <span class="output-name-compact">{{content.title}}</span>
-                      <span class="output-type-compact">{{content.type}}</span>
+                      <div class="output-title-section">
+                        <span class="output-name-compact">{{content.title}}</span>
+                        <span class="output-type-compact">{{content.type}}</span>
+                      </div>
+                      <div class="source-link" *ngIf="content.contentSource">
+                        <svg class="link-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" width="12" height="12">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.102m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+                        </svg>
+                        <small>from: {{content.contentSource.title}}</small>
+                      </div>
                     </div>
                     <div class="output-actions-compact">
                       <button (click)="viewProcessedContent(content)" class="btn-small">View</button>
@@ -587,6 +615,30 @@ interface ProcessedContentOutput {
         (contentAdded)="onContentAdded($event)"
         (closed)="closeContentLibrary()">
       </app-content-library-modal>
+
+      <!-- Add Text Content Modal -->
+      <app-add-text-content-modal
+        [isOpen]="showTextModal"
+        [lessonId]="lesson?.id"
+        (close)="closeTextModal()"
+        (contentAdded)="onNewContentAdded($event)">
+      </app-add-text-content-modal>
+
+      <!-- Add Image Modal -->
+      <app-add-image-modal
+        [isOpen]="showImageModal"
+        [lessonId]="lesson?.id"
+        (close)="closeImageModal()"
+        (contentAdded)="onNewContentAdded($event)">
+      </app-add-image-modal>
+
+      <!-- Add PDF Modal -->
+      <app-add-pdf-modal
+        [isOpen]="showPdfModal"
+        [lessonId]="lesson?.id"
+        (close)="closePdfModal()"
+        (contentAdded)="onNewContentAdded($event)">
+      </app-add-pdf-modal>
 
       <!-- Processed Content Viewer Modal -->
       <div class="modal-overlay" *ngIf="selectedProcessedContent" (click)="closeProcessedContentViewer()">
@@ -1360,7 +1412,23 @@ interface ProcessedContentOutput {
       margin-bottom: 2rem;
     }
     .content-workflow h3 {
-      margin: 0 0 1rem;
+      margin: 0 0 1.5rem;
+      font-size: 1.25rem;
+    }
+    .workflow-section {
+      margin-bottom: 1.5rem;
+    }
+    .workflow-section.separator {
+      border-top: 1px solid #333;
+      padding-top: 1.5rem;
+    }
+    .workflow-section .section-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #999;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin: 0 0 0.75rem 0;
     }
     .content-workflow button {
       margin-right: 0.75rem;
@@ -1402,8 +1470,13 @@ interface ProcessedContentOutput {
     .output-header-compact {
       display: flex;
       flex-direction: column;
-      gap: 0.25rem;
+      gap: 0.5rem;
       flex: 1;
+    }
+    .output-title-section {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
     }
     .output-name {
       font-weight: 500;
@@ -1424,6 +1497,25 @@ interface ProcessedContentOutput {
       border-radius: 4px;
       font-size: 0.7rem;
       color: #aaa;
+    }
+    .source-link {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.7rem;
+      color: #666;
+      padding: 4px 8px;
+      background: rgba(59,130,246,0.1);
+      border-radius: 4px;
+      border-left: 2px solid rgba(59,130,246,0.5);
+    }
+    .source-link .link-icon {
+      flex-shrink: 0;
+      stroke: #60a5fa;
+    }
+    .source-link small {
+      color: #93c5fd;
+      font-weight: 500;
     }
     .output-workflow {
       font-size: 0.875rem;
@@ -1851,6 +1943,9 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   showContentProcessor: boolean = false;
   showApprovalQueue: boolean = false;
   showContentLibrary: boolean = false;
+  showTextModal: boolean = false;
+  showImageModal: boolean = false;
+  showPdfModal: boolean = false;
   contentProcessorVideoId?: string;
   contentProcessorResumeProcessing: boolean = false;
   
@@ -2627,6 +2722,41 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     console.log('[LessonEditor] ✅ Content added to lesson:', event);
     this.showSnackbar(`Content "${event.content.title}" added to lesson`);
     // Could reload linked content here if needed
+  }
+
+  // New Content Modals
+  openTextModal() {
+    console.log('[LessonEditor] 📝 Opening add text content modal');
+    this.showTextModal = true;
+  }
+
+  closeTextModal() {
+    this.showTextModal = false;
+  }
+
+  openImageModal() {
+    console.log('[LessonEditor] 🖼️ Opening add image modal');
+    this.showImageModal = true;
+  }
+
+  closeImageModal() {
+    this.showImageModal = false;
+  }
+
+  openPdfModal() {
+    console.log('[LessonEditor] 📄 Opening add PDF modal');
+    this.showPdfModal = true;
+  }
+
+  closePdfModal() {
+    this.showPdfModal = false;
+  }
+
+  async onNewContentAdded(contentData: any) {
+    console.log('[LessonEditor] ✅ New content added:', contentData);
+    this.showSnackbar(`Content "${contentData.title}" submitted for approval`);
+    // Reload processed content list
+    await this.loadProcessedContent();
   }
 
   // Content Processing Modal Methods

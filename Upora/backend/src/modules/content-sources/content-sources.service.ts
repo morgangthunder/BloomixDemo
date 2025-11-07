@@ -47,11 +47,21 @@ export class ContentSourcesService {
       where.status = status;
     }
 
-    return await this.contentSourcesRepository.find({
+    const sources = await this.contentSourcesRepository.find({
       where,
       order: { createdAt: 'DESC' },
-      relations: ['creator', 'approver'],
+      relations: ['creator', 'approver', 'lessonUsages', 'lessonUsages.lesson'],
     });
+
+    // Add lesson count metadata
+    return sources.map(source => ({
+      ...source,
+      lessonCount: source.lessonUsages?.length || 0,
+      lessons: source.lessonUsages?.map(lu => ({
+        id: lu.lesson.id,
+        title: lu.lesson.title,
+      })) || [],
+    })) as any;
   }
 
   /**
@@ -301,7 +311,7 @@ export class ContentSourcesService {
     const sourceContent = this.contentSourcesRepository.create({
       tenantId: tenantId || '00000000-0000-0000-0000-000000000001',
       createdBy: userId || '00000000-0000-0000-0000-000000000011',
-      type: 'youtube_video',
+      type: 'url', // YouTube URLs are stored as 'url' type
       sourceUrl: url,
       title: videoData.title,
       summary: videoData.description || `YouTube video: ${videoData.title}`,
@@ -311,15 +321,15 @@ export class ContentSourcesService {
         videoId: videoData.videoId,
         channel: videoData.channel,
         duration: videoData.duration,
-        publishedAt: videoData.publishedAt,
         topics: [],
         keywords: videoData.title.split(' ').filter(w => w.length > 3),
         difficulty: 'beginner',
         language: 'en',
       },
-    });
+    } as any); // Type cast needed due to relation properties
     
-    const savedSource = await this.contentSourcesRepository.save(sourceContent);
+    const savedSourceRaw = await this.contentSourcesRepository.save(sourceContent);
+    let savedSource = (Array.isArray(savedSourceRaw) ? savedSourceRaw[0] : savedSourceRaw) as ContentSource;
     this.logger.log(`📚 Saved source content: ${savedSource.id}`);
     
     // Step 3: Index source content in Weaviate
@@ -342,7 +352,7 @@ export class ContentSourcesService {
       });
       
       savedSource.weaviateId = weaviateId;
-      await this.contentSourcesRepository.save(savedSource);
+      savedSource = await this.contentSourcesRepository.save(savedSource);
       this.logger.log(`🔍 Indexed in Weaviate: ${weaviateId}`);
     } catch (error) {
       this.logger.error(`Failed to index in Weaviate: ${error.message}`);

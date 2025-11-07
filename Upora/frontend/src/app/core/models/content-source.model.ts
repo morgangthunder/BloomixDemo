@@ -30,6 +30,11 @@ export interface ContentSource {
     username: string;
     role: string;
   };
+  lessonCount?: number;
+  lessons?: Array<{
+    id: string;
+    title: string;
+  }>;
 }
 
 export interface SearchResult {
