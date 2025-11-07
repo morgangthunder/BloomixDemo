@@ -41,12 +41,12 @@ async function bootstrap() {
   await app.listen(port);
   
   // ========================================
-  // 🔥 BACKEND VERSION 0.0.2 🔥
+  // 🔥 BACKEND VERSION 0.0.3 🔥
   // ========================================
   console.log('');
   console.log('═══════════════════════════════════════════════════════════');
-  console.log('🔥🔥🔥 BACKEND VERSION 0.0.2 STARTED 🔥🔥🔥');
-  console.log('🔧 Fixed UpdateLessonDto validation decorators');
+  console.log('🔥🔥🔥 BACKEND VERSION 0.0.3 STARTED 🔥🔥🔥');
+  console.log('🔧 Unified search: Source + Processed content in Weaviate');
   console.log(`🚀 API running on: http://localhost:${port}/api`);
   console.log(`📅 Timestamp: ${new Date().toISOString()}`);
   console.log('═══════════════════════════════════════════════════════════');

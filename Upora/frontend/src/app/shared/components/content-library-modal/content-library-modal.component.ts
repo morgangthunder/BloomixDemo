@@ -11,6 +11,10 @@ interface ContentSource {
   summary: string;
   sourceUrl?: string;
   filePath?: string;
+  contentCategory?: 'source_content' | 'processed_content';
+  videoId?: string;
+  channel?: string;
+  transcript?: string;
   metadata: {
     topics: string[];
     keywords: string[];
@@ -78,7 +82,12 @@ interface SearchResult {
                 (click)="selectContent(result.contentSource)">
                 
                 <div class="result-header">
-                  <span class="result-type">{{result.contentSource.type}}</span>
+                  <div class="result-badges">
+                    <span class="result-category" [class.source]="result.contentSource.contentCategory === 'source_content'" [class.processed]="result.contentSource.contentCategory === 'processed_content'">
+                      {{result.contentSource.contentCategory === 'processed_content' ? '🎬 Processed' : '📚 Source'}}
+                    </span>
+                    <span class="result-type">{{result.contentSource.type}}</span>
+                  </div>
                   <span class="result-score">{{(result.relevanceScore * 100).toFixed(0)}}% match</span>
                 </div>
                 
@@ -329,6 +338,29 @@ interface SearchResult {
       justify-content: space-between;
       align-items: center;
       margin-bottom: 0.5rem;
+    }
+
+    .result-badges {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .result-category {
+      padding: 0.25rem 0.75rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .result-category.source {
+      background: #1a4d2e;
+      color: #4ade80;
+    }
+
+    .result-category.processed {
+      background: #1e3a8a;
+      color: #60a5fa;
     }
 
     .result-type {

@@ -125,6 +125,7 @@ export class ContentSourcesService {
         status: saved.status,
         title: saved.title,
         sourceUrl: saved.sourceUrl,
+        contentCategory: 'source_content', // Mark as source content
       });
 
       // Store Weaviate ID
@@ -189,26 +190,42 @@ export class ContentSourcesService {
       },
     });
 
-    // Enrich with PostgreSQL data
+    // Enrich with PostgreSQL data from BOTH content_sources and processed_content_outputs
     const enriched = await Promise.all(
       results.map(async (result) => {
         try {
-          const contentSource = await this.contentSourcesRepository.findOne({
-            where: { id: result.contentSourceId },
-            relations: ['creator'],
-          });
+          // Check if this is source_content or processed_content
+          if (result.contentCategory === 'processed_content') {
+            // Fetch from processed_content_outputs table
+            const ProcessedContentOutput = this.contentSourcesRepository.manager.getRepository('ProcessedContentOutput');
+            const processedContent = await ProcessedContentOutput.findOne({
+              where: { id: result.contentSourceId },
+            });
 
-          return {
-            ...result,
-            contentSource,
-          };
+            return {
+              ...result,
+              contentSource: processedContent, // Return processed content as contentSource for compatibility
+            };
+          } else {
+            // Fetch from content_sources table (original behavior)
+            const contentSource = await this.contentSourcesRepository.findOne({
+              where: { id: result.contentSourceId },
+              relations: ['creator'],
+            });
+
+            return {
+              ...result,
+              contentSource,
+            };
+          }
         } catch (error) {
+          this.logger.error(`Failed to enrich result ${result.contentSourceId}: ${error.message}`);
           return result;
         }
       })
     );
 
-    this.logger.log(`Semantic search for "${searchDto.query}" returned ${enriched.length} results`);
+    this.logger.log(`Semantic search for "${searchDto.query}" returned ${enriched.length} results (source + processed)`);
     return enriched;
   }
 

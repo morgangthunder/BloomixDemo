@@ -12,6 +12,10 @@ export interface ContentSummaryData {
   status: string;
   title?: string;
   sourceUrl?: string;
+  contentCategory?: 'source_content' | 'processed_content'; // NEW: Distinguish content types
+  videoId?: string; // NEW: For YouTube videos
+  channel?: string; // NEW: For YouTube channel
+  transcript?: string; // NEW: For video transcripts
 }
 
 export interface SemanticSearchQuery {
@@ -35,6 +39,10 @@ export interface SemanticSearchResult {
   keywords: string[];
   title: string;
   sourceUrl?: string;
+  contentCategory?: 'source_content' | 'processed_content';
+  videoId?: string;
+  channel?: string;
+  transcript?: string;
   relevanceScore: number;
   distance: number;
 }
@@ -141,6 +149,26 @@ export class WeaviateService implements OnModuleInit {
               dataType: ['text'],
               description: 'Original URL if applicable',
             },
+            {
+              name: 'contentCategory',
+              dataType: ['text'],
+              description: 'Category: source_content or processed_content',
+            },
+            {
+              name: 'videoId',
+              dataType: ['text'],
+              description: 'YouTube video ID if applicable',
+            },
+            {
+              name: 'channel',
+              dataType: ['text'],
+              description: 'YouTube channel name if applicable',
+            },
+            {
+              name: 'transcript',
+              dataType: ['text'],
+              description: 'Video transcript or extracted text',
+            },
           ],
         };
 
@@ -180,6 +208,10 @@ export class WeaviateService implements OnModuleInit {
           status: data.status,
           title: data.title || '',
           sourceUrl: data.sourceUrl || '',
+          contentCategory: data.contentCategory || 'source_content',
+          videoId: data.videoId || '',
+          channel: data.channel || '',
+          transcript: data.transcript || '',
         })
         .do();
 
@@ -282,13 +314,14 @@ export class WeaviateService implements OnModuleInit {
       }
 
       // Use BM25 keyword search (works without vectors)
+      // Now searches across ALL fields including transcript, channel, etc.
       const result = await this.client.graphql
         .get()
         .withClassName(this.className)
-        .withFields('contentSourceId tenantId summary fullText topics keywords type status title sourceUrl _additional { score }')
+        .withFields('contentSourceId tenantId summary fullText topics keywords type status title sourceUrl contentCategory videoId channel transcript _additional { score }')
         .withBm25({ 
           query: searchQuery.query,
-          properties: ['summary', 'fullText', 'title', 'keywords', 'topics']
+          properties: ['summary', 'fullText', 'title', 'keywords', 'topics', 'transcript', 'channel']
         })
         .withWhere({
           operator: 'And',
@@ -309,6 +342,10 @@ export class WeaviateService implements OnModuleInit {
         keywords: item.keywords || [],
         title: item.title,
         sourceUrl: item.sourceUrl,
+        contentCategory: item.contentCategory || 'source_content',
+        videoId: item.videoId,
+        channel: item.channel,
+        transcript: item.transcript,
         distance: 0,
         relevanceScore: item._additional?.score || 0, // BM25 score (higher is better)
       }));

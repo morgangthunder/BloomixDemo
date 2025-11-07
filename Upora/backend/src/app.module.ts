@@ -19,7 +19,7 @@ import { LessonsModule } from './modules/lessons/lessons.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { ContentSourcesModule } from './modules/content-sources/content-sources.module';
 import { LessonEditorModule } from './modules/lesson-editor/lesson-editor.module';
-import { WeaviateService } from './services/weaviate.service';
+import { WeaviateModule } from './services/weaviate.module';
 
 @Module({
   imports: [
@@ -42,6 +42,7 @@ import { WeaviateService } from './services/weaviate.service';
         logging: configService.get('database.logging'),
       }),
     }),
+    WeaviateModule, // Global module with WeaviateService
     UsersModule,
     LessonsModule,
     ChatModule,
@@ -49,7 +50,6 @@ import { WeaviateService } from './services/weaviate.service';
     LessonEditorModule,
   ],
   controllers: [AppController],
-  providers: [AppService, WeaviateService],
-  exports: [WeaviateService],
+  providers: [AppService],
 })
 export class AppModule {}

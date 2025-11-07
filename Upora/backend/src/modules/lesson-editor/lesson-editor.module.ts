@@ -8,6 +8,7 @@ import { Lesson } from '../../entities/lesson.entity';
 import { ContentSource } from '../../entities/content-source.entity';
 import { LessonDataService } from '../../services/lesson-data.service';
 import { ContentValidationService } from '../../services/content-validation.service';
+import { WeaviateModule } from '../../services/weaviate.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { ContentValidationService } from '../../services/content-validation.serv
       Lesson,
       ContentSource,
     ]),
+    WeaviateModule, // Import WeaviateModule for WeaviateService
   ],
   controllers: [LessonEditorController],
   providers: [LessonEditorService, LessonDataService, ContentValidationService],

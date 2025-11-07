@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProcessedContentOutput } from '../../entities/processed-content-output.entity';
@@ -6,9 +6,12 @@ import { ScriptBlock } from '../../entities/script-block.entity';
 import { Lesson } from '../../entities/lesson.entity';
 import { LessonDataService, LessonDataSchema, ProcessedContentData } from '../../services/lesson-data.service';
 import { ContentValidationService } from '../../services/content-validation.service';
+import { WeaviateService } from '../../services/weaviate.service';
 
 @Injectable()
 export class LessonEditorService {
+  private logger = new Logger('LessonEditorService');
+
   constructor(
     @InjectRepository(ProcessedContentOutput)
     private processedOutputRepo: Repository<ProcessedContentOutput>,
@@ -18,6 +21,7 @@ export class LessonEditorService {
     private lessonRepo: Repository<Lesson>,
     private lessonDataService: LessonDataService,
     private contentValidationService: ContentValidationService,
+    private weaviateService: WeaviateService,
   ) {}
 
   // ========== Processed Content Outputs ==========
@@ -46,8 +50,42 @@ export class LessonEditorService {
   async createProcessedOutput(
     data: Partial<ProcessedContentOutput>,
   ): Promise<ProcessedContentOutput> {
+    this.logger.log('Creating processed content output');
     const output = this.processedOutputRepo.create(data);
-    return this.processedOutputRepo.save(output);
+    const savedOutput = await this.processedOutputRepo.save(output);
+    
+    // Auto-index in Weaviate for unified search
+    try {
+      this.logger.log(`Indexing processed content in Weaviate: ${savedOutput.id}`);
+      
+      // Get tenant from lesson
+      const lesson = await this.lessonRepo.findOne({ where: { id: data.lessonId } });
+      const tenantId = lesson?.tenantId || '00000000-0000-0000-0000-000000000001';
+      
+      const weaviateId = await this.weaviateService.indexContent({
+        contentSourceId: savedOutput.id,
+        tenantId: tenantId,
+        summary: savedOutput.description || savedOutput.title || 'Processed content',
+        fullText: savedOutput.transcript || '',
+        topics: [], // Could extract from title/description
+        keywords: savedOutput.title?.split(' ').filter(w => w.length > 3) || [],
+        type: savedOutput.outputType || 'youtube_video',
+        status: 'approved', // Processed content is auto-approved
+        title: savedOutput.title || 'Untitled',
+        sourceUrl: savedOutput.videoId ? `https://www.youtube.com/watch?v=${savedOutput.videoId}` : '',
+        contentCategory: 'processed_content',
+        videoId: savedOutput.videoId ?? undefined,
+        channel: savedOutput.channel ?? undefined,
+        transcript: savedOutput.transcript ?? undefined,
+      });
+      
+      this.logger.log(`✅ Processed content indexed in Weaviate with ID: ${weaviateId}`);
+    } catch (error) {
+      this.logger.error(`Failed to index processed content in Weaviate: ${error.message}`);
+      // Don't fail the whole operation if Weaviate indexing fails
+    }
+    
+    return savedOutput;
   }
 
   async updateProcessedOutput(
@@ -63,6 +101,54 @@ export class LessonEditorService {
     if (result.affected === 0) {
       throw new NotFoundException(`Processed output ${id} not found`);
     }
+    // TODO: Also delete from Weaviate if indexed
+  }
+
+  /**
+   * Re-index all existing processed content in Weaviate
+   * Used for migration/sync after adding indexing feature
+   */
+  async reindexAllProcessedContent(): Promise<{ indexed: number; failed: number }> {
+    this.logger.log('🔄 Re-indexing all processed content in Weaviate...');
+    
+    const allOutputs = await this.processedOutputRepo.find({
+      relations: ['lesson']
+    });
+    
+    let indexed = 0;
+    let failed = 0;
+    
+    for (const output of allOutputs) {
+      try {
+        const tenantId = output.lesson?.tenantId || '00000000-0000-0000-0000-000000000001';
+        
+        await this.weaviateService.indexContent({
+          contentSourceId: output.id,
+          tenantId: tenantId,
+          summary: output.description || output.title || 'Processed content',
+          fullText: output.transcript || '',
+          topics: [],
+          keywords: output.title?.split(' ').filter(w => w.length > 3) || [],
+          type: output.outputType || 'youtube_video',
+          status: 'approved',
+          title: output.title || 'Untitled',
+          sourceUrl: output.videoId ? `https://www.youtube.com/watch?v=${output.videoId}` : '',
+          contentCategory: 'processed_content',
+          videoId: output.videoId ?? undefined,
+          channel: output.channel ?? undefined,
+          transcript: output.transcript ?? undefined,
+        });
+        
+        indexed++;
+        this.logger.log(`✅ Indexed: ${output.title}`);
+      } catch (error) {
+        failed++;
+        this.logger.error(`❌ Failed to index ${output.title}: ${error.message}`);
+      }
+    }
+    
+    this.logger.log(`🎉 Re-indexing complete: ${indexed} indexed, ${failed} failed`);
+    return { indexed, failed };
   }
 
   // ========== Script Blocks ==========

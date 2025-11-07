@@ -175,6 +175,17 @@ export class LessonEditorController {
     return this.lessonEditorService.deleteProcessedOutput(id);
   }
 
+  @Post('reindex-processed-content')
+  @HttpCode(HttpStatus.OK)
+  async reindexProcessedContent(): Promise<{ message: string; indexed: number; failed: number }> {
+    console.log('[LessonEditorController] 🔄 Re-indexing all processed content...');
+    const result = await this.lessonEditorService.reindexAllProcessedContent();
+    return {
+      message: 'Re-indexing complete',
+      ...result
+    };
+  }
+
   // ========== Script Blocks ==========
 
   @Get('lessons/:lessonId/script/:substageId')
