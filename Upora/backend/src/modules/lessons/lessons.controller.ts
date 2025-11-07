@@ -50,6 +50,12 @@ export class LessonsController {
     @Headers('x-user-id') userId: string,
     @Headers('x-tenant-id') tenantId?: string,
   ) {
+    console.log('🔥🔥🔥 BACKEND LESSONS API VERSION 0.0.1 🔥🔥🔥');
+    console.log('[LessonsController] PATCH /:id - Version 0.0.1');
+    console.log('[LessonsController] Updating lesson:', id);
+    console.log('[LessonsController] Payload keys:', Object.keys(updateLessonDto));
+    console.log('[LessonsController] Has data field:', !!updateLessonDto.data);
+    
     return this.lessonsService.update(id, updateLessonDto, userId, tenantId);
   }
 

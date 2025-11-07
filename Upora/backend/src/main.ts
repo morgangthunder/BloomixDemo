@@ -40,7 +40,16 @@ async function bootstrap() {
   const port = process.env.PORT || 3000;
   await app.listen(port);
   
-  console.log(`🚀 Upora Backend is running on: http://localhost:${port}/api`);
-  console.log(`📚 API Documentation will be available at: http://localhost:${port}/api-docs (coming soon)`);
+  // ========================================
+  // 🔥 BACKEND VERSION 0.0.2 🔥
+  // ========================================
+  console.log('');
+  console.log('═══════════════════════════════════════════════════════════');
+  console.log('🔥🔥🔥 BACKEND VERSION 0.0.2 STARTED 🔥🔥🔥');
+  console.log('🔧 Fixed UpdateLessonDto validation decorators');
+  console.log(`🚀 API running on: http://localhost:${port}/api`);
+  console.log(`📅 Timestamp: ${new Date().toISOString()}`);
+  console.log('═══════════════════════════════════════════════════════════');
+  console.log('');
 }
 bootstrap();

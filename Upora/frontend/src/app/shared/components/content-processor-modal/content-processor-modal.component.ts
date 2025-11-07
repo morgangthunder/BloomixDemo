@@ -3,8 +3,23 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../../environments/environment';
-import { YouTubeProcessorService, YouTubeVideoData, YouTubeProcessingResult } from '../../../core/services/youtube-processor.service';
 import { ProcessedContentService, ProcessedContentItem } from '../../../core/services/processed-content.service';
+
+// YouTube data interfaces (no longer using YouTubeProcessorService)
+export interface YouTubeVideoData {
+  videoId: string;
+  title: string;
+  description: string;
+  thumbnail: string;
+  duration: number;
+  channel: string;
+  channelId?: string;
+  publishedAt?: string;
+  viewCount?: number;
+  likeCount?: number;
+  transcript?: string;
+  captions?: any[];
+}
 
 interface InteractionType {
   id: string;
@@ -1239,7 +1254,6 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
 
   constructor(
     private http: HttpClient,
-    private youtubeProcessor: YouTubeProcessorService,
     private processedContentService: ProcessedContentService
   ) {}
 
@@ -1304,7 +1318,9 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
       return;
     }
 
-    if (!this.youtubeProcessor.isValidYouTubeUrl(url)) {
+    // Simple YouTube URL validation (no service needed)
+    const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+    if (!youtubeRegex.test(url)) {
       this.urlError = 'Please enter a valid YouTube URL';
     }
   }
@@ -1376,15 +1392,22 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
       const startTimeSec = this.parseTimeToSeconds(this.startTimeInput);
       const endTimeSec = this.parseTimeToSeconds(this.endTimeInput);
       
-      const result = await this.youtubeProcessor.processYouTubeUrl(this.youtubeUrl, startTimeSec, endTimeSec).toPromise();
+      // Call backend API instead of frontend service
+      const payload = {
+        url: this.youtubeUrl,
+        startTime: startTimeSec,
+        endTime: endTimeSec
+      };
+      
+      console.log('[ContentProcessor] 📤 Calling backend API to process YouTube URL');
+      const result = await this.http.post<any>(`${environment.apiUrl}/content-sources/process-youtube`, payload).toPromise();
       
       if (result?.success && result.data) {
         this.videoData = result.data;
         this.processingMessage = 'Validating content...';
         
-        // Validate for educational content
-        const validation = this.youtubeProcessor.validateForEducation(this.videoData);
-        this.validationScore = validation.score;
+        // Simple validation score (backend can do more sophisticated validation)
+        this.validationScore = result.validationScore || 75; // Default to 75 for educational content
 
         this.processingMessage = 'Creating processed content...';
         
@@ -1392,13 +1415,13 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
         this.processedContent = {
           id: `processed_${Date.now()}`,
           type: 'youtube_video',
-          title: this.videoData.title,
-          description: this.videoData.description,
-          thumbnail: this.videoData.thumbnail,
-          duration: this.videoData.duration,
-          channel: this.videoData.channel,
-          videoId: this.videoData.videoId,
-          transcript: this.videoData.transcript,
+          title: this.videoData!.title,
+          description: this.videoData!.description,
+          thumbnail: this.videoData!.thumbnail,
+          duration: this.videoData!.duration,
+          channel: this.videoData!.channel,
+          videoId: this.videoData!.videoId,
+          transcript: this.videoData!.transcript,
           startTime: this.startTime,
           endTime: this.endTime,
           autoplay: this.autoplay,
@@ -1411,7 +1434,7 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
         this.processingMessage = 'Processing complete!';
         
         // Check if OAuth was required - if so, don't move to Step 3 yet
-        const transcript = this.videoData.transcript;
+        const transcript = this.videoData!.transcript;
         if (transcript && transcript.includes('OAuth authentication required')) {
           console.log('[ContentProcessor] 🔄 OAuth required for transcript, staying at Step 2');
           this.processing = false;
@@ -1453,23 +1476,23 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
           // Save to backend API instead of localStorage
           const payload = {
             lessonId: this.lessonId,
-            outputName: this.videoData.title,
+            outputName: this.videoData!.title,
             outputType: 'youtube_video',
             outputData: {
-              videoId: this.videoData.videoId,
+              videoId: this.videoData!.videoId,
               url: this.youtubeUrl,
               startTime: this.startTime,
               endTime: this.endTime,
               autoplay: this.autoplay,
               showControls: this.showControls,
             },
-            videoId: this.videoData.videoId,
-            title: this.videoData.title,
-            description: this.videoData.description,
-            thumbnail: this.videoData.thumbnail,
-            channel: this.videoData.channel,
-            duration: this.videoData.duration?.toString(),
-            transcript: this.videoData.transcript,
+            videoId: this.videoData!.videoId,
+            title: this.videoData!.title,
+            description: this.videoData!.description,
+            thumbnail: this.videoData!.thumbnail,
+            channel: this.videoData!.channel,
+            duration: this.videoData!.duration?.toString(),
+            transcript: this.videoData!.transcript,
             startTime: this.startTime,
             endTime: this.endTime,
             validationScore: this.validationScore,

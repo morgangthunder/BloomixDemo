@@ -1903,9 +1903,9 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   ngOnInit() {
     // VERSION CHECK: This log should always appear when new code is loaded
-    console.log('🔥🔥🔥 LESSON EDITOR VERSION 0.0.3 - CODE UPDATED 🔥🔥🔥');
-    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 0.0.3');
-    console.log('[LessonEditor] 🔍 Data persistence implemented - Version 0.0.3');
+    console.log('🔥🔥🔥 LESSON EDITOR VERSION 0.0.5 - CODE UPDATED 🔥🔥🔥');
+    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 0.0.5');
+    console.log('[LessonEditor] 🔍 Debugging persistence issue - Version 0.0.5');
     
     // Add browser-level unsaved changes warning
     window.addEventListener('beforeunload', this.handleBeforeUnload);
@@ -2126,18 +2126,22 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   }
 
   loadStagesFromLesson() {
-    console.log('[LessonEditor] 🔄 Loading stages from lesson.data');
+    console.log('[LessonEditor] 🔄 Loading stages from lesson.data - VERSION 0.0.5');
+    console.log('[LessonEditor] 🔍 Full lesson object:', this.lesson);
+    console.log('[LessonEditor] 🔍 lesson.data:', this.lesson?.data);
     
     // Parse stages from lesson.data
     if (this.lesson?.data) {
       // Handle both old format (data.stages) and new format (data.structure.stages)
       const stagesData = (this.lesson.data as any).structure?.stages || (this.lesson.data as any).stages || [];
       
-      console.log('[LessonEditor] 📊 Found stages data:', stagesData);
+      console.log('[LessonEditor] 📊 Found stages data:', JSON.stringify(stagesData, null, 2));
+      console.log('[LessonEditor] 📊 Stages array length:', stagesData.length);
       
       if (stagesData && stagesData.length > 0) {
         this.stages = this.parseStagesFromJSON(stagesData);
         console.log('[LessonEditor] ✅ Loaded', this.stages.length, 'stages');
+        console.log('[LessonEditor] ✅ Parsed stages:', this.stages);
       } else {
         console.log('[LessonEditor] ⚠️ No stages found in lesson data');
         this.stages = [];
@@ -2286,11 +2290,17 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
         }
       };
       
-      console.log('[LessonEditor] 📤 Sending payload to API:', payload);
+      const url = `${environment.apiUrl}/lessons/${this.lesson.id}`;
+      console.log('[LessonEditor] 📤 Sending PATCH to:', url);
+      console.log('[LessonEditor] 📤 Headers:', {
+        'x-tenant-id': environment.tenantId,
+        'x-user-id': environment.defaultUserId
+      });
+      console.log('[LessonEditor] 📤 Payload:', payload);
       
       // Send PATCH request to update lesson
       const response = await this.http.patch(
-        `${environment.apiUrl}/lessons/${this.lesson.id}`,
+        url,
         payload,
         {
           headers: {
@@ -2309,9 +2319,13 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       this.showSnackbar('Lesson saved successfully');
       
     } catch (error: any) {
-      console.error('[LessonEditor] ❌ Save failed:', error);
+      console.error('[LessonEditor] ❌ Save failed - VERSION 0.0.5');
+      console.error('[LessonEditor] ❌ Error details:', error);
+      console.error('[LessonEditor] ❌ Error status:', error.status);
+      console.error('[LessonEditor] ❌ Error message:', error.message);
+      console.error('[LessonEditor] ❌ Error response:', error.error);
       this.saving = false;
-      this.showSnackbar(`Failed to save: ${error.message || 'Unknown error'}`);
+      this.showSnackbar(`Failed to save: ${error.status} ${error.error?.message || error.message || 'Unknown error'}`);
     }
   }
 

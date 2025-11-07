@@ -76,15 +76,35 @@ export class LessonsService {
     userId: string,
     tenantId?: string,
   ): Promise<Lesson> {
+    console.log('🔥🔥🔥 BACKEND LESSONS SERVICE VERSION 0.0.1 🔥🔥🔥');
+    console.log('[LessonsService] update() - Version 0.0.1');
+    console.log('[LessonsService] Updating lesson ID:', id);
+    console.log('[LessonsService] User ID:', userId);
+    console.log('[LessonsService] Update DTO:', JSON.stringify(updateLessonDto, null, 2));
+    
     const lesson = await this.findOne(id, tenantId);
+    
+    console.log('[LessonsService] Found lesson:', lesson.title);
+    console.log('[LessonsService] Lesson createdBy:', lesson.createdBy);
     
     // Only creator can update
     if (lesson.createdBy !== userId) {
+      console.log('[LessonsService] ❌ Permission denied: User', userId, 'trying to update lesson by', lesson.createdBy);
       throw new ForbiddenException('You can only update your own lessons');
     }
     
+    console.log('[LessonsService] ✅ Permission check passed');
+    console.log('[LessonsService] Assigning updates...');
+    
     Object.assign(lesson, updateLessonDto);
-    return await this.lessonsRepository.save(lesson);
+    
+    console.log('[LessonsService] Saving to database...');
+    const savedLesson = await this.lessonsRepository.save(lesson);
+    
+    console.log('[LessonsService] ✅ Lesson saved successfully');
+    console.log('[LessonsService] Updated data:', JSON.stringify(savedLesson.data).substring(0, 200) + '...');
+    
+    return savedLesson;
   }
 
   async remove(id: string, userId: string, tenantId?: string): Promise<void> {
