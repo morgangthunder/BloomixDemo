@@ -196,10 +196,27 @@ import { ContentSource, SearchResult } from '../../core/models/content-source.mo
     </div>
   `,
   styles: [`
+    :host {
+      display: block;
+      position: fixed;
+      top: 64px; /* Start below main nav on mobile */
+      left: 0;
+      right: 0;
+      bottom: 0;
+      overflow-y: auto;
+      z-index: 10;
+    }
+    @media (min-width: 768px) {
+      :host {
+        top: 80px; /* Start below main nav on desktop */
+      }
+    }
+    
     .content-library {
       padding: 20px;
       max-width: 1400px;
       margin: 0 auto;
+      min-height: 100%;
     }
     .header {
       margin-bottom: 30px;
@@ -557,15 +574,19 @@ export class ContentLibraryComponent implements OnInit {
   ) {}
 
   async ngOnInit() {
+    console.log('[ContentLibrary] 🚀 Component initialized - VERSION 0.0.1');
     await this.loadContent();
     await this.loadPendingCount();
   }
 
   async loadContent() {
+    console.log('[ContentLibrary] 🔄 Loading content sources...');
     this.loading = true;
     try {
       await this.contentSourceService.loadContentSources(this.filterStatus);
       this.contentSourceService.contentSources$.subscribe(sources => {
+        console.log('[ContentLibrary] 📊 Received sources:', sources);
+        console.log('[ContentLibrary] 📊 Count:', sources.length);
         this.contentSources = sources;
       });
     } catch (error) {
