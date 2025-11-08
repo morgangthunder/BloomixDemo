@@ -35,19 +35,16 @@ interface InteractionType {
   imports: [CommonModule, FormsModule],
   encapsulation: ViewEncapsulation.None,
   template: `
-    <div *ngIf="isOpen" style="position: fixed; inset: 0; background: red; z-index: 999998; display: block !important; width: 100vw; height: 100vh;"></div>
-    <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: lime; color: black; padding: 20px; z-index: 9999999; font-size: 24px; font-weight: bold;" *ngIf="isOpen">
-      DEBUG: MODAL IS OPEN - isOpen={{isOpen}} - RED SHOULD BE BEHIND THIS
-    </div>
-    <div class="modal-overlay debug-test-overlay" *ngIf="isOpen" (click)="close()" 
-         [style.position]="'fixed'" 
-         [style.top]="'0'" 
-         [style.left]="'0'"
-         [style.right]="'0'"
-         [style.bottom]="'0'"
-         [style.z-index]="'999999'"
-         [style.background]="'rgba(255,0,0,0.8)'">
-      <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-overlay" *ngIf="isOpen" (click)="close()">
+      <div class="modal-content" (click)="$event.stopPropagation()"
+           [style.position]="'absolute'"
+           [style.top]="'0'"
+           [style.left]="'0'"
+           [style.width]="'100%'"
+           [style.height]="'100%'"
+           [style.overflow]="'hidden'"
+           [style.display]="'flex'"
+           [style.flex-direction]="'column'">
         <div class="modal-header">
           <h2>🔧 Process Content</h2>
           <button (click)="close(); $event.stopPropagation()" class="close-btn">✕</button>
@@ -398,29 +395,24 @@ interface InteractionType {
   `,
   styles: [`
     .modal-overlay {
-      position: fixed !important;
-      inset: 0 !important;
-      background: rgba(255,0,0,0.5) !important; /* RED for debugging - should cover everything */
-      display: flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-      z-index: 999999 !important;
-      padding: 20px !important;
-      overflow: hidden !important;
-      width: 100vw !important;
-      height: 100vh !important;
-      min-height: 100vh !important;
-      max-height: 100vh !important;
-      margin: 0 !important;
-      transform: none !important;
-      will-change: auto !important;
-      box-sizing: border-box !important;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 99999;
+      padding: 20px;
+      overflow: hidden;
     }
 
     @media (max-width: 768px) {
       .modal-overlay {
-        padding: 0 !important;
-        align-items: flex-start !important;
+        padding: 0;
+        align-items: stretch;
       }
     }
 
@@ -430,9 +422,6 @@ interface InteractionType {
       width: 100%;
       max-width: 800px;
       max-height: 90vh;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
       box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
     }
 
@@ -440,9 +429,7 @@ interface InteractionType {
       .modal-content {
         border-radius: 0;
         max-width: 100%;
-        min-height: 100vh;
-        max-height: 100vh;
-        height: 100vh;
+        /* Inline styles will handle positioning on mobile */
       }
     }
     .modal-header {
