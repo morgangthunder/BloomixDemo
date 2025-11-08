@@ -61,7 +61,6 @@ import { ApprovalQueueModalComponent } from '../../shared/components/approval-qu
           </div>
         </div>
       </div>
-    </div>
 
       <!-- Search Bar -->
       <div class="search-section">
@@ -259,7 +258,7 @@ import { ApprovalQueueModalComponent } from '../../shared/components/approval-qu
               <div class="viewer-value viewer-text">{{viewingContent.fullText}}</div>
             </div>
 
-            <div class="viewer-section" *ngIf="viewingContent.metadata?.topics && viewingContent.metadata.topics.length > 0">
+            <div class="viewer-section" *ngIf="viewingContent.metadata && viewingContent.metadata.topics && viewingContent.metadata.topics.length > 0">
               <label>Topics</label>
               <div class="viewer-value">
                 <div class="topics">
@@ -268,7 +267,7 @@ import { ApprovalQueueModalComponent } from '../../shared/components/approval-qu
               </div>
             </div>
 
-            <div class="viewer-section" *ngIf="viewingContent.metadata?.keywords && viewingContent.metadata.keywords.length > 0">
+            <div class="viewer-section" *ngIf="viewingContent.metadata && viewingContent.metadata.keywords && viewingContent.metadata.keywords.length > 0">
               <label>Keywords</label>
               <div class="viewer-value">
                 <div class="topics">

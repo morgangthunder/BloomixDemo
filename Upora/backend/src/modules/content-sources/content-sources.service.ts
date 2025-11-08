@@ -50,17 +50,14 @@ export class ContentSourcesService {
     const sources = await this.contentSourcesRepository.find({
       where,
       order: { createdAt: 'DESC' },
-      relations: ['creator', 'approver', 'lessonUsages', 'lessonUsages.lesson'],
+      relations: ['creator', 'approver'], // lessonUsages removed until junction table is created
     });
 
-    // Add lesson count metadata
+    // TODO: Add lesson count metadata once junction table is created
     return sources.map(source => ({
       ...source,
-      lessonCount: source.lessonUsages?.length || 0,
-      lessons: source.lessonUsages?.map(lu => ({
-        id: lu.lesson.id,
-        title: lu.lesson.title,
-      })) || [],
+      lessonCount: 0, // Placeholder until junction table exists
+      lessons: [], // Placeholder until junction table exists
     })) as any;
   }
 
