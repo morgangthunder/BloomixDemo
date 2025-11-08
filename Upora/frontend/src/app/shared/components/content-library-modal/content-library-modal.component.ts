@@ -178,32 +178,42 @@ interface SearchResult {
   styles: [`
     .modal-overlay {
       position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.8);
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.85);
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 1000;
-      padding: 1rem;
+      z-index: 2000;
+      padding: 20px;
+      overflow: hidden;
+    }
+
+    @media (max-width: 768px) {
+      .modal-overlay {
+        padding: 0;
+      }
     }
 
     .modal-content {
       background: #1a1a1a;
       border-radius: 12px;
-      width: calc(100% - 24px);
+      width: 100%;
       max-width: 900px;
-      max-height: calc(100vh - 120px);
+      max-height: 100vh;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-      margin: auto;
     }
 
     @media (max-width: 768px) {
       .modal-content {
-        width: calc(100% - 16px);
-        max-height: calc(100vh - 84px);
-        border-radius: 8px;
+        border-radius: 0;
+        max-width: 100%;
+        height: 100vh;
       }
     }
 

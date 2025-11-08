@@ -64,41 +64,42 @@ import { FormsModule } from '@angular/forms';
   styles: [`
     .modal-overlay {
       position: fixed;
-      top: 80px;
+      top: 0;
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0,0,0,0.8);
+      background: rgba(0,0,0,0.85);
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       justify-content: center;
-      z-index: 1000;
+      z-index: 2000;
       padding: 20px;
-      overflow-y: auto;
+      overflow: hidden;
     }
 
     @media (max-width: 768px) {
       .modal-overlay {
-        top: 64px;
-        padding: 12px;
+        padding: 0;
       }
     }
 
     .modal-content {
       background: #1f2937;
       border-radius: 16px;
-      max-width: 600px;
       width: 100%;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      max-width: 600px;
+      max-height: 100vh;
       display: flex;
       flex-direction: column;
-      max-height: calc(100vh - 120px);
-      margin: auto;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
     }
 
     @media (max-width: 768px) {
       .modal-content {
-        max-height: calc(100vh - 84px);
+        border-radius: 0;
+        max-width: 100%;
+        height: 100vh;
       }
     }
 

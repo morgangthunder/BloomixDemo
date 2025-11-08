@@ -387,29 +387,43 @@ interface InteractionType {
   styles: [`
     .modal-overlay {
       position: fixed;
-      top: 80px;
+      top: 0;
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0,0,0,0.8);
+      background: rgba(0,0,0,0.85);
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       justify-content: center;
-      z-index: 9999999 !important;
+      z-index: 2000;
       padding: 20px;
-      box-sizing: border-box;
-      overflow-y: auto;
+      overflow: hidden;
     }
+
+    @media (max-width: 768px) {
+      .modal-overlay {
+        padding: 0;
+      }
+    }
+
     .modal-content {
       background: #1f2937;
       border-radius: 16px;
+      width: 100%;
       max-width: 800px;
-      width: 90%;
-      max-height: calc(100vh - 120px);
-      overflow: hidden;
+      max-height: 100vh;
       display: flex;
       flex-direction: column;
-      margin-top: 20px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+
+    @media (max-width: 768px) {
+      .modal-content {
+        border-radius: 0;
+        max-width: 100%;
+        height: 100vh;
+      }
     }
     .modal-header {
       display: flex;

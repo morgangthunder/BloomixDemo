@@ -738,20 +738,39 @@ import { environment } from '../../../environments/environment';
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0,0,0,0.8);
+      background: rgba(0,0,0,0.85);
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 1000;
+      z-index: 2000;
+      padding: 20px;
+      overflow: hidden;
     }
+
+    @media (max-width: 768px) {
+      .modal-overlay {
+        padding: 0;
+      }
+    }
+
     .modal-content {
       background: #1f2937;
       border-radius: 16px;
-      padding: 32px;
-      max-width: 600px;
-      width: 90%;
-      max-height: 90vh;
-      overflow-y: auto;
+      width: 100%;
+      max-width: 700px;
+      max-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+
+    @media (max-width: 768px) {
+      .modal-content {
+        border-radius: 0;
+        max-width: 100%;
+        height: 100vh;
+      }
     }
     .modal-content h2 {
       color: white;
@@ -927,6 +946,12 @@ import { environment } from '../../../environments/environment';
     /* Viewer Modals */
     .viewer-modal-brief {
       max-width: 500px;
+    }
+
+    @media (max-width: 768px) {
+      .viewer-modal-brief {
+        max-width: 100%;
+      }
     }
 
     .viewer-section {
@@ -1237,13 +1262,6 @@ export class ContentLibraryComponent implements OnInit {
     if (!source) return;
     console.log('[ContentLibrary] Viewing content:', source);
     this.viewingContent = source;
-    // Scroll modal overlay to top when opening
-    setTimeout(() => {
-      const overlay = document.querySelector('.modal-overlay');
-      if (overlay) {
-        overlay.scrollTop = 0;
-      }
-    }, 0);
   }
 
   closeContentViewer() {
@@ -1301,13 +1319,6 @@ export class ContentLibraryComponent implements OnInit {
   viewProcessedContent(item: ProcessedContentItem) {
     console.log('[ContentLibrary] 🔍 Viewing processed content:', item);
     this.viewingProcessedContent = item;
-    // Scroll modal overlay to top when opening
-    setTimeout(() => {
-      const overlay = document.querySelector('.modal-overlay');
-      if (overlay) {
-        overlay.scrollTop = 0;
-      }
-    }, 0);
   }
 
   closeProcessedContentViewer() {

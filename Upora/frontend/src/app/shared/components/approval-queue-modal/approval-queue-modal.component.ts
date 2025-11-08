@@ -202,28 +202,44 @@ interface ApprovalItem {
   `,
   styles: [`
     .modal-overlay {
-      position: fixed !important;
-      top: 0 !important;
-      left: 0 !important;
-      right: 0 !important;
-      bottom: 0 !important;
-      background: rgba(0,0,0,0.8) !important;
-      display: flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-      z-index: 2147483647 !important;
-      padding: 20px !important;
-      box-sizing: border-box !important;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+      padding: 20px;
+      overflow: hidden;
     }
+
+    @media (max-width: 768px) {
+      .modal-overlay {
+        padding: 0;
+      }
+    }
+
     .modal-content {
       background: #1f2937;
       border-radius: 16px;
+      width: 100%;
       max-width: 1000px;
-      width: 95%;
-      max-height: 90vh;
-      overflow: hidden;
+      max-height: 100vh;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+
+    @media (max-width: 768px) {
+      .modal-content {
+        border-radius: 0;
+        max-width: 100%;
+        height: 100vh;
+      }
     }
     .modal-header {
       display: flex;
