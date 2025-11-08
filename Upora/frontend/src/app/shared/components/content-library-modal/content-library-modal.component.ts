@@ -182,19 +182,18 @@ interface SearchResult {
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0, 0, 0, 0.85);
+      background: rgba(0, 0, 0, 0.95);
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 9999;
+      z-index: 99999;
       padding: 20px;
       overflow: hidden;
     }
 
     @media (max-width: 768px) {
       .modal-overlay {
-        padding: 0;
-        align-items: flex-start;
+        padding: 8px;
       }
     }
 
@@ -212,11 +211,10 @@ interface SearchResult {
 
     @media (max-width: 768px) {
       .modal-content {
-        border-radius: 0;
+        border-radius: 12px;
         max-width: 100%;
-        min-height: 100vh;
-        max-height: 100vh;
-        height: 100vh;
+        max-height: calc(100vh - 16px);
+        height: calc(100vh - 16px);
       }
     }
 
