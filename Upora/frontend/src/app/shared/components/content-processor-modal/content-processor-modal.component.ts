@@ -386,24 +386,26 @@ interface InteractionType {
   `,
   styles: [`
     .modal-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
       background: rgba(0,0,0,0.85);
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 9999;
+      z-index: 99999 !important;
       padding: 20px;
       overflow: hidden;
+      width: 100vw;
+      height: 100vh;
     }
 
     @media (max-width: 768px) {
       .modal-overlay {
-        padding: 0;
-        align-items: flex-start;
+        padding: 0 !important;
+        align-items: flex-start !important;
       }
     }
 
@@ -1309,6 +1311,21 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
     console.log('[ContentProcessor] 🔍 ngOnChanges detected:', changes);
     console.log('[ContentProcessor] 🔍 Current videoId:', this.videoId);
     console.log('[ContentProcessor] 🔍 Current isOpen:', this.isOpen);
+    
+    // Lock/unlock body scroll when modal opens/closes
+    if (changes['isOpen']) {
+      if (this.isOpen) {
+        document.body.style.overflow = 'hidden';
+        document.body.style.position = 'fixed';
+        document.body.style.width = '100%';
+        document.body.style.top = '0';
+      } else {
+        document.body.style.overflow = '';
+        document.body.style.position = '';
+        document.body.style.width = '';
+        document.body.style.top = '';
+      }
+    }
     
     // Check if modal is opened
     if (changes['isOpen'] && this.isOpen) {
