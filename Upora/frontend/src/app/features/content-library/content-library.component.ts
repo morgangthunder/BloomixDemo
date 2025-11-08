@@ -742,7 +742,7 @@ import { environment } from '../../../environments/environment';
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 2000;
+      z-index: 9999;
       padding: 20px;
       overflow: hidden;
     }
@@ -750,6 +750,7 @@ import { environment } from '../../../environments/environment';
     @media (max-width: 768px) {
       .modal-overlay {
         padding: 0;
+        align-items: stretch;
       }
     }
 
@@ -758,7 +759,7 @@ import { environment } from '../../../environments/environment';
       border-radius: 16px;
       width: 100%;
       max-width: 700px;
-      max-height: 100vh;
+      max-height: 90vh;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -769,7 +770,8 @@ import { environment } from '../../../environments/environment';
       .modal-content {
         border-radius: 0;
         max-width: 100%;
-        height: 100vh;
+        max-height: 100%;
+        height: 100%;
       }
     }
 
@@ -810,20 +812,21 @@ import { environment } from '../../../environments/environment';
     }
 
     .modal-footer {
-      padding: 20px 24px;
-      padding-bottom: max(20px, env(safe-area-inset-bottom));
+      padding: 16px 20px;
+      padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
       border-top: 1px solid rgba(255,255,255,0.1);
       display: flex;
       justify-content: flex-end;
       gap: 12px;
       flex-shrink: 0;
       background: #1f2937;
+      min-height: 64px;
     }
 
     @media (max-width: 768px) {
       .modal-footer {
-        padding: 16px;
-        padding-bottom: max(16px, env(safe-area-inset-bottom));
+        padding: 12px 16px;
+        padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
       }
     }
     .form-group {
@@ -885,37 +888,36 @@ import { environment } from '../../../environments/environment';
       background: rgba(255,255,255,0.15);
     }
 
-    /* Add Menu Dropdown */
+    /* Add Menu Modal */
     .add-menu-overlay {
       position: fixed;
       top: 0;
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0,0,0,0.5);
-      z-index: 1500;
+      background: rgba(0,0,0,0.85);
+      z-index: 9999;
       display: flex;
-      align-items: flex-start;
-      justify-content: flex-end;
-      padding: 90px 20px 20px 20px;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
       overflow: hidden;
     }
 
     @media (max-width: 768px) {
       .add-menu-overlay {
-        padding: 74px 12px 12px 12px;
-        align-items: center;
-        justify-content: center;
+        padding: 0;
+        align-items: stretch;
       }
     }
 
     .add-menu {
       background: #1f2937;
-      border-radius: 12px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-      min-width: 320px;
-      max-width: 400px;
-      max-height: calc(100vh - 110px);
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      width: 100%;
+      max-width: 450px;
+      max-height: 90vh;
       border: 1px solid rgba(255,255,255,0.1);
       display: flex;
       flex-direction: column;
@@ -924,8 +926,10 @@ import { environment } from '../../../environments/environment';
 
     @media (max-width: 768px) {
       .add-menu {
-        max-width: calc(100% - 24px);
-        max-height: calc(100vh - 86px);
+        border-radius: 0;
+        max-width: 100%;
+        max-height: 100%;
+        height: 100%;
       }
     }
 

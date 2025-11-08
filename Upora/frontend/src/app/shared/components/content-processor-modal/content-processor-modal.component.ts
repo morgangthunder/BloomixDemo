@@ -395,7 +395,7 @@ interface InteractionType {
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 2000;
+      z-index: 9999;
       padding: 20px;
       overflow: hidden;
     }
@@ -403,6 +403,7 @@ interface InteractionType {
     @media (max-width: 768px) {
       .modal-overlay {
         padding: 0;
+        align-items: stretch;
       }
     }
 
@@ -411,7 +412,7 @@ interface InteractionType {
       border-radius: 16px;
       width: 100%;
       max-width: 800px;
-      max-height: 100vh;
+      max-height: 90vh;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -422,7 +423,8 @@ interface InteractionType {
       .modal-content {
         border-radius: 0;
         max-width: 100%;
-        height: 100vh;
+        max-height: 100%;
+        height: 100%;
       }
     }
     .modal-header {
@@ -1123,40 +1125,37 @@ interface InteractionType {
     }
     .modal-footer {
       display: flex;
-      flex-direction: column;
-      gap: 16px;
-      padding: 20px 24px;
-      padding-bottom: max(20px, env(safe-area-inset-bottom));
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
       border-top: 1px solid rgba(255,255,255,0.1);
       flex-shrink: 0;
       background: #1f2937;
-    }
-
-    @media (min-width: 769px) {
-      .modal-footer {
-        flex-direction: row;
-        justify-content: space-between;
-        align-items: center;
-        padding-bottom: 20px;
-      }
+      min-height: 64px;
     }
 
     @media (max-width: 768px) {
       .modal-footer {
-        padding: 16px;
-        padding-bottom: max(16px, env(safe-area-inset-bottom));
+        flex-wrap: wrap;
+        gap: 12px;
+        padding: 12px 16px;
+        padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
       }
     }
 
     .step-indicator {
       display: flex;
       gap: 8px;
-      justify-content: center;
+      order: 1;
     }
 
-    @media (min-width: 769px) {
+    @media (max-width: 768px) {
       .step-indicator {
-        justify-content: flex-start;
+        width: 100%;
+        justify-content: center;
+        order: 0;
       }
     }
     .step-dot {
@@ -1183,15 +1182,13 @@ interface InteractionType {
     .actions {
       display: flex;
       gap: 12px;
-      width: 100%;
+      order: 2;
     }
 
     @media (max-width: 768px) {
       .actions {
-        flex-direction: column-reverse;
-      }
-      .actions button {
         width: 100%;
+        order: 1;
       }
     }
     .btn-primary, .btn-secondary, .btn-cancel {

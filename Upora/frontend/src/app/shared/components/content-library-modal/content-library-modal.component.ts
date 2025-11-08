@@ -186,7 +186,7 @@ interface SearchResult {
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 2000;
+      z-index: 9999;
       padding: 20px;
       overflow: hidden;
     }
@@ -194,6 +194,7 @@ interface SearchResult {
     @media (max-width: 768px) {
       .modal-overlay {
         padding: 0;
+        align-items: stretch;
       }
     }
 
@@ -202,7 +203,7 @@ interface SearchResult {
       border-radius: 12px;
       width: 100%;
       max-width: 900px;
-      max-height: 100vh;
+      max-height: 90vh;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -213,7 +214,8 @@ interface SearchResult {
       .modal-content {
         border-radius: 0;
         max-width: 100%;
-        height: 100vh;
+        max-height: 100%;
+        height: 100%;
       }
     }
 
@@ -593,19 +595,20 @@ interface SearchResult {
     }
 
     .modal-footer {
-      padding: 20px 24px;
-      padding-bottom: max(20px, env(safe-area-inset-bottom));
+      padding: 16px 20px;
+      padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
       border-top: 1px solid #333;
       display: flex;
       justify-content: flex-end;
       flex-shrink: 0;
       background: #1a1a1a;
+      min-height: 64px;
     }
 
     @media (max-width: 768px) {
       .modal-footer {
-        padding: 16px;
-        padding-bottom: max(16px, env(safe-area-inset-bottom));
+        padding: 12px 16px;
+        padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
       }
     }
 

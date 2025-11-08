@@ -211,7 +211,7 @@ interface ApprovalItem {
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 2000;
+      z-index: 9999;
       padding: 20px;
       overflow: hidden;
     }
@@ -219,6 +219,7 @@ interface ApprovalItem {
     @media (max-width: 768px) {
       .modal-overlay {
         padding: 0;
+        align-items: stretch;
       }
     }
 
@@ -227,7 +228,7 @@ interface ApprovalItem {
       border-radius: 16px;
       width: 100%;
       max-width: 1000px;
-      max-height: 100vh;
+      max-height: 90vh;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -238,7 +239,8 @@ interface ApprovalItem {
       .modal-content {
         border-radius: 0;
         max-width: 100%;
-        height: 100vh;
+        max-height: 100%;
+        height: 100%;
       }
     }
     .modal-header {
@@ -593,18 +595,19 @@ interface ApprovalItem {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 20px 24px;
-      padding-bottom: max(20px, env(safe-area-inset-bottom));
+      padding: 16px 20px;
+      padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
       border-top: 1px solid rgba(255,255,255,0.1);
       flex-shrink: 0;
       background: #1f2937;
+      min-height: 64px;
     }
 
     @media (max-width: 768px) {
       .modal-footer {
-        padding: 16px;
-        padding-bottom: max(16px, env(safe-area-inset-bottom));
-        flex-direction: column;
+        flex-wrap: wrap;
+        padding: 12px 16px;
+        padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
         gap: 12px;
       }
     }
