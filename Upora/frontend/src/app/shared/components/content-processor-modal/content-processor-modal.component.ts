@@ -36,7 +36,7 @@ interface InteractionType {
   encapsulation: ViewEncapsulation.None,
   template: `
     <div class="modal-overlay" *ngIf="isOpen" (click)="close()">
-      <div class="modal-content mobile-full-screen" (click)="$event.stopPropagation()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <h2>🔧 Process Content</h2>
           <button (click)="close(); $event.stopPropagation()" class="close-btn">✕</button>
@@ -404,8 +404,6 @@ interface InteractionType {
     @media (max-width: 768px) {
       .modal-overlay {
         padding: 0;
-        /* Don't use flex positioning on mobile */
-        display: block !important;
       }
     }
 
@@ -422,18 +420,11 @@ interface InteractionType {
     }
 
     @media (max-width: 768px) {
-      .mobile-full-screen {
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        right: 0 !important;
-        bottom: 0 !important;
-        width: 100vw !important;
-        height: 100vh !important;
-        max-width: 100vw !important;
-        max-height: 100vh !important;
-        border-radius: 0 !important;
-        margin: 0 !important;
+      .modal-content {
+        border-radius: 0;
+        max-width: 100%;
+        max-height: 100vh;
+        height: 100vh;
       }
     }
     .modal-header {
@@ -1322,45 +1313,8 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
     if (changes['isOpen']) {
       if (this.isOpen) {
         document.body.style.overflow = 'hidden';
-        document.body.style.position = 'fixed';
-        document.body.style.width = '100%';
-        document.body.style.top = '0';
-        
-        // NUCLEAR: Force modal positioning to cover header
-        // The parent component has :host {position: fixed; top: 64px/80px}
-        // So we need to offset the modal to cover the header
-        setTimeout(() => {
-          const isMobile = window.innerWidth <= 768;
-          const headerHeight = isMobile ? 64 : 80;
-          
-          const modalOverlay = document.querySelector('.modal-overlay') as HTMLElement;
-          if (modalOverlay) {
-            console.log('[ContentProcessor] 🔧 FORCING overlay to cover header');
-            // Move overlay up by header height to cover it
-            modalOverlay.style.top = `-${headerHeight}px`;
-            modalOverlay.style.height = `calc(100vh + ${headerHeight}px)`;
-          }
-          
-          if (isMobile) {
-            const modalContent = document.querySelector('.mobile-full-screen') as HTMLElement;
-            if (modalContent) {
-              console.log('[ContentProcessor] 🔧 FORCING modal content full screen');
-              modalContent.style.position = 'fixed';
-              modalContent.style.top = `-${headerHeight}px`;
-              modalContent.style.left = '0';
-              modalContent.style.right = '0';
-              modalContent.style.bottom = '0';
-              modalContent.style.width = '100vw';
-              modalContent.style.height = `calc(100vh + ${headerHeight}px)`;
-              modalContent.style.zIndex = '99999';
-            }
-          }
-        }, 50);
       } else {
         document.body.style.overflow = '';
-        document.body.style.position = '';
-        document.body.style.width = '';
-        document.body.style.top = '';
       }
     }
     

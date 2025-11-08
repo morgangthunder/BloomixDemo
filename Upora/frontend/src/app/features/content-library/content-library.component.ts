@@ -396,17 +396,12 @@ import { environment } from '../../../environments/environment';
   styles: [`
     :host {
       display: block;
-      position: fixed;
-      top: 64px; /* Start below main nav on mobile */
-      left: 0;
-      right: 0;
-      bottom: 0;
-      overflow-y: auto;
-      z-index: 10;
+      min-height: 100vh;
+      padding-top: 64px; /* Space for fixed header on mobile */
     }
     @media (min-width: 768px) {
       :host {
-        top: 80px; /* Start below main nav on desktop */
+        padding-top: 80px; /* Space for fixed header on desktop */
       }
     }
     
