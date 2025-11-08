@@ -65,22 +65,6 @@ import { environment } from '../../../environments/environment';
         </div>
       </div>
 
-      <!-- Tabs -->
-      <div class="tabs">
-        <button 
-          class="tab-btn"
-          [class.active]="activeTab === 'sources'"
-          (click)="activeTab = 'sources'">
-          📚 Content Sources ({{contentSources.length}})
-        </button>
-        <button 
-          class="tab-btn"
-          [class.active]="activeTab === 'processed'"
-          (click)="activeTab = 'processed'; loadProcessedContent()">
-          🔧 Processed Content ({{processedContentItems.length}})
-        </button>
-      </div>
-
       <!-- Search Bar -->
       <div class="search-section">
         <div class="search-bar">
@@ -119,39 +103,31 @@ import { environment } from '../../../environments/environment';
         </div>
       </div>
 
+      <!-- Tabs -->
+      <div class="tabs">
+        <button 
+          class="tab-btn"
+          [class.active]="activeTab === 'sources'"
+          (click)="activeTab = 'sources'">
+          📚 Content Sources ({{getFilteredContentSources().length}})
+        </button>
+        <button 
+          class="tab-btn"
+          [class.active]="activeTab === 'processed'"
+          (click)="activeTab = 'processed'; loadProcessedContent()">
+          🔧 Processed Content ({{getFilteredProcessedContent().length}})
+        </button>
+      </div>
+
       <!-- Loading State -->
       <div *ngIf="loading" class="loading">
         <div class="spinner"></div>
         <p>Loading content sources...</p>
       </div>
 
-      <!-- Search Results (if searching) -->
-      <div *ngIf="searchQuery && searchResults.length > 0" class="results-section">
-        <h3>Search Results ({{searchResults.length}})</h3>
-        <div class="content-grid">
-          <div *ngFor="let result of searchResults" class="content-card search-result">
-            <div class="content-type-badge">{{result.contentSource?.type || 'url'}}</div>
-            <h4>{{result.title}}</h4>
-            <p class="summary">{{result.summary}}</p>
-            <div class="metadata">
-              <span class="relevance">Match: {{(result.relevanceScore * 100).toFixed(0)}}%</span>
-              <div class="topics" *ngIf="result.topics && result.topics.length > 0">
-                <span *ngFor="let topic of result.topics" class="topic-tag">{{topic}}</span>
-              </div>
-            </div>
-            <div class="actions">
-              <button (click)="viewContent(result.contentSource)" class="btn-small">View</button>
-              <button (click)="linkToLesson(result.contentSourceId)" class="btn-small">Link to Lesson</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!-- Content Sources Tab -->
-      <div *ngIf="!searchQuery && !loading && activeTab === 'sources'" class="results-section">
-        <h3>Your Content Sources ({{contentSources.length}})</h3>
-        
-        <div *ngIf="contentSources.length === 0" class="empty-state">
+      <div *ngIf="!loading && activeTab === 'sources'" class="results-section">
+        <div *ngIf="getFilteredContentSources().length === 0" class="empty-state">
           <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
           </svg>
@@ -160,8 +136,8 @@ import { environment } from '../../../environments/environment';
           <button (click)="toggleAddMenu()" class="btn-primary">Add Your First Source</button>
         </div>
 
-        <div class="content-grid" *ngIf="contentSources.length > 0">
-          <div *ngFor="let source of contentSources" class="content-card" [class.pending]="source.status === 'pending'" [class.rejected]="source.status === 'rejected'">
+        <div class="content-grid" *ngIf="getFilteredContentSources().length > 0">
+          <div *ngFor="let source of getFilteredContentSources()" class="content-card" [class.pending]="source.status === 'pending'" [class.rejected]="source.status === 'rejected'">
             <div class="content-header">
               <span class="content-type-badge">{{source.type}}</span>
               <span class="status-badge" [class]="source.status">{{source.status}}</span>
@@ -209,20 +185,20 @@ import { environment } from '../../../environments/environment';
       </div>
 
       <!-- Processed Content Tab -->
-      <div *ngIf="!searchQuery && !loading && activeTab === 'processed'" class="results-section">
-        <h3>Processed Content ({{processedContentItems.length}})</h3>
-        
-        <div *ngIf="processedContentItems.length === 0" class="empty-state">
+      <div *ngIf="!loading && activeTab === 'processed'" class="results-section">
+        <div *ngIf="getFilteredProcessedContent().length === 0" class="empty-state">
           <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
           </svg>
-          <h3>No processed content yet</h3>
-          <p>Process some source content to see outputs here</p>
-          <button (click)="activeTab = 'sources'" class="btn-primary">Go to Content Sources</button>
+          <h3>No processed content found</h3>
+          <p *ngIf="searchQuery">Try a different search term</p>
+          <p *ngIf="!searchQuery">Process some source content to see outputs here</p>
+          <button *ngIf="!searchQuery" (click)="activeTab = 'sources'" class="btn-primary">Go to Content Sources</button>
+          <button *ngIf="searchQuery" (click)="clearSearch()" class="btn-primary">Clear Search</button>
         </div>
 
-        <div class="content-grid" *ngIf="processedContentItems.length > 0">
-          <div *ngFor="let item of processedContentItems" class="content-card">
+        <div class="content-grid" *ngIf="getFilteredProcessedContent().length > 0">
+          <div *ngFor="let item of getFilteredProcessedContent()" class="content-card">
             <div class="content-header">
               <span class="content-type-badge">{{item.type || 'processed'}}</span>
             </div>
@@ -1224,22 +1200,13 @@ export class ContentLibraryComponent implements OnInit, OnDestroy {
     }
   }
 
-  async onSearchChange(query: string) {
-    if (query.length < 2) {
-      this.searchResults = [];
-      return;
-    }
-
-    try {
-      this.searchResults = await this.contentSourceService.searchContent(query, 20);
-    } catch (error) {
-      console.error('Search failed:', error);
-    }
+  onSearchChange(query: string) {
+    // Filtering is now done by getFilteredContentSources() and getFilteredProcessedContent()
+    // No need for additional search API call
   }
 
   clearSearch() {
     this.searchQuery = '';
-    this.searchResults = [];
   }
 
   async applyFilters() {
@@ -1489,6 +1456,44 @@ export class ContentLibraryComponent implements OnInit, OnDestroy {
       return url.substring(0, 47) + '...';
     }
     return url;
+  }
+
+  // Filter methods for tabs
+  getFilteredContentSources(): ContentSource[] {
+    let filtered = this.contentSources;
+
+    // Apply search filter
+    if (this.searchQuery && this.searchQuery.trim().length >= 2) {
+      const query = this.searchQuery.toLowerCase();
+      filtered = filtered.filter(source => {
+        const titleMatch = source.title?.toLowerCase().includes(query);
+        const summaryMatch = source.summary?.toLowerCase().includes(query);
+        const topicMatch = source.metadata?.topics?.some((topic: string) => 
+          topic.toLowerCase().includes(query)
+        );
+        return titleMatch || summaryMatch || topicMatch;
+      });
+    }
+
+    return filtered;
+  }
+
+  getFilteredProcessedContent(): ProcessedContentItem[] {
+    let filtered = this.processedContentItems;
+
+    // Apply search filter
+    if (this.searchQuery && this.searchQuery.trim().length >= 2) {
+      const query = this.searchQuery.toLowerCase();
+      filtered = filtered.filter(item => {
+        const titleMatch = item.title?.toLowerCase().includes(query);
+        const descMatch = item.description?.toLowerCase().includes(query);
+        const typeMatch = item.type?.toLowerCase().includes(query);
+        const sourceMatch = item.contentSource?.title?.toLowerCase().includes(query);
+        return titleMatch || descMatch || typeMatch || sourceMatch;
+      });
+    }
+
+    return filtered;
   }
 }
 
