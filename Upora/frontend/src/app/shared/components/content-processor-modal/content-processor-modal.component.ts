@@ -35,8 +35,9 @@ interface InteractionType {
   imports: [CommonModule, FormsModule],
   encapsulation: ViewEncapsulation.None,
   template: `
+    <div *ngIf="isOpen" style="position: fixed; inset: 0; background: red; z-index: 999998; display: block !important; width: 100vw; height: 100vh;"></div>
     <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: lime; color: black; padding: 20px; z-index: 9999999; font-size: 24px; font-weight: bold;" *ngIf="isOpen">
-      DEBUG: MODAL IS OPEN - isOpen={{isOpen}}
+      DEBUG: MODAL IS OPEN - isOpen={{isOpen}} - RED SHOULD BE BEHIND THIS
     </div>
     <div class="modal-overlay debug-test-overlay" *ngIf="isOpen" (click)="close()" 
          [style.position]="'fixed'" 
