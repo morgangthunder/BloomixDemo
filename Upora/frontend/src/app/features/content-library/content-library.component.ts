@@ -750,7 +750,7 @@ import { environment } from '../../../environments/environment';
     @media (max-width: 768px) {
       .modal-overlay {
         padding: 0;
-        align-items: stretch;
+        align-items: flex-start;
       }
     }
 
@@ -770,8 +770,9 @@ import { environment } from '../../../environments/environment';
       .modal-content {
         border-radius: 0;
         max-width: 100%;
-        max-height: 100%;
-        height: 100%;
+        min-height: 100vh;
+        max-height: 100vh;
+        height: 100vh;
       }
     }
 
@@ -907,7 +908,7 @@ import { environment } from '../../../environments/environment';
     @media (max-width: 768px) {
       .add-menu-overlay {
         padding: 0;
-        align-items: stretch;
+        align-items: flex-start;
       }
     }
 
@@ -928,8 +929,9 @@ import { environment } from '../../../environments/environment';
       .add-menu {
         border-radius: 0;
         max-width: 100%;
-        max-height: 100%;
-        height: 100%;
+        min-height: 100vh;
+        max-height: 100vh;
+        height: 100vh;
       }
     }
 

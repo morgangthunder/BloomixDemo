@@ -403,7 +403,7 @@ interface InteractionType {
     @media (max-width: 768px) {
       .modal-overlay {
         padding: 0;
-        align-items: stretch;
+        align-items: flex-start;
       }
     }
 
@@ -423,8 +423,9 @@ interface InteractionType {
       .modal-content {
         border-radius: 0;
         max-width: 100%;
-        max-height: 100%;
-        height: 100%;
+        min-height: 100vh;
+        max-height: 100vh;
+        height: 100vh;
       }
     }
     .modal-header {
