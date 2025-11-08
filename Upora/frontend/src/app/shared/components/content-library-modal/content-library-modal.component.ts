@@ -640,12 +640,23 @@ export class ContentLibraryModalComponent implements OnInit, OnChanges {
   selectedContent: ContentSource | null = null;
 
   ngOnChanges(changes: SimpleChanges) {
+    // Lock/unlock body scroll and hide header when modal opens/closes
     if (changes['isOpen']) {
-      const header = document.querySelector('app-header');
-      if (header) {
-        (header as HTMLElement).style.display = this.isOpen ? 'none' : '';
+      if (this.isOpen) {
+        document.body.style.overflow = 'hidden';
+        // Hide header when modal is open
+        const header = document.querySelector('app-header');
+        if (header) {
+          (header as HTMLElement).style.display = 'none';
+        }
+      } else {
+        document.body.style.overflow = '';
+        // Show header when modal closes
+        const header = document.querySelector('app-header');
+        if (header) {
+          (header as HTMLElement).style.display = '';
+        }
       }
-      document.body.style.overflow = this.isOpen ? 'hidden' : '';
     }
   }
   showDetails = false;

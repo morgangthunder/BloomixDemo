@@ -2008,6 +2008,13 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 0.0.5');
     console.log('[LessonEditor] 🔍 Debugging persistence issue - Version 0.0.5');
     
+    // Reset body overflow when entering page (in case it was left locked)
+    document.body.style.overflow = '';
+    const header = document.querySelector('app-header');
+    if (header) {
+      (header as HTMLElement).style.display = '';
+    }
+    
     // Add browser-level unsaved changes warning
     window.addEventListener('beforeunload', this.handleBeforeUnload);
     
@@ -2075,22 +2082,22 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   viewProcessedContent(content: ProcessedContentItem) {
     this.selectedProcessedContent = content;
-    // Hide header when modal opens
+    // Lock body scroll and hide header when modal opens
+    document.body.style.overflow = 'hidden';
     const header = document.querySelector('app-header');
     if (header) {
       (header as HTMLElement).style.display = 'none';
     }
-    document.body.style.overflow = 'hidden';
   }
 
   closeProcessedContentViewer() {
     this.selectedProcessedContent = null;
-    // Show header when modal closes
+    // Unlock body scroll and show header when modal closes
+    document.body.style.overflow = '';
     const header = document.querySelector('app-header');
     if (header) {
       (header as HTMLElement).style.display = '';
     }
-    document.body.style.overflow = '';
   }
 
   deleteProcessedContent(content: any) {
@@ -2119,6 +2126,13 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   ngOnDestroy() {
     // Remove browser-level unsaved changes warning
     window.removeEventListener('beforeunload', this.handleBeforeUnload);
+    
+    // Always reset body overflow and header when leaving page
+    document.body.style.overflow = '';
+    const header = document.querySelector('app-header');
+    if (header) {
+      (header as HTMLElement).style.display = '';
+    }
     
     this.destroy$.next();
     this.destroy$.complete();

@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -1142,7 +1142,7 @@ import { environment } from '../../../environments/environment';
     }
   `]
 })
-export class ContentLibraryComponent implements OnInit {
+export class ContentLibraryComponent implements OnInit, OnDestroy {
   contentSources: ContentSource[] = [];
   searchResults: SearchResult[] = [];
   searchQuery = '';
@@ -1175,8 +1175,25 @@ export class ContentLibraryComponent implements OnInit {
 
   async ngOnInit() {
     console.log('[ContentLibrary] 🚀 Component initialized - VERSION 0.0.1');
+    
+    // Reset body overflow when entering page (in case it was left locked)
+    document.body.style.overflow = '';
+    const header = document.querySelector('app-header');
+    if (header) {
+      (header as HTMLElement).style.display = '';
+    }
+    
     await this.loadContent();
     await this.loadPendingCount();
+  }
+
+  ngOnDestroy() {
+    // Always reset body overflow and header when leaving page
+    document.body.style.overflow = '';
+    const header = document.querySelector('app-header');
+    if (header) {
+      (header as HTMLElement).style.display = '';
+    }
   }
 
   async loadContent() {
@@ -1326,22 +1343,22 @@ export class ContentLibraryComponent implements OnInit {
     if (!source) return;
     console.log('[ContentLibrary] Viewing content:', source);
     this.viewingContent = source;
-    // Hide header when modal opens
+    // Lock body scroll and hide header when modal opens
+    document.body.style.overflow = 'hidden';
     const header = document.querySelector('app-header');
     if (header) {
       (header as HTMLElement).style.display = 'none';
     }
-    document.body.style.overflow = 'hidden';
   }
 
   closeContentViewer() {
     this.viewingContent = null;
-    // Show header when modal closes
+    // Unlock body scroll and show header when modal closes
+    document.body.style.overflow = '';
     const header = document.querySelector('app-header');
     if (header) {
       (header as HTMLElement).style.display = '';
     }
-    document.body.style.overflow = '';
   }
 
   editContent(source: ContentSource) {
@@ -1395,22 +1412,22 @@ export class ContentLibraryComponent implements OnInit {
   viewProcessedContent(item: ProcessedContentItem) {
     console.log('[ContentLibrary] 🔍 Viewing processed content:', item);
     this.viewingProcessedContent = item;
-    // Hide header when modal opens
+    // Lock body scroll and hide header when modal opens
+    document.body.style.overflow = 'hidden';
     const header = document.querySelector('app-header');
     if (header) {
       (header as HTMLElement).style.display = 'none';
     }
-    document.body.style.overflow = 'hidden';
   }
 
   closeProcessedContentViewer() {
     this.viewingProcessedContent = null;
-    // Show header when modal closes
+    // Unlock body scroll and show header when modal closes
+    document.body.style.overflow = '';
     const header = document.querySelector('app-header');
     if (header) {
       (header as HTMLElement).style.display = '';
     }
-    document.body.style.overflow = '';
   }
 
   async deleteProcessedContent(id: string) {
