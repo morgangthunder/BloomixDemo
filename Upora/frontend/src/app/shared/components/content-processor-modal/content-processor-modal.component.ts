@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Output, Input, OnInit, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, EventEmitter, Output, Input, OnInit, OnChanges, SimpleChanges, ViewEncapsulation } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -33,8 +33,16 @@ interface InteractionType {
   selector: 'app-content-processor-modal',
   standalone: true,
   imports: [CommonModule, FormsModule],
+  encapsulation: ViewEncapsulation.None,
   template: `
-    <div class="modal-overlay" *ngIf="isOpen" (click)="close()">
+    <div class="modal-overlay debug-test-overlay" *ngIf="isOpen" (click)="close()" 
+         [style.position]="'fixed'" 
+         [style.top]="'0'" 
+         [style.left]="'0'"
+         [style.right]="'0'"
+         [style.bottom]="'0'"
+         [style.z-index]="'999999'"
+         [style.background]="'rgba(255,0,0,0.8)'">
       <div class="modal-content" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <h2>🔧 Process Content</h2>
