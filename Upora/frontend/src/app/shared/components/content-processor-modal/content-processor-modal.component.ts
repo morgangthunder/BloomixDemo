@@ -42,9 +42,9 @@ interface InteractionType {
         </div>
 
         <div class="modal-body">
-          <!-- Step 1: Select Interaction Type -->
+          <!-- Step 1: Select URL Type -->
           <div class="step" [class.active]="currentStep === 1">
-            <h3>1. Choose Interaction Type</h3>
+            <h3>1. Choose URL Type</h3>
             <div class="interaction-types">
               <div 
                 *ngFor="let type of interactionTypes" 
@@ -1220,7 +1220,7 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
   // Validation
   validationScore = 0;
 
-  // Available interaction types
+  // Available URL types for content sources
   interactionTypes: InteractionType[] = [
     {
       id: 'youtube_video',
@@ -1230,24 +1230,17 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
       enabled: true
     },
     {
-      id: 'quiz_interaction',
-      name: 'Interactive Quiz',
-      description: 'Create quizzes with multiple choice, true/false, and open-ended questions',
-      icon: '❓',
+      id: 'audio_url',
+      name: 'Audio URL',
+      description: 'Embed audio content from various sources (podcasts, music, etc.)',
+      icon: '🎵',
       enabled: false
     },
     {
-      id: 'code_editor',
-      name: 'Code Editor',
-      description: 'Interactive code editor with syntax highlighting and execution',
-      icon: '💻',
-      enabled: false
-    },
-    {
-      id: 'slideshow',
-      name: 'Slideshow',
-      description: 'Create interactive slideshows with images, text, and animations',
-      icon: '📊',
+      id: 'webpage',
+      name: 'Webpage',
+      description: 'Extract and process content from any webpage or article',
+      icon: '🌐',
       enabled: false
     }
   ];

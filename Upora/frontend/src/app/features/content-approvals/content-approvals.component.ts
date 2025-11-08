@@ -133,10 +133,27 @@ import { ContentSource } from '../../core/models/content-source.model';
     </div>
   `,
   styles: [`
+    :host {
+      display: block;
+      position: fixed;
+      top: 64px; /* Start below main nav on mobile */
+      left: 0;
+      right: 0;
+      bottom: 0;
+      overflow-y: auto;
+      z-index: 10;
+    }
+    @media (min-width: 768px) {
+      :host {
+        top: 80px; /* Start below main nav on desktop */
+      }
+    }
+
     .approvals-page {
       padding: 20px;
       max-width: 1200px;
       margin: 0 auto;
+      min-height: 100%;
     }
     .header {
       margin-bottom: 30px;

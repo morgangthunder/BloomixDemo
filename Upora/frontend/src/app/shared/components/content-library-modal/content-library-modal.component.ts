@@ -190,12 +190,21 @@ interface SearchResult {
     .modal-content {
       background: #1a1a1a;
       border-radius: 12px;
-      width: 100%;
+      width: calc(100% - 24px);
       max-width: 900px;
-      max-height: 90vh;
+      max-height: calc(100vh - 120px);
       display: flex;
       flex-direction: column;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      margin: auto;
+    }
+
+    @media (max-width: 768px) {
+      .modal-content {
+        width: calc(100% - 16px);
+        max-height: calc(100vh - 84px);
+        border-radius: 8px;
+      }
     }
 
     .modal-header {

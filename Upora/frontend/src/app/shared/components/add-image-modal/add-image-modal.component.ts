@@ -96,26 +96,42 @@ import { FormsModule } from '@angular/forms';
   styles: [`
     .modal-overlay {
       position: fixed;
-      top: 0;
+      top: 80px;
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
+      background: rgba(0,0,0,0.8);
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: center;
       z-index: 1000;
-      backdrop-filter: blur(4px);
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    @media (max-width: 768px) {
+      .modal-overlay {
+        top: 64px;
+        padding: 12px;
+      }
     }
 
     .modal-content {
-      background: white;
-      border-radius: 12px;
-      width: 90%;
+      background: #1f2937;
+      border-radius: 16px;
       max-width: 600px;
-      max-height: 90vh;
-      overflow-y: auto;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      display: flex;
+      flex-direction: column;
+      max-height: calc(100vh - 120px);
+      margin: auto;
+    }
+
+    @media (max-width: 768px) {
+      .modal-content {
+        max-height: calc(100vh - 84px);
+      }
     }
 
     .modal-header {
@@ -123,35 +139,34 @@ import { FormsModule } from '@angular/forms';
       justify-content: space-between;
       align-items: center;
       padding: 24px;
-      border-bottom: 1px solid #eee;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      flex-shrink: 0;
     }
 
     .modal-header h2 {
+      color: white;
       margin: 0;
-      font-size: 24px;
+      font-size: 20px;
       font-weight: 600;
     }
 
     .close-btn {
       background: none;
       border: none;
-      font-size: 32px;
+      color: #9ca3af;
+      font-size: 24px;
       cursor: pointer;
-      color: #999;
+      padding: 4px;
       line-height: 1;
-      padding: 0;
-      width: 32px;
-      height: 32px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
 
     .close-btn:hover {
-      color: #333;
+      color: white;
     }
 
     .modal-body {
+      flex: 1;
+      overflow-y: auto;
       padding: 24px;
     }
 
@@ -163,22 +178,29 @@ import { FormsModule } from '@angular/forms';
       display: block;
       margin-bottom: 8px;
       font-weight: 500;
-      color: #333;
+      color: white;
+      font-size: 14px;
     }
 
     .form-control {
       width: 100%;
-      padding: 10px;
-      border: 1px solid #ddd;
-      border-radius: 6px;
+      padding: 12px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      color: white;
       font-size: 14px;
       font-family: inherit;
     }
 
     .form-control:focus {
       outline: none;
-      border-color: #0066cc;
-      box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+      border-color: #ef4444;
+      background: rgba(255,255,255,0.08);
+    }
+
+    .form-control::placeholder {
+      color: #6b7280;
     }
 
     textarea.form-control {
@@ -194,76 +216,83 @@ import { FormsModule } from '@angular/forms';
     .toggle-btn {
       flex: 1;
       padding: 10px;
-      border: 2px solid #ddd;
-      background: white;
-      border-radius: 6px;
+      border: 2px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.05);
+      color: white;
+      border-radius: 8px;
       cursor: pointer;
       font-weight: 500;
       transition: all 0.2s;
     }
 
     .toggle-btn:hover {
-      border-color: #0066cc;
+      border-color: rgba(239,68,68,0.5);
+      background: rgba(239,68,68,0.1);
     }
 
     .toggle-btn.active {
-      background: #0066cc;
+      background: #ef4444;
       color: white;
-      border-color: #0066cc;
+      border-color: #ef4444;
     }
 
     .help-text {
       display: block;
       margin-top: 6px;
-      color: #666;
+      color: #9ca3af;
       font-size: 12px;
     }
 
     .alert {
-      padding: 12px;
-      border-radius: 6px;
+      padding: 12px 16px;
+      border-radius: 8px;
       margin-top: 16px;
     }
 
     .alert-info {
-      background: #e3f2fd;
-      color: #1976d2;
-      border: 1px solid #90caf9;
+      background: rgba(59,130,246,0.2);
+      color: #93c5fd;
+      border: 1px solid rgba(59,130,246,0.3);
     }
 
     .modal-footer {
-      padding: 24px;
-      border-top: 1px solid #eee;
+      padding: 20px 24px;
+      border-top: 1px solid rgba(255,255,255,0.1);
       display: flex;
       justify-content: flex-end;
       gap: 12px;
+      flex-shrink: 0;
+      background: #1f2937;
+      position: sticky;
+      bottom: 0;
     }
 
     .btn-secondary, .btn-primary {
-      padding: 10px 20px;
-      border-radius: 6px;
+      padding: 12px 24px;
+      border-radius: 8px;
       font-weight: 500;
       cursor: pointer;
       border: none;
       font-size: 14px;
+      transition: all 0.2s;
     }
 
     .btn-secondary {
-      background: #f0f0f0;
-      color: #333;
+      background: rgba(255,255,255,0.1);
+      color: white;
     }
 
     .btn-secondary:hover {
-      background: #e0e0e0;
+      background: rgba(255,255,255,0.15);
     }
 
     .btn-primary {
-      background: #0066cc;
+      background: #ef4444;
       color: white;
     }
 
     .btn-primary:hover:not(:disabled) {
-      background: #0052a3;
+      background: #dc2626;
     }
 
     .btn-primary:disabled {
