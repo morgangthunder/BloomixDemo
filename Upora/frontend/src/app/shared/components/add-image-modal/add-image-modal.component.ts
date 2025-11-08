@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
@@ -310,7 +310,7 @@ import { FormsModule } from '@angular/forms';
     }
   `]
 })
-export class AddImageModalComponent {
+export class AddImageModalComponent implements OnChanges {
   @Input() isOpen = false;
   @Input() lessonId?: string;
   @Output() close = new EventEmitter<void>();
@@ -323,6 +323,16 @@ export class AddImageModalComponent {
   description = '';
   altText = '';
   submitting = false;
+
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['isOpen']) {
+      const header = document.querySelector('app-header');
+      if (header) {
+        (header as HTMLElement).style.display = this.isOpen ? 'none' : '';
+      }
+      document.body.style.overflow = this.isOpen ? 'hidden' : '';
+    }
+  }
 
   canSubmit(): boolean {
     if (this.sourceType === 'url') {

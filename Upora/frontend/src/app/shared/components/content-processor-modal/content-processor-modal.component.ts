@@ -1309,12 +1309,22 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
     console.log('[ContentProcessor] 🔍 Current videoId:', this.videoId);
     console.log('[ContentProcessor] 🔍 Current isOpen:', this.isOpen);
     
-    // Lock/unlock body scroll when modal opens/closes
+    // Lock/unlock body scroll and hide header when modal opens/closes
     if (changes['isOpen']) {
       if (this.isOpen) {
         document.body.style.overflow = 'hidden';
+        // Hide header when modal is open
+        const header = document.querySelector('app-header');
+        if (header) {
+          (header as HTMLElement).style.display = 'none';
+        }
       } else {
         document.body.style.overflow = '';
+        // Show header when modal closes
+        const header = document.querySelector('app-header');
+        if (header) {
+          (header as HTMLElement).style.display = '';
+        }
       }
     }
     

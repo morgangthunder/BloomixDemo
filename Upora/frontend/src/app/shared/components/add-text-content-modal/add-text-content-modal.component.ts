@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
@@ -231,7 +231,7 @@ import { FormsModule } from '@angular/forms';
     }
   `]
 })
-export class AddTextContentModalComponent {
+export class AddTextContentModalComponent implements OnChanges {
   @Input() isOpen = false;
   @Input() lessonId?: string;
   @Output() close = new EventEmitter<void>();
@@ -242,6 +242,16 @@ export class AddTextContentModalComponent {
   summary = '';
   topics = '';
   submitting = false;
+
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['isOpen']) {
+      const header = document.querySelector('app-header');
+      if (header) {
+        (header as HTMLElement).style.display = this.isOpen ? 'none' : '';
+      }
+      document.body.style.overflow = this.isOpen ? 'hidden' : '';
+    }
+  }
 
   canSubmit(): boolean {
     return this.title.trim().length > 0 && this.textContent.trim().length > 0;

@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Output, Input, OnInit } from '@angular/core';
+import { Component, EventEmitter, Output, Input, OnInit, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -627,7 +627,7 @@ interface SearchResult {
     }
   `]
 })
-export class ContentLibraryModalComponent implements OnInit {
+export class ContentLibraryModalComponent implements OnInit, OnChanges {
   @Input() isOpen = false;
   @Input() lessonId?: string;
   @Output() contentAdded = new EventEmitter<any>();
@@ -638,6 +638,16 @@ export class ContentLibraryModalComponent implements OnInit {
   searchAttempted = false;
   searchResults: SearchResult[] = [];
   selectedContent: ContentSource | null = null;
+
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['isOpen']) {
+      const header = document.querySelector('app-header');
+      if (header) {
+        (header as HTMLElement).style.display = this.isOpen ? 'none' : '';
+      }
+      document.body.style.overflow = this.isOpen ? 'hidden' : '';
+    }
+  }
   showDetails = false;
 
   constructor(private http: HttpClient) {}

@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Output, Input, OnInit, OnDestroy } from '@angular/core';
+import { Component, EventEmitter, Output, Input, OnInit, OnDestroy, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { interval, Subscription } from 'rxjs';
@@ -644,7 +644,7 @@ interface ApprovalItem {
     }
   `]
 })
-export class ApprovalQueueModalComponent implements OnInit, OnDestroy {
+export class ApprovalQueueModalComponent implements OnInit, OnDestroy, OnChanges {
   @Input() isOpen = false;
   @Input() canApprove = true; // Whether current user can approve items
   @Output() itemApproved = new EventEmitter<ApprovalItem>();
@@ -655,6 +655,16 @@ export class ApprovalQueueModalComponent implements OnInit, OnDestroy {
   statusFilter = '';
   typeFilter = '';
   searchQuery = '';
+
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['isOpen']) {
+      const header = document.querySelector('app-header');
+      if (header) {
+        (header as HTMLElement).style.display = this.isOpen ? 'none' : '';
+      }
+      document.body.style.overflow = this.isOpen ? 'hidden' : '';
+    }
+  }
 
   // Data
   approvalItems: ApprovalItem[] = [];
