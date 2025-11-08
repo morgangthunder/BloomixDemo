@@ -37,10 +37,16 @@ import { ApprovalQueueModalComponent } from '../../shared/components/approval-qu
           </button>
         </div>
         
-        <!-- Add Content Menu -->
-        <div class="add-menu" *ngIf="showAddMenu" (click)="closeAddMenu()">
-          <div class="add-menu-content" (click)="$event.stopPropagation()">
+      </div>
+
+      <!-- Add Content Menu Overlay -->
+      <div class="add-menu-overlay" *ngIf="showAddMenu" (click)="closeAddMenu()">
+        <div class="add-menu" (click)="$event.stopPropagation()">
+          <div class="add-menu-header">
             <h3>Add & Process Content</h3>
+            <button (click)="closeAddMenu()" class="close-btn">&times;</button>
+          </div>
+          <div class="add-menu-content">
             <div class="add-menu-section">
               <h4>Add Source Content</h4>
               <button (click)="openUrlModal()" class="menu-item-btn">🔗 Paste URL</button>
@@ -50,11 +56,12 @@ import { ApprovalQueueModalComponent } from '../../shared/components/approval-qu
             </div>
             <div class="add-menu-section separator">
               <h4>Browse Existing</h4>
-              <button (click)="navigateToApprovals()" class="menu-item-btn">⏳ Approval Queue</button>
+              <button (click)="openApprovalModal()" class="menu-item-btn">⏳ Approval Queue</button>
             </div>
           </div>
         </div>
       </div>
+    </div>
 
       <!-- Search Bar -->
       <div class="search-section">
@@ -215,6 +222,81 @@ import { ApprovalQueueModalComponent } from '../../shared/components/approval-qu
         (itemApproved)="onItemApproved($event)"
         (itemRejected)="onItemRejected($event)">
       </app-approval-queue-modal>
+
+      <!-- Content Viewer Modal -->
+      <div class="modal-overlay" *ngIf="viewingContent" (click)="closeContentViewer()">
+        <div class="modal-content viewer-modal" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h2>📄 {{viewingContent.title || 'Content Source'}}</h2>
+            <button (click)="closeContentViewer()" class="close-btn">&times;</button>
+          </div>
+          
+          <div class="modal-body">
+            <div class="viewer-section">
+              <label>Type</label>
+              <div class="viewer-value">
+                <span class="content-type-badge">{{viewingContent.type}}</span>
+                <span class="status-badge" [class]="viewingContent.status">{{viewingContent.status}}</span>
+              </div>
+            </div>
+
+            <div class="viewer-section" *ngIf="viewingContent.sourceUrl">
+              <label>Source URL</label>
+              <div class="viewer-value">
+                <a [href]="viewingContent.sourceUrl" target="_blank" rel="noopener">
+                  {{viewingContent.sourceUrl}}
+                </a>
+              </div>
+            </div>
+
+            <div class="viewer-section" *ngIf="viewingContent.summary">
+              <label>Summary</label>
+              <div class="viewer-value">{{viewingContent.summary}}</div>
+            </div>
+
+            <div class="viewer-section" *ngIf="viewingContent.fullText">
+              <label>Full Text</label>
+              <div class="viewer-value viewer-text">{{viewingContent.fullText}}</div>
+            </div>
+
+            <div class="viewer-section" *ngIf="viewingContent.metadata?.topics && viewingContent.metadata.topics.length > 0">
+              <label>Topics</label>
+              <div class="viewer-value">
+                <div class="topics">
+                  <span *ngFor="let topic of viewingContent.metadata.topics" class="topic-tag">{{topic}}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="viewer-section" *ngIf="viewingContent.metadata?.keywords && viewingContent.metadata.keywords.length > 0">
+              <label>Keywords</label>
+              <div class="viewer-value">
+                <div class="topics">
+                  <span *ngFor="let keyword of viewingContent.metadata.keywords.slice(0, 10)" class="topic-tag">{{keyword}}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="viewer-section" *ngIf="viewingContent.lessons && viewingContent.lessons.length > 0">
+              <label>Used in Lessons</label>
+              <div class="viewer-value">
+                <div class="lesson-tags">
+                  <span *ngFor="let lesson of viewingContent.lessons" class="lesson-tag">{{lesson.title}}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="viewer-section">
+              <label>Created</label>
+              <div class="viewer-value">{{viewingContent.createdAt | date:'medium'}}</div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button (click)="closeContentViewer()" class="btn-secondary">Close</button>
+          </div>
+        </div>
+      </div>
     </div>
   `,
   styles: [`
@@ -612,26 +694,66 @@ import { ApprovalQueueModalComponent } from '../../shared/components/approval-qu
     }
 
     /* Add Menu Dropdown */
-    .add-menu {
-      position: absolute;
-      top: 60px;
-      right: 20px;
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-      min-width: 280px;
+    .add-menu-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
       z-index: 100;
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-end;
+      padding: 90px 20px 20px 20px;
+    }
+
+    @media (max-width: 768px) {
+      .add-menu-overlay {
+        padding-top: 74px;
+      }
+    }
+
+    .add-menu {
+      background: #1f2937;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      min-width: 320px;
+      max-width: 400px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .add-menu-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .add-menu-header h3 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      color: white;
+    }
+
+    .add-menu-header .close-btn {
+      background: none;
+      border: none;
+      color: #9ca3af;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+    }
+
+    .add-menu-header .close-btn:hover {
+      color: white;
     }
 
     .add-menu-content {
       padding: 16px;
-    }
-
-    .add-menu-content h3 {
-      margin: 0 0 16px 0;
-      font-size: 18px;
-      font-weight: 600;
-      color: #333;
     }
 
     .add-menu-section {
@@ -639,15 +761,16 @@ import { ApprovalQueueModalComponent } from '../../shared/components/approval-qu
     }
 
     .add-menu-section.separator {
-      border-top: 1px solid #eee;
-      padding-top: 12px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      padding-top: 16px;
+      margin-top: 16px;
     }
 
     .add-menu-section h4 {
-      margin: 0 0 8px 0;
-      font-size: 12px;
+      margin: 0 0 12px 0;
+      font-size: 11px;
       font-weight: 600;
-      color: #999;
+      color: #9ca3af;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
@@ -656,8 +779,9 @@ import { ApprovalQueueModalComponent } from '../../shared/components/approval-qu
       width: 100%;
       padding: 12px 16px;
       margin-bottom: 8px;
-      border: 1px solid #ddd;
-      background: white;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.05);
+      color: white;
       border-radius: 8px;
       cursor: pointer;
       font-size: 14px;
@@ -668,14 +792,59 @@ import { ApprovalQueueModalComponent } from '../../shared/components/approval-qu
     }
 
     .menu-item-btn:hover {
-      background: #f8f9fa;
-      border-color: #0066cc;
+      background: rgba(239,68,68,0.1);
+      border-color: rgba(239,68,68,0.3);
       transform: translateY(-1px);
-      box-shadow: 0 2px 8px rgba(0, 102, 204, 0.1);
     }
 
     .menu-item-btn:last-child {
       margin-bottom: 0;
+    }
+
+    /* Viewer Modal */
+    .viewer-modal {
+      max-width: 700px;
+    }
+
+    .viewer-section {
+      margin-bottom: 24px;
+    }
+
+    .viewer-section label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .viewer-value {
+      color: #d1d5db;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .viewer-value a {
+      color: #60a5fa;
+      text-decoration: none;
+      word-break: break-all;
+    }
+
+    .viewer-value a:hover {
+      text-decoration: underline;
+    }
+
+    .viewer-text {
+      background: rgba(0,0,0,0.3);
+      padding: 16px;
+      border-radius: 8px;
+      max-height: 300px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      font-family: monospace;
+      font-size: 13px;
     }
   `]
 })
@@ -695,6 +864,7 @@ export class ContentLibraryComponent implements OnInit {
   showTextModal = false;
   showImageModal = false;
   showApprovalModal = false;
+  viewingContent: ContentSource | null = null;
 
   constructor(
     private contentSourceService: ContentSourceService,
@@ -852,8 +1022,12 @@ export class ContentLibraryComponent implements OnInit {
 
   viewContent(source: ContentSource | undefined) {
     if (!source) return;
-    console.log('Viewing content:', source);
-    // TODO: Navigate to detail page or show modal
+    console.log('[ContentLibrary] Viewing content:', source);
+    this.viewingContent = source;
+  }
+
+  closeContentViewer() {
+    this.viewingContent = null;
   }
 
   editContent(source: ContentSource) {
