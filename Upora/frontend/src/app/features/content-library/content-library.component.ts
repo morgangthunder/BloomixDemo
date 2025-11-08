@@ -9,6 +9,9 @@ import { AddTextContentModalComponent } from '../../shared/components/add-text-c
 import { AddImageModalComponent } from '../../shared/components/add-image-modal/add-image-modal.component';
 import { AddPdfModalComponent } from '../../shared/components/add-pdf-modal/add-pdf-modal.component';
 import { ApprovalQueueModalComponent } from '../../shared/components/approval-queue-modal/approval-queue-modal.component';
+import { ProcessedContentService, ProcessedContentItem } from '../../core/services/processed-content.service';
+import { HttpClient } from '@angular/common/http';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-content-library',
@@ -62,6 +65,22 @@ import { ApprovalQueueModalComponent } from '../../shared/components/approval-qu
         </div>
       </div>
 
+      <!-- Tabs -->
+      <div class="tabs">
+        <button 
+          class="tab-btn"
+          [class.active]="activeTab === 'sources'"
+          (click)="activeTab = 'sources'">
+          📚 Content Sources ({{contentSources.length}})
+        </button>
+        <button 
+          class="tab-btn"
+          [class.active]="activeTab === 'processed'"
+          (click)="activeTab = 'processed'; loadProcessedContent()">
+          🔧 Processed Content ({{processedContentItems.length}})
+        </button>
+      </div>
+
       <!-- Search Bar -->
       <div class="search-section">
         <div class="search-bar">
@@ -82,7 +101,7 @@ import { ApprovalQueueModalComponent } from '../../shared/components/approval-qu
           </button>
         </div>
         
-        <div class="filters">
+        <div class="filters" *ngIf="activeTab === 'sources'">
           <select [(ngModel)]="filterType" (ngModelChange)="applyFilters()" class="filter-select">
             <option value="">All Types</option>
             <option value="url">URLs</option>
@@ -128,8 +147,8 @@ import { ApprovalQueueModalComponent } from '../../shared/components/approval-qu
         </div>
       </div>
 
-      <!-- Content Grid (regular list) -->
-      <div *ngIf="!searchQuery && !loading" class="results-section">
+      <!-- Content Sources Tab -->
+      <div *ngIf="!searchQuery && !loading && activeTab === 'sources'" class="results-section">
         <h3>Your Content Sources ({{contentSources.length}})</h3>
         
         <div *ngIf="contentSources.length === 0" class="empty-state">
@@ -189,6 +208,52 @@ import { ApprovalQueueModalComponent } from '../../shared/components/approval-qu
         </div>
       </div>
 
+      <!-- Processed Content Tab -->
+      <div *ngIf="!searchQuery && !loading && activeTab === 'processed'" class="results-section">
+        <h3>Processed Content ({{processedContentItems.length}})</h3>
+        
+        <div *ngIf="processedContentItems.length === 0" class="empty-state">
+          <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+          </svg>
+          <h3>No processed content yet</h3>
+          <p>Process some source content to see outputs here</p>
+          <button (click)="activeTab = 'sources'" class="btn-primary">Go to Content Sources</button>
+        </div>
+
+        <div class="content-grid" *ngIf="processedContentItems.length > 0">
+          <div *ngFor="let item of processedContentItems" class="content-card">
+            <div class="content-header">
+              <span class="content-type-badge">{{item.type || 'processed'}}</span>
+            </div>
+            
+            <h4>{{item.title || 'Untitled'}}</h4>
+            <p class="summary">{{item.description || 'No description available'}}</p>
+            
+            <div class="source-link-section" *ngIf="item.contentSource">
+              <svg class="link-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.102m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+              </svg>
+              <small>Source: {{item.contentSource.title}}</small>
+            </div>
+
+            <div class="lesson-info" *ngIf="item.lessonId">
+              <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+              </svg>
+              <small>Lesson: {{getLessonTitle(item.lessonId)}}</small>
+            </div>
+
+            <div class="card-footer">
+              <div class="actions">
+                <button (click)="viewProcessedContent(item)" class="btn-small">View Details</button>
+                <button (click)="deleteProcessedContent(item.id)" class="btn-small btn-danger">Delete</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Content Modals -->
       <app-content-processor-modal
         [isOpen]="showUrlModal"
@@ -222,57 +287,28 @@ import { ApprovalQueueModalComponent } from '../../shared/components/approval-qu
         (itemRejected)="onItemRejected($event)">
       </app-approval-queue-modal>
 
-      <!-- Content Viewer Modal -->
+      <!-- Content Source Viewer Modal (Brief) -->
       <div class="modal-overlay" *ngIf="viewingContent" (click)="closeContentViewer()">
-        <div class="modal-content viewer-modal" (click)="$event.stopPropagation()">
+        <div class="modal-content viewer-modal-brief" (click)="$event.stopPropagation()">
           <div class="modal-header">
-            <h2>📄 {{viewingContent.title || 'Content Source'}}</h2>
+            <h2>🔗 {{viewingContent.title || 'Content Source'}}</h2>
             <button (click)="closeContentViewer()" class="close-btn">&times;</button>
           </div>
           
           <div class="modal-body">
             <div class="viewer-section">
-              <label>Type</label>
+              <label>URL Type</label>
               <div class="viewer-value">
                 <span class="content-type-badge">{{viewingContent.type}}</span>
-                <span class="status-badge" [class]="viewingContent.status">{{viewingContent.status}}</span>
               </div>
             </div>
 
             <div class="viewer-section" *ngIf="viewingContent.sourceUrl">
-              <label>Source URL</label>
+              <label>URL</label>
               <div class="viewer-value">
                 <a [href]="viewingContent.sourceUrl" target="_blank" rel="noopener">
                   {{viewingContent.sourceUrl}}
                 </a>
-              </div>
-            </div>
-
-            <div class="viewer-section" *ngIf="viewingContent.summary">
-              <label>Summary</label>
-              <div class="viewer-value">{{viewingContent.summary}}</div>
-            </div>
-
-            <div class="viewer-section" *ngIf="viewingContent.fullText">
-              <label>Full Text</label>
-              <div class="viewer-value viewer-text">{{viewingContent.fullText}}</div>
-            </div>
-
-            <div class="viewer-section" *ngIf="viewingContent.metadata && viewingContent.metadata.topics && viewingContent.metadata.topics.length > 0">
-              <label>Topics</label>
-              <div class="viewer-value">
-                <div class="topics">
-                  <span *ngFor="let topic of viewingContent.metadata.topics" class="topic-tag">{{topic}}</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="viewer-section" *ngIf="viewingContent.metadata && viewingContent.metadata.keywords && viewingContent.metadata.keywords.length > 0">
-              <label>Keywords</label>
-              <div class="viewer-value">
-                <div class="topics">
-                  <span *ngFor="let keyword of viewingContent.metadata.keywords.slice(0, 10)" class="topic-tag">{{keyword}}</span>
-                </div>
               </div>
             </div>
 
@@ -284,15 +320,74 @@ import { ApprovalQueueModalComponent } from '../../shared/components/approval-qu
                 </div>
               </div>
             </div>
-
-            <div class="viewer-section">
-              <label>Created</label>
-              <div class="viewer-value">{{viewingContent.createdAt | date:'medium'}}</div>
-            </div>
           </div>
 
           <div class="modal-footer">
             <button (click)="closeContentViewer()" class="btn-secondary">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Processed Content Viewer Modal (Detailed - reuse from Lesson Builder) -->
+      <div class="modal-overlay" *ngIf="viewingProcessedContent" (click)="closeProcessedContentViewer()">
+        <div class="modal-content" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h2>🔍 Processed Content Details</h2>
+            <button (click)="closeProcessedContentViewer()" class="close-btn">✕</button>
+          </div>
+          
+          <div class="modal-body">
+            <div class="content-details">
+              <h3>{{viewingProcessedContent.title || 'Untitled'}}</h3>
+              <p class="content-type">Type: {{viewingProcessedContent.type}}</p>
+              
+              <div class="detail-section" *ngIf="viewingProcessedContent.description">
+                <label>Description</label>
+                <p>{{viewingProcessedContent.description}}</p>
+              </div>
+
+              <div class="detail-section" *ngIf="viewingProcessedContent.contentSource">
+                <label>Source Content</label>
+                <div class="source-info">
+                  <span class="content-type-badge">{{viewingProcessedContent.contentSource.type}}</span>
+                  <span>{{viewingProcessedContent.contentSource.title}}</span>
+                  <a *ngIf="viewingProcessedContent.contentSource.sourceUrl" 
+                     [href]="viewingProcessedContent.contentSource.sourceUrl" 
+                     target="_blank" 
+                     rel="noopener"
+                     class="source-link">
+                    View Source
+                  </a>
+                </div>
+              </div>
+
+              <div class="detail-section" *ngIf="viewingProcessedContent.videoId">
+                <label>Video</label>
+                <div class="video-info">
+                  <p><strong>Channel:</strong> {{viewingProcessedContent.channel}}</p>
+                  <p><strong>Duration:</strong> {{viewingProcessedContent.duration}}</p>
+                  <p *ngIf="viewingProcessedContent.thumbnail">
+                    <img [src]="viewingProcessedContent.thumbnail" alt="Video thumbnail" style="max-width: 200px; border-radius: 8px;">
+                  </p>
+                </div>
+              </div>
+
+              <div class="detail-section" *ngIf="viewingProcessedContent.transcript">
+                <label>Transcript</label>
+                <div class="transcript-box">
+                  {{viewingProcessedContent.transcript}}
+                </div>
+              </div>
+
+              <div class="detail-section" *ngIf="viewingProcessedContent.metadata">
+                <label>Metadata</label>
+                <pre class="metadata-box">{{viewingProcessedContent.metadata | json}}</pre>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button (click)="closeProcessedContentViewer()" class="btn-secondary">Close</button>
           </div>
         </div>
       </div>
@@ -339,6 +434,35 @@ import { ApprovalQueueModalComponent } from '../../shared/components/approval-qu
       display: flex;
       gap: 12px;
     }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+      border-bottom: 2px solid rgba(255,255,255,0.1);
+    }
+    .tab-btn {
+      padding: 12px 24px;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: #9ca3af;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: -2px;
+    }
+    .tab-btn:hover {
+      color: white;
+      border-bottom-color: rgba(239,68,68,0.3);
+    }
+    .tab-btn.active {
+      color: white;
+      border-bottom-color: #ef4444;
+    }
+
     .search-section {
       background: rgba(255,255,255,0.05);
       padding: 24px;
@@ -800,13 +924,13 @@ import { ApprovalQueueModalComponent } from '../../shared/components/approval-qu
       margin-bottom: 0;
     }
 
-    /* Viewer Modal */
-    .viewer-modal {
-      max-width: 700px;
+    /* Viewer Modals */
+    .viewer-modal-brief {
+      max-width: 500px;
     }
 
     .viewer-section {
-      margin-bottom: 24px;
+      margin-bottom: 20px;
     }
 
     .viewer-section label {
@@ -835,15 +959,97 @@ import { ApprovalQueueModalComponent } from '../../shared/components/approval-qu
       text-decoration: underline;
     }
 
-    .viewer-text {
+    /* Processed Content Viewer */
+    .content-details h3 {
+      color: white;
+      margin-bottom: 8px;
+    }
+
+    .content-details .content-type {
+      color: #9ca3af;
+      margin-bottom: 24px;
+    }
+
+    .detail-section {
+      margin-bottom: 24px;
+    }
+
+    .detail-section label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .detail-section p {
+      color: #d1d5db;
+      line-height: 1.6;
+    }
+
+    .source-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      color: #d1d5db;
+    }
+
+    .source-info .source-link {
+      color: #60a5fa;
+      text-decoration: none;
+      font-size: 13px;
+    }
+
+    .source-info .source-link:hover {
+      text-decoration: underline;
+    }
+
+    .video-info p {
+      margin: 8px 0;
+      color: #d1d5db;
+    }
+
+    .transcript-box, .metadata-box {
       background: rgba(0,0,0,0.3);
       padding: 16px;
       border-radius: 8px;
       max-height: 300px;
       overflow-y: auto;
-      white-space: pre-wrap;
-      font-family: monospace;
+      color: #d1d5db;
       font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .metadata-box {
+      font-family: monospace;
+      white-space: pre-wrap;
+    }
+
+    .source-link-section, .lesson-info {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 12px 0;
+      padding: 8px 12px;
+      background: rgba(59,130,246,0.1);
+      border-left: 2px solid rgba(59,130,246,0.5);
+      border-radius: 4px;
+    }
+
+    .source-link-section .link-icon,
+    .lesson-info .icon {
+      flex-shrink: 0;
+      stroke: #60a5fa;
+    }
+
+    .source-link-section small,
+    .lesson-info small {
+      color: #93c5fd;
+      font-size: 12px;
+      font-weight: 500;
     }
   `]
 })
@@ -855,6 +1061,12 @@ export class ContentLibraryComponent implements OnInit {
   filterStatus = 'approved';
   loading = false;
   pendingCount = 0;
+  activeTab: 'sources' | 'processed' = 'sources';
+
+  // Processed content
+  processedContentItems: ProcessedContentItem[] = [];
+  viewingProcessedContent: ProcessedContentItem | null = null;
+  lessonTitles: Map<string, string> = new Map();
 
   // Modal states
   showAddMenu = false;
@@ -867,6 +1079,8 @@ export class ContentLibraryComponent implements OnInit {
 
   constructor(
     private contentSourceService: ContentSourceService,
+    private processedContentService: ProcessedContentService,
+    private http: HttpClient,
     private router: Router
   ) {}
 
@@ -1032,6 +1246,71 @@ export class ContentLibraryComponent implements OnInit {
   editContent(source: ContentSource) {
     console.log('Editing content:', source);
     // TODO: Open edit modal
+  }
+
+  // Processed Content Methods
+  async loadProcessedContent() {
+    try {
+      console.log('[ContentLibrary] 📥 Loading all processed content...');
+      // Load all processed content (not filtered by lesson)
+      const response = await this.http.get<ProcessedContentItem[]>(
+        `${environment.apiUrl}/lesson-editor/processed-outputs/all`,
+        {
+          headers: {
+            'x-tenant-id': environment.tenantId,
+            'x-user-id': environment.defaultUserId
+          }
+        }
+      ).toPromise();
+      
+      this.processedContentItems = response || [];
+      console.log('[ContentLibrary] ✅ Loaded processed content:', this.processedContentItems.length);
+      
+      // Load lesson titles for display
+      await this.loadLessonTitles();
+    } catch (error) {
+      console.error('[ContentLibrary] ❌ Failed to load processed content:', error);
+      this.processedContentItems = [];
+    }
+  }
+
+  async loadLessonTitles() {
+    const lessonIds = [...new Set(this.processedContentItems.map(item => item.lessonId))];
+    for (const lessonId of lessonIds) {
+      try {
+        const lesson = await this.http.get<any>(`${environment.apiUrl}/lessons/${lessonId}`).toPromise();
+        this.lessonTitles.set(lessonId, lesson.title);
+      } catch (error) {
+        console.error(`Failed to load lesson ${lessonId}:`, error);
+        this.lessonTitles.set(lessonId, 'Unknown Lesson');
+      }
+    }
+  }
+
+  getLessonTitle(lessonId: string): string {
+    return this.lessonTitles.get(lessonId) || 'Loading...';
+  }
+
+  viewProcessedContent(item: ProcessedContentItem) {
+    console.log('[ContentLibrary] 🔍 Viewing processed content:', item);
+    this.viewingProcessedContent = item;
+  }
+
+  closeProcessedContentViewer() {
+    this.viewingProcessedContent = null;
+  }
+
+  async deleteProcessedContent(id: string) {
+    if (!confirm('Are you sure you want to delete this processed content?')) return;
+
+    try {
+      await this.http.delete(`${environment.apiUrl}/lesson-editor/processed-outputs/${id}`).toPromise();
+      console.log('[ContentLibrary] ✅ Deleted processed content');
+      await this.loadProcessedContent();
+    } catch (error) {
+      console.error('[ContentLibrary] ❌ Failed to delete:', error);
+      alert('Failed to delete processed content');
+    }
   }
 
   async deleteContent(id: string) {

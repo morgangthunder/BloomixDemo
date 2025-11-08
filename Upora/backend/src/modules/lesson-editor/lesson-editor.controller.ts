@@ -143,6 +143,14 @@ export class LessonEditorController {
     return this.lessonEditorService.getProcessedOutputs(lessonId);
   }
 
+  @Get('processed-outputs/all')
+  async getAllProcessedOutputs(
+    @Headers('x-tenant-id') tenantId?: string,
+    @Headers('x-user-id') userId?: string,
+  ): Promise<ProcessedContentOutput[]> {
+    return this.lessonEditorService.getAllProcessedOutputs(tenantId);
+  }
+
   @Get('processed-outputs/:id')
   async getProcessedOutput(
     @Param('id') id: string,

@@ -45,7 +45,7 @@ async function bootstrap() {
   // ========================================
   console.log('');
   console.log('═══════════════════════════════════════════════════════════');
-  console.log('🔥🔥🔥 BACKEND VERSION 0.0.4 STARTED 🔥🔥🔥');
+  console.log('🔥🔥🔥 BACKEND VERSION 0.0.5 STARTED 🔥🔥🔥');
   console.log('🔧 Two-step content flow: URL → source → processed output');
   console.log(`🚀 API running on: http://localhost:${port}/api`);
   console.log(`📅 Timestamp: ${new Date().toISOString()}`);
