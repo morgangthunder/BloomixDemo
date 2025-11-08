@@ -593,10 +593,20 @@ interface SearchResult {
     }
 
     .modal-footer {
-      padding: 1rem 1.5rem;
+      padding: 20px 24px;
+      padding-bottom: max(20px, env(safe-area-inset-bottom));
       border-top: 1px solid #333;
       display: flex;
       justify-content: flex-end;
+      flex-shrink: 0;
+      background: #1a1a1a;
+    }
+
+    @media (max-width: 768px) {
+      .modal-footer {
+        padding: 16px;
+        padding-bottom: max(16px, env(safe-area-inset-bottom));
+      }
     }
 
     .btn-secondary {

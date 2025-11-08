@@ -1123,14 +1123,41 @@ interface InteractionType {
     }
     .modal-footer {
       display: flex;
-      justify-content: space-between;
-      align-items: center;
+      flex-direction: column;
+      gap: 16px;
       padding: 20px 24px;
+      padding-bottom: max(20px, env(safe-area-inset-bottom));
       border-top: 1px solid rgba(255,255,255,0.1);
+      flex-shrink: 0;
+      background: #1f2937;
     }
+
+    @media (min-width: 769px) {
+      .modal-footer {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        padding-bottom: 20px;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .modal-footer {
+        padding: 16px;
+        padding-bottom: max(16px, env(safe-area-inset-bottom));
+      }
+    }
+
     .step-indicator {
       display: flex;
       gap: 8px;
+      justify-content: center;
+    }
+
+    @media (min-width: 769px) {
+      .step-indicator {
+        justify-content: flex-start;
+      }
     }
     .step-dot {
       width: 32px;
@@ -1156,6 +1183,16 @@ interface InteractionType {
     .actions {
       display: flex;
       gap: 12px;
+      width: 100%;
+    }
+
+    @media (max-width: 768px) {
+      .actions {
+        flex-direction: column-reverse;
+      }
+      .actions button {
+        width: 100%;
+      }
     }
     .btn-primary, .btn-secondary, .btn-cancel {
       padding: 10px 20px;

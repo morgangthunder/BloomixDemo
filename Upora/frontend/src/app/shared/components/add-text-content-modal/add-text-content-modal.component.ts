@@ -179,14 +179,24 @@ import { FormsModule } from '@angular/forms';
 
     .modal-footer {
       padding: 20px 24px;
+      padding-bottom: max(20px, env(safe-area-inset-bottom));
       border-top: 1px solid rgba(255,255,255,0.1);
       display: flex;
       justify-content: flex-end;
       gap: 12px;
       flex-shrink: 0;
       background: #1f2937;
-      position: sticky;
-      bottom: 0;
+    }
+
+    @media (max-width: 768px) {
+      .modal-footer {
+        padding: 16px;
+        padding-bottom: max(16px, env(safe-area-inset-bottom));
+        flex-direction: column-reverse;
+      }
+      .modal-footer button {
+        width: 100%;
+      }
     }
 
     .btn-secondary, .btn-primary {

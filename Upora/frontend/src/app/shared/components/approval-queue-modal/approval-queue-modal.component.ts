@@ -247,6 +247,7 @@ interface ApprovalItem {
       align-items: center;
       padding: 24px;
       border-bottom: 1px solid rgba(255,255,255,0.1);
+      flex-shrink: 0;
     }
     .modal-header h2 {
       color: white;
@@ -593,7 +594,19 @@ interface ApprovalItem {
       justify-content: space-between;
       align-items: center;
       padding: 20px 24px;
+      padding-bottom: max(20px, env(safe-area-inset-bottom));
       border-top: 1px solid rgba(255,255,255,0.1);
+      flex-shrink: 0;
+      background: #1f2937;
+    }
+
+    @media (max-width: 768px) {
+      .modal-footer {
+        padding: 16px;
+        padding-bottom: max(16px, env(safe-area-inset-bottom));
+        flex-direction: column;
+        gap: 12px;
+      }
     }
     .footer-info {
       color: #9ca3af;

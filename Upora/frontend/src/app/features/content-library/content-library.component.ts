@@ -772,9 +772,59 @@ import { environment } from '../../../environments/environment';
         height: 100vh;
       }
     }
-    .modal-content h2 {
+
+    .modal-header {
+      padding: 24px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      flex-shrink: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h2 {
       color: white;
-      margin-bottom: 24px;
+      margin: 0;
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      color: #9ca3af;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 4px;
+      line-height: 1;
+    }
+
+    .close-btn:hover {
+      color: white;
+    }
+
+    .modal-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    .modal-footer {
+      padding: 20px 24px;
+      padding-bottom: max(20px, env(safe-area-inset-bottom));
+      border-top: 1px solid rgba(255,255,255,0.1);
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      flex-shrink: 0;
+      background: #1f2937;
+    }
+
+    @media (max-width: 768px) {
+      .modal-footer {
+        padding: 16px;
+        padding-bottom: max(16px, env(safe-area-inset-bottom));
+      }
     }
     .form-group {
       margin-bottom: 20px;
@@ -843,16 +893,19 @@ import { environment } from '../../../environments/environment';
       right: 0;
       bottom: 0;
       background: rgba(0,0,0,0.5);
-      z-index: 100;
+      z-index: 1500;
       display: flex;
       align-items: flex-start;
       justify-content: flex-end;
       padding: 90px 20px 20px 20px;
+      overflow: hidden;
     }
 
     @media (max-width: 768px) {
       .add-menu-overlay {
-        padding-top: 74px;
+        padding: 74px 12px 12px 12px;
+        align-items: center;
+        justify-content: center;
       }
     }
 
@@ -862,7 +915,18 @@ import { environment } from '../../../environments/environment';
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
       min-width: 320px;
       max-width: 400px;
+      max-height: calc(100vh - 110px);
       border: 1px solid rgba(255,255,255,0.1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    @media (max-width: 768px) {
+      .add-menu {
+        max-width: calc(100% - 24px);
+        max-height: calc(100vh - 86px);
+      }
     }
 
     .add-menu-header {
@@ -871,6 +935,7 @@ import { environment } from '../../../environments/environment';
       align-items: center;
       padding: 20px;
       border-bottom: 1px solid rgba(255,255,255,0.1);
+      flex-shrink: 0;
     }
 
     .add-menu-header h3 {
@@ -896,6 +961,8 @@ import { environment } from '../../../environments/environment';
 
     .add-menu-content {
       padding: 16px;
+      flex: 1;
+      overflow-y: auto;
     }
 
     .add-menu-section {
