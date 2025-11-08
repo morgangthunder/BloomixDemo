@@ -36,15 +36,7 @@ interface InteractionType {
   encapsulation: ViewEncapsulation.None,
   template: `
     <div class="modal-overlay" *ngIf="isOpen" (click)="close()">
-      <div class="modal-content" (click)="$event.stopPropagation()"
-           [style.position]="'absolute'"
-           [style.top]="'0'"
-           [style.left]="'0'"
-           [style.width]="'100%'"
-           [style.height]="'100%'"
-           [style.overflow]="'hidden'"
-           [style.display]="'flex'"
-           [style.flex-direction]="'column'">
+      <div class="modal-content mobile-full-screen" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <h2>🔧 Process Content</h2>
           <button (click)="close(); $event.stopPropagation()" class="close-btn">✕</button>
@@ -412,7 +404,8 @@ interface InteractionType {
     @media (max-width: 768px) {
       .modal-overlay {
         padding: 0;
-        align-items: stretch;
+        /* Don't use flex positioning on mobile */
+        display: block !important;
       }
     }
 
@@ -422,14 +415,25 @@ interface InteractionType {
       width: 100%;
       max-width: 800px;
       max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
       box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
     }
 
     @media (max-width: 768px) {
-      .modal-content {
-        border-radius: 0;
-        max-width: 100%;
-        /* Inline styles will handle positioning on mobile */
+      .mobile-full-screen {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        max-width: 100vw !important;
+        max-height: 100vh !important;
+        border-radius: 0 !important;
+        margin: 0 !important;
       }
     }
     .modal-header {
