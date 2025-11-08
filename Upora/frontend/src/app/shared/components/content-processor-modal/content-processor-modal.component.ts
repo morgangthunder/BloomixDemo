@@ -387,19 +387,22 @@ interface InteractionType {
   styles: [`
     .modal-overlay {
       position: fixed !important;
-      top: 0 !important;
-      left: 0 !important;
-      right: 0 !important;
-      bottom: 0 !important;
-      background: rgba(0,0,0,0.85);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 99999 !important;
-      padding: 20px;
-      overflow: hidden;
-      width: 100vw;
-      height: 100vh;
+      inset: 0 !important;
+      background: rgba(255,0,0,0.5) !important; /* RED for debugging - should cover everything */
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      z-index: 999999 !important;
+      padding: 20px !important;
+      overflow: hidden !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      min-height: 100vh !important;
+      max-height: 100vh !important;
+      margin: 0 !important;
+      transform: none !important;
+      will-change: auto !important;
+      box-sizing: border-box !important;
     }
 
     @media (max-width: 768px) {

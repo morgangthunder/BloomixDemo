@@ -3,9 +3,9 @@ import { appConfig } from './app/app.config';
 import { AppComponent } from './app/app.component';
 
 // ========================================
-// 🔥 FRONTEND VERSION 0.0.17 🔥
+// 🔥 FRONTEND VERSION 0.0.18-DEBUG 🔥
 // ========================================
-const FRONTEND_VERSION = '0.0.17';
+const FRONTEND_VERSION = '0.0.18-DEBUG';
 const CACHE_BUST_ID = Math.random().toString(36).substr(2, 9);
 console.log('');
 console.log('═══════════════════════════════════════════════════════════');
