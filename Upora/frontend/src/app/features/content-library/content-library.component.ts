@@ -1237,6 +1237,13 @@ export class ContentLibraryComponent implements OnInit {
     if (!source) return;
     console.log('[ContentLibrary] Viewing content:', source);
     this.viewingContent = source;
+    // Scroll modal overlay to top when opening
+    setTimeout(() => {
+      const overlay = document.querySelector('.modal-overlay');
+      if (overlay) {
+        overlay.scrollTop = 0;
+      }
+    }, 0);
   }
 
   closeContentViewer() {
@@ -1294,6 +1301,13 @@ export class ContentLibraryComponent implements OnInit {
   viewProcessedContent(item: ProcessedContentItem) {
     console.log('[ContentLibrary] 🔍 Viewing processed content:', item);
     this.viewingProcessedContent = item;
+    // Scroll modal overlay to top when opening
+    setTimeout(() => {
+      const overlay = document.querySelector('.modal-overlay');
+      if (overlay) {
+        overlay.scrollTop = 0;
+      }
+    }, 0);
   }
 
   closeProcessedContentViewer() {
