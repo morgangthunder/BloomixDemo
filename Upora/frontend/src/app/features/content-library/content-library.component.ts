@@ -1249,10 +1249,30 @@ export class ContentLibraryComponent implements OnInit, OnDestroy {
   // Add Menu Methods
   toggleAddMenu() {
     this.showAddMenu = !this.showAddMenu;
+    // Lock/unlock body scroll and hide/show header
+    if (this.showAddMenu) {
+      document.body.style.overflow = 'hidden';
+      const header = document.querySelector('app-header');
+      if (header) {
+        (header as HTMLElement).style.display = 'none';
+      }
+    } else {
+      document.body.style.overflow = '';
+      const header = document.querySelector('app-header');
+      if (header) {
+        (header as HTMLElement).style.display = '';
+      }
+    }
   }
 
   closeAddMenu() {
     this.showAddMenu = false;
+    // Unlock body scroll and show header
+    document.body.style.overflow = '';
+    const header = document.querySelector('app-header');
+    if (header) {
+      (header as HTMLElement).style.display = '';
+    }
   }
 
   // Modal open methods
