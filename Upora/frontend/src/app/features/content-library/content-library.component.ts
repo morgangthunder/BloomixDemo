@@ -1326,10 +1326,22 @@ export class ContentLibraryComponent implements OnInit {
     if (!source) return;
     console.log('[ContentLibrary] Viewing content:', source);
     this.viewingContent = source;
+    // Hide header when modal opens
+    const header = document.querySelector('app-header');
+    if (header) {
+      (header as HTMLElement).style.display = 'none';
+    }
+    document.body.style.overflow = 'hidden';
   }
 
   closeContentViewer() {
     this.viewingContent = null;
+    // Show header when modal closes
+    const header = document.querySelector('app-header');
+    if (header) {
+      (header as HTMLElement).style.display = '';
+    }
+    document.body.style.overflow = '';
   }
 
   editContent(source: ContentSource) {
@@ -1383,10 +1395,22 @@ export class ContentLibraryComponent implements OnInit {
   viewProcessedContent(item: ProcessedContentItem) {
     console.log('[ContentLibrary] 🔍 Viewing processed content:', item);
     this.viewingProcessedContent = item;
+    // Hide header when modal opens
+    const header = document.querySelector('app-header');
+    if (header) {
+      (header as HTMLElement).style.display = 'none';
+    }
+    document.body.style.overflow = 'hidden';
   }
 
   closeProcessedContentViewer() {
     this.viewingProcessedContent = null;
+    // Show header when modal closes
+    const header = document.querySelector('app-header');
+    if (header) {
+      (header as HTMLElement).style.display = '';
+    }
+    document.body.style.overflow = '';
   }
 
   async deleteProcessedContent(id: string) {

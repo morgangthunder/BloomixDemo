@@ -2075,10 +2075,22 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   viewProcessedContent(content: ProcessedContentItem) {
     this.selectedProcessedContent = content;
+    // Hide header when modal opens
+    const header = document.querySelector('app-header');
+    if (header) {
+      (header as HTMLElement).style.display = 'none';
+    }
+    document.body.style.overflow = 'hidden';
   }
 
   closeProcessedContentViewer() {
     this.selectedProcessedContent = null;
+    // Show header when modal closes
+    const header = document.querySelector('app-header');
+    if (header) {
+      (header as HTMLElement).style.display = '';
+    }
+    document.body.style.overflow = '';
   }
 
   deleteProcessedContent(content: any) {
