@@ -1325,6 +1325,29 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
         document.body.style.position = 'fixed';
         document.body.style.width = '100%';
         document.body.style.top = '0';
+        
+        // NUCLEAR: Force modal positioning with JavaScript on mobile
+        setTimeout(() => {
+          const isMobile = window.innerWidth <= 768;
+          if (isMobile) {
+            const modalContent = document.querySelector('.mobile-full-screen') as HTMLElement;
+            if (modalContent) {
+              console.log('[ContentProcessor] 🔧 FORCING modal positioning via JS');
+              modalContent.style.position = 'fixed';
+              modalContent.style.top = '0';
+              modalContent.style.left = '0';
+              modalContent.style.right = '0';
+              modalContent.style.bottom = '0';
+              modalContent.style.width = '100vw';
+              modalContent.style.height = '100vh';
+              modalContent.style.zIndex = '99999';
+              modalContent.style.margin = '0';
+              modalContent.style.transform = 'none';
+            } else {
+              console.log('[ContentProcessor] ❌ Could not find .mobile-full-screen element');
+            }
+          }
+        }, 50);
       } else {
         document.body.style.overflow = '';
         document.body.style.position = '';
