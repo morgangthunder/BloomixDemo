@@ -144,11 +144,10 @@ export class LessonEditorController {
   }
 
   @Get('processed-outputs/all')
-  async getAllProcessedOutputs(
-    @Headers('x-tenant-id') tenantId?: string,
-    @Headers('x-user-id') userId?: string,
-  ): Promise<ProcessedContentOutput[]> {
-    return this.lessonEditorService.getAllProcessedOutputs(tenantId);
+  async getAllProcessedOutputs(): Promise<ProcessedContentOutput[]> {
+    // For MVP, return all processed outputs
+    // TODO: Filter by tenant when multi-tenancy is fully implemented
+    return this.lessonEditorService.getAllProcessedOutputs();
   }
 
   @Get('processed-outputs/:id')

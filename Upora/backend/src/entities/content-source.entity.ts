@@ -1,6 +1,5 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { User } from './user.entity';
-import { LessonContentSource } from './lesson-content-source.entity';
 
 @Entity('content_sources')
 export class ContentSource {
@@ -71,8 +70,8 @@ export class ContentSource {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
-  // Many-to-many relationship: content sources can be used in multiple lessons
-  @OneToMany(() => LessonContentSource, lessonContent => lessonContent.contentSource)
-  lessonUsages: LessonContentSource[];
+  // TODO: Add many-to-many relationship when junction table is created
+  // @OneToMany(() => LessonContentSource, lessonContent => lessonContent.contentSource)
+  // lessonUsages: LessonContentSource[];
 }
 

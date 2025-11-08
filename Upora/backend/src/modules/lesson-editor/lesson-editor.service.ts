@@ -34,12 +34,8 @@ export class LessonEditorService {
     });
   }
 
-  async getAllProcessedOutputs(tenantId?: string): Promise<ProcessedContentOutput[]> {
-    const where: any = {};
-    
-    // For now, we'll get all processed outputs
-    // In the future, we can filter by tenant via the lesson relationship
-    
+  async getAllProcessedOutputs(): Promise<ProcessedContentOutput[]> {
+    // Get all processed outputs with their source content and lesson info
     return this.processedOutputRepo.find({
       relations: ['contentSource', 'lesson'],
       order: { createdAt: 'DESC' },
