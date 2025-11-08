@@ -1326,25 +1326,33 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
         document.body.style.width = '100%';
         document.body.style.top = '0';
         
-        // NUCLEAR: Force modal positioning with JavaScript on mobile
+        // NUCLEAR: Force modal positioning to cover header
+        // The parent component has :host {position: fixed; top: 64px/80px}
+        // So we need to offset the modal to cover the header
         setTimeout(() => {
           const isMobile = window.innerWidth <= 768;
+          const headerHeight = isMobile ? 64 : 80;
+          
+          const modalOverlay = document.querySelector('.modal-overlay') as HTMLElement;
+          if (modalOverlay) {
+            console.log('[ContentProcessor] 🔧 FORCING overlay to cover header');
+            // Move overlay up by header height to cover it
+            modalOverlay.style.top = `-${headerHeight}px`;
+            modalOverlay.style.height = `calc(100vh + ${headerHeight}px)`;
+          }
+          
           if (isMobile) {
             const modalContent = document.querySelector('.mobile-full-screen') as HTMLElement;
             if (modalContent) {
-              console.log('[ContentProcessor] 🔧 FORCING modal positioning via JS');
+              console.log('[ContentProcessor] 🔧 FORCING modal content full screen');
               modalContent.style.position = 'fixed';
-              modalContent.style.top = '0';
+              modalContent.style.top = `-${headerHeight}px`;
               modalContent.style.left = '0';
               modalContent.style.right = '0';
               modalContent.style.bottom = '0';
               modalContent.style.width = '100vw';
-              modalContent.style.height = '100vh';
+              modalContent.style.height = `calc(100vh + ${headerHeight}px)`;
               modalContent.style.zIndex = '99999';
-              modalContent.style.margin = '0';
-              modalContent.style.transform = 'none';
-            } else {
-              console.log('[ContentProcessor] ❌ Could not find .mobile-full-screen element');
             }
           }
         }, 50);
