@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { IonContent } from '@ionic/angular/standalone';
 import { ContentSourceService } from '../../core/services/content-source.service';
 import { ContentSource, SearchResult } from '../../core/models/content-source.model';
 import { ContentProcessorModalComponent } from '../../shared/components/content-processor-modal/content-processor-modal.component';
@@ -18,7 +19,8 @@ import { environment } from '../../../environments/environment';
   standalone: true,
   imports: [
     CommonModule, 
-    FormsModule, 
+    FormsModule,
+    IonContent,
     ContentProcessorModalComponent,
     AddTextContentModalComponent,
     AddImageModalComponent,
@@ -26,6 +28,7 @@ import { environment } from '../../../environments/environment';
     ApprovalQueueModalComponent
   ],
   template: `
+    <ion-content>
     <div class="content-library">
       <!-- Header -->
       <div class="header">
@@ -368,24 +371,24 @@ import { environment } from '../../../environments/environment';
         </div>
       </div>
     </div>
+    </ion-content>
   `,
   styles: [`
-    :host {
-      display: block;
-      min-height: 100vh;
-      padding-top: 64px; /* Space for fixed header on mobile */
+    ion-content {
+      --background: #141414;
+      --padding-top: 64px;
     }
     @media (min-width: 768px) {
-      :host {
-        padding-top: 80px; /* Space for fixed header on desktop */
+      ion-content {
+        --padding-top: 80px;
       }
     }
     
     .content-library {
       padding: 20px;
+      padding-bottom: 100px;
       max-width: 1400px;
       margin: 0 auto;
-      min-height: 100%;
     }
     .header {
       margin-bottom: 30px;
@@ -1150,10 +1153,9 @@ export class ContentLibraryComponent implements OnInit, OnDestroy {
   ) {}
 
   async ngOnInit() {
-    console.log('[ContentLibrary] 🚀 Component initialized - VERSION 0.0.1');
+    console.log('[ContentLibrary] 🚀 Component initialized with ion-content');
     
-    // Reset body overflow when entering page (in case it was left locked)
-    document.body.style.overflow = '';
+    // Reset header display
     const header = document.querySelector('app-header');
     if (header) {
       (header as HTMLElement).style.display = '';
