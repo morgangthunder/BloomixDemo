@@ -432,6 +432,13 @@ export class LlmProviderConfigModalComponent implements OnChanges {
   ngOnChanges(changes: SimpleChanges) {
     if (changes['provider'] || changes['isOpen']) {
       if (this.isOpen) {
+        // Hide header and lock body scroll when modal opens
+        document.body.style.overflow = 'hidden';
+        const header = document.querySelector('app-header');
+        if (header) {
+          (header as HTMLElement).style.display = 'none';
+        }
+
         if (this.provider) {
           this.isEditMode = true;
           this.formData = { ...this.provider };
@@ -441,6 +448,13 @@ export class LlmProviderConfigModalComponent implements OnChanges {
         }
         this.testResult = null;
         this.showApiKey = false;
+      } else {
+        // Restore header and body scroll when modal closes
+        document.body.style.overflow = '';
+        const header = document.querySelector('app-header');
+        if (header) {
+          (header as HTMLElement).style.display = '';
+        }
       }
     }
   }
@@ -526,6 +540,13 @@ export class LlmProviderConfigModalComponent implements OnChanges {
   }
 
   close() {
+    // Restore header and body scroll
+    document.body.style.overflow = '';
+    const header = document.querySelector('app-header');
+    if (header) {
+      (header as HTMLElement).style.display = '';
+    }
+    
     this.closed.emit();
   }
 
