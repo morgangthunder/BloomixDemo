@@ -17,37 +17,37 @@ export class InteractionType {
   @Column('jsonb')
   schema: any; // JSON schema for input validation (Zod-compatible)
 
-  @Column('text')
+  @Column('text', { name: 'generation_prompt' })
   generationPrompt: string; // LLM prompt for auto-generation
 
-  @Column('varchar', { nullable: true })
+  @Column('varchar', { name: 'pixi_renderer', nullable: true })
   pixiRenderer: string; // Component name (e.g., 'FragmentBuilderComponent')
 
-  @Column('decimal', { precision: 3, scale: 2, default: 0.7 })
+  @Column('decimal', { name: 'min_confidence', precision: 3, scale: 2, default: 0.7 })
   minConfidence: number; // Minimum confidence threshold for auto-generation
 
-  @Column('simple-array', { nullable: true })
+  @Column('simple-array', { name: 'teach_stage_fit', nullable: true })
   teachStageFit: string[]; // Recommended stages, e.g., ['absorb-show', 'tease-trigger']
 
-  @Column('simple-array', { nullable: true })
+  @Column('simple-array', { name: 'requires_resources', nullable: true })
   requiresResources: string[]; // e.g., ['image', 'video', 'audio']
 
-  @Column('varchar', { default: 'medium' })
+  @Column('varchar', { name: 'cognitive_load', default: 'medium' })
   cognitiveLoad: string; // low | medium | high
 
-  @Column('integer', { nullable: true })
+  @Column('integer', { name: 'estimated_duration', nullable: true })
   estimatedDuration: number; // In seconds
 
-  @Column('jsonb', { nullable: true })
+  @Column('jsonb', { name: 'asset_requirements', nullable: true })
   assetRequirements: any; // Required sprites, sounds, textures
 
-  @Column('jsonb', { nullable: true })
+  @Column('jsonb', { name: 'mobile_adaptations', nullable: true })
   mobileAdaptations: any; // Mobile-specific UX modifications
 
-  @Column('text', { nullable: true })
+  @Column('text', { name: 'scoring_logic', nullable: true })
   scoringLogic: string; // How 0-100 score is calculated
 
-  @Column('boolean', { default: true })
+  @Column('boolean', { name: 'is_active', default: true })
   isActive: boolean; // Can be disabled without deletion
 
   @CreateDateColumn({ name: 'created_at' })
