@@ -22,12 +22,18 @@ export class SuperAdminService {
   async getTokenUsageDashboard() {
     this.logger.log('[SuperAdmin] 📊 Fetching token usage dashboard data...');
 
-    // Get all providers for mapping IDs to names
+    // Get all providers for mapping IDs to names and costs
     const providers = await this.llmProviderRepository.find();
     const providerMap = providers.reduce((acc, p) => {
       acc[p.id] = p.name;
       return acc;
     }, {} as Record<string, string>);
+
+    // Get default provider for pricing info
+    const defaultProvider = providers.find(p => p.isDefault) || providers[0];
+    const pricePerMillionTokens = defaultProvider 
+      ? parseFloat(defaultProvider.costPerMillionTokens as any) 
+      : 5.0;
 
     // Get all users with their token usage
     const users = await this.userRepository.find({
@@ -106,7 +112,7 @@ export class SuperAdminService {
     // Calculate totals
     const totalUsed = accountsData.reduce((sum, acc) => sum + acc.tokenUsed, 0);
     const totalLimit = accountsData.reduce((sum, acc) => sum + acc.tokenLimit, 0);
-    const estimatedCost = (totalUsed / 1000000) * this.grokPricePerMillionTokens;
+    const estimatedCost = (totalUsed / 1000000) * pricePerMillionTokens;
 
     // Get usage breakdown by category
     const allLogs = await this.llmLogRepository.find();
@@ -125,8 +131,8 @@ export class SuperAdminService {
       },
       usageByCategory,
       pricing: {
-        perMillionTokens: this.grokPricePerMillionTokens,
-        provider: 'xAI Grok',
+        perMillionTokens: pricePerMillionTokens,
+        provider: defaultProvider?.name || 'No provider configured',
       },
     };
   }
