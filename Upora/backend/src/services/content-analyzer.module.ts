@@ -6,11 +6,12 @@ import { InteractionType } from '../entities/interaction-type.entity';
 import { ContentSource } from '../entities/content-source.entity';
 import { ProcessedContentOutput } from '../entities/processed-content-output.entity';
 import { LlmGenerationLog } from '../entities/llm-generation-log.entity';
+import { LlmProvider } from '../entities/llm-provider.entity';
 
 @Module({
   imports: [
     HttpModule,
-    TypeOrmModule.forFeature([InteractionType, ContentSource, ProcessedContentOutput, LlmGenerationLog]),
+    TypeOrmModule.forFeature([InteractionType, ContentSource, ProcessedContentOutput, LlmGenerationLog, LlmProvider]),
   ],
   providers: [ContentAnalyzerService],
   exports: [ContentAnalyzerService],

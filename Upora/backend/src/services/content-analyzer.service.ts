@@ -7,19 +7,19 @@ import { InteractionType } from '../entities/interaction-type.entity';
 import { ContentSource } from '../entities/content-source.entity';
 import { ProcessedContentOutput } from '../entities/processed-content-output.entity';
 import { LlmGenerationLog } from '../entities/llm-generation-log.entity';
+import { LlmProvider } from '../entities/llm-provider.entity';
 
 interface AnalysisResult {
   interactionTypeId: string;
   confidence: number;
   output: any;
   tokensUsed: number;
+  providerId: string;
 }
 
 @Injectable()
 export class ContentAnalyzerService {
   private readonly logger = new Logger(ContentAnalyzerService.name);
-  private readonly grokApiUrl = 'https://api.x.ai/v1/chat/completions';
-  private readonly grokApiKey = process.env.GROK_API_KEY || '';
 
   constructor(
     @InjectRepository(InteractionType)
@@ -30,6 +30,8 @@ export class ContentAnalyzerService {
     private processedContentRepository: Repository<ProcessedContentOutput>,
     @InjectRepository(LlmGenerationLog)
     private llmLogRepository: Repository<LlmGenerationLog>,
+    @InjectRepository(LlmProvider)
+    private llmProviderRepository: Repository<LlmProvider>,
     private readonly httpService: HttpService,
   ) {}
 
@@ -70,12 +72,23 @@ export class ContentAnalyzerService {
       return [];
     }
 
-    // 4. Generate Fragment Builder output via Grok
-    this.logger.log('[ContentAnalyzer] 🤖 Calling Grok API for Fragment Builder generation...');
+    // 4. Get active LLM provider
+    const provider = await this.llmProviderRepository.findOne({
+      where: { isDefault: true, isActive: true },
+    });
+
+    if (!provider) {
+      this.logger.error('[ContentAnalyzer] ❌ No active LLM provider configured');
+      throw new Error('No active LLM provider configured. Please configure a provider in Super Admin.');
+    }
+
+    // 5. Generate Fragment Builder output using active provider
+    this.logger.log(`[ContentAnalyzer] 🤖 Calling ${provider.name} for Fragment Builder generation...`);
     const startTime = Date.now();
     const result = await this.generateFragmentBuilder(
       contentText,
       fragmentBuilder.generationPrompt,
+      provider,
     );
     const processingTime = Date.now() - startTime;
 
@@ -83,11 +96,12 @@ export class ContentAnalyzerService {
       return [];
     }
 
-    // 5. Log token usage to database
+    // 6. Log token usage to database
     await this.logTokenUsage({
       contentSourceId,
       userId,
       tenantId: contentSource.tenantId,
+      providerId: provider.id,
       useCase: 'content-analysis',
       promptText: fragmentBuilder.generationPrompt.substring(0, 500) + '...', // Truncate for storage
       response: result,
@@ -121,22 +135,25 @@ export class ContentAnalyzerService {
   }
 
   /**
-   * Generate Fragment Builder interaction using Grok API
+   * Generate Fragment Builder interaction using active LLM provider
    */
   private async generateFragmentBuilder(
     contentText: string,
     promptTemplate: string,
+    provider: LlmProvider,
   ): Promise<AnalysisResult | null> {
     try {
       // Replace {contentText} in prompt template
       const prompt = promptTemplate.replace('{contentText}', contentText);
 
-      // Call Grok API
+      // Call LLM API using active provider settings
+      this.logger.log(`[ContentAnalyzer] Using provider: ${provider.name} (${provider.modelName})`);
+      
       const response = await firstValueFrom(
         this.httpService.post(
-          this.grokApiUrl,
+          provider.apiEndpoint,
           {
-            model: 'grok-beta',
+            model: provider.modelName,
             messages: [
               {
                 role: 'system',
@@ -148,13 +165,13 @@ export class ContentAnalyzerService {
                 content: prompt,
               },
             ],
-            temperature: 0.7,
-            max_tokens: 1000,
+            temperature: provider.temperature,
+            max_tokens: Math.min(provider.maxTokens, 1000), // Cap at 1000 for Fragment Builder
           },
           {
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${this.grokApiKey}`,
+              Authorization: `Bearer ${provider.apiKey}`,
             },
           },
         ),
@@ -177,7 +194,7 @@ export class ContentAnalyzerService {
       const jsonStr = jsonMatch[1] || messageContent;
       const parsed = JSON.parse(jsonStr.trim());
 
-      this.logger.log(`[ContentAnalyzer] 📊 Grok tokens used: ${tokensUsed}`);
+      this.logger.log(`[ContentAnalyzer] 📊 ${provider.name} tokens used: ${tokensUsed}`);
 
       // Log token usage for dashboard (Note: userId and tenantId passed from calling method)
       // This is logged separately in analyzeContentSource method
@@ -187,9 +204,10 @@ export class ContentAnalyzerService {
         confidence: parsed.confidence || 0,
         output: parsed.output || parsed,
         tokensUsed,
+        providerId: provider.id,
       };
     } catch (error) {
-      this.logger.error('[ContentAnalyzer] ❌ Grok API error:', error.message);
+      this.logger.error(`[ContentAnalyzer] ❌ ${provider.name} API error:`, error.message);
       if (error.response?.data) {
         this.logger.error('[ContentAnalyzer] Response:', JSON.stringify(error.response.data));
       }
@@ -221,6 +239,7 @@ export class ContentAnalyzerService {
     contentSourceId: string;
     userId: string;
     tenantId: string;
+    providerId: string;
     useCase: string;
     promptText: string;
     response: any;
@@ -232,6 +251,7 @@ export class ContentAnalyzerService {
       contentSourceId: data.contentSourceId,
       userId: data.userId,
       tenantId: data.tenantId,
+      providerId: data.providerId,
       useCase: data.useCase,
       promptText: data.promptText,
       response: data.response,
