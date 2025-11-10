@@ -556,17 +556,24 @@ export class LlmProviderConfigModalComponent implements OnInit, OnChanges {
   }
 
   onProviderTypeChange() {
+    console.log('[LlmProviderModal] Provider type changed to:', this.formData.providerType);
+    console.log('[LlmProviderModal] All presets:', this.allPresets);
+    
     const providerPreset = this.allPresets.find(p => p.providerType === this.formData.providerType);
+    
+    console.log('[LlmProviderModal] Found preset:', providerPreset);
     
     if (providerPreset) {
       this.availableModels = providerPreset.models;
       this.formData.apiEndpoint = providerPreset.defaultEndpoint;
       this.selectedModelPreset = null;
       this.usingPreset = false;
+      console.log('[LlmProviderModal] Available models:', this.availableModels);
     } else {
       this.availableModels = [];
       this.selectedModelPreset = null;
       this.usingPreset = false;
+      console.log('[LlmProviderModal] No preset found for provider type');
     }
   }
 
