@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { InteractionType } from '../entities/interaction-type.entity';
 import { ContentSource } from '../entities/content-source.entity';
 import { ProcessedContentOutput } from '../entities/processed-content-output.entity';
+import { LlmGenerationLog } from '../entities/llm-generation-log.entity';
 
 interface AnalysisResult {
   interactionTypeId: string;
@@ -27,6 +28,8 @@ export class ContentAnalyzerService {
     private contentSourceRepository: Repository<ContentSource>,
     @InjectRepository(ProcessedContentOutput)
     private processedContentRepository: Repository<ProcessedContentOutput>,
+    @InjectRepository(LlmGenerationLog)
+    private llmLogRepository: Repository<LlmGenerationLog>,
     private readonly httpService: HttpService,
   ) {}
 
@@ -69,16 +72,31 @@ export class ContentAnalyzerService {
 
     // 4. Generate Fragment Builder output via Grok
     this.logger.log('[ContentAnalyzer] 🤖 Calling Grok API for Fragment Builder generation...');
+    const startTime = Date.now();
     const result = await this.generateFragmentBuilder(
       contentText,
       fragmentBuilder.generationPrompt,
     );
+    const processingTime = Date.now() - startTime;
 
     if (!result) {
       return [];
     }
 
-    // 5. Validate and save if confidence >= threshold
+    // 5. Log token usage to database
+    await this.logTokenUsage({
+      contentSourceId,
+      userId,
+      tenantId: contentSource.tenantId,
+      useCase: 'content-analysis',
+      promptText: fragmentBuilder.generationPrompt.substring(0, 500) + '...', // Truncate for storage
+      response: result,
+      tokensUsed: result.tokensUsed,
+      processingTimeMs: processingTime,
+      outputsGenerated: result.confidence >= fragmentBuilder.minConfidence ? 1 : 0,
+    });
+
+    // 6. Validate and save if confidence >= threshold
     if (result.confidence >= fragmentBuilder.minConfidence) {
       await this.saveProcessedOutput({
         contentSourceId,
@@ -87,6 +105,7 @@ export class ContentAnalyzerService {
         confidence: result.confidence,
         tokensUsed: result.tokensUsed,
         userId,
+        tenantId: contentSource.tenantId,
       });
 
       this.logger.log(
@@ -141,7 +160,7 @@ export class ContentAnalyzerService {
         ),
       );
 
-      const grokResponse = response.data;
+      const grokResponse = response.data as any;
       const tokensUsed = grokResponse.usage?.total_tokens || 0;
       const messageContent = grokResponse.choices?.[0]?.message?.content;
 
@@ -159,6 +178,9 @@ export class ContentAnalyzerService {
       const parsed = JSON.parse(jsonStr.trim());
 
       this.logger.log(`[ContentAnalyzer] 📊 Grok tokens used: ${tokensUsed}`);
+
+      // Log token usage for dashboard (Note: userId and tenantId passed from calling method)
+      // This is logged separately in analyzeContentSource method
 
       return {
         interactionTypeId: 'fragment-builder',
@@ -193,6 +215,37 @@ export class ContentAnalyzerService {
   }
 
   /**
+   * Log token usage to database for dashboard
+   */
+  private async logTokenUsage(data: {
+    contentSourceId: string;
+    userId: string;
+    tenantId: string;
+    useCase: string;
+    promptText: string;
+    response: any;
+    tokensUsed: number;
+    processingTimeMs: number;
+    outputsGenerated: number;
+  }) {
+    const log = this.llmLogRepository.create({
+      contentSourceId: data.contentSourceId,
+      userId: data.userId,
+      tenantId: data.tenantId,
+      useCase: data.useCase,
+      promptText: data.promptText,
+      response: data.response,
+      tokensUsed: data.tokensUsed,
+      processingTimeMs: data.processingTimeMs,
+      outputsGenerated: data.outputsGenerated,
+      outputsApproved: 0, // Updated later when builder approves
+    });
+
+    await this.llmLogRepository.save(log);
+    this.logger.log(`[ContentAnalyzer] 📊 Token usage logged: ${data.tokensUsed} tokens`);
+  }
+
+  /**
    * Save processed output to database
    */
   private async saveProcessedOutput(data: {
@@ -202,25 +255,28 @@ export class ContentAnalyzerService {
     confidence: number;
     tokensUsed: number;
     userId: string;
+    tenantId: string;
   }) {
     const processedOutput = this.processedContentRepository.create({
+      lessonId: '00000000-0000-0000-0000-000000000000', // Placeholder - not linked to lesson yet
       contentSourceId: data.contentSourceId,
-      type: data.interactionTypeId,
+      outputType: data.interactionTypeId,
       outputName: data.output.targetStatement || 'Fragment Builder Output',
-      outputData: data.output,
-      status: 'draft', // Requires approval
-      metadata: {
-        confidence: data.confidence,
-        tokensUsed: data.tokensUsed,
-        generatedBy: 'llm-auto',
-        generatedAt: new Date().toISOString(),
+      outputData: {
+        ...data.output,
+        _metadata: {
+          confidence: data.confidence,
+          tokensUsed: data.tokensUsed,
+          generatedBy: 'llm-auto',
+          generatedAt: new Date().toISOString(),
+        },
       },
+      notes: `Auto-generated by LLM with confidence: ${data.confidence.toFixed(2)}`,
       createdBy: data.userId,
-      tenantId: '00000000-0000-0000-0000-000000000001', // TODO: Get from user context
     });
 
     await this.processedContentRepository.save(processedOutput);
-    this.logger.log(`[ContentAnalyzer] 💾 Saved processed output (status: draft)`);
+    this.logger.log(`[ContentAnalyzer] 💾 Saved processed output (outputType: ${data.interactionTypeId})`);
   }
 }
 
