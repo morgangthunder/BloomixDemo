@@ -15,6 +15,8 @@ import { ProcessedContentOutput } from './entities/processed-content-output.enti
 import { ScriptBlock } from './entities/script-block.entity';
 import { Course } from './entities/course.entity';
 import { LlmGenerationLog } from './entities/llm-generation-log.entity';
+import { StudentTopicScore } from './entities/student-topic-score.entity';
+import { StudentMistake } from './entities/student-mistake.entity';
 import { UsersModule } from './modules/users/users.module';
 import { LessonsModule } from './modules/lessons/lessons.module';
 import { ChatModule } from './modules/chat/chat.module';
@@ -41,7 +43,7 @@ import { WeaviateModule } from './services/weaviate.module';
         username: configService.get('database.username'),
         password: configService.get('database.password'),
         database: configService.get('database.database'),
-        entities: [User, Lesson, InteractionType, Workflow, Usage, ContentSource, LessonDataLink, ProcessedContentOutput, ScriptBlock, Course, LlmGenerationLog],
+        entities: [User, Lesson, InteractionType, Workflow, Usage, ContentSource, LessonDataLink, ProcessedContentOutput, ScriptBlock, Course, LlmGenerationLog, StudentTopicScore, StudentMistake],
         synchronize: configService.get('database.synchronize'),
         logging: configService.get('database.logging'),
       }),

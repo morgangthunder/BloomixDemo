@@ -142,6 +142,14 @@ export class Lesson {
   @Column({ name: 'course_id', type: 'uuid', nullable: true })
   courseId: string | null;
 
+  @Column({ type: 'jsonb', nullable: true })
+  objectives: {
+    topics: Array<{
+      name: string;
+      facts: string[]; // Learning objectives / proficiencies for this topic
+    }>;
+  };
+
   @ManyToOne(() => Course, course => course.lessons, { nullable: true })
   @JoinColumn({ name: 'course_id' })
   course: Course;
