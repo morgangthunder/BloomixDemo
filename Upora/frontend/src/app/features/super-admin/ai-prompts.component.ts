@@ -358,6 +358,34 @@ export class AiPromptsComponent implements OnInit {
   selectedAssistant: AIAssistant | null = null;
   assistants: AIAssistant[] = [
     {
+      id: 'content-analyzer',
+      name: 'Content Analyzer',
+      icon: '🔍',
+      description: 'Analyzes content sources (PDF, URL, text, video) and identifies which interaction types can be generated with high confidence',
+      prompts: {
+        pdfAnalysis: {
+          label: 'PDF Analysis Prompt',
+          content: 'You are analyzing a PDF document to identify possible educational interactions.\n\nGiven the PDF content, identify which interaction types can be generated with high confidence.\n\nFor each possible interaction:\n1. Assess if the content has the necessary elements\n2. Rate confidence (0.0-1.0)\n3. Explain why this interaction fits\n\nReturn JSON: { "possibleInteractions": [{ "type": "fragment-builder", "confidence": 0.95, "reason": "..." }] }',
+          placeholder: 'Enter the prompt for analyzing PDF content sources...'
+        },
+        urlAnalysis: {
+          label: 'URL/Webpage Analysis Prompt',
+          content: 'You are analyzing webpage content to identify possible educational interactions.\n\nGiven the webpage text, identify which interaction types can be generated.\n\nConsider:\n- Article structure and clarity\n- Presence of examples, comparisons, processes\n- Complexity and reading level\n\nReturn JSON with possible interactions and confidence scores.',
+          placeholder: 'Enter the prompt for analyzing web content...'
+        },
+        textAnalysis: {
+          label: 'Text Input Analysis Prompt',
+          content: 'You are analyzing raw text input to identify possible educational interactions.\n\nGiven the text, identify which interaction types work best.\n\nPrioritize:\n- Clear concepts and statements (Fragment Builder, True/False)\n- Cause-effect relationships (Prediction Branching)\n- Comparisons (Analogy Bridge)\n- Step-by-step processes (Stepping Stones)\n\nReturn JSON with ranked interaction suggestions.',
+          placeholder: 'Enter the prompt for analyzing text input...'
+        },
+        videoTranscriptAnalysis: {
+          label: 'Video Transcript Analysis Prompt',
+          content: 'You are analyzing a video transcript to identify possible educational interactions.\n\nGiven the transcript, identify interaction types that leverage:\n- Temporal flow of information\n- Visual descriptions (for Mystery Reveal, Hotspot Explorer)\n- Demonstrations and explanations\n- Q&A patterns\n\nReturn JSON with interaction suggestions and timestamp hints.',
+          placeholder: 'Enter the prompt for analyzing video transcripts...'
+        }
+      }
+    },
+    {
       id: 'scaffolder',
       name: 'Scaffolder',
       icon: '🏗️',
