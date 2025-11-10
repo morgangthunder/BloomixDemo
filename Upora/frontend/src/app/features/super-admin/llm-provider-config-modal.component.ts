@@ -4,8 +4,23 @@ import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 
-interface LlmProvider {
+interface LlmProviderForm {
   id?: string;
+  name: string;
+  providerType: string;
+  apiEndpoint: string;
+  apiKey: string;
+  modelName: string;
+  costPerMillionTokens: number;
+  maxTokens: number;
+  temperature: number;
+  isActive: boolean;
+  isDefault: boolean;
+  config?: any;
+}
+
+interface LlmProvider {
+  id: string;
   name: string;
   providerType: string;
   apiEndpoint: string;
@@ -405,7 +420,7 @@ export class LlmProviderConfigModalComponent implements OnChanges {
   @Output() closed = new EventEmitter<void>();
   @Output() saved = new EventEmitter<LlmProvider>();
 
-  formData: LlmProvider = this.getEmptyForm();
+  formData: LlmProviderForm = this.getEmptyForm();
   isEditMode = false;
   showApiKey = false;
   testing = false;
@@ -430,7 +445,7 @@ export class LlmProviderConfigModalComponent implements OnChanges {
     }
   }
 
-  getEmptyForm(): LlmProvider {
+  getEmptyForm(): LlmProviderForm {
     return {
       name: '',
       providerType: 'xai',
