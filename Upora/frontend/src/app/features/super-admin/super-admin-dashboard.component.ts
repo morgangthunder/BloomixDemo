@@ -8,7 +8,7 @@ import { IonContent } from '@ionic/angular/standalone';
   standalone: true,
   imports: [CommonModule, RouterModule, IonContent],
   template: `
-    <ion-content>
+    <ion-content [style.--padding-top]="'80px'">
       <div class="super-admin-dashboard">
         <!-- Header -->
         <div class="dashboard-header">

@@ -77,6 +77,11 @@ interface TokenUsage {
                       [class]="getNavLinkClasses('interaction-builder')">
                 Interaction Builder
               </button>
+              <button *ngIf="isSuperAdmin()" 
+                      (click)="navigateTo('super-admin')" 
+                      [class]="getNavLinkClasses('super-admin')">
+                🔧 Super Admin
+              </button>
             </nav>
           </div>
           
@@ -165,6 +170,7 @@ interface TokenUsage {
           <button *ngIf="isLessonBuilder()" (click)="navigateTo('content-library')" [class]="getMobileNavLinkClasses('content-library')">Content Library</button>
           <button *ngIf="isLessonBuilder()" (click)="navigateTo('lesson-builder')" [class]="getMobileNavLinkClasses('lesson-builder')">Lesson Builder</button>
           <button *ngIf="isInteractionBuilder()" (click)="navigateTo('interaction-builder')" [class]="getMobileNavLinkClasses('interaction-builder')">Interaction Builder</button>
+          <button *ngIf="isSuperAdmin()" (click)="navigateTo('super-admin')" [class]="getMobileNavLinkClasses('super-admin')">🔧 Super Admin</button>
         </nav>
       </div>
     </header>
@@ -288,11 +294,16 @@ export class HeaderComponent implements OnInit, OnDestroy {
 
   isLessonBuilder(): boolean {
     const role = environment.userRole;
-    return role === 'lesson-builder' || role === 'admin';
+    return role === 'lesson-builder' || role === 'admin' || role === 'super-admin';
   }
 
   isInteractionBuilder(): boolean {
     const role = environment.userRole;
-    return role === 'interaction-builder' || role === 'admin';
+    return role === 'interaction-builder' || role === 'admin' || role === 'super-admin';
+  }
+
+  isSuperAdmin(): boolean {
+    const role = environment.userRole;
+    return role === 'super-admin';
   }
 }

@@ -41,7 +41,7 @@ interface TokenUsageResponse {
   standalone: true,
   imports: [CommonModule, IonContent],
   template: `
-    <ion-content>
+    <ion-content [style.--padding-top]="'80px'">
       <div class="llm-usage-page">
         <!-- Header with Back Button -->
         <div class="page-header">

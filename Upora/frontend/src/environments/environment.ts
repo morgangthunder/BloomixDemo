@@ -8,7 +8,7 @@ export const environment = {
   // Multi-tenancy configuration
   tenantId: '00000000-0000-0000-0000-000000000001', // Default dev tenant
   defaultUserId: '00000000-0000-0000-0000-000000000011', // Default user (Sarah - lesson builder)
-  userRole: 'lesson-builder', // student | lesson-builder | interaction-builder | admin
+  userRole: 'super-admin', // student | lesson-builder | interaction-builder | admin | super-admin
   
   // Feature flags
   enableMockData: false, // Using real API - connected to backend
