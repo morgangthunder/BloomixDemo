@@ -165,7 +165,7 @@ export class ContentAnalyzerService {
                 content: prompt,
               },
             ],
-            temperature: provider.temperature,
+            temperature: parseFloat(provider.temperature as any), // Convert string to number
             max_tokens: Math.min(provider.maxTokens, 1000), // Cap at 1000 for Fragment Builder
           },
           {
