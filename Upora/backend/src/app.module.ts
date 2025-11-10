@@ -19,6 +19,7 @@ import { LessonsModule } from './modules/lessons/lessons.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { ContentSourcesModule } from './modules/content-sources/content-sources.module';
 import { LessonEditorModule } from './modules/lesson-editor/lesson-editor.module';
+import { InteractionTypesModule } from './modules/interaction-types/interaction-types.module';
 import { WeaviateModule } from './services/weaviate.module';
 
 @Module({
@@ -48,6 +49,7 @@ import { WeaviateModule } from './services/weaviate.module';
     ChatModule,
     ContentSourcesModule,
     LessonEditorModule,
+    InteractionTypesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

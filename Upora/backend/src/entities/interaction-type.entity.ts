@@ -1,69 +1,58 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-  ManyToOne,
-  JoinColumn,
-} from 'typeorm';
-import { ApprovalStatus } from '../common/enums/approval-status.enum';
-import { User } from './user.entity';
+import { Entity, PrimaryColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
 @Entity('interaction_types')
 export class InteractionType {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryColumn('varchar')
+  id: string; // e.g., 'fragment-builder'
 
-  @Column({ type: 'uuid' })
-  tenantId: string;
+  @Column('varchar')
+  name: string; // e.g., 'True/False Fragment Builder'
 
-  @Column()
-  name: string;
+  @Column('varchar', { nullable: true })
+  category: string; // e.g., 'absorb-show'
 
-  @Column({ type: 'text', nullable: true })
+  @Column('text')
   description: string;
 
-  @Column()
-  stage: string; // e.g., 'Trigger', 'Explore', etc.
+  @Column('jsonb')
+  schema: any; // JSON schema for input validation (Zod-compatible)
 
-  @Column()
-  subStage: string; // e.g., 'Tease', 'Ignite', etc.
+  @Column('text')
+  generationPrompt: string; // LLM prompt for auto-generation
 
-  @Column({ type: 'jsonb' })
-  config: {
-    inputs?: any[];
-    events?: any[];
-    rendering?: any;
-    pixiCode?: string;
-  };
+  @Column('varchar', { nullable: true })
+  pixiRenderer: string; // Component name (e.g., 'FragmentBuilderComponent')
 
-  @Column({
-    type: 'enum',
-    enum: ApprovalStatus,
-    default: ApprovalStatus.PENDING,
-  })
-  status: ApprovalStatus;
+  @Column('decimal', { precision: 3, scale: 2, default: 0.7 })
+  minConfidence: number; // Minimum confidence threshold for auto-generation
 
-  @Column({ type: 'uuid' })
-  createdBy: string;
+  @Column('simple-array', { nullable: true })
+  teachStageFit: string[]; // Recommended stages, e.g., ['absorb-show', 'tease-trigger']
 
-  @ManyToOne(() => User)
-  @JoinColumn({ name: 'createdBy' })
-  creator: User;
+  @Column('simple-array', { nullable: true })
+  requiresResources: string[]; // e.g., ['image', 'video', 'audio']
 
-  @Column({ type: 'boolean', default: false })
-  isPremium: boolean;
+  @Column('varchar', { default: 'medium' })
+  cognitiveLoad: string; // low | medium | high
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
-  price: number;
+  @Column('integer', { nullable: true })
+  estimatedDuration: number; // In seconds
 
-  @Column({ type: 'int', default: 0 })
-  usageCount: number;
+  @Column('jsonb', { nullable: true })
+  assetRequirements: any; // Required sprites, sounds, textures
 
-  @CreateDateColumn()
+  @Column('jsonb', { nullable: true })
+  mobileAdaptations: any; // Mobile-specific UX modifications
+
+  @Column('text', { nullable: true })
+  scoringLogic: string; // How 0-100 score is calculated
+
+  @Column('boolean', { default: true })
+  isActive: boolean; // Can be disabled without deletion
+
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }
