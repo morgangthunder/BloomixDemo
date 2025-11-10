@@ -1,9 +1,11 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { IonContent } from '@ionic/angular/standalone';
 import { environment } from '../../../environments/environment';
+import { LlmProviderConfigModalComponent } from './llm-provider-config-modal.component';
 
 interface TokenUsageAccount {
   accountId: string;
@@ -38,10 +40,25 @@ interface TokenUsageResponse {
   };
 }
 
+interface LlmProvider {
+  id: string;
+  name: string;
+  providerType: string;
+  apiEndpoint: string;
+  apiKey: string;
+  modelName: string;
+  costPerMillionTokens: number;
+  maxTokens: number;
+  temperature: number;
+  isActive: boolean;
+  isDefault: boolean;
+  config?: any;
+}
+
 @Component({
   selector: 'app-llm-token-usage',
   standalone: true,
-  imports: [CommonModule, IonContent],
+  imports: [CommonModule, FormsModule, IonContent, LlmProviderConfigModalComponent],
   template: `
     <ion-content [style.--padding-top]="'80px'">
       <div class="llm-usage-page">
@@ -90,12 +107,35 @@ interface TokenUsageResponse {
               <div class="card-subtext">{{ data.totals.currency }} @ \${{ data.pricing.perMillionTokens }}/1M tokens</div>
             </div>
 
-            <div class="summary-card">
-              <div class="card-label">Provider</div>
-              <div class="card-value provider">{{ data.pricing.provider }}</div>
-              <div class="card-subtext">AI Model</div>
+            <div class="summary-card provider-card">
+              <div class="card-label">Active Provider</div>
+              <select 
+                [(ngModel)]="selectedProviderId" 
+                (change)="onProviderChange()"
+                class="provider-dropdown"
+              >
+                <option *ngFor="let p of providers" [value]="p.id">
+                  {{ p.name }}
+                </option>
+              </select>
+              <div class="provider-actions">
+                <button class="btn-add-provider" (click)="openAddProviderModal()" title="Add new provider">
+                  <span class="btn-icon">+</span>
+                </button>
+                <button class="btn-configure" (click)="openConfigureModal()" [disabled]="!selectedProviderId">
+                  Configure
+                </button>
+              </div>
             </div>
           </div>
+
+          <!-- Provider Config Modal -->
+          <app-llm-provider-config-modal
+            [isOpen]="showProviderModal"
+            [provider]="editingProvider"
+            (closed)="closeProviderModal()"
+            (saved)="onProviderSaved($event)"
+          ></app-llm-provider-config-modal>
 
           <!-- Accounts Table -->
           <div class="accounts-section">
@@ -336,6 +376,88 @@ interface TokenUsageResponse {
     .card-subtext {
       font-size: 0.75rem;
       color: rgba(255, 255, 255, 0.5);
+    }
+
+    .provider-card {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .provider-dropdown {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      padding: 0.5rem 0.75rem;
+      color: #ffffff;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .provider-dropdown:focus {
+      outline: none;
+      border-color: #00d4ff;
+    }
+
+    .provider-dropdown option {
+      background: #1a1a2e;
+      color: #ffffff;
+    }
+
+    .provider-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .btn-add-provider {
+      width: 36px;
+      height: 36px;
+      background: rgba(0, 212, 255, 0.2);
+      border: 1px solid #00d4ff;
+      border-radius: 50%;
+      color: #00d4ff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    .btn-add-provider:hover {
+      background: rgba(0, 212, 255, 0.3);
+      transform: scale(1.05);
+    }
+
+    .btn-icon {
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .btn-configure {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      color: #ffffff;
+      padding: 0.5rem 1rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-configure:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: #00d4ff;
+    }
+
+    .btn-configure:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     /* Accounts Section */
@@ -672,6 +794,10 @@ export class LlmTokenUsageComponent implements OnInit {
   loading = true;
   error: string | null = null;
   data: TokenUsageResponse | null = null;
+  providers: LlmProvider[] = [];
+  selectedProviderId: string = '';
+  showProviderModal = false;
+  editingProvider: LlmProvider | null = null;
 
   constructor(
     private http: HttpClient,
@@ -679,7 +805,26 @@ export class LlmTokenUsageComponent implements OnInit {
   ) {}
 
   ngOnInit() {
+    this.loadProviders();
     this.loadData();
+  }
+
+  async loadProviders() {
+    try {
+      this.providers = await this.http.get<LlmProvider[]>(
+        `${environment.apiUrl}/super-admin/llm-providers`
+      ).toPromise() as LlmProvider[];
+
+      // Set selected to default provider
+      const defaultProvider = this.providers.find(p => p.isDefault);
+      if (defaultProvider) {
+        this.selectedProviderId = defaultProvider.id;
+      }
+
+      console.log('[LLM Usage] Providers loaded:', this.providers);
+    } catch (error) {
+      console.error('[LLM Usage] Failed to load providers:', error);
+    }
   }
 
   loadData() {
@@ -730,6 +875,47 @@ export class LlmTokenUsageComponent implements OnInit {
     if (!this.data) return '0.00';
     const cost = (tokensUsed / 1000000) * this.data.pricing.perMillionTokens;
     return cost.toFixed(2);
+  }
+
+  async onProviderChange() {
+    console.log('[LLM Usage] Provider changed to:', this.selectedProviderId);
+    
+    // Set as default provider
+    try {
+      await this.http.put(
+        `${environment.apiUrl}/super-admin/llm-providers/${this.selectedProviderId}/set-default`,
+        {}
+      ).toPromise();
+      
+      console.log('[LLM Usage] Default provider updated');
+      this.loadData(); // Reload to update pricing
+    } catch (error) {
+      console.error('[LLM Usage] Failed to set default provider:', error);
+    }
+  }
+
+  openAddProviderModal() {
+    this.editingProvider = null;
+    this.showProviderModal = true;
+  }
+
+  openConfigureModal() {
+    const provider = this.providers.find(p => p.id === this.selectedProviderId);
+    if (provider) {
+      this.editingProvider = provider;
+      this.showProviderModal = true;
+    }
+  }
+
+  closeProviderModal() {
+    this.showProviderModal = false;
+    this.editingProvider = null;
+  }
+
+  async onProviderSaved(provider: LlmProvider) {
+    console.log('[LLM Usage] Provider saved:', provider);
+    await this.loadProviders();
+    this.loadData();
   }
 }
 
