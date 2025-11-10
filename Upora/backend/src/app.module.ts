@@ -20,6 +20,7 @@ import { ChatModule } from './modules/chat/chat.module';
 import { ContentSourcesModule } from './modules/content-sources/content-sources.module';
 import { LessonEditorModule } from './modules/lesson-editor/lesson-editor.module';
 import { InteractionTypesModule } from './modules/interaction-types/interaction-types.module';
+import { ContentAnalyzerModule } from './services/content-analyzer.module';
 import { WeaviateModule } from './services/weaviate.module';
 
 @Module({
@@ -44,6 +45,7 @@ import { WeaviateModule } from './services/weaviate.module';
       }),
     }),
     WeaviateModule, // Global module with WeaviateService
+    ContentAnalyzerModule, // LLM content analysis service
     UsersModule,
     LessonsModule,
     ChatModule,

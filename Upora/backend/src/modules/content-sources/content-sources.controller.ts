@@ -16,10 +16,14 @@ import { ContentSourcesService } from './content-sources.service';
 import { CreateContentSourceDto } from './dto/create-content-source.dto';
 import { UpdateContentSourceDto } from './dto/update-content-source.dto';
 import { SearchContentDto } from './dto/search-content.dto';
+import { ContentAnalyzerService } from '../../services/content-analyzer.service';
 
 @Controller('content-sources')
 export class ContentSourcesController {
-  constructor(private readonly contentSourcesService: ContentSourcesService) {}
+  constructor(
+    private readonly contentSourcesService: ContentSourcesService,
+    private readonly contentAnalyzerService: ContentAnalyzerService,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -140,6 +144,25 @@ export class ContentSourcesController {
   ) {
     console.log('[ContentSourcesController] 🎬 Processing YouTube URL...');
     return this.contentSourcesService.processYouTubeUrl(url, startTime, endTime, tenantId, userId);
+  }
+
+  @Post(':id/analyze')
+  @HttpCode(HttpStatus.OK)
+  async analyzeContent(
+    @Param('id', ParseUUIDPipe) contentSourceId: string,
+    @Headers('x-user-id') userId: string,
+  ) {
+    console.log('[ContentSourcesController] 🤖 Analyzing content source with LLM...');
+    const results = await this.contentAnalyzerService.analyzeContentSource(contentSourceId, userId);
+    return {
+      contentSourceId,
+      generatedOutputs: results.length,
+      results: results.map(r => ({
+        interactionType: r.interactionTypeId,
+        confidence: r.confidence,
+        tokensUsed: r.tokensUsed,
+      })),
+    };
   }
 }
 
