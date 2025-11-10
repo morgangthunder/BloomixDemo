@@ -17,6 +17,7 @@ import { Course } from './entities/course.entity';
 import { LlmGenerationLog } from './entities/llm-generation-log.entity';
 import { StudentTopicScore } from './entities/student-topic-score.entity';
 import { StudentMistake } from './entities/student-mistake.entity';
+import { LlmProvider } from './entities/llm-provider.entity';
 import { UsersModule } from './modules/users/users.module';
 import { LessonsModule } from './modules/lessons/lessons.module';
 import { ChatModule } from './modules/chat/chat.module';
@@ -24,6 +25,7 @@ import { ContentSourcesModule } from './modules/content-sources/content-sources.
 import { LessonEditorModule } from './modules/lesson-editor/lesson-editor.module';
 import { InteractionTypesModule } from './modules/interaction-types/interaction-types.module';
 import { SuperAdminModule } from './modules/super-admin/super-admin.module';
+import { LlmProvidersModule } from './modules/llm-providers/llm-providers.module';
 import { ContentAnalyzerModule } from './services/content-analyzer.module';
 import { WeaviateModule } from './services/weaviate.module';
 
@@ -43,7 +45,7 @@ import { WeaviateModule } from './services/weaviate.module';
         username: configService.get('database.username'),
         password: configService.get('database.password'),
         database: configService.get('database.database'),
-        entities: [User, Lesson, InteractionType, Workflow, Usage, ContentSource, LessonDataLink, ProcessedContentOutput, ScriptBlock, Course, LlmGenerationLog, StudentTopicScore, StudentMistake],
+        entities: [User, Lesson, InteractionType, Workflow, Usage, ContentSource, LessonDataLink, ProcessedContentOutput, ScriptBlock, Course, LlmGenerationLog, StudentTopicScore, StudentMistake, LlmProvider],
         synchronize: configService.get('database.synchronize'),
         logging: configService.get('database.logging'),
       }),
@@ -57,6 +59,7 @@ import { WeaviateModule } from './services/weaviate.module';
     LessonEditorModule,
     InteractionTypesModule,
     SuperAdminModule,
+    LlmProvidersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
