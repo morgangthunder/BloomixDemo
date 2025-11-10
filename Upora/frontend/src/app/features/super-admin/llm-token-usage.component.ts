@@ -184,10 +184,15 @@ interface TokenUsageResponse {
     </ion-content>
   `,
   styles: [`
+    :host {
+      display: block;
+    }
+
     .llm-usage-page {
       min-height: 100vh;
       background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%);
       padding: 2rem;
+      padding-top: 1rem;
     }
 
     .page-header {

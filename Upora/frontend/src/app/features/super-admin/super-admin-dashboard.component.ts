@@ -78,15 +78,40 @@ import { IonContent } from '@ionic/angular/standalone';
               <div class="card-status">Coming Soon</div>
             </div>
           </div>
+
+          <!-- AI Assistant Prompts Management -->
+          <div class="dashboard-card disabled">
+            <div class="card-icon">🧠</div>
+            <div class="card-content">
+              <h3>AI Assistant Prompts</h3>
+              <p>Configure prompts for Scaffolder, Lesson-builder, Teacher, Inventor, Optimiser, and Lesson Approver</p>
+              <div class="card-status">Coming Soon</div>
+            </div>
+          </div>
+
+          <!-- Lesson Approval Queue -->
+          <div class="dashboard-card disabled">
+            <div class="card-icon">✅</div>
+            <div class="card-content">
+              <h3>Lesson Approval Queue</h3>
+              <p>Review lessons submitted for approval, AI rejections, and approval history</p>
+              <div class="card-status">Coming Soon</div>
+            </div>
+          </div>
         </div>
       </div>
     </ion-content>
   `,
   styles: [`
+    :host {
+      display: block;
+    }
+
     .super-admin-dashboard {
       min-height: 100vh;
       background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%);
       padding: 2rem;
+      padding-top: 1rem;
     }
 
     .dashboard-header {
