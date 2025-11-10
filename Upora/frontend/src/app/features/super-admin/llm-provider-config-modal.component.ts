@@ -1,8 +1,26 @@
-import { Component, EventEmitter, Input, Output, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, EventEmitter, Input, Output, OnInit, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
+
+interface ModelPreset {
+  modelName: string;
+  displayName: string;
+  costPerMillionTokens: number;
+  maxTokens: number;
+  defaultTemperature: number;
+  supportsStreaming?: boolean;
+  supportsVision?: boolean;
+  contextWindow?: number;
+}
+
+interface ProviderPresets {
+  providerType: string;
+  displayName: string;
+  defaultEndpoint: string;
+  models: ModelPreset[];
+}
 
 interface LlmProviderForm {
   id?: string;
@@ -60,21 +78,40 @@ interface LlmProvider {
           <div class="form-row">
             <div class="form-group">
               <label>Provider Type *</label>
-              <select [(ngModel)]="formData.providerType" class="form-select">
+              <select 
+                [(ngModel)]="formData.providerType" 
+                (change)="onProviderTypeChange()"
+                class="form-select"
+              >
+                <option value="">-- Select Provider --</option>
                 <option value="xai">xAI</option>
                 <option value="openai">OpenAI</option>
                 <option value="anthropic">Anthropic</option>
                 <option value="google">Google</option>
-                <option value="other">Other</option>
+                <option value="other">Other (Manual Config)</option>
               </select>
             </div>
 
-            <div class="form-group">
+            <div class="form-group" *ngIf="formData.providerType && formData.providerType !== 'other'">
+              <label>Model *</label>
+              <select 
+                [(ngModel)]="selectedModelPreset" 
+                (change)="onModelSelect()"
+                class="form-select"
+              >
+                <option [ngValue]="null">-- Select Model --</option>
+                <option *ngFor="let model of availableModels" [ngValue]="model">
+                  {{ model.displayName }} (\${{ model.costPerMillionTokens }}/1M)
+                </option>
+              </select>
+            </div>
+
+            <div class="form-group" *ngIf="formData.providerType === 'other'">
               <label>Model Name *</label>
               <input 
                 type="text" 
                 [(ngModel)]="formData.modelName" 
-                placeholder="e.g., grok-beta"
+                placeholder="e.g., custom-model-v1"
                 class="form-input"
               />
             </div>
@@ -118,7 +155,10 @@ interface LlmProvider {
                 [(ngModel)]="formData.costPerMillionTokens" 
                 placeholder="5.00"
                 class="form-input"
+                [readonly]="usingPreset"
+                [class.readonly-field]="usingPreset"
               />
+              <div *ngIf="usingPreset" class="field-hint">✓ Auto-filled from model preset</div>
             </div>
 
             <div class="form-group">
@@ -128,7 +168,10 @@ interface LlmProvider {
                 [(ngModel)]="formData.maxTokens" 
                 placeholder="4096"
                 class="form-input"
+                [readonly]="usingPreset"
+                [class.readonly-field]="usingPreset"
               />
+              <div *ngIf="usingPreset" class="field-hint">✓ Auto-filled from model preset</div>
             </div>
 
             <div class="form-group">
@@ -275,6 +318,19 @@ interface LlmProvider {
       color: rgba(255, 255, 255, 0.3);
     }
 
+    .form-input.readonly-field {
+      background: rgba(0, 212, 255, 0.05);
+      border-color: rgba(0, 212, 255, 0.3);
+      cursor: not-allowed;
+      opacity: 0.8;
+    }
+
+    .field-hint {
+      font-size: 0.75rem;
+      color: #00d4ff;
+      margin-top: 0.25rem;
+    }
+
     .input-with-toggle {
       position: relative;
     }
@@ -414,7 +470,7 @@ interface LlmProvider {
     }
   `]
 })
-export class LlmProviderConfigModalComponent implements OnChanges {
+export class LlmProviderConfigModalComponent implements OnInit, OnChanges {
   @Input() isOpen = false;
   @Input() provider: LlmProvider | null = null;
   @Output() closed = new EventEmitter<void>();
@@ -426,8 +482,25 @@ export class LlmProviderConfigModalComponent implements OnChanges {
   testing = false;
   saving = false;
   testResult: { success: boolean; message: string } | null = null;
+  
+  allPresets: ProviderPresets[] = [];
+  availableModels: ModelPreset[] = [];
+  selectedModelPreset: ModelPreset | null = null;
+  usingPreset = false;
 
   constructor(private http: HttpClient) {}
+
+  async ngOnInit() {
+    // Load model presets from backend
+    try {
+      this.allPresets = await this.http.get<ProviderPresets[]>(
+        `${environment.apiUrl}/super-admin/llm-providers/presets`
+      ).toPromise() as ProviderPresets[];
+      console.log('[LlmProviderModal] Presets loaded:', this.allPresets);
+    } catch (error) {
+      console.error('[LlmProviderModal] Failed to load presets:', error);
+    }
+  }
 
   ngOnChanges(changes: SimpleChanges) {
     if (changes['provider'] || changes['isOpen']) {
@@ -472,6 +545,46 @@ export class LlmProviderConfigModalComponent implements OnChanges {
       isActive: true,
       isDefault: false,
     };
+  }
+
+  onProviderTypeChange() {
+    const providerPreset = this.allPresets.find(p => p.providerType === this.formData.providerType);
+    
+    if (providerPreset) {
+      this.availableModels = providerPreset.models;
+      this.formData.apiEndpoint = providerPreset.defaultEndpoint;
+      this.selectedModelPreset = null;
+      this.usingPreset = false;
+    } else {
+      this.availableModels = [];
+      this.selectedModelPreset = null;
+      this.usingPreset = false;
+    }
+  }
+
+  onModelSelect() {
+    if (this.selectedModelPreset) {
+      // Auto-fill from preset
+      this.formData.modelName = this.selectedModelPreset.modelName;
+      this.formData.name = this.selectedModelPreset.displayName;
+      this.formData.costPerMillionTokens = this.selectedModelPreset.costPerMillionTokens;
+      this.formData.maxTokens = this.selectedModelPreset.maxTokens;
+      this.formData.temperature = this.selectedModelPreset.defaultTemperature;
+      
+      if (this.selectedModelPreset.supportsStreaming !== undefined) {
+        this.formData.config = {
+          ...this.formData.config,
+          supportsStreaming: this.selectedModelPreset.supportsStreaming,
+          supportsVision: this.selectedModelPreset.supportsVision,
+          contextWindow: this.selectedModelPreset.contextWindow,
+        };
+      }
+      
+      this.usingPreset = true;
+      console.log('[LlmProviderModal] Model preset applied:', this.selectedModelPreset);
+    } else {
+      this.usingPreset = false;
+    }
   }
 
   isFormValid(): boolean {

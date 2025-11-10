@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, HttpCode, HttpStatus, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, HttpCode, HttpStatus, ParseUUIDPipe } from '@nestjs/common';
 import { LlmProvidersService } from './llm-providers.service';
 import { LlmProvider } from '../../entities/llm-provider.entity';
+import { MODEL_PRESETS, getProviderPresets, getModelPreset } from './model-presets';
 
 @Controller('super-admin/llm-providers')
 export class LlmProvidersController {
@@ -57,6 +58,32 @@ export class LlmProvidersController {
   async seed(): Promise<{ message: string }> {
     await this.llmProvidersService.seedDefaultProvider();
     return { message: 'Default provider seeded successfully' };
+  }
+
+  @Get('presets')
+  async getPresets() {
+    return MODEL_PRESETS;
+  }
+
+  @Get('presets/:providerType')
+  async getProviderPresets(@Param('providerType') providerType: string) {
+    const presets = getProviderPresets(providerType);
+    if (!presets) {
+      return { error: 'Provider type not found' };
+    }
+    return presets;
+  }
+
+  @Get('presets/:providerType/:modelName')
+  async getModelPreset(
+    @Param('providerType') providerType: string,
+    @Param('modelName') modelName: string,
+  ) {
+    const preset = getModelPreset(providerType, modelName);
+    if (!preset) {
+      return { error: 'Model not found' };
+    }
+    return preset;
   }
 }
 
