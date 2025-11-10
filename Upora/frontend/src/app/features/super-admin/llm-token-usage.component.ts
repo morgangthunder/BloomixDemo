@@ -112,6 +112,7 @@ interface TokenUsageResponse {
                     <th>Progress</th>
                     <th>Remaining</th>
                     <th>Status</th>
+                    <th>Quota Exceed Est.</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -158,8 +159,14 @@ interface TokenUsageResponse {
                       >
                         {{ account.willExceed ? '⚠️ Will Exceed' : '✓ OK' }}
                       </span>
-                      <div *ngIf="account.estimatedExceedDate" class="exceed-date">
-                        Est: {{ account.estimatedExceedDate }}
+                    </td>
+                    <td>
+                      <div *ngIf="account.willExceed && account.estimatedExceedDate" class="exceed-info">
+                        <div class="exceed-date-highlight">{{ account.estimatedExceedDate }}</div>
+                        <div class="exceed-period">Before renewal ({{ account.currentPeriodEnd }})</div>
+                      </div>
+                      <div *ngIf="!account.willExceed" class="no-exceed">
+                        <span class="safe-text">—</span>
                       </div>
                     </td>
                   </tr>
@@ -488,6 +495,32 @@ interface TokenUsageResponse {
       font-size: 0.75rem;
       color: rgba(255, 255, 255, 0.5);
       margin-top: 0.25rem;
+    }
+
+    .exceed-info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .exceed-date-highlight {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #f44336;
+    }
+
+    .exceed-period {
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.5);
+    }
+
+    .no-exceed {
+      text-align: center;
+    }
+
+    .safe-text {
+      color: rgba(255, 255, 255, 0.3);
+      font-size: 1.25rem;
     }
 
     /* Category Section */

@@ -80,13 +80,14 @@ import { IonContent } from '@ionic/angular/standalone';
           </div>
 
           <!-- AI Assistant Prompts Management -->
-          <div class="dashboard-card disabled">
+          <div class="dashboard-card" (click)="navigateTo('/super-admin/ai-prompts')">
             <div class="card-icon">🧠</div>
             <div class="card-content">
               <h3>AI Assistant Prompts</h3>
               <p>Configure prompts for Scaffolder, Lesson-builder, Teacher, Inventor, Optimiser, and Lesson Approver</p>
-              <div class="card-status">Coming Soon</div>
+              <div class="card-status active">Active</div>
             </div>
+            <div class="card-arrow">→</div>
           </div>
 
           <!-- Lesson Approval Queue -->

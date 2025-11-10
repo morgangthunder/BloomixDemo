@@ -65,5 +65,9 @@ export const routes: Routes = [
   {
     path: 'super-admin/llm-usage',
     loadComponent: () => import('./features/super-admin/llm-token-usage.component').then(m => m.LlmTokenUsageComponent)
+  },
+  {
+    path: 'super-admin/ai-prompts',
+    loadComponent: () => import('./features/super-admin/ai-prompts.component').then(m => m.AiPromptsComponent)
   }
 ];
