@@ -111,6 +111,7 @@ interface TokenUsageResponse {
                     <th>Used / Limit</th>
                     <th>Progress</th>
                     <th>Remaining</th>
+                    <th>Cost This Period</th>
                     <th>Status</th>
                     <th>Quota Exceed Est.</th>
                   </tr>
@@ -150,6 +151,12 @@ interface TokenUsageResponse {
                     </td>
                     <td>
                       <span class="remaining-tokens">{{ formatNumber(account.tokenRemaining) }}</span>
+                    </td>
+                    <td>
+                      <div class="cost-cell">
+                        <div class="cost-amount">\${{ calculateAccountCost(account.tokenUsed) }}</div>
+                        <div class="cost-subtext">{{ data.totals.currency }}</div>
+                      </div>
                     </td>
                     <td>
                       <span 
@@ -523,6 +530,23 @@ interface TokenUsageResponse {
       font-size: 1.25rem;
     }
 
+    .cost-cell {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .cost-amount {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #00d4ff;
+    }
+
+    .cost-subtext {
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.5);
+    }
+
     /* Category Section */
     .category-section {
       background: rgba(255, 255, 255, 0.03);
@@ -653,6 +677,12 @@ export class LlmTokenUsageComponent implements OnInit {
       name: name.replace(/-/g, ' '),
       tokens
     }));
+  }
+
+  calculateAccountCost(tokensUsed: number): string {
+    if (!this.data) return '0.00';
+    const cost = (tokensUsed / 1000000) * this.data.pricing.perMillionTokens;
+    return cost.toFixed(2);
   }
 }
 
