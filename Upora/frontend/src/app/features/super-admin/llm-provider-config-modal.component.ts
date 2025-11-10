@@ -491,7 +491,12 @@ export class LlmProviderConfigModalComponent implements OnInit, OnChanges {
   constructor(private http: HttpClient) {}
 
   async ngOnInit() {
-    // Load model presets from backend
+    await this.loadPresets();
+  }
+
+  async loadPresets() {
+    if (this.allPresets.length > 0) return; // Already loaded
+    
     try {
       this.allPresets = await this.http.get<ProviderPresets[]>(
         `${environment.apiUrl}/super-admin/llm-providers/presets`
@@ -502,9 +507,12 @@ export class LlmProviderConfigModalComponent implements OnInit, OnChanges {
     }
   }
 
-  ngOnChanges(changes: SimpleChanges) {
+  async ngOnChanges(changes: SimpleChanges) {
     if (changes['provider'] || changes['isOpen']) {
       if (this.isOpen) {
+        // Load presets if not already loaded
+        await this.loadPresets();
+
         // Hide header and lock body scroll when modal opens
         document.body.style.overflow = 'hidden';
         const header = document.querySelector('app-header');
