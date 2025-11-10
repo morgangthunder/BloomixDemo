@@ -57,5 +57,13 @@ export const routes: Routes = [
   {
     path: 'course-details/:id',
     loadComponent: () => import('./features/course-details/course-details.component').then(m => m.CourseDetailsComponent)
+  },
+  {
+    path: 'super-admin',
+    loadComponent: () => import('./features/super-admin/super-admin-dashboard.component').then(m => m.SuperAdminDashboardComponent)
+  },
+  {
+    path: 'super-admin/llm-usage',
+    loadComponent: () => import('./features/super-admin/llm-token-usage.component').then(m => m.LlmTokenUsageComponent)
   }
 ];
