@@ -19,6 +19,8 @@ interface TokenUsageAccount {
   estimatedExceedDate: string | null;
   currentPeriodStart: string;
   currentPeriodEnd: string;
+  llmProvider: string;
+  avgLatencyMs: number;
 }
 
 interface TokenUsageResponse {
@@ -112,6 +114,8 @@ interface TokenUsageResponse {
                     <th>Progress</th>
                     <th>Remaining</th>
                     <th>Cost This Period</th>
+                    <th>LLM Used</th>
+                    <th>Avg Latency</th>
                     <th>Status</th>
                     <th>Quota Exceed Est.</th>
                   </tr>
@@ -156,6 +160,18 @@ interface TokenUsageResponse {
                       <div class="cost-cell">
                         <div class="cost-amount">\${{ calculateAccountCost(account.tokenUsed) }}</div>
                         <div class="cost-subtext">{{ data.totals.currency }}</div>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="provider-cell">
+                        <span class="provider-name">{{ account.llmProvider }}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="latency-cell">
+                        <span class="latency-value" [class.latency-good]="account.avgLatencyMs < 2000" [class.latency-slow]="account.avgLatencyMs >= 2000">
+                          {{ account.avgLatencyMs > 0 ? account.avgLatencyMs + 'ms' : 'N/A' }}
+                        </span>
                       </div>
                     </td>
                     <td>
@@ -545,6 +561,37 @@ interface TokenUsageResponse {
     .cost-subtext {
       font-size: 0.75rem;
       color: rgba(255, 255, 255, 0.5);
+    }
+
+    .provider-cell {
+      text-align: center;
+    }
+
+    .provider-name {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    .latency-cell {
+      text-align: center;
+    }
+
+    .latency-value {
+      font-size: 0.875rem;
+      font-weight: 600;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+    }
+
+    .latency-value.latency-good {
+      color: #4caf50;
+      background: rgba(76, 175, 80, 0.1);
+    }
+
+    .latency-value.latency-slow {
+      color: #ff9800;
+      background: rgba(255, 152, 0, 0.1);
     }
 
     /* Category Section */

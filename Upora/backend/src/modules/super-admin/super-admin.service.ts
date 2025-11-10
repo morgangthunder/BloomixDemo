@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { LlmGenerationLog } from '../../entities/llm-generation-log.entity';
 import { User } from '../../entities/user.entity';
+import { LlmProvider } from '../../entities/llm-provider.entity';
 
 @Injectable()
 export class SuperAdminService {
@@ -14,10 +15,19 @@ export class SuperAdminService {
     private llmLogRepository: Repository<LlmGenerationLog>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    @InjectRepository(LlmProvider)
+    private llmProviderRepository: Repository<LlmProvider>,
   ) {}
 
   async getTokenUsageDashboard() {
     this.logger.log('[SuperAdmin] 📊 Fetching token usage dashboard data...');
+
+    // Get all providers for mapping IDs to names
+    const providers = await this.llmProviderRepository.find();
+    const providerMap = providers.reduce((acc, p) => {
+      acc[p.id] = p.name;
+      return acc;
+    }, {} as Record<string, string>);
 
     // Get all users with their token usage
     const users = await this.userRepository.find({
@@ -41,6 +51,22 @@ export class SuperAdminService {
 
         const monthlyLogs = logs.filter(log => log.createdAt >= startOfMonth);
         const monthlyUsed = monthlyLogs.reduce((sum, log) => sum + log.tokensUsed, 0);
+        
+        // Calculate average latency
+        const totalLatency = monthlyLogs.reduce((sum, log) => sum + (log.processingTimeMs || 0), 0);
+        const avgLatency = monthlyLogs.length > 0 ? Math.round(totalLatency / monthlyLogs.length) : 0;
+        
+        // Get most used provider
+        const providerCounts = monthlyLogs.reduce((acc, log) => {
+          if (log.providerId) {
+            acc[log.providerId] = (acc[log.providerId] || 0) + 1;
+          }
+          return acc;
+        }, {} as Record<string, number>);
+        
+        const mostUsedProviderId = Object.keys(providerCounts).length > 0
+          ? Object.entries(providerCounts).sort((a, b) => b[1] - a[1])[0][0]
+          : null;
         
         const tokenLimit = user.grokTokenLimit || this.getDefaultLimit(user.subscription);
         const percentUsed = tokenLimit > 0 ? (monthlyUsed / tokenLimit) * 100 : 0;
@@ -71,6 +97,8 @@ export class SuperAdminService {
           estimatedExceedDate: exceedDate ? exceedDate.toISOString().split('T')[0] : null,
           currentPeriodStart: startOfMonth.toISOString().split('T')[0],
           currentPeriodEnd: new Date(startOfMonth.getFullYear(), startOfMonth.getMonth() + 1, 0).toISOString().split('T')[0],
+          llmProvider: mostUsedProviderId ? providerMap[mostUsedProviderId] || 'N/A' : 'N/A',
+          avgLatencyMs: avgLatency,
         };
       }),
     );

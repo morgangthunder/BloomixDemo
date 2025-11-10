@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { ContentSource } from './content-source.entity';
 import { User } from './user.entity';
+import { LlmProvider } from './llm-provider.entity';
 
 @Entity('llm_generation_logs')
 export class LlmGenerationLog {
@@ -41,6 +42,13 @@ export class LlmGenerationLog {
 
   @Column('integer', { name: 'outputs_approved', default: 0 })
   outputsApproved: number;
+
+  @Column('varchar', { name: 'provider_id', nullable: true })
+  providerId: string;
+
+  @ManyToOne(() => LlmProvider, { nullable: true })
+  @JoinColumn({ name: 'provider_id' })
+  provider: LlmProvider;
 
   @Column('varchar', { name: 'tenant_id' })
   tenantId: string;
