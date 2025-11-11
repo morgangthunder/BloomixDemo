@@ -1,0 +1,131 @@
+{
+  "id": "30000000-0000-0000-0000-000000000099",
+  "title": "Photosynthesis Basics",
+  "description": "Learn how plants convert sunlight into energy",
+  "thumbnailUrl": "https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?w=300",
+  "category": "Science",
+  "difficulty": "Beginner",
+  "estimatedDuration": 15,
+  "tags": ["biology", "science", "plants"],
+  "objectives": {
+    "learningObjectives": [
+      "Understand what photosynthesis is",
+      "Identify the inputs and outputs of photosynthesis",
+      "Explain why photosynthesis is important"
+    ],
+    "topics": ["photosynthesis", "plants", "energy"]
+  },
+  "metadata": {
+    "version": "1.0",
+    "created": "2025-11-11T12:00:00.000Z",
+    "updated": "2025-11-11T12:00:00.000Z",
+    "author": "System",
+    "language": "en"
+  },
+  "stages": [
+    {
+      "id": "stage-1",
+      "type": "tease",
+      "title": "Understanding Photosynthesis",
+      "order": 0,
+      "duration": 10,
+      "description": "Hook students with interesting facts about photosynthesis",
+      "aiPrompt": "You are teaching photosynthesis. Help students understand the process step by step. Be encouraging and answer questions clearly.",
+      "prerequisites": [],
+      "subStages": [
+        {
+          "id": "substage-1-1",
+          "title": "What is Photosynthesis?",
+          "order": 0,
+          "content": "Photosynthesis is the process by which plants use sunlight to convert carbon dioxide and water into glucose (food) and oxygen.",
+          "interactionTypeId": "20000000-0000-0000-0000-000000000001",
+          "contentOutputId": "40000000-0000-0000-0000-000000000099",
+          "scriptBlocks": [
+            {
+              "id": "script-1-1-intro",
+              "order": 0,
+              "idealTimestamp": 0,
+              "text": "Welcome to this lesson on Photosynthesis! Today we're going to explore one of the most important processes in nature. Have you ever wondered how plants make their own food? Let's discover together how they convert sunlight into energy!",
+              "estimatedDuration": 15,
+              "audioUrl": null,
+              "playbackRules": {
+                "autoPlay": true,
+                "canSkip": true,
+                "pauseOnInteraction": false,
+                "displayIfMissed": "asap"
+              }
+            },
+            {
+              "id": "script-1-1-pre-interaction",
+              "order": 1,
+              "idealTimestamp": 20,
+              "text": "Now let's test your understanding with a quick quiz. Select all the TRUE statements about photosynthesis. Take your time and think carefully!",
+              "estimatedDuration": 8,
+              "audioUrl": null,
+              "playbackRules": {
+                "autoPlay": true,
+                "canSkip": true,
+                "pauseOnInteraction": true,
+                "displayIfMissed": "asap"
+              }
+            },
+            {
+              "id": "script-1-1-post-interaction",
+              "order": 2,
+              "idealTimestamp": null,
+              "triggerCondition": "interactionComplete",
+              "text": "Excellent work! You're starting to understand the basics. Let's move on to explore why photosynthesis is so important for life on Earth.",
+              "estimatedDuration": 8,
+              "audioUrl": null,
+              "playbackRules": {
+                "autoPlay": true,
+                "canSkip": true,
+                "pauseOnInteraction": false,
+                "displayIfMissed": "never"
+              }
+            }
+          ]
+        },
+        {
+          "id": "substage-1-2",
+          "title": "Why is it Important?",
+          "order": 1,
+          "content": "Photosynthesis provides oxygen for us to breathe and food for the plant. It is essential for life on Earth!",
+          "interactionTypeId": null,
+          "contentOutputId": null,
+          "scriptBlocks": [
+            {
+              "id": "script-1-2-intro",
+              "order": 0,
+              "idealTimestamp": 0,
+              "text": "Great work so far! Now let's think about why photosynthesis matters. Without this amazing process, we wouldn't have oxygen to breathe, and plants couldn't grow the food we eat. It truly is one of nature's greatest gifts!",
+              "estimatedDuration": 12,
+              "audioUrl": null,
+              "playbackRules": {
+                "autoPlay": true,
+                "canSkip": true,
+                "pauseOnInteraction": false,
+                "displayIfMissed": "asap"
+              }
+            },
+            {
+              "id": "script-1-2-deeper",
+              "order": 1,
+              "idealTimestamp": 15,
+              "text": "Think about this: every breath you take contains oxygen produced by photosynthesis. Every meal you eat depends on plants or animals that eat plants. The entire food chain starts with photosynthesis!",
+              "estimatedDuration": 12,
+              "audioUrl": null,
+              "playbackRules": {
+                "autoPlay": true,
+                "canSkip": true,
+                "pauseOnInteraction": false,
+                "displayIfMissed": "asap"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
