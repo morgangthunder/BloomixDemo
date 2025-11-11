@@ -196,6 +196,13 @@ interface LlmProvider {
             </label>
           </div>
 
+          <div class="form-group checkbox-group" *ngIf="isEditMode">
+            <label class="checkbox-label">
+              <input type="checkbox" [(ngModel)]="formData.isDefault" />
+              <span>Set as Default Provider (used for all LLM calls)</span>
+            </label>
+          </div>
+
           <div *ngIf="testResult" class="test-result" [class.success]="testResult.success" [class.error]="!testResult.success">
             {{ testResult.message }}
           </div>
@@ -681,12 +688,30 @@ export class LlmProviderConfigModalComponent implements OnInit, OnChanges {
           `${environment.apiUrl}/super-admin/llm-providers/${this.formData.id}`,
           this.formData
         ).toPromise() as LlmProvider;
+
+        // If user checked "Set as Default", call set-default endpoint
+        if (this.formData.isDefault && !this.provider?.isDefault) {
+          await this.http.put(
+            `${environment.apiUrl}/super-admin/llm-providers/${this.formData.id}/set-default`,
+            {}
+          ).toPromise();
+          console.log('[LlmProviderModal] Set as default provider');
+        }
       } else {
         // Create new
         result = await this.http.post<LlmProvider>(
           `${environment.apiUrl}/super-admin/llm-providers`,
           this.formData
         ).toPromise() as LlmProvider;
+
+        // If user checked "Set as Default" on new provider, set it
+        if (this.formData.isDefault && result.id) {
+          await this.http.put(
+            `${environment.apiUrl}/super-admin/llm-providers/${result.id}/set-default`,
+            {}
+          ).toPromise();
+          console.log('[LlmProviderModal] Set new provider as default');
+        }
       }
 
       this.saved.emit(result);
