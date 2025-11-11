@@ -832,9 +832,10 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         this.updateActiveSubStage();
         
         // Auto-play first script if it exists
-        if (firstSubStage.teacherScript) {
+        const scriptBlocks = (firstSubStage as any).scriptBlocks || (firstSubStage as any).script || [];
+        if (scriptBlocks.length > 0) {
           console.log('[LessonView] 🎬 Auto-playing first script');
-          this.playTeacherScript(firstSubStage.teacherScript);
+          this.playTeacherScript(scriptBlocks[0]);
         } else {
           console.log('[LessonView] ⚠️ No teacher script in first substage');
         }
