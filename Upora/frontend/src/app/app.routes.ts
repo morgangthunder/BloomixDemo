@@ -72,6 +72,6 @@ export const routes: Routes = [
   },
   {
     path: 'test/true-false-selection',
-    loadComponent: () => import('./features/interactions/fragment-builder-test.component').then(m => m.TrueFalseSelectionTestComponent)
+    loadComponent: () => import('./features/interactions/true-false-selection-test.component').then(m => m.TrueFalseSelectionTestComponent)
   }
 ];
