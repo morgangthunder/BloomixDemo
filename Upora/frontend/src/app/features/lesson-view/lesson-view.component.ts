@@ -589,11 +589,15 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 100; /* Above content but below sidebar (sidebar is z-index 1000) */
+      z-index: 1001; /* Above sidebar (1000) on desktop */
     }
     
-    /* Hide when mobile nav is open */
+    /* Mobile: hide when nav is open, lower z-index */
     @media (max-width: 767px) {
+      .fullscreen-toggle {
+        z-index: 100; /* Below sidebar on mobile */
+      }
+      
       .lesson-view-wrapper:has(.sidebar.translate-x-0) .fullscreen-toggle {
         display: none;
       }
