@@ -143,7 +143,6 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
           <!-- Fullscreen Toggle -->
           <button 
             class="fullscreen-toggle"
-            [style.left]="fullscreenToggleLeft"
             (click)="toggleFullscreen()"
             [title]="isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'">
             <svg *ngIf="!isFullscreen" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -210,11 +209,6 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
           </div>
 
           <ng-template #selectPrompt>
-            <!-- Debug Info -->
-            <div style="position: absolute; top: 0; left: 0; background: red; color: white; padding: 10px; z-index: 99999;">
-              DEBUG: activeStageId={{ activeStageId }}, lesson={{ !!lesson }}
-            </div>
-            
             <!-- End of Lesson Screen -->
             <div *ngIf="!activeStageId && lesson" class="end-of-lesson">
               <div class="end-content">
@@ -581,9 +575,9 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
     }
 
     .fullscreen-toggle {
-      position: fixed;
-      bottom: calc(60px + 1.5rem); /* Above control bar */
-      /* left is set dynamically via [style.left] binding */
+      position: absolute;
+      bottom: 1.5rem;
+      right: 1.5rem; /* Bottom-right of content area */
       width: 44px;
       height: 44px;
       background: rgba(0, 0, 0, 0.7);
@@ -591,15 +585,19 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       border-radius: 8px;
       color: #ffffff;
       cursor: pointer;
-      transition: left 0.3s ease;
+      transition: all 0.3s ease;
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 100; /* Above content but below sidebar */
+      z-index: 100; /* Above content but below sidebar (sidebar is z-index 1000) */
     }
     
-    /* When fullscreen */
+    /* When fullscreen, use fixed positioning at bottom-left */
     .content-area.fullscreen .fullscreen-toggle {
+      position: fixed;
+      bottom: calc(60px + 1.5rem);
+      left: 1.5rem;
+      right: auto;
       z-index: 9998;
     }
 
@@ -854,9 +852,6 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   // Fullscreen
   isFullscreen = false;
   
-  // Fullscreen toggle positioning
-  fullscreenToggleLeft = '1.5rem';
-  
   // Lesson Timer
   showTimer = false;
   elapsedSeconds = 0;
@@ -936,10 +931,6 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // Setup mouse listeners for resize
     window.addEventListener('mousemove', this.handleMouseMove.bind(this));
     window.addEventListener('mouseup', this.handleMouseUp.bind(this));
-    
-    // Initialize fullscreen toggle position and update on resize
-    this.updateFullscreenTogglePosition();
-    window.addEventListener('resize', () => this.updateFullscreenTogglePosition());
   }
 
   /**
@@ -1187,31 +1178,6 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     } else {
       this.navWidth = this.navWidthBeforeCollapse;
     }
-    this.updateFullscreenTogglePosition();
-  }
-  
-  /**
-   * Update fullscreen toggle position based on sidebar width and fullscreen state
-   */
-  private updateFullscreenTogglePosition() {
-    console.log('[LessonView] 🔧 Updating toggle position - fullscreen:', this.isFullscreen, 'navWidth:', this.navWidth);
-    
-    if (this.isFullscreen) {
-      // In fullscreen, always simple left
-      this.fullscreenToggleLeft = '1.5rem';
-    } else {
-      // In normal mode, adjust for sidebar
-      // Use navWidth to determine if sidebar is open (not window.innerWidth)
-      if (this.navWidth > 0) {
-        // Sidebar is open - position after sidebar
-        this.fullscreenToggleLeft = `calc(${this.navWidth}px + 1.5rem)`;
-      } else {
-        // Sidebar closed - simple left
-        this.fullscreenToggleLeft = '1.5rem';
-      }
-    }
-    
-    console.log('[LessonView] ✅ Toggle left set to:', this.fullscreenToggleLeft);
   }
 
   openMobileNav() {
@@ -1617,9 +1583,6 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       this.fabLeft = 0;
       this.fabTop = 0;
     }
-    
-    // Update toggle position for new mode
-    this.updateFullscreenTogglePosition();
     
     console.log('[LessonView] 🖥️ Fullscreen toggled to:', this.isFullscreen);
   }

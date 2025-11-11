@@ -71,21 +71,29 @@ interface TrueFalseSelectionData {
               </div>
             </div>
 
-            <!-- Class Average (if available) -->
-            <div *ngIf="classAverage !== null" class="score-section class-average">
+            <!-- Class Average -->
+            <div class="score-section class-average">
               <div class="score-label">Class Average</div>
-              <div class="score-value">{{ classAverage }}%</div>
-              <div class="score-breakdown">
+              <div *ngIf="classAverage !== null; else noAverage" class="score-value">{{ classAverage }}%</div>
+              <ng-template #noAverage>
+                <div class="score-value text-gray-500">--</div>
+              </ng-template>
+              <div *ngIf="totalAttempts > 0" class="score-breakdown">
                 Based on {{ totalAttempts }} {{ totalAttempts === 1 ? 'student' : 'students' }}
               </div>
-              <div class="comparison" *ngIf="score > classAverage">
-                🌟 Above average!
+              <div *ngIf="totalAttempts === 0" class="score-breakdown text-gray-500">
+                No data yet
               </div>
-              <div class="comparison" *ngIf="score === classAverage">
-                📊 Right on average
-              </div>
-              <div class="comparison" *ngIf="score < classAverage">
-                💪 Room to improve
+              <div *ngIf="classAverage !== null">
+                <div class="comparison" *ngIf="score > classAverage">
+                  🌟 Above average!
+                </div>
+                <div class="comparison" *ngIf="score === classAverage">
+                  📊 Right on average
+                </div>
+                <div class="comparison" *ngIf="score < classAverage">
+                  💪 Room to improve
+                </div>
               </div>
             </div>
           </div>
