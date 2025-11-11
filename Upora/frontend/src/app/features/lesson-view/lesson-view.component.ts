@@ -1199,11 +1199,15 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   private updateTogglePosition() {
     const isDesktop = window.innerWidth >= 768;
     
+    console.log('[LessonView] 🎯 updateTogglePosition - isDesktop:', isDesktop, 'navWidth:', this.navWidth, 'isFullscreen:', this.isFullscreen);
+    
     // ONLY adjust if desktop AND sidebar open AND NOT fullscreen
     if (isDesktop && this.navWidth > 0 && !this.isFullscreen) {
       this.toggleLeftPosition = `calc(${this.navWidth}px + 1.5rem)`;
+      console.log('[LessonView] ✅ Desktop with sidebar open - left:', this.toggleLeftPosition);
     } else {
       this.toggleLeftPosition = '1.5rem';
+      console.log('[LessonView] ✅ Default position - left:', this.toggleLeftPosition);
     }
   }
 
