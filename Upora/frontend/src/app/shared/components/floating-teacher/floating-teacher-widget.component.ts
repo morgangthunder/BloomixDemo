@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnChanges, OnDestroy, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
@@ -23,7 +23,12 @@ export interface ChatMessage {
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="teacher-widget" [class.minimized]="isMinimized" [class.hidden]="isHidden">
+    <div class="teacher-widget" 
+         [class.minimized]="isMinimized" 
+         [class.hidden]="isHidden"
+         [class.draggable]="isDraggable"
+         [style.left.px]="isDraggable ? widgetLeft : null"
+         [style.top.px]="isDraggable ? widgetTop : null">
       <!-- Minimized State -->
       <div *ngIf="isMinimized" class="teacher-icon-minimized" (click)="restore()">
         <div class="avatar">🎓</div>
@@ -33,8 +38,11 @@ export interface ChatMessage {
       <!-- Expanded State -->
       <div *ngIf="!isMinimized" class="teacher-card">
         <!-- Header -->
-        <div class="teacher-header">
-          <div class="teacher-avatar" [class.speaking]="isPlaying">
+        <div class="teacher-header"
+             [class.draggable-header]="isDraggable"
+             (mousedown)="startDrag($event)"
+             (touchstart)="startDrag($event)">
+          <div class="teacher-avatar" [class.speaking]="isPlaying" (click)="close()" title="Minimize">
             <span class="avatar-emoji">🎓</span>
           </div>
           <div class="teacher-title">AI Teacher</div>
@@ -114,9 +122,24 @@ export interface ChatMessage {
       transition: all 0.3s ease;
     }
 
+    .teacher-widget.draggable {
+      bottom: auto !important;
+      right: auto !important;
+      transition: none; /* Disable transitions when dragging */
+    }
+
     .teacher-widget.hidden {
       opacity: 0;
       pointer-events: none;
+    }
+
+    .draggable-header {
+      cursor: move;
+      cursor: grab;
+    }
+
+    .draggable-header:active {
+      cursor: grabbing;
     }
 
     /* Minimized State */
@@ -206,6 +229,12 @@ export interface ChatMessage {
       justify-content: center;
       flex-shrink: 0;
       transition: all 0.3s ease;
+      cursor: pointer;
+    }
+
+    .teacher-avatar:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 12px rgba(255, 59, 63, 0.6);
     }
 
     .teacher-avatar.speaking {
@@ -442,18 +471,21 @@ export interface ChatMessage {
     /* Mobile Responsive */
     @media (max-width: 768px) {
       .teacher-widget {
-        bottom: 5rem;
+        bottom: calc(56px + 1rem);
         right: 1rem;
         left: 1rem;
       }
 
       .teacher-card {
         width: 100%;
-        max-height: calc(100vh - 12rem);
+        max-height: calc(100vh - 10rem);
+        display: flex;
+        flex-direction: column;
       }
 
       .chat-history {
-        max-height: 250px;
+        max-height: calc(100vh - 24rem);
+        flex: 1;
       }
 
       .teacher-icon-minimized {
@@ -499,12 +531,13 @@ export interface ChatMessage {
     }
   `]
 })
-export class FloatingTeacherWidgetComponent implements OnChanges {
+export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy {
   @Input() currentScript: ScriptBlock | null = null;
   @Input() autoPlay: boolean = true;
   @Input() chatMessages: ChatMessage[] = [];
   @Input() isAITyping: boolean = false;
   @Input() isConnected: boolean = false;
+  @Input() isDraggable: boolean = false; // Enable dragging in fullscreen
   
   @Output() play = new EventEmitter<void>();
   @Output() pause = new EventEmitter<void>();
@@ -517,6 +550,13 @@ export class FloatingTeacherWidgetComponent implements OnChanges {
   isMinimized = false;
   isHidden = false;
   chatInput = '';
+  
+  // Dragging state
+  private isDragging = false;
+  private dragStartX = 0;
+  private dragStartY = 0;
+  private widgetLeft = 0;
+  private widgetTop = 0;
 
   ngOnChanges(changes: SimpleChanges) {
     if (changes['currentScript']) {
@@ -583,6 +623,54 @@ export class FloatingTeacherWidgetComponent implements OnChanges {
 
   raiseHand() {
     this.raiseHandClicked.emit();
+  }
+
+  startDrag(event: MouseEvent | TouchEvent) {
+    if (!this.isDraggable) return;
+    
+    event.preventDefault();
+    this.isDragging = true;
+    
+    const clientX = 'touches' in event ? event.touches[0].clientX : event.clientX;
+    const clientY = 'touches' in event ? event.touches[0].clientY : event.clientY;
+    
+    this.dragStartX = clientX - this.widgetLeft;
+    this.dragStartY = clientY - this.widgetTop;
+    
+    // Add global listeners
+    document.addEventListener('mousemove', this.onDrag);
+    document.addEventListener('mouseup', this.stopDrag);
+    document.addEventListener('touchmove', this.onDrag);
+    document.addEventListener('touchend', this.stopDrag);
+  }
+
+  private onDrag = (event: MouseEvent | TouchEvent) => {
+    if (!this.isDragging || !this.isDraggable) return;
+    
+    const clientX = 'touches' in event ? event.touches[0].clientX : event.clientX;
+    const clientY = 'touches' in event ? event.touches[0].clientY : event.clientY;
+    
+    this.widgetLeft = clientX - this.dragStartX;
+    this.widgetTop = clientY - this.dragStartY;
+    
+    // Keep within viewport bounds
+    const maxX = window.innerWidth - 400; // widget width
+    const maxY = window.innerHeight - 400; // approx widget height
+    
+    this.widgetLeft = Math.max(0, Math.min(this.widgetLeft, maxX));
+    this.widgetTop = Math.max(0, Math.min(this.widgetTop, maxY));
+  }
+
+  private stopDrag = () => {
+    this.isDragging = false;
+    document.removeEventListener('mousemove', this.onDrag);
+    document.removeEventListener('mouseup', this.stopDrag);
+    document.removeEventListener('touchmove', this.onDrag);
+    document.removeEventListener('touchend', this.stopDrag);
+  }
+
+  ngOnDestroy() {
+    this.stopDrag();
   }
 }
 

@@ -139,7 +139,20 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
         </header>
 
         <!-- Content Area -->
-        <div class="flex-1 p-6 md:p-8 lg:p-12 overflow-y-auto pb-32 md:pb-8">
+        <div class="flex-1 p-6 md:p-8 lg:p-12 overflow-y-auto pb-32 md:pb-8 relative content-area" [class.fullscreen]="isFullscreen">
+          <!-- Fullscreen Toggle -->
+          <button 
+            class="fullscreen-toggle"
+            (click)="toggleFullscreen()"
+            [title]="isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'">
+            <svg *ngIf="!isFullscreen" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/>
+            </svg>
+            <svg *ngIf="isFullscreen" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 4H4v4M16 4h4v4M8 20H4v-4M16 20h4v-4"/>
+            </svg>
+          </button>
+
           <div *ngIf="activeSubStage; else selectPrompt">
             <!-- Loading State -->
             <div *ngIf="isLoadingInteraction" class="bg-brand-black rounded-lg p-12 flex items-center justify-center">
@@ -218,15 +231,21 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
               [disabled]="!currentTeacherScript"
               [class.active]="isScriptPlaying"
               [title]="isScriptPlaying ? 'Pause' : 'Play'">
-              <span *ngIf="!isScriptPlaying">▶️</span>
-              <span *ngIf="isScriptPlaying">⏸️</span>
+              <svg *ngIf="!isScriptPlaying" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+              <svg *ngIf="isScriptPlaying" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+              </svg>
             </button>
             <button 
               class="control-bar-btn playback-btn"
               (click)="skipScript()"
               [disabled]="!currentTeacherScript"
               title="Skip">
-              ⏭️
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 4l10 8-10 8V4zm10 0v16h2V4h-2z"/>
+              </svg>
             </button>
             <div class="script-progress-info">
               <span class="script-title">{{ currentTeacherScript?.text?.substring(0, 40) || 'Ready to teach' }}{{ (currentTeacherScript?.text?.length || 0) > 40 ? '...' : '' }}</span>
@@ -254,6 +273,7 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
         [chatMessages]="chatMessages"
         [isAITyping]="isAITyping"
         [isConnected]="isConnected"
+        [isDraggable]="isFullscreen"
         (play)="onTeacherPlay()"
         (pause)="onTeacherPause()"
         (skipRequested)="onTeacherSkip()"
@@ -451,10 +471,46 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       text-align: center;
     }
 
+    /* Fullscreen Mode */
+    .content-area.fullscreen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 9999;
+      background: #0a0a0a;
+      padding: 2rem !important;
+    }
+
+    .fullscreen-toggle {
+      position: absolute;
+      bottom: 1.5rem;
+      left: 1.5rem;
+      width: 44px;
+      height: 44px;
+      background: rgba(0, 0, 0, 0.7);
+      border: 1px solid #333333;
+      border-radius: 8px;
+      color: #ffffff;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+
+    .fullscreen-toggle:hover {
+      background: #ff3b3f;
+      border-color: #ff3b3f;
+      transform: scale(1.1);
+    }
+
     /* Teacher FAB */
     .teacher-fab {
       position: fixed;
-      bottom: 6rem;
+      bottom: calc(60px + 1rem); /* Sits on top of control bar */
       right: 2rem;
       width: 70px;
       height: 70px;
@@ -468,10 +524,16 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       box-shadow: 0 4px 12px rgba(255, 59, 63, 0.4);
       transition: all 0.3s ease;
       z-index: 999;
+      transform: translateY(50%); /* Half overlaps the red line */
+    }
+
+    .fullscreen .teacher-fab,
+    .content-area.fullscreen ~ .teacher-fab {
+      z-index: 10000; /* Above fullscreen content */
     }
 
     .teacher-fab:hover {
-      transform: scale(1.1);
+      transform: translateY(50%) scale(1.1);
       box-shadow: 0 6px 20px rgba(255, 59, 63, 0.6);
       background: #1a1a1a;
     }
@@ -517,8 +579,8 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       }
 
       .teacher-fab {
-        bottom: 5rem;
-        right: 1rem;
+        bottom: calc(56px + 0.75rem);
+        right: 1.5rem;
         width: 60px;
         height: 60px;
       }
@@ -559,6 +621,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   private teacherScriptTimeout: any = null;
   isScriptPlaying = false;
   teacherWidgetHidden = true; // Start hidden, show on first script or manual open
+  
+  // Fullscreen
+  isFullscreen = false;
   
   // Interaction data
   interactionData: any = null;
@@ -1009,6 +1074,14 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    */
   toggleTeacherWidget() {
     this.teacherWidgetHidden = !this.teacherWidgetHidden;
+  }
+
+  /**
+   * Toggle fullscreen mode
+   */
+  toggleFullscreen() {
+    this.isFullscreen = !this.isFullscreen;
+    console.log('[LessonView] Fullscreen:', this.isFullscreen);
   }
 
   /**
