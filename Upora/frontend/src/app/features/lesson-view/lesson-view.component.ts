@@ -473,10 +473,16 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   private setLessonData(lesson: Lesson) {
     this.lesson = lesson;
     // Try data.stages first (from API), fallback to stages (for compatibility)
-    this.lessonStages = lesson.data?.stages || lesson.stages || [];
+    const rawStages = lesson.data?.stages || lesson.stages || [];
+    
+    // Normalize stage data: convert 'substages' to 'subStages' if needed
+    this.lessonStages = rawStages.map((stage: any) => ({
+      ...stage,
+      subStages: stage.subStages || stage.substages || []
+    }));
     
     console.log('[LessonView] Lesson set - ID:', lesson.id, 'Stages:', this.lessonStages.length);
-    console.log('[LessonView] Raw lesson data:', JSON.stringify(lesson.data, null, 2).substring(0, 500));
+    console.log('[LessonView] First stage:', JSON.stringify(this.lessonStages[0], null, 2).substring(0, 500));
     
     // Auto-select first stage and substage if available
     if (this.lessonStages.length > 0) {
