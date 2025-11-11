@@ -444,11 +444,8 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
     }
 
     .timer-btn {
-      color: #ffffff;
-    }
-
-    .timer-btn:not(.active) {
       color: rgba(255, 255, 255, 0.5);
+      background: transparent;
     }
 
     .timer-btn.active {
@@ -1288,19 +1285,20 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   toggleTimer() {
     this.showTimer = !this.showTimer;
     
+    // Always start the timer interval when toggling on for the first time
     if (this.showTimer && !this.timerInterval) {
       this.startTimer();
-    } else if (!this.showTimer && this.timerInterval) {
-      this.stopTimer();
     }
+    // Keep timer running in background even when hidden (so it can still count)
   }
 
   private startTimer() {
-    console.log('[LessonView] Timer started');
+    console.log('[LessonView] Timer interval started');
     this.timerInterval = setInterval(() => {
       // Only increment when script is actively playing (pause button showing)
       if (this.isScriptPlaying) {
         this.elapsedSeconds++;
+        console.log('[LessonView] Timer:', this.elapsedSeconds, 'seconds');
       }
     }, 1000);
   }
