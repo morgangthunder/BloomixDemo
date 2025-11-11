@@ -1267,6 +1267,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    * Navigate to next substage or stage
    */
   moveToNextSubStage() {
+    if (!this.activeStageId) return;
+    
     const currentStage = this.lessonStages.find(s => s.id === this.activeStageId);
     if (!currentStage) return;
     
