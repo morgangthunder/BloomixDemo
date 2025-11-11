@@ -143,7 +143,6 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
           <!-- Fullscreen Toggle -->
           <button 
             class="fullscreen-toggle"
-            [style.left]="toggleLeftPosition"
             (click)="toggleFullscreen()"
             [title]="isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'">
             <svg *ngIf="!isFullscreen" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -577,7 +576,7 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
 
     .fullscreen-toggle {
       position: fixed; /* Fixed so it doesn't scroll */
-      bottom: calc(60px + 1.5rem); /* Above control bar */
+      bottom: calc(60px + 4rem); /* Directly above the Toggle Stages button */
       left: 1.5rem;
       width: 44px;
       height: 44px;
@@ -586,7 +585,7 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       border-radius: 8px;
       color: #ffffff;
       cursor: pointer;
-      transition: all 0.3s ease;
+      transition: none; /* No transition */
       display: flex;
       align-items: center;
       justify-content: center;
@@ -857,9 +856,6 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   // Fullscreen
   isFullscreen = false;
   
-  // Fullscreen toggle dynamic positioning (only for desktop with sidebar open)
-  toggleLeftPosition = '1.5rem';
-  
   // Lesson Timer
   showTimer = false;
   elapsedSeconds = 0;
@@ -939,10 +935,6 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // Setup mouse listeners for resize
     window.addEventListener('mousemove', this.handleMouseMove.bind(this));
     window.addEventListener('mouseup', this.handleMouseUp.bind(this));
-    
-    // Initialize toggle position
-    this.updateTogglePosition();
-    window.addEventListener('resize', () => this.updateTogglePosition());
   }
 
   /**
@@ -1184,36 +1176,11 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   }
 
   toggleNavCollapse() {
-    const wasOpen = this.navWidth > 0;
-    
-    if (wasOpen) {
+    if (this.navWidth > 0) {
       this.navWidthBeforeCollapse = this.navWidth;
       this.navWidth = 0;
-      this.isSidebarOpen = false;
     } else {
       this.navWidth = this.navWidthBeforeCollapse;
-      this.isSidebarOpen = true;
-    }
-    
-    console.log('[LessonView] 📂 toggleNavCollapse - wasOpen:', wasOpen, '→ isSidebarOpen:', this.isSidebarOpen, 'navWidth:', this.navWidth);
-    this.updateTogglePosition();
-  }
-  
-  /**
-   * Update toggle position ONLY for desktop with sidebar open
-   */
-  private updateTogglePosition() {
-    const isDesktop = window.innerWidth >= 768;
-    
-    console.log('[LessonView] 🎯 updateTogglePosition - isDesktop:', isDesktop, 'isSidebarOpen:', this.isSidebarOpen, 'navWidth:', this.navWidth, 'isFullscreen:', this.isFullscreen);
-    
-    // ONLY adjust if desktop AND sidebar open AND NOT fullscreen
-    if (isDesktop && this.isSidebarOpen && !this.isFullscreen) {
-      this.toggleLeftPosition = `calc(${this.navWidth}px + 1.5rem)`;
-      console.log('[LessonView] ✅ Desktop with sidebar open - left:', this.toggleLeftPosition);
-    } else {
-      this.toggleLeftPosition = '1.5rem';
-      console.log('[LessonView] ✅ Default position - left:', this.toggleLeftPosition);
     }
   }
 
@@ -1620,9 +1587,6 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       this.fabLeft = 0;
       this.fabTop = 0;
     }
-    
-    // Update toggle position for new mode
-    this.updateTogglePosition();
     
     console.log('[LessonView] 🖥️ Fullscreen toggled to:', this.isFullscreen);
   }
