@@ -413,7 +413,6 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
     }
 
     .control-bar-btn:hover:not(:disabled) {
-      background: #ff3b3f;
       border-color: #ff3b3f;
       transform: scale(1.05);
     }
@@ -424,8 +423,15 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
     }
 
     .control-bar-btn.active {
-      background: #ff3b3f;
       border-color: #ff3b3f;
+    }
+
+    /* Force specific buttons to never have red background */
+    .playback-btn:hover,
+    .playback-btn:focus,
+    .playback-btn:active,
+    .playback-btn.active {
+      background: #1a1a1a !important;
     }
 
     .playback-btn {
@@ -1325,7 +1331,6 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       // Only increment when script is actively playing (pause button showing)
       if (this.isScriptPlaying) {
         this.elapsedSeconds++;
-        console.log('[LessonView] Timer:', this.elapsedSeconds, 'seconds');
       }
     }, 1000);
   }
