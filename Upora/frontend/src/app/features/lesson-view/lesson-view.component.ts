@@ -574,13 +574,9 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       display: none !important;
     }
 
-    .content-area {
-      position: relative; /* Create positioning context */
-    }
-    
     .fullscreen-toggle {
-      position: absolute; /* Absolute to content-area - moves with it */
-      bottom: 1.5rem;
+      position: fixed; /* Fixed so it doesn't scroll */
+      bottom: calc(60px + 1.5rem); /* Above control bar */
       left: 1.5rem;
       width: 44px;
       height: 44px;
@@ -593,7 +589,7 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 10; /* Above content */
+      z-index: 100; /* Below sidebar */
     }
     
     /* Mobile: hide when nav is open */
@@ -603,11 +599,9 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       }
     }
     
-    /* When fullscreen, use fixed positioning at very bottom */
+    /* When fullscreen, move to very bottom */
     .content-area.fullscreen .fullscreen-toggle {
-      position: fixed !important;
       bottom: 1rem !important; /* Very close to bottom */
-      left: 1.5rem !important;
       z-index: 9998 !important; /* Above everything in fullscreen */
     }
 
