@@ -26,7 +26,8 @@ interface TokenUsage {
   imports: [CommonModule, FormsModule],
   template: `
     <header 
-      class="fixed top-0 left-0 right-0 z-10 bg-brand-black shadow-lg">
+      class="fixed top-0 left-0 right-0 bg-brand-black shadow-lg"
+      style="z-index: 50;">
       <div class="container mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-16 md:h-20">
           <div class="flex items-center space-x-4 md:space-x-8">

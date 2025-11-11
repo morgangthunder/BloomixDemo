@@ -118,7 +118,8 @@ export interface ChatMessage {
       position: fixed;
       bottom: 2rem;
       right: 2rem;
-      z-index: 10001; /* Always above fullscreen (which is 9999) */
+      z-index: 10001; /* Always above fullscreen and header */
+      max-height: calc(100vh - 8rem); /* Prevent going above header */
       transition: all 0.3s ease;
     }
 

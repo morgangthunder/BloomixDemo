@@ -389,12 +389,19 @@ export class TrueFalseSelectionComponent {
     if (!this.data) return;
 
     const trueCount = this.getTrueCount();
-    const correctCount = this.getCorrectCount();
+    const correctSelections = this.getCorrectCount(); // Correctly selected TRUE statements
+    
+    // Count incorrect selections (selected FALSE statements)
+    const incorrectSelections = Array.from(this.selectedFragments)
+      .filter(index => !this.data!.fragments[index].isTrueInContext).length;
 
-    this.score = trueCount > 0 ? Math.round((correctCount / trueCount) * 100) : 0;
+    // Score = (Correct - Incorrect) / Total TRUE statements
+    // Minimum score is 0
+    const netCorrect = Math.max(0, correctSelections - incorrectSelections);
+    this.score = trueCount > 0 ? Math.round((netCorrect / trueCount) * 100) : 0;
     this.showScore = true;
 
-    console.log('[TrueFalseSelection] Score:', this.score, '% -', correctCount, '/', trueCount, 'correct');
+    console.log('[TrueFalseSelection] Score:', this.score, '% -', correctSelections, 'correct,', incorrectSelections, 'incorrect out of', trueCount, 'true statements');
   }
 
   complete() {
