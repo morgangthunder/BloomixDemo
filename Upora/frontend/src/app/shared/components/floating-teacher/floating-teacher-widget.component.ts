@@ -342,7 +342,7 @@ export class FloatingTeacherWidgetComponent implements OnChanges {
   
   @Output() play = new EventEmitter<void>();
   @Output() pause = new EventEmitter<void>();
-  @Output() skip = new EventEmitter<void>();
+  @Output() skipRequested = new EventEmitter<void>();
   @Output() closed = new EventEmitter<void>();
 
   isPlaying = false;
@@ -388,7 +388,7 @@ export class FloatingTeacherWidgetComponent implements OnChanges {
     if (!this.currentScript) return;
     
     this.isPlaying = false;
-    this.skip.emit();
+    this.skipRequested.emit();
   }
 
   minimize() {

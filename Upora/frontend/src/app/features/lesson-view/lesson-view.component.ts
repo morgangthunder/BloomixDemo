@@ -295,7 +295,7 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
         [autoPlay]="true"
         (play)="onTeacherPlay()"
         (pause)="onTeacherPause()"
-        (skip)="onTeacherSkip()"
+        (skipRequested)="onTeacherSkip()"
         (closed)="onTeacherClosed()">
       </app-floating-teacher-widget>
     </div>
