@@ -247,8 +247,20 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
                 <path d="M6 4l10 8-10 8V4zm10 0v16h2V4h-2z"/>
               </svg>
             </button>
+            <button 
+              class="control-bar-btn timer-btn"
+              (click)="toggleTimer()"
+              [class.active]="showTimer"
+              title="Toggle Timer">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="13" r="8"/>
+                <path d="M12 9v4l3 2"/>
+                <path d="M9 2h6"/>
+              </svg>
+            </button>
             <div class="script-progress-info">
-              <span class="script-title">{{ currentTeacherScript?.text?.substring(0, 40) || 'Ready to teach' }}{{ (currentTeacherScript?.text?.length || 0) > 40 ? '...' : '' }}</span>
+              <span *ngIf="!showTimer" class="script-title">{{ currentTeacherScript?.text?.substring(0, 40) || 'Ready to teach' }}{{ (currentTeacherScript?.text?.length || 0) > 40 ? '...' : '' }}</span>
+              <span *ngIf="showTimer" class="timer-display">⏱️ {{ formatTime(elapsedSeconds) }}</span>
             </div>
           </div>
 
@@ -284,6 +296,7 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
         (pause)="onTeacherPause()"
         (skipRequested)="onTeacherSkip()"
         (closed)="onTeacherClosed()"
+        (scriptClosed)="onScriptClosed()"
         (sendChat)="sendChatMessage($event)"
         (raiseHandClicked)="raiseHand()">
       </app-floating-teacher-widget>
@@ -428,6 +441,26 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
 
     .playback-btn.active {
       color: #ffffff;
+    }
+
+    .timer-btn {
+      color: #ffffff;
+    }
+
+    .timer-btn:not(.active) {
+      color: rgba(255, 255, 255, 0.5);
+    }
+
+    .timer-btn.active {
+      color: #ff3b3f;
+      background: rgba(255, 59, 63, 0.1);
+    }
+
+    .timer-display {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #ff3b3f;
+      font-variant-numeric: tabular-nums;
     }
 
     .left-btn, .right-btn {
@@ -670,6 +703,11 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   // Fullscreen
   isFullscreen = false;
   
+  // Lesson Timer
+  showTimer = false;
+  elapsedSeconds = 0;
+  private timerInterval: any = null;
+  
   // FAB Dragging (in fullscreen)
   fabLeft = 0;
   fabTop = 0;
@@ -828,6 +866,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     
     // Clean up FAB drag listeners
     this.stopFabDrag();
+    
+    // Stop timer
+    this.stopTimer();
     
     // Disconnect from WebSocket
     this.wsService.leaveLesson();
@@ -1061,38 +1102,29 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     console.log('[LessonView] Teacher playing script');
     this.isScriptPlaying = true;
     // TODO: Integrate TTS here when ready
-    // For now, auto-clear after estimated duration
-    if (this.currentTeacherScript?.estimatedDuration) {
-      this.teacherScriptTimeout = setTimeout(() => {
-        this.currentTeacherScript = null;
-        this.isScriptPlaying = false;
-      }, this.currentTeacherScript.estimatedDuration * 1000);
-    }
+    // Script stays visible until user closes or new script starts
   }
 
   onTeacherPause() {
     console.log('[LessonView] Teacher paused');
     this.isScriptPlaying = false;
-    if (this.teacherScriptTimeout) {
-      clearTimeout(this.teacherScriptTimeout);
-      this.teacherScriptTimeout = null;
-    }
+    // Timer continues to run but won't increment while paused (see startTimer logic)
   }
 
   onTeacherSkip() {
     console.log('[LessonView] Teacher script skipped');
     this.isScriptPlaying = false;
-    if (this.teacherScriptTimeout) {
-      clearTimeout(this.teacherScriptTimeout);
-      this.teacherScriptTimeout = null;
-    }
+    this.currentTeacherScript = null;
+  }
+
+  onScriptClosed() {
+    console.log('[LessonView] Script closed by user');
+    this.isScriptPlaying = false;
     this.currentTeacherScript = null;
   }
 
   onTeacherClosed() {
-    console.log('[LessonView] Teacher widget closed');
-    this.isScriptPlaying = false;
-    this.currentTeacherScript = null;
+    console.log('[LessonView] Teacher widget minimized');
     this.teacherWidgetHidden = true;
   }
 
@@ -1248,12 +1280,54 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Lesson Timer Methods
+   */
+  toggleTimer() {
+    this.showTimer = !this.showTimer;
+    
+    if (this.showTimer && !this.timerInterval) {
+      this.startTimer();
+    } else if (!this.showTimer && this.timerInterval) {
+      this.stopTimer();
+    }
+  }
+
+  private startTimer() {
+    console.log('[LessonView] Timer started');
+    this.timerInterval = setInterval(() => {
+      // Only increment if script is playing or not paused
+      if (this.isScriptPlaying || !this.currentTeacherScript) {
+        this.elapsedSeconds++;
+      }
+    }, 1000);
+  }
+
+  private stopTimer() {
+    if (this.timerInterval) {
+      clearInterval(this.timerInterval);
+      this.timerInterval = null;
+      console.log('[LessonView] Timer stopped at', this.elapsedSeconds, 'seconds');
+    }
+  }
+
+  formatTime(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  /**
    * Play a teacher script block
    */
   private playTeacherScript(script?: ScriptBlock | any) {
     if (!script || !script.text) {
       console.log('[LessonView] No script to play');
       return;
+    }
+
+    // Auto-clear previous script when new one starts
+    if (this.currentTeacherScript && this.currentTeacherScript !== script) {
+      console.log('[LessonView] Replacing previous script with new script');
     }
 
     console.log('[LessonView] Playing teacher script:', script.text.substring(0, 50) + '...');

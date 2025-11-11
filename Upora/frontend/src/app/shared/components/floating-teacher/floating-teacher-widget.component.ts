@@ -57,7 +57,14 @@ export interface ChatMessage {
 
         <!-- Current Script (if playing) -->
         <div *ngIf="currentScript" class="current-script">
-          <div class="script-label">📜 Script:</div>
+          <div class="script-header">
+            <div class="script-label">📜 Script:</div>
+            <button class="script-close-btn" (click)="closeScript()" title="Close script">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+                <path d="M14 1.41L12.59 0L7 5.59L1.41 0L0 1.41L5.59 7L0 12.59L1.41 14L7 8.41L12.59 14L14 12.59L8.41 7L14 1.41Z"/>
+              </svg>
+            </button>
+          </div>
           <div class="script-text">{{ currentScript.text }}</div>
         </div>
 
@@ -291,11 +298,38 @@ export interface ChatMessage {
       border-bottom: 1px solid #333333;
     }
 
+    .script-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+
     .script-label {
       font-size: 0.75rem;
       color: rgba(255, 255, 255, 0.6);
-      margin-bottom: 0.5rem;
       font-weight: 600;
+    }
+
+    .script-close-btn {
+      width: 24px;
+      height: 24px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      color: rgba(255, 255, 255, 0.6);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .script-close-btn:hover {
+      background: #ff3b3f;
+      border-color: #ff3b3f;
+      color: #ffffff;
     }
 
     .script-text {
@@ -546,6 +580,7 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy {
   @Output() closed = new EventEmitter<void>();
   @Output() sendChat = new EventEmitter<string>();
   @Output() raiseHandClicked = new EventEmitter<void>();
+  @Output() scriptClosed = new EventEmitter<void>();
 
   isPlaying = false;
   isMinimized = false;
@@ -645,6 +680,11 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy {
 
   raiseHand() {
     this.raiseHandClicked.emit();
+  }
+
+  closeScript() {
+    this.isPlaying = false;
+    this.scriptClosed.emit();
   }
 
   onAvatarClick(event: Event) {
