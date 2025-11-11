@@ -73,6 +73,7 @@ interface LlmProvider {
               placeholder="e.g., xAI Grok Beta"
               class="form-input"
             />
+            <div class="field-hint" style="color: rgba(255,255,255,0.5);">Customize the display name for this provider</div>
           </div>
 
           <div class="form-row">
@@ -93,7 +94,7 @@ interface LlmProvider {
             </div>
 
             <div class="form-group" *ngIf="formData.providerType && formData.providerType !== 'other'">
-              <label>Model * ({{ availableModels.length }} models available)</label>
+              <label>Model *</label>
               <select 
                 [(ngModel)]="selectedModelPreset" 
                 (change)="onModelSelect()"
@@ -104,9 +105,6 @@ interface LlmProvider {
                   {{ model.displayName }} (\${{ model.costPerMillionTokens }}/1M)
                 </option>
               </select>
-              <div class="debug-info" style="color: yellow; font-size: 0.75rem; margin-top: 0.5rem;">
-                DEBUG: Provider={{ formData.providerType }}, Models={{ availableModels.length }}, Presets={{ allPresets.length }}
-              </div>
             </div>
 
             <div class="form-group" *ngIf="formData.providerType === 'other'">
@@ -204,6 +202,10 @@ interface LlmProvider {
         </div>
 
         <div class="modal-footer">
+          <button *ngIf="isEditMode" class="btn-delete" (click)="deleteProvider()" [disabled]="deleting">
+            {{ deleting ? 'Deleting...' : '🗑️ Delete' }}
+          </button>
+          <div class="footer-spacer"></div>
           <button *ngIf="isEditMode" class="btn-test" (click)="testConnection()" [disabled]="testing">
             {{ testing ? 'Testing...' : 'Test Connection' }}
           </button>
@@ -397,12 +399,17 @@ interface LlmProvider {
     .modal-footer {
       display: flex;
       justify-content: flex-end;
+      align-items: center;
       gap: 1rem;
       padding: 1.5rem 2rem;
       border-top: 1px solid rgba(255, 255, 255, 0.1);
     }
 
-    .btn-test, .btn-secondary, .btn-primary {
+    .footer-spacer {
+      flex: 1;
+    }
+
+    .btn-delete, .btn-test, .btn-secondary, .btn-primary {
       padding: 0.75rem 1.5rem;
       border-radius: 8px;
       font-size: 0.875rem;
@@ -410,6 +417,17 @@ interface LlmProvider {
       cursor: pointer;
       transition: all 0.2s ease;
       border: none;
+    }
+
+    .btn-delete {
+      background: rgba(244, 67, 54, 0.2);
+      color: #f44336;
+      border: 1px solid #f44336;
+    }
+
+    .btn-delete:hover:not(:disabled) {
+      background: rgba(244, 67, 54, 0.3);
+      box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);
     }
 
     .btn-test {
@@ -484,6 +502,7 @@ export class LlmProviderConfigModalComponent implements OnInit, OnChanges {
   showApiKey = false;
   testing = false;
   saving = false;
+  deleting = false;
   testResult: { success: boolean; message: string } | null = null;
   
   allPresets: ProviderPresets[] = [];
@@ -588,9 +607,12 @@ export class LlmProviderConfigModalComponent implements OnInit, OnChanges {
 
   onModelSelect() {
     if (this.selectedModelPreset) {
-      // Auto-fill from preset
+      // Auto-fill from preset (name is still editable by user)
       this.formData.modelName = this.selectedModelPreset.modelName;
-      this.formData.name = this.selectedModelPreset.displayName;
+      // Only set name if it's empty or matches a previous preset
+      if (!this.formData.name || this.formData.name.includes('Grok') || this.formData.name.includes('GPT') || this.formData.name.includes('Claude') || this.formData.name.includes('Gemini')) {
+        this.formData.name = this.selectedModelPreset.displayName;
+      }
       this.formData.costPerMillionTokens = this.selectedModelPreset.costPerMillionTokens;
       this.formData.maxTokens = this.selectedModelPreset.maxTokens;
       this.formData.temperature = this.selectedModelPreset.defaultTemperature;
@@ -673,6 +695,29 @@ export class LlmProviderConfigModalComponent implements OnInit, OnChanges {
       alert(`Failed to save provider: ${error.error?.message || 'Unknown error'}`);
     } finally {
       this.saving = false;
+    }
+  }
+
+  async deleteProvider() {
+    if (!this.formData.id) return;
+
+    const confirmDelete = confirm(`Are you sure you want to delete "${this.formData.name}"?\n\nThis action cannot be undone.`);
+    if (!confirmDelete) return;
+
+    this.deleting = true;
+
+    try {
+      await this.http.delete(
+        `${environment.apiUrl}/super-admin/llm-providers/${this.formData.id}`
+      ).toPromise();
+
+      console.log('[LlmProviderModal] Provider deleted:', this.formData.name);
+      this.saved.emit({} as LlmProvider); // Trigger refresh
+      this.close();
+    } catch (error: any) {
+      alert(`Failed to delete provider: ${error.error?.message || 'Unknown error'}`);
+    } finally {
+      this.deleting = false;
     }
   }
 
