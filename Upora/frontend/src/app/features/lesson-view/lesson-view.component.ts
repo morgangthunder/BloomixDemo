@@ -11,11 +11,12 @@ import { takeUntil } from 'rxjs/operators';
 import { Lesson, Stage, SubStage } from '../../core/models/lesson.model';
 import { environment } from '../../../environments/environment';
 import { TrueFalseSelectionComponent } from '../interactions/true-false-selection/true-false-selection.component';
+import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/components/floating-teacher/floating-teacher-widget.component';
 
 @Component({
   selector: 'app-lesson-view',
   standalone: true,
-  imports: [CommonModule, FormsModule, IonContent, TrueFalseSelectionComponent],
+  imports: [CommonModule, FormsModule, IonContent, TrueFalseSelectionComponent, FloatingTeacherWidgetComponent],
   template: `
     <div class="bg-brand-dark text-white overflow-hidden flex flex-col md:flex-row lesson-view-wrapper">
       <!-- Mobile overlay -->
@@ -287,6 +288,16 @@ import { TrueFalseSelectionComponent } from '../interactions/true-false-selectio
           </div>
         </div>
       </main>
+
+      <!-- Floating Teacher Widget -->
+      <app-floating-teacher-widget
+        [currentScript]="currentTeacherScript"
+        [autoPlay]="true"
+        (play)="onTeacherPlay()"
+        (pause)="onTeacherPause()"
+        (skip)="onTeacherSkip()"
+        (closed)="onTeacherClosed()">
+      </app-floating-teacher-widget>
     </div>
   `,
   styles: [`
@@ -383,6 +394,10 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   isAITyping = false;
   isConnected = false;
   isChatExpanded = false;
+  
+  // Teacher Script
+  currentTeacherScript: ScriptBlock | null = null;
+  private teacherScriptTimeout: any = null;
   
   // Interaction data
   interactionData: any = null;
@@ -561,6 +576,16 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     
     // Load interaction data if available
     this.loadInteractionData();
+    
+    // Play teacher script if available (or demo script for testing)
+    // TODO: Get script from activeSubStage.script.before
+    if (this.activeSubStage) {
+      // Demo script for testing the widget
+      this.playTeacherScript({
+        text: `Welcome to ${this.activeSubStage.title || 'this sub-stage'}! Let me explain what we'll be learning here. This is a demonstration of the AI teacher script system. In production, these scripts will be defined in the lesson data and can be edited by lesson builders.`,
+        estimatedDuration: 15
+      });
+    }
   }
 
   private updateActiveSubStage() {
@@ -726,5 +751,57 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // TODO: Save score to backend (student_topic_scores table)
     // For now, just log it
     console.log('[LessonView] Score:', result.score, '% - Selected:', result.selectedFragments);
+    
+    // TODO: Play "after" script when interaction completes
+    // this.playTeacherScript(this.activeSubStage?.script?.after);
+  }
+
+  /**
+   * Teacher Widget Handlers
+   */
+  onTeacherPlay() {
+    console.log('[LessonView] Teacher playing script');
+    // TODO: Integrate TTS here when ready
+    // For now, auto-clear after estimated duration
+    if (this.currentTeacherScript?.estimatedDuration) {
+      this.teacherScriptTimeout = setTimeout(() => {
+        this.currentTeacherScript = null;
+      }, this.currentTeacherScript.estimatedDuration * 1000);
+    }
+  }
+
+  onTeacherPause() {
+    console.log('[LessonView] Teacher paused');
+    if (this.teacherScriptTimeout) {
+      clearTimeout(this.teacherScriptTimeout);
+      this.teacherScriptTimeout = null;
+    }
+  }
+
+  onTeacherSkip() {
+    console.log('[LessonView] Teacher script skipped');
+    if (this.teacherScriptTimeout) {
+      clearTimeout(this.teacherScriptTimeout);
+      this.teacherScriptTimeout = null;
+    }
+    this.currentTeacherScript = null;
+  }
+
+  onTeacherClosed() {
+    console.log('[LessonView] Teacher widget closed');
+    this.currentTeacherScript = null;
+  }
+
+  /**
+   * Play a teacher script block
+   */
+  private playTeacherScript(script?: ScriptBlock | any) {
+    if (!script || !script.text) {
+      console.log('[LessonView] No script to play');
+      return;
+    }
+
+    console.log('[LessonView] Playing teacher script:', script.text.substring(0, 50) + '...');
+    this.currentTeacherScript = script;
   }
 }
