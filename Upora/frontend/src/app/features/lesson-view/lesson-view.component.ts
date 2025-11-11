@@ -268,6 +268,7 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       <!-- Floating Teacher Widget -->
       <app-floating-teacher-widget
         *ngIf="!teacherWidgetHidden"
+        [class.fullscreen-widget]="isFullscreen"
         [currentScript]="currentTeacherScript"
         [autoPlay]="true"
         [chatMessages]="chatMessages"
@@ -527,9 +528,25 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       transform: translateY(50%); /* Half overlaps the red line */
     }
 
-    .fullscreen .teacher-fab,
+    /* Teacher FAB in Fullscreen */
     .content-area.fullscreen ~ .teacher-fab {
       z-index: 10000; /* Above fullscreen content */
+    }
+
+    /* Teacher Widget in Fullscreen */
+    app-floating-teacher-widget.fullscreen-widget {
+      z-index: 10000 !important;
+    }
+
+    app-floating-teacher-widget.fullscreen-widget ::ng-deep .teacher-widget {
+      z-index: 10000 !important;
+    }
+
+    /* Hide Sidebar When Collapsed */
+    .sidebar[style*="width: 0px"],
+    .sidebar[style*="width:0px"] {
+      display: none !important;
+      overflow: hidden;
     }
 
     .teacher-fab:hover {
