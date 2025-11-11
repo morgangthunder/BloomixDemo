@@ -1111,6 +1111,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // Add/remove class to body to hide global header
     if (this.isFullscreen) {
       document.body.classList.add('fullscreen-active');
+      // Auto-show teacher widget in fullscreen so it can be dragged
+      this.teacherWidgetHidden = false;
     } else {
       document.body.classList.remove('fullscreen-active');
     }
