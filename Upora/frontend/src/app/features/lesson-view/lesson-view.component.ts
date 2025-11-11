@@ -447,7 +447,7 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
 
     .timer-btn.active {
       color: #ff3b3f;
-      background: rgba(255, 59, 63, 0.1);
+      background: transparent;
     }
 
     .timer-display {
@@ -824,9 +824,20 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       this.activeStageId = firstStage.id;
       this.expandedStages.add(firstStage.id);
       
+      console.log('[LessonView] 📂 Auto-opened first stage:', firstStage.id);
+      
       if (firstStage.subStages && firstStage.subStages.length > 0) {
-        this.activeSubStageId = firstStage.subStages[0].id;
+        const firstSubStage = firstStage.subStages[0];
+        this.activeSubStageId = firstSubStage.id;
         this.updateActiveSubStage();
+        
+        // Auto-play first script if it exists
+        if (firstSubStage.teacherScript) {
+          console.log('[LessonView] 🎬 Auto-playing first script');
+          this.playTeacherScript(firstSubStage.teacherScript);
+        } else {
+          console.log('[LessonView] ⚠️ No teacher script in first substage');
+        }
       }
     }
     
