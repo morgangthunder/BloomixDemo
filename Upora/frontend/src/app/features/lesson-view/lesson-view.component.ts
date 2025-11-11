@@ -572,8 +572,13 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       overflow: hidden;
     }
 
-    .teacher-fab:hover {
+    .teacher-fab:hover:not(.draggable-fab) {
       transform: translateY(50%) scale(1.1);
+      box-shadow: 0 6px 20px rgba(255, 59, 63, 0.6);
+      background: #1a1a1a;
+    }
+
+    .teacher-fab.draggable-fab:hover {
       box-shadow: 0 6px 20px rgba(255, 59, 63, 0.6);
       background: #1a1a1a;
     }
@@ -669,6 +674,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   fabLeft = 0;
   fabTop = 0;
   private fabDragging = false;
+  private fabDidMove = false; // Track if FAB actually moved during drag
   private fabDragStartX = 0;
   private fabDragStartY = 0;
   
@@ -1133,9 +1139,10 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    * FAB Click Handler
    */
   onFabClick(event: Event) {
-    // If in fullscreen and was dragged, don't open (just repositioning)
-    if (this.isFullscreen && this.fabDragging) {
-      console.log('[LessonView] FAB drag end - not opening widget');
+    // If FAB was just dragged (moved), don't open widget
+    if (this.fabDidMove) {
+      console.log('[LessonView] FAB was dragged - not opening widget');
+      this.fabDidMove = false;
       return;
     }
     
@@ -1148,14 +1155,12 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    */
   startFabDrag(event: MouseEvent | TouchEvent) {
     if (!this.isFullscreen) {
-      console.log('[LessonView] FAB drag disabled - not in fullscreen');
-      return;
+      return; // Not in fullscreen, let click handler work
     }
     
-    console.log('[LessonView] Starting FAB drag');
-    event.preventDefault();
-    event.stopPropagation();
+    console.log('[LessonView] FAB mousedown - checking for drag');
     this.fabDragging = true;
+    this.fabDidMove = false; // Reset move flag
     
     const clientX = 'touches' in event ? event.touches[0].clientX : event.clientX;
     const clientY = 'touches' in event ? event.touches[0].clientY : event.clientY;
@@ -1184,8 +1189,17 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     const clientX = 'touches' in event ? event.touches[0].clientX : event.clientX;
     const clientY = 'touches' in event ? event.touches[0].clientY : event.clientY;
     
-    this.fabLeft = clientX - this.fabDragStartX;
-    this.fabTop = clientY - this.fabDragStartY;
+    const newLeft = clientX - this.fabDragStartX;
+    const newTop = clientY - this.fabDragStartY;
+    
+    // Check if actually moved (more than 5px)
+    const movedDistance = Math.abs(newLeft - this.fabLeft) + Math.abs(newTop - this.fabTop);
+    if (movedDistance > 5) {
+      this.fabDidMove = true;
+    }
+    
+    this.fabLeft = newLeft;
+    this.fabTop = newTop;
     
     // Keep within viewport
     const maxX = window.innerWidth - 70;
@@ -1196,14 +1210,17 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   }
 
   private stopFabDrag = () => {
-    setTimeout(() => {
-      this.fabDragging = false;
-    }, 100); // Small delay so click handler can check fabDragging
+    this.fabDragging = false;
     
     document.removeEventListener('mousemove', this.onFabDrag);
     document.removeEventListener('mouseup', this.stopFabDrag);
     document.removeEventListener('touchmove', this.onFabDrag);
     document.removeEventListener('touchend', this.stopFabDrag);
+    
+    // Reset fabDidMove after a short delay (so click handler can check it)
+    setTimeout(() => {
+      this.fabDidMove = false;
+    }, 200);
   }
 
   /**
