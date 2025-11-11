@@ -601,10 +601,10 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
     
     /* When fullscreen, use fixed positioning at bottom-left */
     .content-area.fullscreen .fullscreen-toggle {
-      position: fixed;
-      bottom: calc(60px + 1.5rem);
-      left: 1.5rem;
-      z-index: 9998;
+      position: fixed !important;
+      bottom: calc(60px + 1.5rem) !important;
+      left: 1.5rem !important;
+      z-index: 9998 !important;
     }
 
     .fullscreen-toggle:hover {
