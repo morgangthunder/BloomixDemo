@@ -210,6 +210,11 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
           </div>
 
           <ng-template #selectPrompt>
+            <!-- Debug Info -->
+            <div style="position: absolute; top: 0; left: 0; background: red; color: white; padding: 10px; z-index: 99999;">
+              DEBUG: activeStageId={{ activeStageId }}, lesson={{ !!lesson }}
+            </div>
+            
             <!-- End of Lesson Screen -->
             <div *ngIf="!activeStageId && lesson" class="end-of-lesson">
               <div class="end-content">
@@ -1189,19 +1194,19 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    * Update fullscreen toggle position based on sidebar width and fullscreen state
    */
   private updateFullscreenTogglePosition() {
-    const isDesktop = window.innerWidth >= 768;
-    console.log('[LessonView] 🔧 Updating toggle position - fullscreen:', this.isFullscreen, 'desktop:', isDesktop, 'navWidth:', this.navWidth);
+    console.log('[LessonView] 🔧 Updating toggle position - fullscreen:', this.isFullscreen, 'navWidth:', this.navWidth);
     
     if (this.isFullscreen) {
       // In fullscreen, always simple left
       this.fullscreenToggleLeft = '1.5rem';
     } else {
-      // In normal mode, adjust for sidebar on desktop
-      if (isDesktop && this.navWidth > 0) {
-        // Sidebar is open on desktop - position after sidebar
+      // In normal mode, adjust for sidebar
+      // Use navWidth to determine if sidebar is open (not window.innerWidth)
+      if (this.navWidth > 0) {
+        // Sidebar is open - position after sidebar
         this.fullscreenToggleLeft = `calc(${this.navWidth}px + 1.5rem)`;
       } else {
-        // Mobile or sidebar closed - simple left
+        // Sidebar closed - simple left
         this.fullscreenToggleLeft = '1.5rem';
       }
     }
