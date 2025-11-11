@@ -1101,6 +1101,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   onTeacherPlay() {
     console.log('[LessonView] Teacher playing script');
     this.isScriptPlaying = true;
+    // Timer will now increment (if visible)
     // TODO: Integrate TTS here when ready
     // Script stays visible until user closes or new script starts
   }
@@ -1108,7 +1109,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   onTeacherPause() {
     console.log('[LessonView] Teacher paused');
     this.isScriptPlaying = false;
-    // Timer continues to run but won't increment while paused (see startTimer logic)
+    // Timer will now pause (stops incrementing)
   }
 
   onTeacherSkip() {
@@ -1132,6 +1133,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    * Bottom Control Bar Methods
    */
   toggleScriptPlay() {
+    console.log('[LessonView] Toggle play/pause from control bar');
     if (this.isScriptPlaying) {
       this.onTeacherPause();
     } else {
@@ -1140,6 +1142,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   }
 
   skipScript() {
+    console.log('[LessonView] Skip from control bar');
     this.onTeacherSkip();
   }
 
@@ -1295,8 +1298,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   private startTimer() {
     console.log('[LessonView] Timer started');
     this.timerInterval = setInterval(() => {
-      // Only increment if script is playing or not paused
-      if (this.isScriptPlaying || !this.currentTeacherScript) {
+      // Only increment when script is actively playing (pause button showing)
+      if (this.isScriptPlaying) {
         this.elapsedSeconds++;
       }
     }, 1000);
