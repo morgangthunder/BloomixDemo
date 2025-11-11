@@ -39,14 +39,9 @@ export interface ChatMessage {
           </div>
           <div class="teacher-title">AI Teacher</div>
           <div class="header-controls">
-            <button class="control-btn" (click)="minimize()" title="Minimize">
+            <button class="control-btn" (click)="close()" title="Minimize">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <rect x="3" y="7" width="10" height="2" rx="1"/>
-              </svg>
-            </button>
-            <button class="control-btn" (click)="close()" title="Close">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M4 4L12 12M12 4L4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
               </svg>
             </button>
           </div>
@@ -447,12 +442,18 @@ export interface ChatMessage {
     /* Mobile Responsive */
     @media (max-width: 768px) {
       .teacher-widget {
-        bottom: 1rem;
+        bottom: 5rem;
         right: 1rem;
+        left: 1rem;
       }
 
       .teacher-card {
-        width: calc(100vw - 2rem);
+        width: 100%;
+        max-height: calc(100vh - 12rem);
+      }
+
+      .chat-history {
+        max-height: 250px;
       }
 
       .teacher-icon-minimized {
@@ -462,6 +463,19 @@ export interface ChatMessage {
 
       .teacher-icon-minimized .avatar {
         font-size: 2rem;
+      }
+
+      .chat-input-container {
+        padding: 0.75rem;
+      }
+
+      .raise-hand-btn, .send-btn {
+        width: 40px;
+        height: 40px;
+      }
+
+      .chat-input {
+        font-size: 0.8125rem;
       }
     }
 

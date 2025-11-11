@@ -24,16 +24,6 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
            (click)="closeMobileNav()"
            class="fixed inset-0 bg-black/60 z-30 md:hidden"></div>
 
-      <!-- Mobile FAB for Stages -->
-      <button 
-        (click)="toggleMobileNav()"
-        class="mobile-fab md:hidden"
-        aria-label="Toggle stages menu">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
-        </svg>
-      </button>
-
       <!-- Sidebar -->
       <aside 
         [style.width.px]="navWidth"
@@ -45,7 +35,10 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
         
         <!-- Sidebar Header -->
         <div class="flex items-center justify-between p-4 border-b border-gray-700">
-          <h2 class="text-lg font-bold truncate">{{ lesson?.title }}</h2>
+          <div class="flex-1 min-w-0">
+            <h2 class="text-lg font-bold truncate text-white">{{ lesson?.title || 'Lesson' }}</h2>
+            <p class="text-xs text-gray-400">{{ lesson?.durationMinutes || 0 }} minutes</p>
+          </div>
           <button (click)="closeMobileNav()" class="md:hidden text-white p-2">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -148,9 +141,6 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
         <!-- Content Area -->
         <div class="flex-1 p-6 md:p-8 lg:p-12 overflow-y-auto pb-32 md:pb-8">
           <div *ngIf="activeSubStage; else selectPrompt">
-            <h1 class="text-3xl md:text-4xl font-bold text-white mb-2">{{ activeSubStage.title }}</h1>
-            <p class="text-brand-gray mb-8">{{ activeSubStage.type }} • {{ activeSubStage.interactionType }} • {{ activeSubStage.duration }} minutes</p>
-
             <!-- Loading State -->
             <div *ngIf="isLoadingInteraction" class="bg-brand-black rounded-lg p-12 flex items-center justify-center">
               <div class="text-center">
@@ -209,11 +199,12 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
 
         <!-- Bottom Control Bar -->
         <div class="lesson-control-bar">
-          <!-- Left: View Stages (Mobile) -->
+          <!-- Left: Toggle Stages -->
           <button 
-            class="control-bar-btn left-btn md:hidden"
-            (click)="openMobileNav()"
-            title="View Stages">
+            class="control-bar-btn left-btn"
+            (click)="toggleSidebar()"
+            [class.active]="isSidebarOpen"
+            title="Toggle Stages">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
             </svg>
@@ -222,15 +213,16 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
           <!-- Center: Playback Controls -->
           <div class="center-controls">
             <button 
-              class="control-bar-btn"
+              class="control-bar-btn playback-btn"
               (click)="toggleScriptPlay()"
               [disabled]="!currentTeacherScript"
+              [class.active]="isScriptPlaying"
               [title]="isScriptPlaying ? 'Pause' : 'Play'">
               <span *ngIf="!isScriptPlaying">▶️</span>
               <span *ngIf="isScriptPlaying">⏸️</span>
             </button>
             <button 
-              class="control-bar-btn"
+              class="control-bar-btn playback-btn"
               (click)="skipScript()"
               [disabled]="!currentTeacherScript"
               title="Skip">
@@ -241,18 +233,18 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
             </div>
           </div>
 
-          <!-- Right: Teacher Chat Toggle -->
-          <button 
-            class="control-bar-btn right-btn teacher-toggle"
-            (click)="toggleTeacherWidget()"
-            [class.active]="!teacherWidgetHidden"
-            title="AI Teacher Chat">
-            <span class="icon">🎓</span>
-            <span class="label hidden md:inline">Teacher</span>
-            <span *ngIf="chatMessages.length > 0" class="badge">{{ chatMessages.length }}</span>
-          </button>
         </div>
       </main>
+
+      <!-- Floating Teacher FAB (Always visible when minimized) -->
+      <div 
+        *ngIf="teacherWidgetHidden"
+        class="teacher-fab"
+        (click)="toggleTeacherWidget()"
+        title="Open AI Teacher">
+        <span class="fab-icon">🎓</span>
+        <span *ngIf="chatMessages.length > 0" class="fab-badge">{{ chatMessages.length }}</span>
+      </div>
 
       <!-- Floating Teacher Widget -->
       <app-floating-teacher-widget
@@ -400,6 +392,18 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       border-color: #ff3b3f;
     }
 
+    .playback-btn {
+      color: #ffffff;
+    }
+
+    .playback-btn:not(:disabled) {
+      color: #ff3b3f;
+    }
+
+    .playback-btn.active {
+      color: #ffffff;
+    }
+
     .left-btn, .right-btn {
       min-width: auto;
     }
@@ -447,6 +451,51 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       text-align: center;
     }
 
+    /* Teacher FAB */
+    .teacher-fab {
+      position: fixed;
+      bottom: 6rem;
+      right: 2rem;
+      width: 70px;
+      height: 70px;
+      background: #000000;
+      border: 2px solid #ff3b3f;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(255, 59, 63, 0.4);
+      transition: all 0.3s ease;
+      z-index: 999;
+    }
+
+    .teacher-fab:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 20px rgba(255, 59, 63, 0.6);
+      background: #1a1a1a;
+    }
+
+    .fab-icon {
+      font-size: 2.25rem;
+      line-height: 1;
+    }
+
+    .fab-badge {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      background: #ff3b3f;
+      color: #ffffff;
+      font-size: 0.625rem;
+      font-weight: 700;
+      padding: 3px 7px;
+      border-radius: 12px;
+      min-width: 22px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
     @media (max-width: 768px) {
       .lesson-control-bar {
         padding: 0.5rem 0.75rem;
@@ -466,6 +515,17 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       .script-progress-info {
         max-width: 150px;
       }
+
+      .teacher-fab {
+        bottom: 5rem;
+        right: 1rem;
+        width: 60px;
+        height: 60px;
+      }
+
+      .fab-icon {
+        font-size: 2rem;
+      }
     }
   `]
 })
@@ -480,6 +540,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   
   // Sidebar state
   isMobileNavOpen = false;
+  isSidebarOpen = true; // Desktop sidebar state
   navWidth = 280;
   private navWidthBeforeCollapse = 280;
   private isResizing = false;
@@ -743,6 +804,19 @@ export class LessonViewComponent implements OnInit, OnDestroy {
 
   toggleMobileNav() {
     this.isMobileNavOpen = !this.isMobileNavOpen;
+  }
+
+  toggleSidebar() {
+    // On mobile, toggle mobile nav
+    // On desktop, toggle sidebar width
+    const isMobile = window.innerWidth < 768;
+    
+    if (isMobile) {
+      this.isMobileNavOpen = !this.isMobileNavOpen;
+    } else {
+      this.isSidebarOpen = !this.isSidebarOpen;
+      this.navWidth = this.isSidebarOpen ? 280 : 0;
+    }
   }
 
   toggleChatExpanded() {
