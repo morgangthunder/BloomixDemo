@@ -196,11 +196,12 @@ interface LlmProvider {
             </label>
           </div>
 
-          <div class="form-group checkbox-group" *ngIf="isEditMode">
-            <label class="checkbox-label">
-              <input type="checkbox" [(ngModel)]="formData.isDefault" />
-              <span>Set as Default Provider (used for all LLM calls)</span>
-            </label>
+          <div *ngIf="isEditMode && formData.isDefault" class="default-badge">
+            ⭐ This is currently the DEFAULT provider used for all LLM calls
+          </div>
+
+          <div *ngIf="isEditMode && !formData.isDefault" class="info-message">
+            💡 To set this as the default provider, select it from the dropdown on the main page
           </div>
 
           <div *ngIf="testResult" class="test-result" [class.success]="testResult.success" [class.error]="!testResult.success">
@@ -401,6 +402,28 @@ interface LlmProvider {
       background: rgba(244, 67, 54, 0.2);
       border: 1px solid #f44336;
       color: #f44336;
+    }
+
+    .default-badge {
+      padding: 0.75rem;
+      border-radius: 8px;
+      background: rgba(255, 215, 0, 0.2);
+      border: 1px solid #ffd700;
+      color: #ffd700;
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin-top: 1rem;
+      text-align: center;
+    }
+
+    .info-message {
+      padding: 0.75rem;
+      border-radius: 8px;
+      background: rgba(0, 212, 255, 0.1);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 0.875rem;
+      margin-top: 1rem;
     }
 
     .modal-footer {
@@ -683,35 +706,22 @@ export class LlmProviderConfigModalComponent implements OnInit, OnChanges {
       let result: LlmProvider;
 
       if (this.isEditMode && this.formData.id) {
-        // Update existing
+        // Update existing (never change isDefault here - use dropdown instead)
+        const updateData = { ...this.formData };
+        delete updateData.isDefault; // Don't update isDefault via this modal
+        
         result = await this.http.put<LlmProvider>(
           `${environment.apiUrl}/super-admin/llm-providers/${this.formData.id}`,
-          this.formData
+          updateData
         ).toPromise() as LlmProvider;
-
-        // If user checked "Set as Default", call set-default endpoint
-        if (this.formData.isDefault && !this.provider?.isDefault) {
-          await this.http.put(
-            `${environment.apiUrl}/super-admin/llm-providers/${this.formData.id}/set-default`,
-            {}
-          ).toPromise();
-          console.log('[LlmProviderModal] Set as default provider');
-        }
       } else {
-        // Create new
+        // Create new (starts as non-default, user can switch via dropdown)
+        const createData = { ...this.formData, isDefault: false };
+        
         result = await this.http.post<LlmProvider>(
           `${environment.apiUrl}/super-admin/llm-providers`,
-          this.formData
+          createData
         ).toPromise() as LlmProvider;
-
-        // If user checked "Set as Default" on new provider, set it
-        if (this.formData.isDefault && result.id) {
-          await this.http.put(
-            `${environment.apiUrl}/super-admin/llm-providers/${result.id}/set-default`,
-            {}
-          ).toPromise();
-          console.log('[LlmProviderModal] Set new provider as default');
-        }
       }
 
       this.saved.emit(result);
@@ -725,6 +735,12 @@ export class LlmProviderConfigModalComponent implements OnInit, OnChanges {
 
   async deleteProvider() {
     if (!this.formData.id) return;
+
+    console.log('[LlmProviderModal] Attempting to delete:', {
+      id: this.formData.id,
+      name: this.formData.name,
+      isDefault: this.formData.isDefault
+    });
 
     const confirmDelete = confirm(`Are you sure you want to delete "${this.formData.name}"?\n\nThis action cannot be undone.`);
     if (!confirmDelete) return;
@@ -740,6 +756,7 @@ export class LlmProviderConfigModalComponent implements OnInit, OnChanges {
       this.saved.emit({} as LlmProvider); // Trigger refresh
       this.close();
     } catch (error: any) {
+      console.error('[LlmProviderModal] Delete failed:', error);
       alert(`Failed to delete provider: ${error.error?.message || 'Unknown error'}`);
     } finally {
       this.deleting = false;
