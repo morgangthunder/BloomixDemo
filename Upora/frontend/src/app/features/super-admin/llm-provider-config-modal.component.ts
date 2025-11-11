@@ -93,7 +93,7 @@ interface LlmProvider {
             </div>
 
             <div class="form-group" *ngIf="formData.providerType && formData.providerType !== 'other'">
-              <label>Model *</label>
+              <label>Model * ({{ availableModels.length }} models available)</label>
               <select 
                 [(ngModel)]="selectedModelPreset" 
                 (change)="onModelSelect()"
@@ -104,6 +104,9 @@ interface LlmProvider {
                   {{ model.displayName }} (\${{ model.costPerMillionTokens }}/1M)
                 </option>
               </select>
+              <div class="debug-info" style="color: yellow; font-size: 0.75rem; margin-top: 0.5rem;">
+                DEBUG: Provider={{ formData.providerType }}, Models={{ availableModels.length }}, Presets={{ allPresets.length }}
+              </div>
             </div>
 
             <div class="form-group" *ngIf="formData.providerType === 'other'">
@@ -523,9 +526,15 @@ export class LlmProviderConfigModalComponent implements OnInit, OnChanges {
         if (this.provider) {
           this.isEditMode = true;
           this.formData = { ...this.provider };
+          
+          // Load models for existing provider
+          if (this.formData.providerType && this.formData.providerType !== 'other') {
+            this.onProviderTypeChange();
+          }
         } else {
           this.isEditMode = false;
           this.formData = this.getEmptyForm();
+          // Provider type starts empty, so user must select which will trigger (change) event
         }
         this.testResult = null;
         this.showApiKey = false;
@@ -543,7 +552,7 @@ export class LlmProviderConfigModalComponent implements OnInit, OnChanges {
   getEmptyForm(): LlmProviderForm {
     return {
       name: '',
-      providerType: 'xai',
+      providerType: '', // Start empty so user must select
       apiEndpoint: '',
       apiKey: '',
       modelName: '',
