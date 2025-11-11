@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ContentSourceService } from '../../core/services/content-source.service';
 import { ContentSource } from '../../core/models/content-source.model';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-content-approvals',
@@ -117,15 +118,31 @@ import { ContentSource } from '../../core/models/content-source.model';
             </div>
 
             <div class="action-buttons" *ngIf="showRejectForm !== source.id">
-              <button (click)="approveContent(source.id)" class="btn-approve" [disabled]="processing">
+              <!-- Approve/Reject buttons only for admins or super-admins -->
+              <button 
+                *ngIf="canApprove(source)" 
+                (click)="approveContent(source.id)" 
+                class="btn-approve" 
+                [disabled]="processing">
                 {{processing ? 'Processing...' : '✓ Approve'}}
               </button>
-              <button (click)="startReject(source.id)" class="btn-reject" [disabled]="processing">
+              <button 
+                *ngIf="canApprove(source)" 
+                (click)="startReject(source.id)" 
+                class="btn-reject" 
+                [disabled]="processing">
                 ✕ Reject
               </button>
+              
+              <!-- View button always visible -->
               <button (click)="viewSource(source)" class="btn-view">
                 👁️ View
               </button>
+              
+              <!-- Info message for non-admins -->
+              <div *ngIf="!canApprove(source)" class="pending-info">
+                ⏳ Awaiting admin approval
+              </div>
             </div>
           </div>
         </div>
@@ -351,6 +368,17 @@ import { ContentSource } from '../../core/models/content-source.model';
     .btn-view:hover {
       background: rgba(255,255,255,0.15);
     }
+    
+    .pending-info {
+      padding: 12px 16px;
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      border-radius: 8px;
+      color: #f59e0b;
+      font-size: 0.875rem;
+      text-align: center;
+    }
+    
     .rejection-section {
       margin-bottom: 16px;
     }
@@ -446,6 +474,26 @@ export class ContentApprovalsComponent implements OnInit {
 
   async ngOnInit() {
     await this.loadPendingContent();
+  }
+
+  /**
+   * Check if current user can approve content
+   * Rules:
+   * - Admin or super-admin role can approve
+   * - User cannot approve their own content (unless they're also an admin)
+   */
+  canApprove(source: ContentSource): boolean {
+    const userRole = environment.userRole;
+    const userId = environment.defaultUserId;
+    
+    // Super-admins and admins can always approve
+    if (userRole === 'super-admin' || userRole === 'admin') {
+      return true;
+    }
+    
+    // Regular users (lesson-builder, interaction-builder, student) cannot approve
+    // Even if it's someone else's content
+    return false;
   }
 
   async loadPendingContent() {
