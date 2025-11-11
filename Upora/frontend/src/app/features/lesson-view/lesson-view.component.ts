@@ -576,8 +576,8 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
 
     .fullscreen-toggle {
       position: fixed; /* Fixed so it doesn't scroll */
-      bottom: calc(60px + 4rem); /* Directly above the Toggle Stages button */
-      left: 1.5rem;
+      bottom: calc(60px + 1.5rem); /* Same as before - above control bar */
+      left: 1.5rem; /* Default left */
       width: 44px;
       height: 44px;
       background: rgba(0, 0, 0, 0.7);
@@ -585,11 +585,18 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       border-radius: 8px;
       color: #ffffff;
       cursor: pointer;
-      transition: none; /* No transition */
+      transition: left 0.3s ease; /* Transition left only */
       display: flex;
       align-items: center;
       justify-content: center;
       z-index: 100; /* Below sidebar */
+    }
+    
+    /* Desktop: when sidebar is visible (not width 0), move toggle right */
+    @media (min-width: 768px) {
+      .lesson-view-wrapper:has(.sidebar:not([style*="width: 0px"])) .fullscreen-toggle {
+        left: calc(280px + 1.5rem) !important; /* Move right when sidebar open */
+      }
     }
     
     /* Mobile: hide when nav is open */
@@ -599,9 +606,10 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       }
     }
     
-    /* When fullscreen, move to very bottom */
+    /* When fullscreen, move to very bottom and reset left */
     .content-area.fullscreen .fullscreen-toggle {
       bottom: 1rem !important; /* Very close to bottom */
+      left: 1.5rem !important; /* Back to left edge */
       z-index: 9998 !important; /* Above everything in fullscreen */
     }
 
