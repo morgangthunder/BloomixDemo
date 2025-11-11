@@ -1,6 +1,5 @@
-import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
+import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import * as PIXI from 'pixi.js';
 
 interface Fragment {
   text: string;
@@ -22,113 +21,212 @@ interface FragmentBuilderData {
     <div class="fragment-builder-container">
       <!-- Target Statement -->
       <div class="target-statement">
-        <div class="label">Build the correct statement:</div>
+        <div class="label">Build the correct statement by selecting the TRUE fragments:</div>
         <div class="statement">{{ data?.targetStatement || 'Loading...' }}</div>
       </div>
 
-      <!-- Pixi Canvas -->
-      <div class="canvas-container" #canvasContainer>
-        <canvas #pixiCanvas></canvas>
+      <!-- Fragments Grid (HTML/CSS instead of Pixi) -->
+      <div class="fragments-grid">
+        <div 
+          *ngFor="let fragment of data?.fragments; let i = index"
+          class="fragment-tile"
+          [class.selected]="isSelected(i)"
+          [class.correct]="showScore && fragment.isTrueInContext && isSelected(i)"
+          [class.incorrect]="showScore && !fragment.isTrueInContext && isSelected(i)"
+          [class.missed]="showScore && fragment.isTrueInContext && !isSelected(i)"
+          [class.locked]="showScore"
+          (click)="toggleFragment(i)"
+          [title]="fragment.explanation"
+        >
+          <div class="fragment-text">{{ fragment.text }}</div>
+          <div *ngIf="showScore" class="fragment-feedback">
+            <span *ngIf="fragment.isTrueInContext && isSelected(i)" class="feedback-icon">✓</span>
+            <span *ngIf="!fragment.isTrueInContext && isSelected(i)" class="feedback-icon">✗</span>
+            <span *ngIf="fragment.isTrueInContext && !isSelected(i)" class="feedback-icon">○</span>
+          </div>
+        </div>
       </div>
 
       <!-- Instructions -->
-      <div class="instructions">
-        <p>Tap the TRUE statements to build the correct sentence.</p>
-        <p class="hint">Tap and hold for explanations</p>
+      <div class="instructions" *ngIf="!showScore">
+        <p>💡 Tap fragments to select them • Hover for explanations</p>
       </div>
 
       <!-- Score Display -->
       <div *ngIf="showScore" class="score-display" [class.perfect]="score === 100">
-        <div class="score-label">Score:</div>
+        <div class="score-label">Your Score:</div>
         <div class="score-value">{{ score }}%</div>
-        <div *ngIf="score === 100" class="perfect-message">Perfect! 🎉</div>
+        <div class="score-breakdown">
+          {{ getCorrectCount() }} out of {{ getTrueCount() }} correct
+        </div>
+        <div *ngIf="score === 100" class="perfect-message">🎉 Perfect Score!</div>
+        <div *ngIf="score < 100" class="try-again">Review the highlighted fragments</div>
       </div>
 
-      <!-- Submit Button -->
-      <button 
-        *ngIf="!showScore" 
-        class="submit-btn" 
-        (click)="checkAnswers()"
-        [disabled]="selectedFragments.size === 0"
-      >
-        Check My Answer
-      </button>
+      <!-- Action Buttons -->
+      <div class="actions">
+        <button 
+          *ngIf="!showScore" 
+          class="submit-btn" 
+          (click)="checkAnswers()"
+          [disabled]="selectedFragments.size === 0"
+        >
+          Check My Answer
+        </button>
 
-      <button 
-        *ngIf="showScore" 
-        class="continue-btn" 
-        (click)="complete()"
-      >
-        Continue
-      </button>
+        <button 
+          *ngIf="showScore" 
+          class="continue-btn" 
+          (click)="complete()"
+        >
+          Continue →
+        </button>
+      </div>
     </div>
   `,
   styles: [`
     .fragment-builder-container {
       width: 100%;
-      height: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
       display: flex;
       flex-direction: column;
       padding: 2rem;
+      gap: 2rem;
       background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%);
       color: #ffffff;
+      min-height: 100%;
     }
 
     .target-statement {
       text-align: center;
-      margin-bottom: 2rem;
+      padding: 2rem;
+      background: rgba(0, 212, 255, 0.1);
+      border: 2px solid rgba(0, 212, 255, 0.3);
+      border-radius: 16px;
     }
 
     .label {
       font-size: 0.875rem;
       color: rgba(255, 255, 255, 0.6);
-      margin-bottom: 0.5rem;
+      margin-bottom: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
     }
 
     .statement {
-      font-size: 1.25rem;
+      font-size: 1.125rem;
       font-weight: 600;
-      color: #00d4ff;
-      line-height: 1.6;
+      color: #ffffff;
+      line-height: 1.8;
     }
 
-    .canvas-container {
-      flex: 1;
-      position: relative;
-      min-height: 400px;
+    .fragments-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .fragment-tile {
+      background: rgba(255, 255, 255, 0.05);
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-radius: 12px;
+      padding: 1.5rem;
+      min-height: 120px;
       display: flex;
-      justify-content: center;
+      flex-direction: column;
       align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+      user-select: none;
     }
 
-    canvas {
-      max-width: 100%;
-      max-height: 100%;
+    .fragment-tile:hover:not(.locked) {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: #00d4ff;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 212, 255, 0.2);
+    }
+
+    .fragment-tile.selected:not(.locked) {
+      background: rgba(0, 212, 255, 0.2);
+      border-color: #00d4ff;
+      border-width: 3px;
+    }
+
+    .fragment-tile.correct {
+      background: rgba(76, 175, 80, 0.2);
+      border-color: #4caf50;
+      border-width: 3px;
+    }
+
+    .fragment-tile.incorrect {
+      background: rgba(244, 67, 54, 0.2);
+      border-color: #f44336;
+      border-width: 3px;
+    }
+
+    .fragment-tile.missed {
+      background: rgba(255, 193, 7, 0.15);
+      border-color: #ffc107;
+      border-width: 2px;
+    }
+
+    .fragment-tile.locked {
+      cursor: default;
+    }
+
+    .fragment-text {
+      font-size: 1rem;
+      font-weight: 500;
+      color: #ffffff;
+      text-align: center;
+      line-height: 1.4;
+    }
+
+    .fragment-feedback {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+    }
+
+    .feedback-icon {
+      font-size: 1.5rem;
+      font-weight: bold;
+    }
+
+    .fragment-tile.correct .feedback-icon {
+      color: #4caf50;
+    }
+
+    .fragment-tile.incorrect .feedback-icon {
+      color: #f44336;
+    }
+
+    .fragment-tile.missed .feedback-icon {
+      color: #ffc107;
     }
 
     .instructions {
       text-align: center;
-      margin: 1.5rem 0;
     }
 
     .instructions p {
-      margin: 0.5rem 0;
-      color: rgba(255, 255, 255, 0.7);
+      margin: 0;
+      color: rgba(255, 255, 255, 0.6);
       font-size: 0.875rem;
-    }
-
-    .hint {
-      font-size: 0.75rem;
-      color: rgba(255, 255, 255, 0.5);
     }
 
     .score-display {
       text-align: center;
       padding: 2rem;
-      background: rgba(255, 255, 255, 0.05);
+      background: rgba(0, 212, 255, 0.1);
       border-radius: 16px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      margin-bottom: 1rem;
+      border: 2px solid rgba(0, 212, 255, 0.3);
     }
 
     .score-display.perfect {
@@ -140,37 +238,53 @@ interface FragmentBuilderData {
       font-size: 0.875rem;
       color: rgba(255, 255, 255, 0.6);
       margin-bottom: 0.5rem;
+      text-transform: uppercase;
     }
 
     .score-value {
-      font-size: 3rem;
+      font-size: 4rem;
       font-weight: 700;
       color: #00d4ff;
+      margin: 0.5rem 0;
     }
 
     .score-display.perfect .score-value {
       color: #4caf50;
     }
 
+    .score-breakdown {
+      font-size: 1rem;
+      color: rgba(255, 255, 255, 0.7);
+      margin-bottom: 1rem;
+    }
+
     .perfect-message {
-      font-size: 1.25rem;
+      font-size: 1.5rem;
       color: #4caf50;
       margin-top: 1rem;
       font-weight: 600;
     }
 
+    .try-again {
+      font-size: 1rem;
+      color: #ffc107;
+      margin-top: 0.5rem;
+    }
+
+    .actions {
+      display: flex;
+      justify-content: center;
+      margin-top: auto;
+    }
+
     .submit-btn, .continue-btn {
-      padding: 1rem 2rem;
+      padding: 1rem 3rem;
       border: none;
       border-radius: 12px;
-      font-size: 1rem;
+      font-size: 1.125rem;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.3s ease;
-      width: 100%;
-      max-width: 300px;
-      margin: 0 auto;
-      display: block;
     }
 
     .submit-btn {
@@ -180,11 +294,12 @@ interface FragmentBuilderData {
 
     .submit-btn:hover:not(:disabled) {
       background: #00bce6;
-      box-shadow: 0 4px 12px rgba(0, 212, 255, 0.4);
+      box-shadow: 0 6px 20px rgba(0, 212, 255, 0.4);
+      transform: translateY(-2px);
     }
 
     .submit-btn:disabled {
-      opacity: 0.5;
+      opacity: 0.4;
       cursor: not-allowed;
     }
 
@@ -195,220 +310,91 @@ interface FragmentBuilderData {
 
     .continue-btn:hover {
       background: #45a049;
-      box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+      box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+      transform: translateY(-2px);
+    }
+
+    @media (max-width: 1024px) {
+      .fragments-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
     }
 
     @media (max-width: 768px) {
       .fragment-builder-container {
         padding: 1rem;
+        gap: 1.5rem;
       }
 
-      .canvas-container {
-        min-height: 300px;
+      .target-statement {
+        padding: 1.5rem;
       }
 
       .statement {
         font-size: 1rem;
       }
+
+      .fragments-grid {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+      }
+
+      .fragment-tile {
+        padding: 1.25rem;
+        min-height: 100px;
+      }
+
+      .score-value {
+        font-size: 3rem;
+      }
     }
   `]
 })
-export class FragmentBuilderComponent implements OnInit, OnDestroy {
+export class FragmentBuilderComponent {
   @Input() data: FragmentBuilderData | null = null;
   @Output() completed = new EventEmitter<{ score: number; selectedFragments: string[] }>();
 
-  @ViewChild('pixiCanvas', { static: true }) canvasRef!: ElementRef<HTMLCanvasElement>;
-  @ViewChild('canvasContainer', { static: true }) containerRef!: ElementRef<HTMLDivElement>;
-
-  private app: PIXI.Application | null = null;
-  private fragmentSprites: Map<number, PIXI.Container> = new Map();
   selectedFragments: Set<number> = new Set();
   showScore = false;
   score = 0;
 
-  async ngOnInit() {
-    if (this.data) {
-      await this.initPixi();
-      this.createFragments();
-    }
+  isSelected(index: number): boolean {
+    return this.selectedFragments.has(index);
   }
 
-  ngOnDestroy() {
-    if (this.app) {
-      this.app.destroy(true, { children: true });
-    }
-  }
+  toggleFragment(index: number) {
+    if (this.showScore) return; // Locked after checking
 
-  private async initPixi() {
-    const canvas = this.canvasRef.nativeElement;
-    const container = this.containerRef.nativeElement;
-
-    this.app = new PIXI.Application();
-    await this.app.init({
-      canvas,
-      width: container.clientWidth,
-      height: Math.max(container.clientHeight, 400),
-      backgroundColor: 0x0f0f23,
-      antialias: true,
-    });
-
-    console.log('[FragmentBuilder] Pixi initialized');
-  }
-
-  private createFragments() {
-    if (!this.app || !this.data) return;
-
-    const fragments = this.data.fragments;
-    const padding = 15;
-    const canvasWidth = this.app.screen.width;
-    const fragmentsPerRow = window.innerWidth < 768 ? 1 : 2; // 1 column mobile, 2 desktop
-    const fragmentWidth = (canvasWidth - (padding * (fragmentsPerRow + 1))) / fragmentsPerRow;
-    const fragmentHeight = 100; // Taller for better text display
-
-    fragments.forEach((fragment, index) => {
-      const row = Math.floor(index / fragmentsPerRow);
-      const col = index % fragmentsPerRow;
-      const x = padding + col * (fragmentWidth + padding);
-      const y = padding + row * (fragmentHeight + padding);
-
-      const fragmentContainer = this.createFragmentTile(fragment, index, x, y, fragmentWidth, fragmentHeight);
-      this.fragmentSprites.set(index, fragmentContainer);
-      this.app!.stage.addChild(fragmentContainer);
-    });
-
-    // Update canvas height to fit all fragments
-    const totalRows = Math.ceil(fragments.length / fragmentsPerRow);
-    const neededHeight = padding + totalRows * (fragmentHeight + padding);
-    this.app.renderer.resize(canvasWidth, neededHeight);
-
-    console.log('[FragmentBuilder] Created', fragments.length, 'fragments in', totalRows, 'rows');
-  }
-
-  private createFragmentTile(
-    fragment: Fragment,
-    index: number,
-    x: number,
-    y: number,
-    width: number,
-    height: number
-  ): PIXI.Container {
-    const container = new PIXI.Container();
-    container.x = x;
-    container.y = y;
-    container.eventMode = 'static';
-    container.cursor = 'pointer';
-
-    // Background
-    const bg = new PIXI.Graphics();
-    bg.rect(0, 0, width, height);
-    bg.fill({ color: 0x1a1a2e });
-    bg.stroke({ color: 0x00d4ff, width: 2, alpha: 0.3 });
-    container.addChild(bg);
-
-    // Text
-    const text = new PIXI.Text({
-      text: fragment.text,
-      style: {
-        fontFamily: 'Arial, sans-serif',
-        fontSize: 14,
-        fill: 0xffffff,
-        wordWrap: true,
-        wordWrapWidth: width - 30,
-        align: 'center',
-        breakWords: true,
-      }
-    });
-    text.x = width / 2;
-    text.y = height / 2;
-    text.anchor.set(0.5);
-    
-    // Ensure text fits within bounds
-    if (text.height > height - 20) {
-      text.style.fontSize = 12;
-    }
-    
-    container.addChild(text);
-
-    // Tap/Click Handler
-    container.on('pointerdown', () => this.onFragmentTap(index, container, bg, fragment));
-
-    // Tap-and-hold for explanation (future enhancement)
-    // For now, just tap to select
-
-    return container;
-  }
-
-  private onFragmentTap(index: number, container: PIXI.Container, bg: PIXI.Graphics, fragment: Fragment) {
-    if (this.showScore) return; // Locked after checking answers
-
-    const isSelected = this.selectedFragments.has(index);
-    const bounds = bg.getBounds();
-
-    if (isSelected) {
-      // Deselect
+    if (this.selectedFragments.has(index)) {
       this.selectedFragments.delete(index);
-      bg.clear();
-      bg.rect(0, 0, bounds.width, bounds.height);
-      bg.fill({ color: 0x1a1a2e });
-      bg.stroke({ color: 0x00d4ff, width: 2, alpha: 0.3 });
     } else {
-      // Select
       this.selectedFragments.add(index);
-      bg.clear();
-      bg.rect(0, 0, bounds.width, bounds.height);
-      bg.fill({ color: 0x00d4ff, alpha: 0.2 });
-      bg.stroke({ color: 0x00d4ff, width: 3 });
     }
 
-    console.log('[FragmentBuilder] Fragment', index, isSelected ? 'deselected' : 'selected');
+    console.log('[FragmentBuilder] Fragment', index, this.isSelected(index) ? 'selected' : 'deselected');
+  }
+
+  getTrueCount(): number {
+    if (!this.data) return 0;
+    return this.data.fragments.filter(f => f.isTrueInContext).length;
+  }
+
+  getCorrectCount(): number {
+    if (!this.data) return 0;
+    return Array.from(this.selectedFragments)
+      .filter(index => this.data!.fragments[index].isTrueInContext).length;
   }
 
   checkAnswers() {
     if (!this.data) return;
 
-    const trueFragments = this.data.fragments
-      .map((f, i) => ({ fragment: f, index: i }))
-      .filter(item => item.fragment.isTrueInContext);
+    const trueCount = this.getTrueCount();
+    const correctCount = this.getCorrectCount();
 
-    const correctSelections = Array.from(this.selectedFragments)
-      .filter(index => this.data!.fragments[index].isTrueInContext);
-
-    this.score = Math.round((correctSelections.length / trueFragments.length) * 100);
+    this.score = trueCount > 0 ? Math.round((correctCount / trueCount) * 100) : 0;
     this.showScore = true;
 
-    // Visual feedback on fragments
-    this.data.fragments.forEach((fragment, index) => {
-      const sprite = this.fragmentSprites.get(index);
-      if (!sprite) return;
-
-      const bg = sprite.children[0] as PIXI.Graphics;
-      const bounds = bg.getBounds();
-      const isSelected = this.selectedFragments.has(index);
-      const isTrue = fragment.isTrueInContext;
-
-      bg.clear();
-      bg.rect(0, 0, bounds.width, bounds.height);
-
-      if (isTrue && isSelected) {
-        // Correct selection - green
-        bg.fill({ color: 0x4caf50, alpha: 0.3 });
-        bg.stroke({ color: 0x4caf50, width: 3 });
-      } else if (isTrue && !isSelected) {
-        // Missed true fragment - show it was true
-        bg.fill({ color: 0xffc107, alpha: 0.2 });
-        bg.stroke({ color: 0xffc107, width: 2 });
-      } else if (!isTrue && isSelected) {
-        // Incorrectly selected - red
-        bg.fill({ color: 0xf44336, alpha: 0.3 });
-        bg.stroke({ color: 0xf44336, width: 3 });
-      } else {
-        // Correctly not selected - neutral
-        bg.fill({ color: 0x1a1a2e });
-        bg.stroke({ color: 0x666666, width: 2, alpha: 0.3 });
-      }
-    });
-
-    console.log('[FragmentBuilder] Score:', this.score, '% -', correctSelections.length, '/', trueFragments.length, 'correct');
+    console.log('[FragmentBuilder] Score:', this.score, '% -', correctCount, '/', trueCount, 'correct');
   }
 
   complete() {
