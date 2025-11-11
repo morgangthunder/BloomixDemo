@@ -10,19 +10,18 @@ import { Subject, takeUntil } from 'rxjs';
   template: `
     <div class="toast-container">
       <div *ngFor="let toast of toasts" 
-           class="toast"
+           class="toast toast-slide-in"
            [class.toast-success]="toast.type === 'success'"
            [class.toast-error]="toast.type === 'error'"
            [class.toast-warning]="toast.type === 'warning'"
-           [class.toast-info]="toast.type === 'info'"
-           [@slideIn]>
+           [class.toast-info]="toast.type === 'info'">
         <div class="toast-icon">
           <span *ngIf="toast.type === 'success'">✓</span>
           <span *ngIf="toast.type === 'error'">✗</span>
           <span *ngIf="toast.type === 'warning'">⚠</span>
           <span *ngIf="toast.type === 'info'">ℹ</span>
         </div>
-        <div class="toast-message" [innerHTML]="toast.message || 'Notification'"></div>
+        <div class="toast-message">{{ toast.message }}</div>
       </div>
     </div>
   `,
@@ -56,6 +55,9 @@ import { Subject, takeUntil } from 'rxjs';
       min-width: 300px;
       max-width: 500px;
       pointer-events: auto;
+    }
+
+    .toast-slide-in {
       animation: slideIn 0.3s ease-out;
     }
 
