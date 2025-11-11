@@ -126,8 +126,8 @@ interface TrueFalseSelectionData {
       margin: 0 auto;
       display: flex;
       flex-direction: column;
-      padding: 2rem;
-      gap: 2rem;
+      padding: 1rem;
+      gap: 1rem;
       background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%);
       color: #ffffff;
       min-height: 100%;
@@ -135,31 +135,31 @@ interface TrueFalseSelectionData {
 
     .target-statement {
       text-align: center;
-      padding: 2rem;
+      padding: 1rem;
       background: rgba(0, 212, 255, 0.1);
       border: 2px solid rgba(0, 212, 255, 0.3);
-      border-radius: 16px;
+      border-radius: 12px;
     }
 
     .label {
-      font-size: 0.875rem;
+      font-size: 0.75rem;
       color: rgba(255, 255, 255, 0.6);
-      margin-bottom: 0.75rem;
+      margin-bottom: 0.5rem;
       text-transform: uppercase;
       letter-spacing: 1px;
     }
 
     .statement {
-      font-size: 1.125rem;
+      font-size: 1rem;
       font-weight: 600;
       color: #ffffff;
-      line-height: 1.8;
+      line-height: 1.6;
     }
 
     .fragments-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 1rem;
+      gap: 0.75rem;
       margin: 0 auto;
       width: 100%;
     }
@@ -167,9 +167,9 @@ interface TrueFalseSelectionData {
     .fragment-tile {
       background: rgba(255, 255, 255, 0.05);
       border: 2px solid rgba(255, 255, 255, 0.2);
-      border-radius: 12px;
-      padding: 1.5rem;
-      min-height: 120px;
+      border-radius: 10px;
+      padding: 1rem;
+      min-height: 90px;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -216,21 +216,21 @@ interface TrueFalseSelectionData {
     }
 
     .fragment-text {
-      font-size: 1rem;
+      font-size: 0.875rem;
       font-weight: 500;
       color: #ffffff;
       text-align: center;
-      line-height: 1.4;
+      line-height: 1.3;
     }
 
     .fragment-feedback {
       position: absolute;
-      top: 0.5rem;
-      right: 0.5rem;
+      top: 0.375rem;
+      right: 0.375rem;
     }
 
     .feedback-icon {
-      font-size: 1.5rem;
+      font-size: 1.25rem;
       font-weight: bold;
     }
 

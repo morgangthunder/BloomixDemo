@@ -143,6 +143,7 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
           <!-- Fullscreen Toggle -->
           <button 
             class="fullscreen-toggle"
+            [style.--toggle-left]="fullscreenToggleLeft"
             (click)="toggleFullscreen()"
             [title]="isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'">
             <svg *ngIf="!isFullscreen" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -577,7 +578,7 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
     .fullscreen-toggle {
       position: fixed;
       bottom: calc(60px + 1.5rem); /* Above control bar */
-      right: calc(100vw - var(--content-area-left, 0px) - var(--content-area-width, 100vw) + 1.5rem + 44px);
+      left: var(--toggle-left, 1.5rem); /* Dynamic left position */
       width: 44px;
       height: 44px;
       background: rgba(0, 0, 0, 0.7);
@@ -585,33 +586,15 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       border-radius: 8px;
       color: #ffffff;
       cursor: pointer;
-      transition: none;
+      transition: left 0.3s ease;
       display: flex;
       align-items: center;
       justify-content: center;
       z-index: 100; /* Above content but below sidebar */
     }
     
-    /* Simpler approach: just use left margin for desktop */
-    @media (min-width: 768px) {
-      .fullscreen-toggle {
-        left: calc(320px + 1.5rem); /* Sidebar width + margin */
-        right: auto;
-      }
-    }
-    
-    /* Mobile: simple left positioning */
-    @media (max-width: 767px) {
-      .fullscreen-toggle {
-        left: 1.5rem;
-        right: auto;
-      }
-    }
-    
     /* When fullscreen */
     .content-area.fullscreen .fullscreen-toggle {
-      left: 1.5rem !important;
-      right: auto !important;
       z-index: 9998;
     }
 
@@ -866,6 +849,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   // Fullscreen
   isFullscreen = false;
   
+  // Fullscreen toggle positioning
+  fullscreenToggleLeft = '1.5rem';
+  
   // Lesson Timer
   showTimer = false;
   elapsedSeconds = 0;
@@ -945,6 +931,10 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // Setup mouse listeners for resize
     window.addEventListener('mousemove', this.handleMouseMove.bind(this));
     window.addEventListener('mouseup', this.handleMouseUp.bind(this));
+    
+    // Initialize fullscreen toggle position and update on resize
+    this.updateFullscreenTogglePosition();
+    window.addEventListener('resize', () => this.updateFullscreenTogglePosition());
   }
 
   /**
@@ -1192,6 +1182,27 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     } else {
       this.navWidth = this.navWidthBeforeCollapse;
     }
+    this.updateFullscreenTogglePosition();
+  }
+  
+  /**
+   * Update fullscreen toggle position based on sidebar width and fullscreen state
+   */
+  private updateFullscreenTogglePosition() {
+    if (this.isFullscreen) {
+      // In fullscreen, always simple left
+      this.fullscreenToggleLeft = '1.5rem';
+    } else {
+      // In normal mode, adjust for sidebar on desktop
+      const isDesktop = window.innerWidth >= 768;
+      if (isDesktop && this.navWidth > 0) {
+        // Sidebar is open on desktop - position after sidebar
+        this.fullscreenToggleLeft = `calc(${this.navWidth}px + 1.5rem)`;
+      } else {
+        // Mobile or sidebar closed - simple left
+        this.fullscreenToggleLeft = '1.5rem';
+      }
+    }
   }
 
   openMobileNav() {
@@ -1428,10 +1439,19 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   }
 
   onScriptClosed() {
-    console.log('[LessonView] Script closed by user');
-    // Don't stop playing - just clear the script
-    // isScriptPlaying stays true so timer continues
+    console.log('[LessonView] ✖️ Script closed by user');
     this.currentTeacherScript = null;
+    
+    // If no interaction in this substage, skip to next stage immediately
+    if (!this.getEmbeddedInteraction()) {
+      console.log('[LessonView] No interaction - advancing immediately after script close');
+      // Clear auto-advance timeout since we're manually advancing
+      if (this.autoAdvanceTimeout) {
+        clearTimeout(this.autoAdvanceTimeout);
+        this.autoAdvanceTimeout = null;
+      }
+      this.moveToNextSubStage();
+    }
   }
 
   onTeacherClosed() {
@@ -1589,8 +1609,10 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       this.fabTop = 0;
     }
     
+    // Update toggle position for new mode
+    this.updateFullscreenTogglePosition();
+    
     console.log('[LessonView] 🖥️ Fullscreen toggled to:', this.isFullscreen);
-    console.log('[LessonView] Call origin:', new Error().stack?.split('\n')[2]);
   }
 
   /**

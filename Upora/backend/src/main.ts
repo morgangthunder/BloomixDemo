@@ -45,11 +45,11 @@ async function bootstrap() {
   await app.listen(port);
   
   // ========================================
-  // 🔥 BACKEND VERSION 0.3.2 🔥
+  // 🔥 BACKEND VERSION 0.3.3 🔥
   // ========================================
   console.log('');
   console.log('═══════════════════════════════════════════════════════════');
-  console.log('🔥🔥🔥 BACKEND VERSION 0.3.2 STARTED 🔥🔥🔥');
+  console.log('🔥🔥🔥 BACKEND VERSION 0.3.3 STARTED 🔥🔥🔥');
   console.log('🔧 Two-step content flow: URL → source → processed output');
   console.log(`🚀 API running on: http://localhost:${port}/api`);
   console.log(`📅 Timestamp: ${new Date().toISOString()}`);
