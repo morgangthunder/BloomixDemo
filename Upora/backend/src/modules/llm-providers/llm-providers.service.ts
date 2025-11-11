@@ -66,6 +66,10 @@ export class LlmProvidersService {
       throw new BadRequestException('Cannot delete the default provider. Please set another provider as default first.');
     }
 
+    // Note: If there are llm_generation_logs pointing to this provider,
+    // they need to be updated or the foreign key constraint will fail.
+    // For now, admin must ensure logs are migrated or we set FK to ON DELETE SET NULL in production
+    
     await this.llmProviderRepository.delete(id);
     this.logger.log(`[LlmProviders] Deleted provider: ${provider.name}`);
   }
