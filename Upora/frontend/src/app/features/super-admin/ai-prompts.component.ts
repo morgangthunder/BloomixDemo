@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { IonContent } from '@ionic/angular/standalone';
 import { environment } from '../../../environments/environment';
@@ -618,6 +618,7 @@ export class AiPromptsComponent implements OnInit {
 
   constructor(
     private router: Router,
+    private route: ActivatedRoute,
     private http: HttpClient,
     private toastService: ToastService
   ) {}
@@ -625,6 +626,18 @@ export class AiPromptsComponent implements OnInit {
   async ngOnInit() {
     console.log('[AIPrompts] Component initialized');
     await this.loadPromptsFromBackend();
+    
+    // Check for assistantId in query params
+    this.route.queryParams.subscribe(params => {
+      const assistantId = params['assistant'];
+      if (assistantId) {
+        const assistant = this.assistants.find(a => a.id === assistantId);
+        if (assistant) {
+          this.selectedAssistant = assistant;
+          console.log('[AIPrompts] 🔗 Restored selected assistant from URL:', assistantId);
+        }
+      }
+    });
   }
 
   /**
@@ -662,6 +675,13 @@ export class AiPromptsComponent implements OnInit {
 
   selectAssistant(assistant: AIAssistant) {
     this.selectedAssistant = assistant;
+    
+    // Update URL with query param to persist selection on refresh
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { assistant: assistant.id },
+      queryParamsHandling: 'merge'
+    });
   }
 
   getPromptKeys(assistant: AIAssistant): string[] {
@@ -670,6 +690,13 @@ export class AiPromptsComponent implements OnInit {
 
   cancelEdit() {
     this.selectedAssistant = null;
+    
+    // Remove query param when going back
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { assistant: null },
+      queryParamsHandling: 'merge'
+    });
   }
 
   async saveIndividualPrompt(assistant: AIAssistant, promptKey: string) {
@@ -743,6 +770,13 @@ export class AiPromptsComponent implements OnInit {
       );
       
       this.selectedAssistant = null;
+      
+      // Remove query param after saving all
+      this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: { assistant: null },
+        queryParamsHandling: 'merge'
+      });
     } catch (error: any) {
       console.error('[AIPrompts] ❌ Failed to save prompts:', error);
       this.toastService.error('Failed to save prompts: ' + (error?.message || 'Unknown error'), 5000);

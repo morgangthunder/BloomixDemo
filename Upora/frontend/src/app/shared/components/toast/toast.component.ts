@@ -22,7 +22,7 @@ import { Subject, takeUntil } from 'rxjs';
           <span *ngIf="toast.type === 'warning'">⚠</span>
           <span *ngIf="toast.type === 'info'">ℹ</span>
         </div>
-        <div class="toast-message">{{ toast.message }}</div>
+        <div class="toast-message" [innerHTML]="toast.message || 'Notification'"></div>
       </div>
     </div>
   `,
@@ -121,6 +121,10 @@ export class ToastComponent implements OnInit, OnDestroy {
     this.toastService.toast$
       .pipe(takeUntil(this.destroy$))
       .subscribe(toast => {
+        console.log('[Toast] Received toast:', toast);
+        console.log('[Toast] Message:', toast.message);
+        console.log('[Toast] Message length:', toast.message?.length);
+        
         this.toasts.push(toast);
         
         // Auto-remove after duration
