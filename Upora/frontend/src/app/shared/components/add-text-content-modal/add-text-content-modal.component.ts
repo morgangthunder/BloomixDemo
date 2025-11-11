@@ -1,7 +1,7 @@
 import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { HttpClient } from '@angular/common/http';
+import { ApiService } from '../../../core/services/api.service';
 import { environment } from '../../../../environments/environment';
 
 @Component({
@@ -358,7 +358,7 @@ export class AddTextContentModalComponent implements OnChanges {
   readonly maxWords = 75000; // ~1.3 tokens per word
   readonly maxChars = 400000; // ~4 chars per token
 
-  constructor(private http: HttpClient) {}
+  constructor(private apiService: ApiService) {}
 
   ngOnChanges(changes: SimpleChanges) {
     // Lock/unlock body scroll and hide header when modal opens/closes
@@ -421,11 +421,11 @@ export class AddTextContentModalComponent implements OnChanges {
     console.log('[AddTextContentModal] ✨ Auto-filling fields from text content...');
 
     try {
-      const response = await this.http.post<{
+      const response = await this.apiService.post<{
         title: string;
         summary: string;
         topics: string[];
-      }>(`${environment.apiUrl}/content-sources/auto-populate/text`, {
+      }>('/content-sources/auto-populate/text', {
         textContent: this.textContent
       }).toPromise();
 
