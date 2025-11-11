@@ -25,8 +25,23 @@ export class AiPromptsController {
   async updateContent(
     @Param('id') id: string,
     @Body('content') content: string,
+    @Body('label') label?: string,
   ): Promise<AiPrompt> {
-    return this.aiPromptsService.updateContent(id, content);
+    // Parse ID to get assistant and prompt key
+    const [assistantId, promptKey] = id.split('.');
+    
+    if (!assistantId || !promptKey) {
+      throw new Error(`Invalid prompt ID format: ${id}. Expected format: assistantId.promptKey`);
+    }
+
+    // Use upsert to create if not exists, update if exists
+    return this.aiPromptsService.upsert(
+      assistantId,
+      promptKey,
+      label || promptKey, // Use provided label or fall back to promptKey
+      content,
+      content, // Use same content as default for new prompts
+    );
   }
 
   @Post(':id/reset')

@@ -613,7 +613,8 @@ export class AiPromptsComponent implements OnInit {
         
         updates.push(
           this.http.put(`${environment.apiUrl}/ai-prompts/${promptId}`, {
-            content: prompt.content
+            content: prompt.content,
+            label: prompt.label
           }).toPromise()
         );
       }
