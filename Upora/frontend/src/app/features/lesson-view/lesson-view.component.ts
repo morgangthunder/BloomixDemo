@@ -442,12 +442,21 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
 
     .timer-btn {
       color: rgba(255, 255, 255, 0.5);
-      background: transparent;
+      background: transparent !important;
     }
 
     .timer-btn.active {
       color: #ff3b3f;
-      background: transparent;
+      background: transparent !important;
+    }
+
+    .timer-btn:hover,
+    .timer-btn:focus,
+    .timer-btn:active,
+    .timer-btn.active:hover,
+    .timer-btn.active:focus,
+    .timer-btn.active:active {
+      background: transparent !important;
     }
 
     .timer-display {
@@ -832,9 +841,11 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         this.updateActiveSubStage();
         
         // Auto-play first script if it exists
+        console.log('[LessonView] First substage data:', JSON.stringify(firstSubStage, null, 2).substring(0, 500));
         const scriptBlocks = (firstSubStage as any).scriptBlocks || (firstSubStage as any).script || [];
+        console.log('[LessonView] Script blocks found:', scriptBlocks.length);
         if (scriptBlocks.length > 0) {
-          console.log('[LessonView] 🎬 Auto-playing first script');
+          console.log('[LessonView] 🎬 Auto-playing first script:', scriptBlocks[0]);
           this.playTeacherScript(scriptBlocks[0]);
         } else {
           console.log('[LessonView] ⚠️ No teacher script in first substage');
