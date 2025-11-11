@@ -33,8 +33,39 @@ export class LlmProvidersService {
   }
 
   async create(data: Partial<LlmProvider>): Promise<LlmProvider> {
+    // Ensure unique name by appending number if needed
+    if (data.name) {
+      data.name = await this.getUniqueName(data.name);
+    }
+    
     const provider = this.llmProviderRepository.create(data);
     return this.llmProviderRepository.save(provider);
+  }
+
+  private async getUniqueName(baseName: string): Promise<string> {
+    const existing = await this.llmProviderRepository.find({
+      where: {},
+      select: ['name'],
+    });
+
+    const existingNames = existing.map(p => p.name);
+    
+    // If name doesn't exist, use it as-is
+    if (!existingNames.includes(baseName)) {
+      return baseName;
+    }
+
+    // Find the next available number
+    let counter = 2;
+    let newName = `${baseName} ${counter}`;
+    
+    while (existingNames.includes(newName)) {
+      counter++;
+      newName = `${baseName} ${counter}`;
+    }
+
+    this.logger.log(`[LlmProviders] Name '${baseName}' already exists, using '${newName}'`);
+    return newName;
   }
 
   async update(id: string, data: Partial<LlmProvider>): Promise<LlmProvider> {
