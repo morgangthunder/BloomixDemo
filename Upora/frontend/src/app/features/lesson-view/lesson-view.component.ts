@@ -524,13 +524,8 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       cursor: pointer;
       box-shadow: 0 4px 12px rgba(255, 59, 63, 0.4);
       transition: all 0.3s ease;
-      z-index: 999;
+      z-index: 10001; /* Always above fullscreen */
       transform: translateY(50%); /* Half overlaps the red line */
-    }
-
-    /* Teacher FAB in Fullscreen */
-    .content-area.fullscreen ~ .teacher-fab {
-      z-index: 10000; /* Above fullscreen content */
     }
 
     /* Teacher Widget in Fullscreen */
