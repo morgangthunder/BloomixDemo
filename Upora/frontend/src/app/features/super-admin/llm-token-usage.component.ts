@@ -23,6 +23,7 @@ interface TokenUsageAccount {
   currentPeriodEnd: string;
   llmProvider: string;
   avgLatencyMs: number;
+  costThisPeriod: number;
 }
 
 interface TokenUsageResponse {
@@ -67,8 +68,23 @@ interface LlmProvider {
           <button class="back-btn" (click)="goBack()">
             ← Back to Dashboard
           </button>
-          <h1>🤖 LLM Token Usage</h1>
-          <p class="subtitle">Monitor AI costs and consumption</p>
+          <div class="header-content">
+            <div>
+              <h1>🤖 LLM Token Usage</h1>
+              <p class="subtitle">Monitor AI costs and consumption</p>
+              <p *ngIf="lastUpdated" class="last-updated">
+                Last updated: {{ lastUpdated | date:'short' }}
+              </p>
+            </div>
+            <button 
+              class="refresh-btn" 
+              (click)="refresh()" 
+              [disabled]="refreshing || loading"
+              [class.spinning]="refreshing"
+            >
+              🔄 {{ refreshing ? 'Refreshing...' : 'Refresh' }}
+            </button>
+          </div>
         </div>
 
         <!-- Loading State -->
@@ -286,6 +302,13 @@ interface LlmProvider {
       border-color: #00d4ff;
     }
 
+    .header-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+
     .page-header h1 {
       font-size: 2rem;
       font-weight: 700;
@@ -297,6 +320,47 @@ interface LlmProvider {
       font-size: 1rem;
       color: rgba(255, 255, 255, 0.6);
       margin: 0;
+    }
+
+    .last-updated {
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.4);
+      margin: 0.25rem 0 0 0;
+      font-style: italic;
+    }
+
+    .refresh-btn {
+      background: rgba(0, 212, 255, 0.1);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      color: #00d4ff;
+      padding: 0.625rem 1.25rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+      min-width: 120px;
+    }
+
+    .refresh-btn:hover:not(:disabled) {
+      background: rgba(0, 212, 255, 0.2);
+      border-color: #00d4ff;
+      transform: translateY(-1px);
+    }
+
+    .refresh-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .refresh-btn.spinning {
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
     }
 
     /* Loading & Error States */
@@ -798,6 +862,8 @@ export class LlmTokenUsageComponent implements OnInit {
   selectedProviderId: string = '';
   showProviderModal = false;
   editingProvider: LlmProvider | null = null;
+  refreshing = false;
+  lastUpdated: Date | null = null;
 
   constructor(
     private http: HttpClient,
@@ -807,6 +873,12 @@ export class LlmTokenUsageComponent implements OnInit {
   ngOnInit() {
     this.loadProviders();
     this.loadData();
+  }
+
+  async refresh() {
+    this.refreshing = true;
+    await this.loadData();
+    this.refreshing = false;
   }
 
   async loadProviders() {
@@ -836,6 +908,7 @@ export class LlmTokenUsageComponent implements OnInit {
         next: (response) => {
           this.data = response;
           this.loading = false;
+          this.lastUpdated = new Date();
           console.log('[LLM Usage] Data loaded:', response);
         },
         error: (err) => {

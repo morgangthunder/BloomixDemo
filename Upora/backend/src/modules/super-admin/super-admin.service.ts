@@ -89,6 +89,9 @@ export class SuperAdminService {
           ? new Date(Date.now() + daysUntilExceed * 24 * 60 * 60 * 1000)
           : null;
 
+        // Calculate cost for this account
+        const accountCost = (monthlyUsed / 1000000) * pricePerMillionTokens;
+
         return {
           accountId: user.id,
           email: user.email,
@@ -105,6 +108,7 @@ export class SuperAdminService {
           currentPeriodEnd: new Date(startOfMonth.getFullYear(), startOfMonth.getMonth() + 1, 0).toISOString().split('T')[0],
           llmProvider: mostUsedProviderId ? providerMap[mostUsedProviderId] || 'N/A' : 'N/A',
           avgLatencyMs: avgLatency,
+          costThisPeriod: parseFloat(accountCost.toFixed(6)), // Keep 6 decimals for precision
         };
       }),
     );
@@ -126,7 +130,7 @@ export class SuperAdminService {
       totals: {
         totalUsed,
         totalLimit,
-        estimatedCost: parseFloat(estimatedCost.toFixed(2)),
+        estimatedCost: parseFloat(estimatedCost.toFixed(6)), // Keep 6 decimals for small costs
         currency: 'USD',
       },
       usageByCategory,
