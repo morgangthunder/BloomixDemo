@@ -11,12 +11,16 @@ import {
   Query,
 } from '@nestjs/common';
 import { LessonsService } from './lessons.service';
+import { LessonLoaderService } from './lesson-loader.service';
 import { CreateLessonDto } from './dto/create-lesson.dto';
 import { UpdateLessonDto } from './dto/update-lesson.dto';
 
 @Controller('lessons')
 export class LessonsController {
-  constructor(private readonly lessonsService: LessonsService) {}
+  constructor(
+    private readonly lessonsService: LessonsService,
+    private readonly lessonLoaderService: LessonLoaderService,
+  ) {}
 
   @Post()
   create(@Body() createLessonDto: CreateLessonDto) {
@@ -109,5 +113,55 @@ export class LessonsController {
     @Headers('x-tenant-id') tenantId: string,
   ) {
     return this.lessonsService.markCompletion(id, userId, tenantId);
+  }
+
+  // ====================================
+  // Lesson Loading from JSON Files
+  // ====================================
+
+  @Get('admin/json-files')
+  getAvailableLessonFiles() {
+    return {
+      files: this.lessonLoaderService.getAvailableLessonFiles(),
+    };
+  }
+
+  @Post('admin/load-from-json/:filename')
+  async loadLessonFromFile(@Param('filename') filename: string) {
+    const lesson = await this.lessonLoaderService.loadLessonFromFile(filename);
+    return {
+      message: 'Lesson loaded successfully',
+      lesson: {
+        id: lesson.id,
+        title: lesson.title,
+        status: lesson.status,
+      },
+    };
+  }
+
+  @Post('admin/load-all-json')
+  async loadAllLessons() {
+    const lessons = await this.lessonLoaderService.loadAllLessons();
+    return {
+      message: `Loaded ${lessons.length} lessons`,
+      lessons: lessons.map(l => ({
+        id: l.id,
+        title: l.title,
+        status: l.status,
+      })),
+    };
+  }
+
+  @Post('admin/reload/:id')
+  async reloadLesson(@Param('id', ParseUUIDPipe) id: string) {
+    const lesson = await this.lessonLoaderService.reloadLesson(id);
+    return {
+      message: 'Lesson reloaded from JSON',
+      lesson: {
+        id: lesson.id,
+        title: lesson.title,
+        status: lesson.status,
+      },
+    };
   }
 }
