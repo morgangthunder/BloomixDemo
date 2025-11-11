@@ -27,8 +27,8 @@ export interface ChatMessage {
          [class.minimized]="isMinimized" 
          [class.hidden]="isHidden"
          [class.draggable]="isDraggable"
-         [style.left.px]="isDraggable ? widgetLeft : null"
-         [style.top.px]="isDraggable ? widgetTop : null">
+         [style.left.px]="isDraggable && widgetLeft > 0 ? widgetLeft : null"
+         [style.top.px]="isDraggable && widgetTop > 0 ? widgetTop : null">
       <!-- Minimized State -->
       <div *ngIf="isMinimized" class="teacher-icon-minimized" (click)="restore()">
         <div class="avatar">🎓</div>
@@ -579,6 +579,19 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy {
         this.isPlaying = false;
       }
     }
+
+    // Initialize drag position when becoming draggable
+    if (changes['isDraggable'] && changes['isDraggable'].currentValue && !changes['isDraggable'].previousValue) {
+      // Set initial position to bottom-right when fullscreen activates
+      this.widgetLeft = window.innerWidth - 420; // 400px width + 20px margin
+      this.widgetTop = window.innerHeight - 420; // Approximate height + margin
+    }
+
+    // Reset position when no longer draggable
+    if (changes['isDraggable'] && !changes['isDraggable'].currentValue && changes['isDraggable'].previousValue) {
+      this.widgetLeft = 0;
+      this.widgetTop = 0;
+    }
   }
 
   togglePlay() {
@@ -628,11 +641,27 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy {
   startDrag(event: MouseEvent | TouchEvent) {
     if (!this.isDraggable) return;
     
+    // Don't drag if clicking on buttons
+    const target = event.target as HTMLElement;
+    if (target.closest('button') || target.closest('input')) {
+      return;
+    }
+    
     event.preventDefault();
+    event.stopPropagation();
     this.isDragging = true;
     
     const clientX = 'touches' in event ? event.touches[0].clientX : event.clientX;
     const clientY = 'touches' in event ? event.touches[0].clientY : event.clientY;
+    
+    // If first drag, initialize position from current computed position
+    if (this.widgetLeft === 0 && this.widgetTop === 0) {
+      const rect = (event.currentTarget as HTMLElement).closest('.teacher-widget')?.getBoundingClientRect();
+      if (rect) {
+        this.widgetLeft = rect.left;
+        this.widgetTop = rect.top;
+      }
+    }
     
     this.dragStartX = clientX - this.widgetLeft;
     this.dragStartY = clientY - this.widgetTop;

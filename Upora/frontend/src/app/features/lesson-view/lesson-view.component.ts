@@ -18,7 +18,7 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
   standalone: true,
   imports: [CommonModule, FormsModule, IonContent, TrueFalseSelectionComponent, FloatingTeacherWidgetComponent],
   template: `
-    <div class="bg-brand-dark text-white overflow-hidden flex flex-col md:flex-row lesson-view-wrapper">
+    <div class="bg-brand-dark text-white overflow-hidden flex flex-col md:flex-row lesson-view-wrapper" [class.fullscreen-active]="isFullscreen">
       <!-- Mobile overlay -->
       <div *ngIf="isMobileNavOpen" 
            (click)="closeMobileNav()"
@@ -473,6 +473,11 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
     }
 
     /* Fullscreen Mode */
+    .fullscreen-active .sidebar,
+    .fullscreen-active .mobile-header {
+      display: none !important;
+    }
+
     .content-area.fullscreen {
       position: fixed;
       top: 0;
@@ -482,6 +487,12 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       z-index: 9999;
       background: #0a0a0a;
       padding: 2rem !important;
+    }
+
+    /* Hide global header when fullscreen active */
+    :host-context(.fullscreen-active) app-header,
+    body.fullscreen-active app-header {
+      display: none !important;
     }
 
     .fullscreen-toggle {
@@ -782,6 +793,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    // Clean up fullscreen class
+    document.body.classList.remove('fullscreen-active');
+    
     // Disconnect from WebSocket
     this.wsService.leaveLesson();
     this.wsService.disconnect();
@@ -1093,6 +1107,14 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    */
   toggleFullscreen() {
     this.isFullscreen = !this.isFullscreen;
+    
+    // Add/remove class to body to hide global header
+    if (this.isFullscreen) {
+      document.body.classList.add('fullscreen-active');
+    } else {
+      document.body.classList.remove('fullscreen-active');
+    }
+    
     console.log('[LessonView] Fullscreen:', this.isFullscreen);
   }
 

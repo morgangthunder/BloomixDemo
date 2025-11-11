@@ -38,3 +38,8 @@ app-root {
 ::-webkit-scrollbar-thumb:hover {
   background: #606060;
 }
+
+/* Fullscreen Mode - Hide Header */
+body.fullscreen-active app-header {
+  display: none !important;
+}
