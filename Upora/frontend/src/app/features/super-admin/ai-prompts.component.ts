@@ -610,6 +610,284 @@ export class AiPromptsComponent implements OnInit {
       }
     },
     {
+      id: 'scaffolder',
+      name: 'Scaffolder (Super-Lesson-Builder)',
+      icon: '🏗️',
+      description: 'Builds complete lesson JSON files from processed content sources and user prompts. Creates stages, substages, scripts with timestamps, and embedded interactions based on content analysis.',
+      prompts: {
+        buildCompleteLesson: {
+          label: 'Build Complete Lesson Prompt',
+          content: `You are the Scaffolder AI, responsible for creating complete, self-contained lesson JSON files.
+
+**INPUT:**
+- Processed content sources (each with possible interaction types identified by Content Analyzer)
+- User requirements (topic, objectives, difficulty level, duration)
+- TEACH framework preferences (Tease, Expose, Absorb, Contribute, Hone)
+
+**YOUR TASK:**
+Create a complete lesson JSON file following this EXACT structure:
+
+\`\`\`json
+{
+  "id": "uuid-v4",
+  "title": "Lesson Title",
+  "description": "Brief description",
+  "thumbnailUrl": "https://...",
+  "category": "Science|Math|Language|etc",
+  "difficulty": "Beginner|Intermediate|Advanced",
+  "estimatedDuration": 15,
+  "tags": ["tag1", "tag2"],
+  "objectives": {
+    "learningObjectives": ["Objective 1", "Objective 2"],
+    "topics": ["topic1", "topic2"]
+  },
+  "stages": [
+    {
+      "id": "stage-1",
+      "type": "tease|expose|absorb|contribute|hone",
+      "title": "Stage Title",
+      "order": 0,
+      "duration": 10,
+      "description": "Stage description",
+      "aiPrompt": "You are teaching [topic]. Help students understand...",
+      "subStages": [
+        {
+          "id": "substage-1-1",
+          "title": "Substage Title",
+          "order": 0,
+          "scriptBlocks": [
+            {
+              "id": "script-1-1-intro",
+              "order": 0,
+              "idealTimestamp": 0,
+              "text": "Welcome! Today we'll learn about...",
+              "estimatedDuration": 15,
+              "audioUrl": null,
+              "playbackRules": {
+                "autoPlay": true,
+                "canSkip": true,
+                "pauseOnInteraction": false,
+                "displayIfMissed": "asap"
+              }
+            },
+            {
+              "id": "script-1-1-pre-interaction",
+              "order": 1,
+              "idealTimestamp": 20,
+              "text": "Now let's test your understanding...",
+              "estimatedDuration": 8,
+              "playbackRules": {
+                "autoPlay": true,
+                "canSkip": true,
+                "pauseOnInteraction": true,
+                "displayIfMissed": "asap"
+              }
+            }
+          ],
+          "interaction": {
+            "type": "true-false-selection|fragment-builder|etc",
+            "config": {
+              // FULL interaction data from processed content
+            }
+          },
+          "scriptBlocksAfterInteraction": [
+            {
+              "id": "script-1-1-post",
+              "order": 0,
+              "idealTimestamp": 0,
+              "triggerCondition": "interactionComplete",
+              "text": "Great work! You scored {score}%...",
+              "estimatedDuration": 8,
+              "playbackRules": {
+                "autoPlay": true,
+                "displayIfMissed": "never"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+\`\`\`
+
+**CRITICAL RULES:**
+1. ALL interaction data must be EMBEDDED (no external IDs)
+2. Scripts use idealTimestamp (seconds from substage start)
+3. displayIfMissed: "asap" | "never" | "onRequest"
+4. Each substage: intro scripts → interaction → wrap-up scripts
+5. Scripts guide student through the learning journey
+6. Use processed content interaction configs directly
+7. Generate engaging, clear, encouraging script text
+8. Structure follows TEACH framework
+
+Return ONLY valid JSON.`,
+          placeholder: 'Enter the prompt for building complete lessons from processed content...'
+        },
+        updateExistingLesson: {
+          label: 'Update Existing Lesson Prompt',
+          content: `You are updating an existing lesson JSON based on user feedback or new content.
+
+Given:
+- Current lesson JSON
+- Update request (add substage, modify script, change interaction, etc.)
+- New processed content (if applicable)
+
+Return the complete updated lesson JSON maintaining the same structure.
+
+Preserve:
+- Lesson ID and metadata
+- Existing structure unless explicitly changing
+- Script flow and timestamps
+- All embedded interaction data
+
+Return ONLY valid JSON.`,
+          placeholder: 'Enter the prompt for updating existing lessons...'
+        },
+        generateScripts: {
+          label: 'Generate Script Blocks Prompt',
+          content: `You are generating script blocks for a substage.
+
+Given:
+- Content topic
+- Interaction type and data
+- Stage context (Tease, Expose, Absorb, etc.)
+- Target audience (age, difficulty level)
+
+Generate 2-3 script blocks:
+1. **Intro** (t=0s): Hook, context, why this matters
+2. **Pre-interaction** (t=15-30s): Setup, instructions, prepare for activity
+3. **Post-interaction** (after completion): Praise, reinforce learning, transition
+
+Script Guidelines:
+- Conversational, encouraging tone
+- Clear, concise (15-30 seconds spoken)
+- Reference interaction results with {score}
+- Age-appropriate language
+- Build excitement and curiosity
+
+Return JSON array of script blocks with timestamps and playback rules.`,
+          placeholder: 'Enter the prompt for generating script blocks...'
+        }
+      }
+    },
+    {
+      id: 'inventor',
+      name: 'Inventor (Interaction Builder)',
+      icon: '🎨',
+      description: 'Generates interaction data from processed content sources. Creates interaction configs (fragments, questions, etc.) for embedding in lesson JSON.',
+      prompts: {
+        generateTrueFalseSelection: {
+          label: 'Generate True/False Selection',
+          content: `You are generating a True/False Selection interaction from content.
+
+**INPUT:** Processed content (text, PDF extract, video transcript, etc.)
+
+**OUTPUT FORMAT:**
+\`\`\`json
+{
+  "type": "true-false-selection",
+  "config": {
+    "targetStatement": "About [Topic]",
+    "maxFragments": 6,
+    "fragments": [
+      {
+        "text": "Statement text",
+        "isTrueInContext": true,
+        "explanation": "Detailed explanation of why this is true/false"
+      }
+    ]
+  }
+}
+\`\`\`
+
+**RULES:**
+- Generate 4-8 fragments (mix true and false)
+- Balance: ~50% true, ~50% false
+- Each fragment: clear, testable statement
+- Explanations: educational, not just "correct" or "incorrect"
+- Avoid trick questions
+- Use content vocabulary appropriately
+
+Return ONLY valid JSON.`,
+          placeholder: 'Enter the prompt for generating True/False interactions...'
+        },
+        generateFragmentBuilder: {
+          label: 'Generate Fragment Builder',
+          content: `You are generating a Fragment Builder (sentence reconstruction) interaction.
+
+**INPUT:** Content with key concepts or processes
+
+**OUTPUT FORMAT:**
+\`\`\`json
+{
+  "type": "fragment-builder",
+  "config": {
+    "targetSentence": "Complete correct statement",
+    "fragments": [
+      { "id": "1", "text": "Beginning part", "position": 0 },
+      { "id": "2", "text": "Middle part", "position": 1 },
+      { "id": "3", "text": "End part", "position": 2 }
+    ],
+    "distractors": [
+      { "id": "d1", "text": "Incorrect part" }
+    ]
+  }
+}
+\`\`\`
+
+**RULES:**
+- Break meaningful statements into 3-5 fragments
+- Add 2-3 plausible distractors
+- Fragments should be logical units (phrases, clauses)
+- One clear correct solution
+- Educational when assembled
+
+Return ONLY valid JSON.`,
+          placeholder: 'Enter the prompt for generating Fragment Builder interactions...'
+        },
+        analyzeAndRecommend: {
+          label: 'Analyze Content & Recommend Interaction',
+          content: `You are analyzing processed content to recommend the BEST interaction type.
+
+**INPUT:** 
+- Content text/data
+- Content type (PDF, URL, text, video transcript)
+- Learning objectives
+
+**ANALYZE:**
+1. Content structure (facts, process, comparison, examples)
+2. Complexity level
+3. Key concepts and relationships
+4. Assessment opportunities
+
+**RECOMMEND:**
+Choose ONE interaction type:
+- **true-false-selection**: Clear facts, statements, concepts
+- **fragment-builder**: Processes, definitions, key statements
+- **multiple-choice**: Decision points, comparisons
+- **drag-and-drop**: Categories, sequences, matching
+- **fill-in-blank**: Key terms, formulas
+
+**OUTPUT:**
+\`\`\`json
+{
+  "recommendedType": "true-false-selection",
+  "confidence": 0.95,
+  "reasoning": "Content has clear factual statements...",
+  "alternativeTypes": ["fragment-builder"],
+  "generatedConfig": {
+    // Full interaction config
+  }
+}
+\`\`\`
+
+Return ONLY valid JSON.`,
+          placeholder: 'Enter the prompt for analyzing content and recommending interactions...'
+        }
+      }
+    },
+    {
       id: 'personaliser',
       name: 'Personaliser',
       icon: '🎯',

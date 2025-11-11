@@ -1,0 +1,130 @@
+{
+  "id": "30000000-0000-0000-0000-000000000001",
+  "title": "Introduction to Python",
+  "description": "Learn the basics of Python programming",
+  "thumbnailUrl": "https://images.unsplash.com/photo-1526379095098-d400fd0bf935?w=400",
+  "category": "Programming",
+  "difficulty": "Beginner",
+  "estimatedDuration": 30,
+  "tags": ["python", "programming", "basics"],
+  "objectives": {
+    "learningObjectives": [
+      "Understand Python syntax basics",
+      "Write simple Python programs",
+      "Use variables and data types"
+    ],
+    "topics": ["python", "syntax", "variables"]
+  },
+  "metadata": {
+    "version": "1.0",
+    "created": "2025-11-11T12:00:00.000Z",
+    "updated": "2025-11-11T12:00:00.000Z",
+    "author": "System"
+  },
+  "stages": [
+    {
+      "id": "stage-1",
+      "type": "tease",
+      "title": "Welcome to Python",
+      "order": 0,
+      "duration": 30,
+      "description": "Get started with Python programming",
+      "aiPrompt": "You are teaching Python basics. Help students understand fundamental concepts.",
+      "prerequisites": [],
+      "subStages": [
+        {
+          "id": "substage-1-1",
+          "title": "What is Python?",
+          "order": 0,
+          "scriptBlocks": [
+            {
+              "id": "script-intro",
+              "order": 0,
+              "idealTimestamp": 0,
+              "text": "Welcome to Python! Python is one of the most popular programming languages in the world. It's used for everything from web development to data science and artificial intelligence. Let's discover why Python is so powerful and easy to learn!",
+              "estimatedDuration": 15,
+              "audioUrl": null,
+              "playbackRules": {
+                "autoPlay": true,
+                "canSkip": true,
+                "pauseOnInteraction": false,
+                "displayIfMissed": "asap"
+              }
+            },
+            {
+              "id": "script-pre-quiz",
+              "order": 1,
+              "idealTimestamp": 20,
+              "text": "Let's test your understanding of what makes Python special. Select all the TRUE statements!",
+              "estimatedDuration": 8,
+              "audioUrl": null,
+              "playbackRules": {
+                "autoPlay": true,
+                "canSkip": true,
+                "pauseOnInteraction": true,
+                "displayIfMissed": "asap"
+              }
+            }
+          ],
+          "interaction": {
+            "type": "true-false-selection",
+            "config": {
+              "targetStatement": "About Python",
+              "maxFragments": 6,
+              "fragments": [
+                {
+                  "text": "Python is easy to read and write",
+                  "isTrueInContext": true,
+                  "explanation": "Correct! Python's syntax is designed to be clear and readable."
+                },
+                {
+                  "text": "Python can only be used for web development",
+                  "isTrueInContext": false,
+                  "explanation": "Incorrect. Python is used for web, data science, AI, automation, and more!"
+                },
+                {
+                  "text": "Python is a high-level programming language",
+                  "isTrueInContext": true,
+                  "explanation": "Correct! Python abstracts low-level details, making it easier to use."
+                },
+                {
+                  "text": "You must compile Python code before running it",
+                  "isTrueInContext": false,
+                  "explanation": "Incorrect. Python is interpreted, you can run code directly!"
+                },
+                {
+                  "text": "Python has a large community and many libraries",
+                  "isTrueInContext": true,
+                  "explanation": "Correct! Python has one of the largest ecosystems of libraries and frameworks."
+                },
+                {
+                  "text": "Python code runs faster than C++",
+                  "isTrueInContext": false,
+                  "explanation": "Incorrect. Python is slower than compiled languages like C++, but easier to write."
+                }
+              ]
+            }
+          },
+          "scriptBlocksAfterInteraction": [
+            {
+              "id": "script-outro",
+              "order": 0,
+              "idealTimestamp": 0,
+              "triggerCondition": "interactionComplete",
+              "text": "Excellent! You scored {score}%. You now understand what Python is and why it's such a popular choice for beginners and experts alike. Ready to write your first Python code?",
+              "estimatedDuration": 10,
+              "audioUrl": null,
+              "playbackRules": {
+                "autoPlay": true,
+                "canSkip": true,
+                "pauseOnInteraction": false,
+                "displayIfMissed": "never"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+

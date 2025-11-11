@@ -186,25 +186,57 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
               </div>
             </div>
 
+            <!-- Embedded Interaction (from JSON) -->
+            <div *ngIf="!isLoadingInteraction && !interactionData && getEmbeddedInteraction()">
+              <app-true-false-selection
+                *ngIf="getEmbeddedInteraction()?.type === 'true-false-selection'"
+                [data]="getEmbeddedInteraction()?.config"
+                [lessonId]="lesson?.id || null"
+                [stageId]="activeStageId?.toString() || null"
+                [substageId]="activeSubStageId?.toString() || null"
+                (completed)="onInteractionCompleted($event)">
+              </app-true-false-selection>
+            </div>
+
             <!-- Fallback for no interaction data -->
-            <div *ngIf="!isLoadingInteraction && !interactionData" class="bg-brand-black rounded-lg aspect-video flex items-center justify-center text-brand-gray">
+            <div *ngIf="!isLoadingInteraction && !interactionData && !getEmbeddedInteraction()" class="bg-brand-black rounded-lg aspect-video flex items-center justify-center text-brand-gray">
               <div class="text-center">
                 <p class="text-xl mb-4">Content for "{{ activeSubStage.title }}"</p>
-                <p class="text-sm text-gray-500">Interaction Type: {{ activeSubStage.interactionType }}</p>
-                <p class="text-xs text-gray-600 mt-2">No interaction data available yet</p>
-                
-                <!-- Toggle "Passed" button for Evaluate stages -->
-                <button *ngIf="activeSubStage.type === 'Evaluate'"
-                        (click)="togglePassStatus()"
-                        class="mt-4 bg-brand-red text-white font-bold py-2 px-4 rounded hover:bg-opacity-80 transition">
-                  {{ currentStage?.passed ? 'Mark as Not Passed' : 'Mark as Passed' }}
-                </button>
+                <p class="text-sm text-gray-500">{{ activeSubStage.title }}</p>
+                <p class="text-xs text-gray-600 mt-2">No interaction in this substage</p>
               </div>
             </div>
           </div>
 
           <ng-template #selectPrompt>
-            <div class="flex items-center justify-center h-full">
+            <!-- End of Lesson Screen -->
+            <div *ngIf="!activeStageId && lesson" class="end-of-lesson">
+              <div class="end-content">
+                <div class="end-icon">🎓</div>
+                <h1>Lesson Complete!</h1>
+                <p class="lesson-title">{{ lesson.title }}</p>
+                <p class="completion-message">
+                  Congratulations! You've completed this lesson.
+                </p>
+                <div class="end-actions">
+                  <button class="btn-primary" (click)="router.navigate(['/'])">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+                    </svg>
+                    Back to Home
+                  </button>
+                  <button class="btn-secondary" (click)="restartLesson()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+                    </svg>
+                    Restart Lesson
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Initial Prompt -->
+            <div *ngIf="!activeStageId && !lesson" class="flex items-center justify-center h-full">
               <p class="text-brand-gray text-xl">Select a lesson stage to begin.</p>
             </div>
           </ng-template>
@@ -543,8 +575,8 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
     }
 
     .fullscreen-toggle {
-      position: absolute;
-      bottom: 1.5rem;
+      position: fixed;
+      bottom: calc(60px + 1.5rem); /* Above control bar */
       left: 1.5rem;
       width: 44px;
       height: 44px;
@@ -557,13 +589,100 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 100;
+      z-index: 1000;
     }
 
     .fullscreen-toggle:hover {
       background: #ff3b3f;
       border-color: #ff3b3f;
       transform: scale(1.1);
+    }
+
+    /* End of Lesson Screen */
+    .end-of-lesson {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100%;
+      padding: 2rem;
+    }
+
+    .end-content {
+      text-align: center;
+      max-width: 600px;
+    }
+
+    .end-icon {
+      font-size: 5rem;
+      margin-bottom: 1rem;
+      animation: bounce 2s ease infinite;
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-20px); }
+    }
+
+    .end-content h1 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: #00d4ff;
+      margin-bottom: 1rem;
+    }
+
+    .lesson-title {
+      font-size: 1.5rem;
+      color: #ffffff;
+      margin-bottom: 0.5rem;
+    }
+
+    .completion-message {
+      font-size: 1.125rem;
+      color: rgba(255, 255, 255, 0.7);
+      margin-bottom: 2rem;
+    }
+
+    .end-actions {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .end-actions .btn-primary,
+    .end-actions .btn-secondary {
+      padding: 0.875rem 2rem;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: none;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .end-actions .btn-primary {
+      background: #00d4ff;
+      color: #0f0f23;
+    }
+
+    .end-actions .btn-primary:hover {
+      background: #00bce6;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0, 212, 255, 0.4);
+    }
+
+    .end-actions .btn-secondary {
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .end-actions .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.2);
+      border-color: rgba(255, 255, 255, 0.4);
     }
 
     /* Teacher FAB */
@@ -681,8 +800,8 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
 export class LessonViewComponent implements OnInit, OnDestroy {
   lesson: Lesson | null = null;
   lessonStages: Stage[] = [];
-  activeStageId: number | null = null;
-  activeSubStageId: number | null = null;
+  activeStageId: string | number | null = null;
+  activeSubStageId: string | number | null = null;
   currentStage: Stage | null = null;
   activeSubStage: SubStage | null = null;
   expandedStages = new Set<number>();
@@ -734,7 +853,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
 
   constructor(
     private lessonService: LessonService,
-    private router: Router,
+    public router: Router,
     private route: ActivatedRoute,
     private wsService: WebSocketService,
     private http: HttpClient
@@ -822,7 +941,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   private setLessonData(lesson: Lesson) {
     this.lesson = lesson;
     // Try data.stages first (from API), fallback to stages (for compatibility)
-    const rawStages = lesson.data?.stages || lesson.stages || [];
+    const rawStages = (lesson.data as any)?.structure?.stages || lesson.data?.stages || lesson.stages || [];
     
     // Normalize stage data: convert 'substages' to 'subStages' if needed
     this.lessonStages = rawStages.map((stage: any) => ({
@@ -831,7 +950,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     }));
     
     console.log('[LessonView] Lesson set - ID:', lesson.id, 'Stages:', this.lessonStages.length);
-    console.log('[LessonView] First stage:', JSON.stringify(this.lessonStages[0], null, 2).substring(0, 500));
+    console.log('[LessonView] First stage:', JSON.stringify(this.lessonStages[0], null, 2).substring(0, 800));
+    console.log('[LessonView] First substage full:', JSON.stringify(this.lessonStages[0]?.subStages?.[0], null, 2));
     
     // Auto-select first stage and substage if available
     if (this.lessonStages.length > 0) {
@@ -919,7 +1039,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     }
   }
 
-  selectSubStage(stageId: number, subStageId: number) {
+  selectSubStage(stageId: string | number, subStageId: string | number) {
     this.activeStageId = stageId;
     this.activeSubStageId = subStageId;
     this.isMobileNavOpen = false;
@@ -949,6 +1069,18 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     const stage = this.lessonStages.find(s => s.id === this.activeStageId);
     this.currentStage = stage || null;
     this.activeSubStage = stage?.subStages.find(ss => ss.id === this.activeSubStageId) || null;
+    
+    console.log('[LessonView] Active substage updated:', this.activeSubStage?.title);
+    console.log('[LessonView] Embedded interaction:', this.getEmbeddedInteraction());
+  }
+
+  getEmbeddedInteraction(): any {
+    // Check if activeSubStage has an embedded interaction (from JSON)
+    const interaction = (this.activeSubStage as any)?.interaction || null;
+    if (interaction) {
+      console.log('[LessonView] 🎮 Embedded interaction found:', interaction.type);
+    }
+    return interaction;
   }
 
   togglePassStatus() {
@@ -1118,12 +1250,82 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       this.updateActiveSubStage();
     }
     
-    // TODO: Save score to backend (student_topic_scores table)
-    // For now, just log it
     console.log('[LessonView] Score:', result.score, '% - Selected:', result.selectedFragments);
     
-    // TODO: Play "after" script when interaction completes
-    // this.playTeacherScript(this.activeSubStage?.script?.after);
+    // Play "after" script if available
+    const afterScripts = (this.activeSubStage as any)?.scriptBlocksAfterInteraction;
+    if (afterScripts && afterScripts.length > 0) {
+      console.log('[LessonView] Playing post-interaction script');
+      this.playTeacherScript(afterScripts[0]);
+    }
+    
+    // Auto-advance to next substage/stage
+    this.moveToNextSubStage();
+  }
+  
+  /**
+   * Navigate to next substage or stage
+   */
+  moveToNextSubStage() {
+    const currentStage = this.lessonStages.find(s => s.id === this.activeStageId);
+    if (!currentStage) return;
+    
+    const currentSubStageIndex = currentStage.subStages.findIndex(ss => ss.id === this.activeSubStageId);
+    
+    // Check if there's a next substage in current stage
+    if (currentSubStageIndex < currentStage.subStages.length - 1) {
+      const nextSubStage = currentStage.subStages[currentSubStageIndex + 1];
+      console.log('[LessonView] Moving to next substage:', nextSubStage.title);
+      this.selectSubStage(this.activeStageId, nextSubStage.id);
+    } else {
+      // Try to move to next stage
+      const currentStageIndex = this.lessonStages.findIndex(s => s.id === this.activeStageId);
+      if (currentStageIndex < this.lessonStages.length - 1) {
+        const nextStage = this.lessonStages[currentStageIndex + 1];
+        console.log('[LessonView] Moving to next stage:', nextStage.title);
+        this.activeStageId = nextStage.id;
+        this.expandedStages.add(nextStage.id);
+        if (nextStage.subStages && nextStage.subStages.length > 0) {
+          this.selectSubStage(nextStage.id, nextStage.subStages[0].id);
+        }
+      } else {
+        // End of lesson
+        console.log('[LessonView] 🎉 Lesson completed!');
+        this.showEndOfLesson();
+      }
+    }
+  }
+  
+  /**
+   * Show end of lesson screen
+   */
+  showEndOfLesson() {
+    this.activeStageId = null;
+    this.activeSubStageId = null;
+    this.activeSubStage = null;
+    this.currentTeacherScript = null;
+    this.isScriptPlaying = false;
+    console.log('[LessonView] Showing end of lesson screen');
+  }
+  
+  /**
+   * Restart the lesson from the beginning
+   */
+  restartLesson() {
+    console.log('[LessonView] Restarting lesson');
+    this.elapsedSeconds = 0; // Reset timer
+    
+    // Restart from first stage
+    if (this.lessonStages.length > 0) {
+      const firstStage = this.lessonStages[0];
+      this.activeStageId = firstStage.id;
+      this.expandedStages.clear();
+      this.expandedStages.add(firstStage.id);
+      
+      if (firstStage.subStages && firstStage.subStages.length > 0) {
+        this.selectSubStage(firstStage.id, firstStage.subStages[0].id);
+      }
+    }
   }
 
   /**
@@ -1153,7 +1355,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
 
   onScriptClosed() {
     console.log('[LessonView] Script closed by user');
-    this.isScriptPlaying = false;
+    // Don't stop playing - just clear the script
+    // isScriptPlaying stays true so timer continues
     this.currentTeacherScript = null;
   }
 

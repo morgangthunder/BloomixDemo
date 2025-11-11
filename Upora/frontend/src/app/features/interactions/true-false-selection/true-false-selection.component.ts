@@ -1,5 +1,7 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { HttpClient } from '@angular/common/http';
+import { environment } from '../../../../environments/environment';
 
 interface Fragment {
   text: string;
@@ -52,34 +54,67 @@ interface TrueFalseSelectionData {
         <p>💡 Tap statements to select them • Hover for explanations</p>
       </div>
 
-      <!-- Score Display -->
-      <div *ngIf="showScore" class="score-display" [class.perfect]="score === 100">
-        <div class="score-label">Your Score:</div>
-        <div class="score-value">{{ score }}%</div>
-        <div class="score-breakdown">
-          {{ getCorrectCount() }} out of {{ getTrueCount() }} correct
+      <!-- Score Popup Modal -->
+      <div *ngIf="showScore" class="score-modal-overlay" (click)="closeScoreModal($event)">
+        <div class="score-modal" (click)="$event.stopPropagation()">
+          <div class="score-header">
+            <h2>{{ score === 100 ? '🎉 Perfect Score!' : score >= 75 ? '✅ Great Job!' : score >= 50 ? '👍 Good Effort!' : '💪 Keep Trying!' }}</h2>
+          </div>
+
+          <div class="score-body">
+            <!-- Your Score -->
+            <div class="score-section your-score">
+              <div class="score-label">Your Score</div>
+              <div class="score-value">{{ score }}%</div>
+              <div class="score-breakdown">
+                {{ getCorrectCount() }} out of {{ getTrueCount() }} correct
+              </div>
+            </div>
+
+            <!-- Class Average (if available) -->
+            <div *ngIf="classAverage !== null" class="score-section class-average">
+              <div class="score-label">Class Average</div>
+              <div class="score-value">{{ classAverage }}%</div>
+              <div class="score-breakdown">
+                Based on {{ totalAttempts }} {{ totalAttempts === 1 ? 'student' : 'students' }}
+              </div>
+              <div class="comparison" *ngIf="score > classAverage">
+                🌟 Above average!
+              </div>
+              <div class="comparison" *ngIf="score === classAverage">
+                📊 Right on average
+              </div>
+              <div class="comparison" *ngIf="score < classAverage">
+                💪 Room to improve
+              </div>
+            </div>
+          </div>
+
+          <div class="score-actions">
+            <button class="btn-secondary" (click)="playAgain()">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+              </svg>
+              Play Again
+            </button>
+            <button class="btn-primary" (click)="complete()">
+              Next
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/>
+              </svg>
+            </button>
+          </div>
         </div>
-        <div *ngIf="score === 100" class="perfect-message">🎉 Perfect Score!</div>
-        <div *ngIf="score < 100" class="try-again">Review the highlighted statements</div>
       </div>
 
       <!-- Action Buttons -->
-      <div class="actions">
+      <div class="actions" *ngIf="!showScore">
         <button 
-          *ngIf="!showScore" 
           class="submit-btn" 
           (click)="checkAnswers()"
           [disabled]="selectedFragments.size === 0"
         >
           Check My Answer
-        </button>
-
-        <button 
-          *ngIf="showScore" 
-          class="continue-btn" 
-          (click)="complete()"
-        >
-          Continue →
         </button>
       </div>
     </div>
@@ -314,6 +349,163 @@ interface TrueFalseSelectionData {
       transform: translateY(-2px);
     }
 
+    /* Score Modal */
+    .score-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.95);
+      z-index: 100000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .score-modal {
+      background: linear-gradient(135deg, #1a1a2e 0%, #0f0f23 100%);
+      border-radius: 16px;
+      padding: 2rem;
+      max-width: 500px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .score-header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .score-header h2 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin: 0;
+    }
+
+    .score-body {
+      display: flex;
+      gap: 2rem;
+      margin-bottom: 2rem;
+    }
+
+    .score-section {
+      flex: 1;
+      text-align: center;
+      padding: 1.5rem;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .score-section.your-score {
+      border-color: #00d4ff;
+      background: rgba(0, 212, 255, 0.1);
+    }
+
+    .score-section.class-average {
+      border-color: #ffc107;
+      background: rgba(255, 193, 7, 0.1);
+    }
+
+    .score-section .score-label {
+      font-size: 0.875rem;
+      color: rgba(255, 255, 255, 0.6);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+    }
+
+    .score-section .score-value {
+      font-size: 3rem;
+      font-weight: 700;
+      color: #ffffff;
+      line-height: 1;
+      margin-bottom: 0.5rem;
+    }
+
+    .score-section.your-score .score-value {
+      color: #00d4ff;
+    }
+
+    .score-section.class-average .score-value {
+      color: #ffc107;
+    }
+
+    .score-section .score-breakdown {
+      font-size: 0.875rem;
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .comparison {
+      margin-top: 0.75rem;
+      padding: 0.5rem;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .score-actions {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+    }
+
+    .btn-primary, .btn-secondary {
+      padding: 0.875rem 2rem;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: none;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn-primary {
+      background: #00d4ff;
+      color: #0f0f23;
+    }
+
+    .btn-primary:hover {
+      background: #00bce6;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0, 212, 255, 0.4);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.2);
+      border-color: rgba(255, 255, 255, 0.4);
+    }
+
+    @media (max-width: 768px) {
+      .score-body {
+        flex-direction: column;
+        gap: 1rem;
+      }
+
+      .score-section .score-value {
+        font-size: 2.5rem;
+      }
+
+      .btn-primary, .btn-secondary {
+        flex: 1;
+      }
+    }
+
     @media (max-width: 1024px) {
       .fragments-grid {
         grid-template-columns: repeat(2, 1fr);
@@ -351,12 +543,20 @@ interface TrueFalseSelectionData {
   `]
 })
 export class TrueFalseSelectionComponent {
+  private http = inject(HttpClient);
+
   @Input() data: TrueFalseSelectionData | null = null;
+  @Input() lessonId: string | null = null;
+  @Input() stageId: string | null = null;
+  @Input() substageId: string | null = null;
   @Output() completed = new EventEmitter<{ score: number; selectedFragments: string[] }>();
 
   selectedFragments: Set<number> = new Set();
   showScore = false;
   score = 0;
+  classAverage: number | null = null;
+  totalAttempts: number = 0;
+  percentile: number = 0;
 
   isSelected(index: number): boolean {
     return this.selectedFragments.has(index);
@@ -385,7 +585,7 @@ export class TrueFalseSelectionComponent {
       .filter(index => this.data!.fragments[index].isTrueInContext).length;
   }
 
-  checkAnswers() {
+  async checkAnswers() {
     if (!this.data) return;
 
     const trueCount = this.getTrueCount();
@@ -399,9 +599,64 @@ export class TrueFalseSelectionComponent {
     // Minimum score is 0
     const netCorrect = Math.max(0, correctSelections - incorrectSelections);
     this.score = trueCount > 0 ? Math.round((netCorrect / trueCount) * 100) : 0;
-    this.showScore = true;
 
     console.log('[TrueFalseSelection] Score:', this.score, '% -', correctSelections, 'correct,', incorrectSelections, 'incorrect out of', trueCount, 'true statements');
+
+    // Save result and get class average
+    await this.saveResultAndFetchAverage();
+
+    this.showScore = true;
+  }
+
+  private async saveResultAndFetchAverage() {
+    if (!this.lessonId || !this.stageId || !this.substageId) {
+      console.warn('[TrueFalseSelection] Missing context IDs, skipping save');
+      return;
+    }
+
+    try {
+      const response = await this.http.post<any>(`${environment.apiUrl}/interaction-results`, {
+        lessonId: this.lessonId,
+        stageId: this.stageId,
+        substageId: this.substageId,
+        interactionTypeId: 'true-false-selection',
+        score: this.score,
+        timeTakenSeconds: null, // TODO: Track time
+        attempts: 1,
+        resultData: {
+          selectedFragments: Array.from(this.selectedFragments),
+          correctCount: this.getCorrectCount(),
+          incorrectCount: Array.from(this.selectedFragments)
+            .filter(index => !this.data!.fragments[index].isTrueInContext).length,
+        }
+      }).toPromise();
+
+      if (response) {
+        this.classAverage = response.classAverage;
+        this.totalAttempts = response.totalAttempts;
+        this.percentile = response.percentile;
+        console.log('[TrueFalseSelection] Class average:', this.classAverage, '% (', this.totalAttempts, 'attempts)');
+      }
+    } catch (error) {
+      console.error('[TrueFalseSelection] Failed to save result:', error);
+      // Continue anyway - show popup without class average
+    }
+  }
+
+  playAgain() {
+    // Reset the interaction
+    this.selectedFragments.clear();
+    this.showScore = false;
+    this.score = 0;
+    this.classAverage = null;
+    console.log('[TrueFalseSelection] Restarting interaction');
+  }
+
+  closeScoreModal(event: Event) {
+    // Only close if clicking the overlay (not the modal content)
+    if (event.target === event.currentTarget) {
+      this.showScore = false;
+    }
   }
 
   complete() {

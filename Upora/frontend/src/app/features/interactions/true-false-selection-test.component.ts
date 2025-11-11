@@ -15,6 +15,9 @@ import { TrueFalseSelectionComponent } from './true-false-selection/true-false-s
 
         <app-true-false-selection
           [data]="testData"
+          [lessonId]="'30000000-0000-0000-0000-000000000099'"
+          [stageId]="'stage-1'"
+          [substageId]="'substage-1-1'"
           (completed)="onCompleted($event)"
         ></app-true-false-selection>
 

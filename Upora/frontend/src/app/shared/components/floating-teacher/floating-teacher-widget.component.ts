@@ -683,7 +683,7 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy {
   }
 
   closeScript() {
-    this.isPlaying = false;
+    // Don't change isPlaying - parent will handle it
     this.scriptClosed.emit();
   }
 

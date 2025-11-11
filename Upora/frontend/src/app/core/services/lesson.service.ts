@@ -38,7 +38,7 @@ export class LessonService {
   private activeLessonSubject = new BehaviorSubject<Lesson | null>(null);
   private overviewLessonSubject = new BehaviorSubject<Lesson | null>(null);
   private coursesSubject = new BehaviorSubject<Course[]>(MOCK_COURSES);
-  private hubLessonsSubject = new BehaviorSubject<HubLesson[]>(MOCK_HUB_LESSONS);
+  private hubLessonsSubject = new BehaviorSubject<HubLesson[]>([]); // Start empty, load from API
   private activeCourseSubject = new BehaviorSubject<Course | null>(null);
   private lessonBuilderSubPageSubject = new BehaviorSubject<'hub' | 'builder'>('hub');
   private currentLessonSubject = new BehaviorSubject<Lesson>(SAMPLE_LESSON);
@@ -69,10 +69,14 @@ export class LessonService {
     this.loadMyListFromStorage();
     this.setupSearchSubscription();
     
+    console.log('[LessonService] 🎬 Constructor - enableMockData:', environment.enableMockData);
+    
     // Load lessons from API if not using mock data
     if (!environment.enableMockData) {
+      console.log('[LessonService] ✅ Mock data DISABLED - loading from API');
       this.loadLessonsFromAPI();
     } else {
+      console.log('[LessonService] ⚠️ Mock data ENABLED - using CATEGORIES');
       // Use mock data
       this.categoriesSubject.next(CATEGORIES);
     }
@@ -96,9 +100,30 @@ export class LessonService {
         map(backendLessons => this.transformBackendLessons(backendLessons)),
         tap(lessons => {
           console.log('[LessonService] ✅ Lessons transformed:', lessons.length);
+          
+          // Update categories for home page
           const categories = this.organizeLessonsByCategory(lessons);
           console.log('[LessonService] ✅ Categories organized:', categories.length, categories.map(c => c.name));
           this.categoriesSubject.next(categories);
+          
+          // Update hub lessons for lesson builder (transform to HubLesson format)
+          const hubLessons: HubLesson[] = lessons.map(lesson => ({
+            id: lesson.id as any, // Keep as string UUID
+            title: lesson.title,
+            stageCount: lesson.stages?.length || 0,
+            status: 'Published', // All approved lessons are "Published"
+            isClickable: true,
+            stats: {
+              views: lesson.views || 0,
+              completionRate: lesson.rating || 0,
+              completions: Math.round((lesson.views || 0) * ((lesson.rating || 0) / 100))
+            },
+            earnings: 0.00, // TODO: Calculate from usage data
+            courseId: null
+          }));
+          console.log('[LessonService] ✅ Hub lessons updated:', hubLessons.length);
+          this.hubLessonsSubject.next(hubLessons);
+          
           this.loadingSubject.next(false);
           console.log('[LessonService] ✅ Lessons loaded successfully from API!');
         }),
@@ -108,6 +133,7 @@ export class LessonService {
           this.errorSubject.next('Failed to load lessons. Using fallback data.');
           // Fallback to mock data on error
           this.categoriesSubject.next(CATEGORIES);
+          this.hubLessonsSubject.next(MOCK_HUB_LESSONS);
           this.loadingSubject.next(false);
           return of([]);
         })
@@ -137,7 +163,7 @@ export class LessonService {
         difficulty: (bl.difficulty || 'Beginner') as 'Beginner' | 'Intermediate' | 'Advanced',
         tags: bl.tags || [],
         views: bl.views || 0, // Fixed: use views not view_count
-        stages: bl.data?.stages || [],
+        stages: (bl.data as any)?.structure?.stages || bl.data?.stages || [],
       };
       
       console.log(`[LessonService] Transformed: ${lesson.title} (ID: ${lesson.id}, image: ${lesson.image?.substring(0, 50)}...)`);

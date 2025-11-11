@@ -57,6 +57,7 @@ services:
       - WEAVIATE_SCHEME=http
     volumes:
       - ./Upora/backend/src:/app/src
+      - ./Upora/lessons:/app/lessons
       - /app/node_modules
     depends_on:
       postgres:

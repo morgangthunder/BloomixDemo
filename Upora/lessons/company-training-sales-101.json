@@ -1,0 +1,125 @@
+{
+  "id": "30000000-0000-0000-0000-000000000010",
+  "title": "Company Training: Sales 101",
+  "description": "Essential sales techniques for new team members",
+  "thumbnailUrl": "https://images.unsplash.com/photo-1553028826-f4804a6dba3b?w=400",
+  "category": "Business",
+  "difficulty": "Beginner",
+  "estimatedDuration": 20,
+  "tags": ["sales", "business", "training"],
+  "objectives": {
+    "learningObjectives": [
+      "Understand the sales process",
+      "Build rapport with customers",
+      "Handle objections effectively"
+    ],
+    "topics": ["sales", "communication", "customer service"]
+  },
+  "metadata": {
+    "version": "1.0",
+    "created": "2025-11-11T12:00:00.000Z",
+    "updated": "2025-11-11T12:00:00.000Z",
+    "author": "System"
+  },
+  "stages": [
+    {
+      "id": "stage-1",
+      "type": "tease",
+      "title": "The Art of Selling",
+      "order": 0,
+      "duration": 20,
+      "description": "Learn fundamental sales principles",
+      "aiPrompt": "You are teaching sales fundamentals. Help students understand effective sales techniques.",
+      "prerequisites": [],
+      "subStages": [
+        {
+          "id": "substage-1-1",
+          "title": "Sales Basics",
+          "order": 0,
+          "scriptBlocks": [
+            {
+              "id": "script-intro",
+              "order": 0,
+              "idealTimestamp": 0,
+              "text": "Welcome to Sales 101! Great salespeople aren't born - they're trained. Today you'll learn the essential skills that turn conversations into successful sales. Let's get started!",
+              "estimatedDuration": 12,
+              "audioUrl": null,
+              "playbackRules": {
+                "autoPlay": true,
+                "canSkip": true,
+                "pauseOnInteraction": false,
+                "displayIfMissed": "asap"
+              }
+            },
+            {
+              "id": "script-pre-quiz",
+              "order": 1,
+              "idealTimestamp": 15,
+              "text": "Let's test what you know about sales fundamentals. Which statements are TRUE?",
+              "estimatedDuration": 6,
+              "audioUrl": null,
+              "playbackRules": {
+                "autoPlay": true,
+                "canSkip": true,
+                "pauseOnInteraction": true,
+                "displayIfMissed": "asap"
+              }
+            }
+          ],
+          "interaction": {
+            "type": "true-false-selection",
+            "config": {
+              "targetStatement": "About Sales",
+              "maxFragments": 5,
+              "fragments": [
+                {
+                  "text": "Listening to customers is more important than talking",
+                  "isTrueInContext": true,
+                  "explanation": "Correct! Great salespeople listen first to understand customer needs."
+                },
+                {
+                  "text": "The goal is to sell to everyone",
+                  "isTrueInContext": false,
+                  "explanation": "Incorrect. Focus on qualified prospects who actually need your product."
+                },
+                {
+                  "text": "Building trust is essential for long-term success",
+                  "isTrueInContext": true,
+                  "explanation": "Correct! Trust leads to repeat business and referrals."
+                },
+                {
+                  "text": "You should never follow up after a sale",
+                  "isTrueInContext": false,
+                  "explanation": "Incorrect. Follow-up builds relationships and can lead to more sales."
+                },
+                {
+                  "text": "Understanding the customer's problem comes before pitching",
+                  "isTrueInContext": true,
+                  "explanation": "Correct! Diagnose before you prescribe - understand the need first."
+                }
+              ]
+            }
+          },
+          "scriptBlocksAfterInteraction": [
+            {
+              "id": "script-outro",
+              "order": 0,
+              "idealTimestamp": 0,
+              "triggerCondition": "interactionComplete",
+              "text": "Well done! You scored {score}%. You're on your way to becoming a great salesperson!",
+              "estimatedDuration": 8,
+              "audioUrl": null,
+              "playbackRules": {
+                "autoPlay": true,
+                "canSkip": true,
+                "pauseOnInteraction": false,
+                "displayIfMissed": "never"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+

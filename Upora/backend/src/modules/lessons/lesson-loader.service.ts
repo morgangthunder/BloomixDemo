@@ -1,14 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Lesson } from './entities/lesson.entity';
+import { Lesson } from '../../entities/lesson.entity';
 import * as fs from 'fs';
 import * as path from 'path';
 
 @Injectable()
 export class LessonLoaderService {
   private readonly logger = new Logger(LessonLoaderService.name);
-  private readonly lessonsDir = path.join(__dirname, '../../../../lessons');
+  private readonly lessonsDir = path.join(process.cwd(), 'lessons');
 
   constructor(
     @InjectRepository(Lesson)
@@ -35,31 +35,110 @@ export class LessonLoaderService {
       throw new Error(`Invalid lesson data in ${filename}: missing id or title`);
     }
 
-    // Create or update lesson in database
-    const lesson = this.lessonRepository.create({
-      id: lessonData.id,
-      tenantId: lessonData.tenantId || '00000000-0000-0000-0000-000000000001',
-      title: lessonData.title,
-      description: lessonData.description,
-      thumbnailUrl: lessonData.thumbnailUrl,
-      category: lessonData.category,
-      difficulty: lessonData.difficulty,
-      duration: lessonData.estimatedDuration,
-      tags: lessonData.tags || [],
-      data: {
-        stages: lessonData.stages,
-        metadata: lessonData.metadata,
-      },
-      status: 'approved',
-      createdBy: lessonData.metadata?.author || 'system',
-      objectives: lessonData.objectives,
-    });
+    // Check if lesson exists
+    let lesson = await this.lessonRepository.findOne({ where: { id: lessonData.id } });
+    
+    if (lesson) {
+      // Update existing lesson
+      lesson.title = lessonData.title;
+      lesson.description = lessonData.description;
+      lesson.thumbnailUrl = lessonData.thumbnailUrl;
+      lesson.category = lessonData.category;
+      lesson.difficulty = lessonData.difficulty;
+      lesson.durationMinutes = lessonData.estimatedDuration;
+      lesson.tags = lessonData.tags || [];
+      lesson.data = {
+        ...lesson.data,
+        metadata: lessonData.metadata || lesson.data.metadata,
+        structure: {
+          stages: lessonData.stages,
+          totalDuration: lessonData.estimatedDuration,
+          learningObjectives: lessonData.objectives?.learningObjectives || [],
+        },
+      };
+      lesson.objectives = lessonData.objectives;
+    } else {
+      // Create new lesson
+      const newLesson = this.lessonRepository.create({
+        id: lessonData.id,
+        tenantId: lessonData.tenantId || '00000000-0000-0000-0000-000000000001',
+        title: lessonData.title,
+        description: lessonData.description,
+        thumbnailUrl: lessonData.thumbnailUrl,
+        category: lessonData.category,
+        difficulty: lessonData.difficulty,
+        durationMinutes: lessonData.estimatedDuration,
+        tags: lessonData.tags || [],
+        data: {
+          metadata: {
+            version: lessonData.metadata?.version || '1.0',
+            created: lessonData.metadata?.created || new Date().toISOString(),
+            updated: lessonData.metadata?.updated || new Date().toISOString(),
+            lessonId: lessonData.id,
+            tenantId: lessonData.tenantId || '00000000-0000-0000-0000-000000000001',
+            createdBy: lessonData.metadata?.author || 'system',
+          },
+          config: {
+            title: lessonData.title,
+            description: lessonData.description,
+            category: lessonData.category,
+            difficulty: lessonData.difficulty as any,
+            durationMinutes: lessonData.estimatedDuration,
+            thumbnailUrl: lessonData.thumbnailUrl,
+            tags: lessonData.tags || [],
+            status: 'approved' as any,
+          },
+          aiContext: {
+            generalPrompt: '',
+            defaultSubStagePrompts: {},
+            customPrompts: {},
+            contextData: {
+              lessonObjectives: lessonData.objectives?.learningObjectives || [],
+              prerequisites: [],
+              keyConcepts: lessonData.objectives?.topics || [],
+            },
+          },
+          structure: {
+            stages: lessonData.stages,
+            totalDuration: lessonData.estimatedDuration,
+            learningObjectives: lessonData.objectives?.learningObjectives || [],
+          },
+          contentReferences: {
+            contentSources: [],
+            mediaAssets: [],
+          },
+          processedContent: {},
+          interactions: {
+            interactionTypes: [],
+            customInteractions: [],
+          },
+          script: {
+            blocks: [],
+            totalDuration: 0,
+            timing: {},
+          },
+          assessment: {
+            checkpoints: [],
+            evaluationCriteria: [],
+            progressTracking: {},
+          },
+        },
+        status: 'approved' as any,
+        createdBy: lessonData.metadata?.author || 'system',
+        objectives: lessonData.objectives,
+      });
+      lesson = newLesson;
+    }
 
-    const savedLesson = await this.lessonRepository.save(lesson);
+    if (!lesson) {
+      throw new Error('Failed to create lesson entity');
+    }
+
+    const savedLesson = await this.lessonRepository.save(lesson as any);
     
     this.logger.log(`✅ Lesson loaded: ${lessonData.title} (${lessonData.id})`);
     
-    return savedLesson;
+    return savedLesson as Lesson;
   }
 
   /**

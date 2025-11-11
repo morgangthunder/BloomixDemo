@@ -1,0 +1,125 @@
+{
+  "id": "30000000-0000-0000-0000-000000000002",
+  "title": "JavaScript Fundamentals",
+  "description": "Master the core concepts of JavaScript",
+  "thumbnailUrl": "https://images.unsplash.com/photo-1579468118864-1b9ea3c0db4a?w=400",
+  "category": "Programming",
+  "difficulty": "Beginner",
+  "estimatedDuration": 25,
+  "tags": ["javascript", "web", "programming"],
+  "objectives": {
+    "learningObjectives": [
+      "Understand JavaScript variables and functions",
+      "Work with arrays and objects",
+      "Use modern JavaScript features"
+    ],
+    "topics": ["javascript", "es6", "web development"]
+  },
+  "metadata": {
+    "version": "1.0",
+    "created": "2025-11-11T12:00:00.000Z",
+    "updated": "2025-11-11T12:00:00.000Z",
+    "author": "System"
+  },
+  "stages": [
+    {
+      "id": "stage-1",
+      "type": "expose",
+      "title": "JavaScript Basics",
+      "order": 0,
+      "duration": 25,
+      "description": "Learn core JavaScript concepts",
+      "aiPrompt": "You are teaching JavaScript fundamentals. Help students understand variables, functions, and modern syntax.",
+      "prerequisites": [],
+      "subStages": [
+        {
+          "id": "substage-1-1",
+          "title": "Understanding JavaScript",
+          "order": 0,
+          "scriptBlocks": [
+            {
+              "id": "script-intro",
+              "order": 0,
+              "idealTimestamp": 0,
+              "text": "Welcome to JavaScript Fundamentals! JavaScript is the language of the web - it powers every interactive website you visit. From simple animations to complex web applications, JavaScript makes it all possible. Let's dive in!",
+              "estimatedDuration": 12,
+              "audioUrl": null,
+              "playbackRules": {
+                "autoPlay": true,
+                "canSkip": true,
+                "pauseOnInteraction": false,
+                "displayIfMissed": "asap"
+              }
+            },
+            {
+              "id": "script-pre-quiz",
+              "order": 1,
+              "idealTimestamp": 15,
+              "text": "Let's check your understanding of JavaScript basics. Select all the TRUE statements!",
+              "estimatedDuration": 6,
+              "audioUrl": null,
+              "playbackRules": {
+                "autoPlay": true,
+                "canSkip": true,
+                "pauseOnInteraction": true,
+                "displayIfMissed": "asap"
+              }
+            }
+          ],
+          "interaction": {
+            "type": "true-false-selection",
+            "config": {
+              "targetStatement": "About JavaScript",
+              "maxFragments": 5,
+              "fragments": [
+                {
+                  "text": "JavaScript runs in web browsers",
+                  "isTrueInContext": true,
+                  "explanation": "Correct! JavaScript is the primary language for client-side web development."
+                },
+                {
+                  "text": "JavaScript and Java are the same language",
+                  "isTrueInContext": false,
+                  "explanation": "Incorrect. Despite similar names, they are completely different languages."
+                },
+                {
+                  "text": "You can use JavaScript to manipulate web pages",
+                  "isTrueInContext": true,
+                  "explanation": "Correct! JavaScript can modify HTML and CSS dynamically."
+                },
+                {
+                  "text": "JavaScript cannot run outside of browsers",
+                  "isTrueInContext": false,
+                  "explanation": "Incorrect. Node.js allows JavaScript to run on servers and in other environments."
+                },
+                {
+                  "text": "let and const are modern ways to declare variables",
+                  "isTrueInContext": true,
+                  "explanation": "Correct! ES6 introduced let and const as improvements over var."
+                }
+              ]
+            }
+          },
+          "scriptBlocksAfterInteraction": [
+            {
+              "id": "script-outro",
+              "order": 0,
+              "idealTimestamp": 0,
+              "triggerCondition": "interactionComplete",
+              "text": "Great work! You scored {score}%. You're ready to start coding in JavaScript!",
+              "estimatedDuration": 8,
+              "audioUrl": null,
+              "playbackRules": {
+                "autoPlay": true,
+                "canSkip": true,
+                "pauseOnInteraction": false,
+                "displayIfMissed": "never"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
