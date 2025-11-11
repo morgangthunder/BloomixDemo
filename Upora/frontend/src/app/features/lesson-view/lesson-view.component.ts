@@ -259,8 +259,13 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       <div 
         *ngIf="teacherWidgetHidden"
         class="teacher-fab"
-        (click)="toggleTeacherWidget()"
-        title="Open AI Teacher">
+        [class.draggable-fab]="isFullscreen"
+        [style.left.px]="isFullscreen && fabLeft > 0 ? fabLeft : null"
+        [style.top.px]="isFullscreen && fabTop > 0 ? fabTop : null"
+        (click)="onFabClick($event)"
+        (mousedown)="startFabDrag($event)"
+        (touchstart)="startFabDrag($event)"
+        [title]="isFullscreen ? 'Hold to drag' : 'Open AI Teacher'">
         <span class="fab-icon">🎓</span>
         <span *ngIf="chatMessages.length > 0" class="fab-badge">{{ chatMessages.length }}</span>
       </div>
@@ -539,6 +544,18 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       transform: translateY(50%); /* Half overlaps the red line */
     }
 
+    .teacher-fab.draggable-fab {
+      cursor: grab;
+      bottom: auto !important;
+      right: auto !important;
+      transform: none;
+      transition: none;
+    }
+
+    .teacher-fab.draggable-fab:active {
+      cursor: grabbing;
+    }
+
     /* Teacher Widget in Fullscreen */
     app-floating-teacher-widget.fullscreen-widget {
       z-index: 10000 !important;
@@ -647,6 +664,13 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   
   // Fullscreen
   isFullscreen = false;
+  
+  // FAB Dragging (in fullscreen)
+  fabLeft = 0;
+  fabTop = 0;
+  private fabDragging = false;
+  private fabDragStartX = 0;
+  private fabDragStartY = 0;
   
   // Interaction data
   interactionData: any = null;
@@ -795,6 +819,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     // Clean up fullscreen class
     document.body.classList.remove('fullscreen-active');
+    
+    // Clean up FAB drag listeners
+    this.stopFabDrag();
     
     // Disconnect from WebSocket
     this.wsService.leaveLesson();
@@ -1103,6 +1130,83 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * FAB Click Handler
+   */
+  onFabClick(event: Event) {
+    // If in fullscreen and was dragged, don't open (just repositioning)
+    if (this.isFullscreen && this.fabDragging) {
+      console.log('[LessonView] FAB drag end - not opening widget');
+      return;
+    }
+    
+    // Otherwise, open widget
+    this.toggleTeacherWidget();
+  }
+
+  /**
+   * Start dragging FAB
+   */
+  startFabDrag(event: MouseEvent | TouchEvent) {
+    if (!this.isFullscreen) {
+      console.log('[LessonView] FAB drag disabled - not in fullscreen');
+      return;
+    }
+    
+    console.log('[LessonView] Starting FAB drag');
+    event.preventDefault();
+    event.stopPropagation();
+    this.fabDragging = true;
+    
+    const clientX = 'touches' in event ? event.touches[0].clientX : event.clientX;
+    const clientY = 'touches' in event ? event.touches[0].clientY : event.clientY;
+    
+    // Initialize position from current location
+    if (this.fabLeft === 0 && this.fabTop === 0) {
+      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+      this.fabLeft = rect.left;
+      this.fabTop = rect.top;
+      console.log('[LessonView] FAB initial position:', this.fabLeft, this.fabTop);
+    }
+    
+    this.fabDragStartX = clientX - this.fabLeft;
+    this.fabDragStartY = clientY - this.fabTop;
+    
+    // Add global listeners
+    document.addEventListener('mousemove', this.onFabDrag);
+    document.addEventListener('mouseup', this.stopFabDrag);
+    document.addEventListener('touchmove', this.onFabDrag);
+    document.addEventListener('touchend', this.stopFabDrag);
+  }
+
+  private onFabDrag = (event: MouseEvent | TouchEvent) => {
+    if (!this.fabDragging) return;
+    
+    const clientX = 'touches' in event ? event.touches[0].clientX : event.clientX;
+    const clientY = 'touches' in event ? event.touches[0].clientY : event.clientY;
+    
+    this.fabLeft = clientX - this.fabDragStartX;
+    this.fabTop = clientY - this.fabDragStartY;
+    
+    // Keep within viewport
+    const maxX = window.innerWidth - 70;
+    const maxY = window.innerHeight - 70;
+    
+    this.fabLeft = Math.max(0, Math.min(this.fabLeft, maxX));
+    this.fabTop = Math.max(0, Math.min(this.fabTop, maxY));
+  }
+
+  private stopFabDrag = () => {
+    setTimeout(() => {
+      this.fabDragging = false;
+    }, 100); // Small delay so click handler can check fabDragging
+    
+    document.removeEventListener('mousemove', this.onFabDrag);
+    document.removeEventListener('mouseup', this.stopFabDrag);
+    document.removeEventListener('touchmove', this.onFabDrag);
+    document.removeEventListener('touchend', this.stopFabDrag);
+  }
+
+  /**
    * Toggle fullscreen mode
    */
   toggleFullscreen() {
@@ -1111,15 +1215,19 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // Add/remove class to body to hide global header
     if (this.isFullscreen) {
       document.body.classList.add('fullscreen-active');
-      // Auto-show teacher widget in fullscreen so it can be dragged
-      this.teacherWidgetHidden = false;
+      // Initialize FAB position to bottom-right
+      if (this.fabLeft === 0 && this.fabTop === 0) {
+        this.fabLeft = window.innerWidth - 90; // 70px width + 20px margin
+        this.fabTop = window.innerHeight - 90;
+      }
     } else {
       document.body.classList.remove('fullscreen-active');
+      // Reset FAB position
+      this.fabLeft = 0;
+      this.fabTop = 0;
     }
     
     console.log('[LessonView] Fullscreen:', this.isFullscreen);
-    console.log('[LessonView] Teacher widget hidden:', this.teacherWidgetHidden);
-    console.log('[LessonView] Widget will receive isDraggable:', this.isFullscreen);
   }
 
   /**
