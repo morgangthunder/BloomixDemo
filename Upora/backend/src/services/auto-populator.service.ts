@@ -200,7 +200,18 @@ Return ONLY valid JSON:
     response: any,
   ): Promise<void> {
     try {
-      await this.llmLogRepository.save({
+      // Validate required fields
+      if (!userId || !tenantId) {
+        this.logger.error('[AutoPopulator] ⚠️ Missing required fields for token logging:', {
+          userId: userId || 'MISSING',
+          tenantId: tenantId || 'MISSING',
+          useCase,
+          tokensUsed
+        });
+        throw new Error(`Missing required fields: userId=${userId}, tenantId=${tenantId}`);
+      }
+
+      const logEntry = {
         userId,
         tenantId,
         providerId,
@@ -212,9 +223,23 @@ Return ONLY valid JSON:
         outputsGenerated: 1,
         outputsApproved: 0,
         contentSourceId: null,
+      };
+
+      this.logger.log('[AutoPopulator] 📝 Logging token usage:', {
+        userId,
+        tenantId,
+        useCase,
+        tokensUsed
       });
+
+      await this.llmLogRepository.save(logEntry);
+      this.logger.log('[AutoPopulator] ✅ Token usage logged successfully');
     } catch (error) {
-      this.logger.error('[AutoPopulator] Failed to log token usage:', error.message);
+      this.logger.error('[AutoPopulator] ❌ Failed to log token usage:', error.message);
+      this.logger.error('[AutoPopulator] Error details:', error);
+      
+      // RE-THROW so caller knows logging failed
+      throw new Error(`Token logging failed: ${error.message}`);
     }
   }
 }
