@@ -6,15 +6,15 @@
 
 ## Quick Reference
 
-**Total Interaction Types:** 20  
-**Auto-Generable:** 18/20 (90%)  
+**Total Interaction Types:** 21  
+**Auto-Generable:** 19/21 (90%)  
 **Require Manual Assets:** 2/20 (Anomaly Hunter, some media clips)  
 **TEACH Stage Coverage:** All 5 stages, all sub-stages
 
 ### Stage Distribution
-- **TEASE:** 3 types (Mystery Reveal, Explosive Poll, Memory Lane Timeline)
+- **TEASE:** 4 types (Mystery Reveal, Explosive Poll, Memory Lane Timeline, True/False Selection)
 - **EXPLORE:** 5 types (Physics Sandbox, Card Clue Peeler, Scratch-Off Explorer, Prediction Branching, Anomaly Hunter)
-- **ABSORB:** 5 types (Paraphrase Builder, Topic Spinner, True/False Fragment Builder, Concept Checker, Bridge Matcher)
+- **ABSORB:** 5 types (Paraphrase Builder, Topic Spinner, Fragment Builder, Concept Checker, Bridge Matcher)
 - **CULTIVATE:** 4 types (Skill Drill Arcade, Scenario Remix Sorter, Blank Canvas Creator, Stepping Stones)
 - **HONE:** 3 types (Retrieval Race, Progress Reflection, Exit Bridge Maze)
 
@@ -123,9 +123,59 @@
 
 ---
 
+#### 4. True/False Selection
+- **ID:** `true-false-selection`
+- **Sub-Stage:** Trigger
+- **Cognitive Load:** Low
+- **Duration:** 2-3 min
+
+**Purpose:** Activate prior knowledge and surface misconceptions before diving into new content. Students identify which statements are TRUE, revealing what they already know (or think they know).
+
+**Input Data:**
+```json
+{
+  "fragments": [
+    {
+      "text": "Plants perform photosynthesis",
+      "isTrueInContext": true,
+      "explanation": "Plants are primary organisms that carry out photosynthesis"
+    },
+    {
+      "text": "Plants eat soil",
+      "isTrueInContext": false,
+      "explanation": "Plants make their own food through photosynthesis, they don't consume soil"
+    }
+  ],
+  "targetStatement": "Which of these statements about photosynthesis are TRUE?",
+  "maxFragments": 8
+}
+```
+
+**LLM Can Generate:** ✅ All statements, ✅ Explanations, ✅ Common misconceptions  
+**Confidence Threshold:** 0.8  
+**Score:** (True statements selected / Total true statements) × 100  
+**Mobile:** Large tap targets (min 48x48px), haptic feedback for selection  
+**Assets:** fragment-tile.png, checkmark.png, x-mark.png, tap.mp3, correct.mp3, incorrect.mp3
+
+**Interaction Flow:**
+1. Student sees 6-10 statement tiles
+2. Taps to select statements they believe are TRUE
+3. Can tap again to deselect
+4. Submits answer when ready
+5. Sees which were correct/incorrect with explanations
+6. Misconceptions are flagged for teacher/AI to address
+
+**LLM Prompt Focus:**
+- Generate clear, unambiguous statements
+- Include common misconceptions as false options
+- Mix obvious and subtle differences
+- Provide explanations that teach, not just correct
+
+---
+
 ### EXPLORE Stage Interactions
 
-#### 4. Physics Sandbox Closed Sort
+#### 5. Physics Sandbox Closed Sort
 - **ID:** `physics-sandbox-sort`
 - **Sub-Stage:** Handle
 - **Cognitive Load:** High
@@ -171,7 +221,7 @@
 
 ---
 
-#### 5. Card Clue Peeler
+#### 6. Card Clue Peeler
 - **ID:** `card-clue-peeler`
 - **Sub-Stage:** Uncover
 - **Cognitive Load:** Medium
@@ -203,7 +253,7 @@
 
 ---
 
-#### 6. Scratch-Off Explorer
+#### 7. Scratch-Off Explorer
 - **ID:** `scratch-off-explorer`
 - **Sub-Stage:** Uncover (Image variant)
 - **Cognitive Load:** Medium
@@ -235,7 +285,7 @@
 
 ---
 
-#### 7. Prediction Branching Tree
+#### 8. Prediction Branching Tree
 - **ID:** `prediction-branching`
 - **Sub-Stage:** Noodle
 - **Cognitive Load:** High
@@ -273,7 +323,7 @@
 
 ---
 
-#### 8. Anomaly Hunter (Image Hotspots)
+#### 9. Anomaly Hunter (Image Hotspots)
 - **ID:** `anomaly-hunter`
 - **Sub-Stage:** Track
 - **Cognitive Load:** Medium
@@ -310,7 +360,7 @@
 
 ### ABSORB Stage Interactions
 
-#### 9. Paraphrase Builder
+#### 10. Paraphrase Builder
 - **ID:** `paraphrase-builder`
 - **Sub-Stage:** Interpret
 - **Cognitive Load:** High
@@ -336,7 +386,7 @@
 
 ---
 
-#### 10. Topic Spinner
+#### 11. Topic Spinner
 - **ID:** `topic-spinner`
 - **Sub-Stage:** Show
 - **Cognitive Load:** Low
@@ -367,41 +417,58 @@
 
 ---
 
-#### 11. True/False Fragment Builder
+#### 12. Fragment Builder (Sentence Pairs)
 - **ID:** `fragment-builder`
 - **Sub-Stage:** Show
 - **Cognitive Load:** Medium
-- **Duration:** 3-4 min
+- **Duration:** 3-5 min
+
+**Purpose:** Students drag sentence fragments (beginnings + endings) to build TRUE statements. Fragments can be combined incorrectly, making this a puzzle-solving activity that reinforces content understanding.
 
 **Input Data:**
 ```json
 {
-  "fragments": [
+  "sentencePairs": [
     {
-      "text": "Plants",
-      "isTrueInContext": true,
-      "explanation": "Plants are the subject of photosynthesis"
+      "id": "pair1",
+      "beginning": "Plants convert light energy",
+      "ending": "into chemical energy",
+      "isCorrectPair": true,
+      "explanation": "This describes photosynthesis accurately"
     },
     {
-      "text": "eat soil",
-      "isTrueInContext": false,
-      "explanation": "Plants make food via photosynthesis, not from soil"
+      "id": "pair2",
+      "beginning": "Plants eat",
+      "ending": "nutrients from soil",
+      "isCorrectPair": false,
+      "explanation": "This is a misconception - plants make their own food"
     }
   ],
-  "targetStatement": "Build a true statement about photosynthesis",
-  "maxFragments": 8
+  "distractorEndings": [
+    "at night without light",
+    "only in winter months"
+  ],
+  "targetCount": 3,
+  "allowPartialCredit": true
 }
 ```
 
-**LLM Can Generate:** ✅ Fragments, explanations, target  
+**Interaction Flow:**
+1. Sentence beginnings appear on left, endings on right (shuffled)
+2. Student drags endings to match with beginnings
+3. Can test combinations and undo
+4. Submits when they've built their target number of statements
+5. Feedback shows which pairs are TRUE and which are FALSE with explanations
+
+**LLM Can Generate:** ✅ Sentence pairs, ✅ Distractor endings, ✅ Explanations  
 **Confidence Threshold:** 0.8  
-**Score:** (True fragments selected / Total true fragments) × 100  
-**Mobile:** Tap to toggle fragment selection, shake for incorrect  
-**Assets:** fragment-tile.png, checkmark.png, x-mark.png
+**Score:** (Correct pairs built / Target count) × 100  
+**Mobile:** Large drag targets, tap-to-select-then-tap-to-connect as alternative  
+**Assets:** fragment-tile.png, connection-line.png, snap-sound.mp3, success.mp3
 
 ---
 
-#### 12. Concept Checker
+#### 13. Concept Checker
 - **ID:** `concept-checker`
 - **Sub-Stage:** Show
 - **Cognitive Load:** Medium
@@ -438,7 +505,7 @@
 
 ---
 
-#### 13. Bridge Matcher (Analogy Connector)
+#### 14. Bridge Matcher (Analogy Connector)
 - **ID:** `bridge-matcher`
 - **Sub-Stage:** Parallel
 - **Cognitive Load:** Medium
@@ -470,7 +537,7 @@
 
 ### CULTIVATE Stage Interactions
 
-#### 14. Skill Drill Arcade (Endless Runner)
+#### 15. Skill Drill Arcade (Endless Runner)
 - **ID:** `skill-drill-arcade`
 - **Sub-Stage:** Grip
 - **Cognitive Load:** Medium
@@ -502,7 +569,7 @@
 
 ---
 
-#### 15. Scenario Remix Sorter
+#### 16. Scenario Remix Sorter
 - **ID:** `scenario-remix-sorter`
 - **Sub-Stage:** Repurpose
 - **Cognitive Load:** High
@@ -536,7 +603,7 @@
 
 ---
 
-#### 16. Blank Canvas Creator
+#### 17. Blank Canvas Creator
 - **ID:** `blank-canvas-creator`
 - **Sub-Stage:** Originate
 - **Cognitive Load:** Very High
@@ -564,7 +631,7 @@
 
 ---
 
-#### 17. Stepping Stones
+#### 18. Stepping Stones
 - **ID:** `stepping-stones`
 - **Sub-Stage:** Originate (NOTE: "Work" was typo)
 - **Cognitive Load:** Medium
@@ -600,7 +667,7 @@
 
 ### HONE Stage Interactions
 
-#### 18. Retrieval Race (Speed Flashcards)
+#### 19. Retrieval Race (Speed Flashcards)
 - **ID:** `retrieval-race`
 - **Sub-Stage:** Verify
 - **Cognitive Load:** Medium
@@ -631,7 +698,7 @@
 
 ---
 
-#### 19. Progress Reflection
+#### 20. Progress Reflection
 - **ID:** `progress-reflection`
 - **Sub-Stage:** Evaluate
 - **Cognitive Load:** Low
@@ -696,7 +763,7 @@
 
 ---
 
-#### 20. Exit Bridge Maze
+#### 21. Exit Bridge Maze
 - **ID:** `exit-bridge-maze`
 - **Sub-Stage:** Target
 - **Cognitive Load:** High
