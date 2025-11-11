@@ -2,6 +2,7 @@ import { Component, Input, Output, EventEmitter, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../../environments/environment';
+import { ApiService } from '../../../core/services/api.service';
 
 interface Fragment {
   text: string;
@@ -552,6 +553,7 @@ interface TrueFalseSelectionData {
 })
 export class TrueFalseSelectionComponent {
   private http = inject(HttpClient);
+  private apiService = inject(ApiService);
 
   @Input() data: TrueFalseSelectionData | null = null;
   @Input() lessonId: string | null = null;
@@ -669,7 +671,7 @@ export class TrueFalseSelectionComponent {
     }
 
     try {
-      const response = await this.http.post<any>(`${environment.apiUrl}/interaction-results`, {
+      const response = await this.apiService.post<any>('/interaction-results', {
         lessonId: this.lessonId,
         stageId: this.stageId,
         substageId: this.substageId,
@@ -679,9 +681,8 @@ export class TrueFalseSelectionComponent {
         attempts: 1,
         resultData: {
           selectedFragments: Array.from(this.selectedFragments),
-          correctCount: this.getCorrectCount(),
-          incorrectCount: Array.from(this.selectedFragments)
-            .filter(index => !this.data!.fragments[index].isTrueInContext).length,
+          correctCount: this.getCorrectAnswersCount(),
+          incorrectCount: this.data!.fragments.length - this.getCorrectAnswersCount(),
         }
       }).toPromise();
 

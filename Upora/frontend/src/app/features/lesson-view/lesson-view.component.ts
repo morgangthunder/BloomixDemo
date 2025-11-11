@@ -575,9 +575,9 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
     }
 
     .fullscreen-toggle {
-      position: absolute;
-      bottom: 1.5rem;
-      left: 1.5rem; /* Bottom-LEFT of content area */
+      position: fixed; /* Fixed so it doesn't scroll */
+      bottom: calc(60px + 1.5rem); /* Above control bar */
+      left: 1.5rem;
       width: 44px;
       height: 44px;
       background: rgba(0, 0, 0, 0.7);
@@ -599,11 +599,9 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       }
     }
     
-    /* When fullscreen, use fixed positioning at bottom-left */
+    /* When fullscreen, move to very bottom */
     .content-area.fullscreen .fullscreen-toggle {
-      position: fixed !important;
-      bottom: calc(60px + 1.5rem) !important;
-      left: 1.5rem !important;
+      bottom: 1rem !important; /* Very close to bottom */
       z-index: 9998 !important;
     }
 
