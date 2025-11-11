@@ -70,7 +70,16 @@ INSERT INTO lessons (
             "order": 0,
             "content": "Photosynthesis is the process by which plants use sunlight to convert carbon dioxide and water into glucose (food) and oxygen.",
             "interactionTypeId": "20000000-0000-0000-0000-000000000001",
-            "contentOutputId": "40000000-0000-0000-0000-000000000099"
+            "contentOutputId": "40000000-0000-0000-0000-000000000099",
+            "scriptBlocks": [
+              {
+                "id": "script-1-1",
+                "order": 0,
+                "text": "Welcome to this lesson on Photosynthesis! Today we are going to explore one of the most important processes in nature. Have you ever wondered how plants make their own food? Let''s discover together how they convert sunlight into energy!",
+                "estimatedDuration": 15,
+                "audioUrl": null
+              }
+            ]
           },
           {
             "id": "substage-1-2",
@@ -78,7 +87,16 @@ INSERT INTO lessons (
             "order": 1,
             "content": "Photosynthesis provides oxygen for us to breathe and food for the plant. It is essential for life on Earth!",
             "interactionTypeId": null,
-            "contentOutputId": null
+            "contentOutputId": null,
+            "scriptBlocks": [
+              {
+                "id": "script-1-2",
+                "order": 0,
+                "text": "Great work so far! Now let''s think about why photosynthesis matters. Without this amazing process, we wouldn''t have oxygen to breathe, and plants couldn''t grow the food we eat. It truly is one of nature''s greatest gifts!",
+                "estimatedDuration": 12,
+                "audioUrl": null
+              }
+            ]
           }
         ],
         "prerequisites": []
