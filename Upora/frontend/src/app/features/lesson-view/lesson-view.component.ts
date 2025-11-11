@@ -605,6 +605,17 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       justify-content: center;
       min-height: 100%;
       padding: 2rem;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    
+    .end-of-lesson * {
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    
+    .end-of-lesson button {
+      cursor: pointer !important;
     }
 
     .end-content {
@@ -1558,7 +1569,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       this.fabTop = 0;
     }
     
-    console.log('[LessonView] Fullscreen:', this.isFullscreen);
+    console.log('[LessonView] 🖥️ Fullscreen toggled to:', this.isFullscreen);
+    console.log('[LessonView] Call origin:', new Error().stack?.split('\n')[2]);
   }
 
   /**

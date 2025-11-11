@@ -600,11 +600,14 @@ export class TrueFalseSelectionComponent {
     const netCorrect = Math.max(0, correctSelections - incorrectSelections);
     this.score = trueCount > 0 ? Math.round((netCorrect / trueCount) * 100) : 0;
 
-    console.log('[TrueFalseSelection] Score:', this.score, '% -', correctSelections, 'correct,', incorrectSelections, 'incorrect out of', trueCount, 'true statements');
+    console.log('[TrueFalseSelection] ✅ Score calculated:', this.score, '%');
+    console.log('[TrueFalseSelection] Breakdown:', correctSelections, 'correct,', incorrectSelections, 'incorrect,', trueCount, 'total true');
+    console.log('[TrueFalseSelection] Net correct:', netCorrect, 'Formula:', `(${netCorrect}/${trueCount}) * 100 = ${this.score}%`);
 
     // Save result and get class average
     await this.saveResultAndFetchAverage();
 
+    console.log('[TrueFalseSelection] 🎯 Final score before showing modal:', this.score, '%');
     this.showScore = true;
   }
 
