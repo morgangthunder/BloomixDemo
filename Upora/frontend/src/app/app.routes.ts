@@ -73,5 +73,9 @@ export const routes: Routes = [
   {
     path: 'test/true-false-selection',
     loadComponent: () => import('./features/interactions/true-false-selection-test.component').then(m => m.TrueFalseSelectionTestComponent)
+  },
+  {
+    path: '**',
+    loadComponent: () => import('./shared/components/not-found/not-found.component').then(m => m.NotFoundComponent)
   }
 ];
