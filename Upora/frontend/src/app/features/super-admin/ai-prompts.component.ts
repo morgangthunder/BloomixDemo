@@ -608,6 +608,29 @@ export class AiPromptsComponent implements OnInit {
           placeholder: 'Enter the prompt for rejection feedback...'
         }
       }
+    },
+    {
+      id: 'personaliser',
+      name: 'Personaliser',
+      icon: '🎯',
+      description: 'Adapts lesson content to match individual student preferences and interests (e.g., changing "football" examples to "tennis" for tennis enthusiasts)',
+      prompts: {
+        exampleAdaptation: {
+          label: 'Example Adaptation Prompt',
+          content: 'You are personalizing a lesson for a student based on their interests and preferences. Given the original lesson content and the student\'s profile (interests, hobbies, preferred subjects), make subtle adjustments to examples, analogies, and scenarios to better resonate with them.\n\nGuidelines:\n- Keep the core educational content unchanged\n- Only modify examples, analogies, and non-essential context\n- Maintain the same difficulty level\n- Preserve learning objectives\n- Make changes feel natural, not forced\n\nExample: If the lesson uses "kicking a football" and the student likes tennis, change it to "serving a tennis ball"\n\nReturn modified lesson JSON with only the necessary changes.',
+          placeholder: 'Enter the prompt for adapting examples to student interests...'
+        },
+        preferenceDetection: {
+          label: 'Preference Detection Prompt',
+          content: 'Analyze student interaction history, content engagement patterns, and explicit preferences to identify opportunities for personalization.\n\nIdentify:\n- Favorite topics and subjects\n- Preferred types of examples (sports, music, technology, nature, etc.)\n- Learning style preferences (visual, hands-on, theoretical)\n- Cultural context and background\n\nReturn JSON with personalization recommendations for this student.',
+          placeholder: 'Enter the prompt for detecting student preferences...'
+        },
+        culturalAdaptation: {
+          label: 'Cultural Adaptation Prompt',
+          content: 'Adapt lesson content to be more culturally relevant and relatable for students from different backgrounds.\n\nConsider:\n- Local sports, games, and activities\n- Regional foods and customs\n- Measurement systems (metric vs imperial)\n- Currency and pricing examples\n- Historical and cultural references\n\nReturn culturally adapted lesson JSON that maintains educational integrity while improving relatability.',
+          placeholder: 'Enter the prompt for cultural adaptation...'
+        }
+      }
     }
   ];
 
