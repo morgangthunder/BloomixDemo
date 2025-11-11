@@ -207,29 +207,56 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
           </ng-template>
         </div>
 
-        <!-- Bottom Control Bar (YouTube-style) -->
+        <!-- Bottom Control Bar -->
         <div class="lesson-control-bar">
+          <!-- Left: View Stages (Mobile) -->
           <button 
-            class="control-bar-btn"
-            (click)="toggleScriptPlay()"
-            [title]="isScriptPlaying ? 'Pause' : 'Play'">
-            <span *ngIf="!isScriptPlaying">▶️</span>
-            <span *ngIf="isScriptPlaying">⏸️</span>
+            class="control-bar-btn left-btn md:hidden"
+            (click)="openMobileNav()"
+            title="View Stages">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+            </svg>
           </button>
-          <button 
-            class="control-bar-btn"
-            (click)="skipScript()"
-            title="Skip">
-            ⏭️
-          </button>
-          <div class="script-progress-info">
-            <span class="script-title">{{ currentTeacherScript?.text?.substring(0, 50) || 'Ready to teach' }}{{ currentTeacherScript?.text && currentTeacherScript.text.length > 50 ? '...' : '' }}</span>
+
+          <!-- Center: Playback Controls -->
+          <div class="center-controls">
+            <button 
+              class="control-bar-btn"
+              (click)="toggleScriptPlay()"
+              [disabled]="!currentTeacherScript"
+              [title]="isScriptPlaying ? 'Pause' : 'Play'">
+              <span *ngIf="!isScriptPlaying">▶️</span>
+              <span *ngIf="isScriptPlaying">⏸️</span>
+            </button>
+            <button 
+              class="control-bar-btn"
+              (click)="skipScript()"
+              [disabled]="!currentTeacherScript"
+              title="Skip">
+              ⏭️
+            </button>
+            <div class="script-progress-info">
+              <span class="script-title">{{ currentTeacherScript?.text?.substring(0, 40) || 'Ready to teach' }}{{ (currentTeacherScript?.text?.length || 0) > 40 ? '...' : '' }}</span>
+            </div>
           </div>
+
+          <!-- Right: Teacher Chat Toggle -->
+          <button 
+            class="control-bar-btn right-btn teacher-toggle"
+            (click)="toggleTeacherWidget()"
+            [class.active]="!teacherWidgetHidden"
+            title="AI Teacher Chat">
+            <span class="icon">🎓</span>
+            <span class="label hidden md:inline">Teacher</span>
+            <span *ngIf="chatMessages.length > 0" class="badge">{{ chatMessages.length }}</span>
+          </button>
         </div>
       </main>
 
       <!-- Floating Teacher Widget -->
       <app-floating-teacher-widget
+        *ngIf="!teacherWidgetHidden"
         [currentScript]="currentTeacherScript"
         [autoPlay]="true"
         [chatMessages]="chatMessages"
@@ -314,28 +341,36 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       }
     }
 
-    /* Lesson Control Bar (YouTube-style) */
+    /* Lesson Control Bar */
     .lesson-control-bar {
       position: sticky;
       bottom: 0;
       left: 0;
       right: 0;
-      background: rgba(15, 15, 35, 0.95);
-      backdrop-filter: blur(10px);
-      border-top: 1px solid rgba(0, 212, 255, 0.2);
-      padding: 0.75rem 1.5rem;
+      background: #000000;
+      border-top: 2px solid #ff3b3f;
+      padding: 0.75rem 1rem;
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 1rem;
       z-index: 100;
-      box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.5);
+    }
+
+    .center-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex: 1;
+      justify-content: center;
     }
 
     .control-bar-btn {
-      width: 44px;
+      min-width: 44px;
       height: 44px;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: #1a1a1a;
+      border: 1px solid #333333;
       border-radius: 8px;
       color: #ffffff;
       font-size: 1.25rem;
@@ -344,41 +379,92 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       display: flex;
       align-items: center;
       justify-content: center;
+      gap: 0.5rem;
+      padding: 0 0.75rem;
       flex-shrink: 0;
     }
 
-    .control-bar-btn:hover {
-      background: rgba(0, 212, 255, 0.2);
-      border-color: #00d4ff;
+    .control-bar-btn:hover:not(:disabled) {
+      background: #ff3b3f;
+      border-color: #ff3b3f;
       transform: scale(1.05);
+    }
+
+    .control-bar-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .control-bar-btn.active {
+      background: #ff3b3f;
+      border-color: #ff3b3f;
+    }
+
+    .left-btn, .right-btn {
+      min-width: auto;
+    }
+
+    .teacher-toggle {
+      position: relative;
+    }
+
+    .teacher-toggle .icon {
+      font-size: 1.5rem;
+    }
+
+    .teacher-toggle .label {
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .teacher-toggle .badge {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      background: #ff3b3f;
+      color: #ffffff;
+      font-size: 0.625rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 10px;
+      min-width: 18px;
+      text-align: center;
     }
 
     .script-progress-info {
       flex: 1;
       overflow: hidden;
+      max-width: 400px;
     }
 
     .script-title {
       font-size: 0.875rem;
-      color: rgba(255, 255, 255, 0.8);
+      color: rgba(255, 255, 255, 0.7);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
       display: block;
+      text-align: center;
     }
 
     @media (max-width: 768px) {
       .lesson-control-bar {
-        padding: 0.5rem 1rem;
+        padding: 0.5rem 0.75rem;
       }
 
       .control-bar-btn {
-        width: 40px;
+        min-width: 40px;
         height: 40px;
+        font-size: 1rem;
+        padding: 0 0.5rem;
       }
 
       .script-title {
         font-size: 0.75rem;
+      }
+
+      .script-progress-info {
+        max-width: 150px;
       }
     }
   `]
@@ -411,6 +497,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   currentTeacherScript: ScriptBlock | null = null;
   private teacherScriptTimeout: any = null;
   isScriptPlaying = false;
+  teacherWidgetHidden = true; // Start hidden, show on first script or manual open
   
   // Interaction data
   interactionData: any = null;
@@ -808,6 +895,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     console.log('[LessonView] Teacher widget closed');
     this.isScriptPlaying = false;
     this.currentTeacherScript = null;
+    this.teacherWidgetHidden = true;
   }
 
   /**
@@ -843,6 +931,13 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Toggle teacher widget visibility
+   */
+  toggleTeacherWidget() {
+    this.teacherWidgetHidden = !this.teacherWidgetHidden;
+  }
+
+  /**
    * Play a teacher script block
    */
   private playTeacherScript(script?: ScriptBlock | any) {
@@ -853,5 +948,6 @@ export class LessonViewComponent implements OnInit, OnDestroy {
 
     console.log('[LessonView] Playing teacher script:', script.text.substring(0, 50) + '...');
     this.currentTeacherScript = script;
+    this.teacherWidgetHidden = false; // Auto-show when script plays
   }
 }

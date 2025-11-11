@@ -26,7 +26,7 @@ export interface ChatMessage {
     <div class="teacher-widget" [class.minimized]="isMinimized" [class.hidden]="isHidden">
       <!-- Minimized State -->
       <div *ngIf="isMinimized" class="teacher-icon-minimized" (click)="restore()">
-        <div class="avatar">👨‍🏫</div>
+        <div class="avatar">🎓</div>
         <div *ngIf="isPlaying" class="speaking-indicator">...</div>
       </div>
 
@@ -35,7 +35,7 @@ export interface ChatMessage {
         <!-- Header -->
         <div class="teacher-header">
           <div class="teacher-avatar" [class.speaking]="isPlaying">
-            <span class="avatar-emoji">👨‍🏫</span>
+            <span class="avatar-emoji">🎓</span>
           </div>
           <div class="teacher-title">AI Teacher</div>
           <div class="header-controls">
@@ -128,20 +128,22 @@ export interface ChatMessage {
     .teacher-icon-minimized {
       width: 80px;
       height: 80px;
-      background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+      background: #000000;
+      border: 2px solid #ff3b3f;
       border-radius: 50%;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      box-shadow: 0 4px 12px rgba(0, 212, 255, 0.4);
+      box-shadow: 0 4px 12px rgba(255, 59, 63, 0.4);
       transition: all 0.3s ease;
     }
 
     .teacher-icon-minimized:hover {
       transform: scale(1.1);
-      box-shadow: 0 6px 20px rgba(0, 212, 255, 0.6);
+      box-shadow: 0 6px 20px rgba(255, 59, 63, 0.6);
+      background: #1a1a1a;
     }
 
     .teacher-icon-minimized .avatar {
@@ -152,8 +154,8 @@ export interface ChatMessage {
     .speaking-indicator {
       position: absolute;
       bottom: -5px;
-      background: rgba(255, 255, 255, 0.9);
-      color: #0099cc;
+      background: #ff3b3f;
+      color: #ffffff;
       padding: 2px 8px;
       border-radius: 10px;
       font-size: 0.75rem;
@@ -170,10 +172,10 @@ export interface ChatMessage {
     .teacher-card {
       width: 400px;
       max-width: calc(100vw - 4rem);
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-      border: 2px solid rgba(0, 212, 255, 0.3);
+      background: #000000;
+      border: 2px solid #ff3b3f;
       border-radius: 16px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
       overflow: hidden;
       animation: slideUp 0.3s ease;
     }
@@ -195,14 +197,14 @@ export interface ChatMessage {
       align-items: center;
       gap: 0.75rem;
       padding: 1rem;
-      background: rgba(0, 212, 255, 0.1);
-      border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+      background: #1a1a1a;
+      border-bottom: 1px solid #333333;
     }
 
     .teacher-avatar {
       width: 48px;
       height: 48px;
-      background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+      background: #ff3b3f;
       border-radius: 50%;
       display: flex;
       align-items: center;
@@ -216,8 +218,8 @@ export interface ChatMessage {
     }
 
     @keyframes avatarPulse {
-      0%, 100% { transform: scale(1); box-shadow: 0 0 0 rgba(0, 212, 255, 0.4); }
-      50% { transform: scale(1.05); box-shadow: 0 0 20px rgba(0, 212, 255, 0.8); }
+      0%, 100% { transform: scale(1); box-shadow: 0 0 0 rgba(255, 59, 63, 0.4); }
+      50% { transform: scale(1.05); box-shadow: 0 0 20px rgba(255, 59, 63, 0.8); }
     }
 
     .avatar-emoji {
@@ -260,8 +262,8 @@ export interface ChatMessage {
     /* Current Script Banner */
     .current-script {
       padding: 1rem;
-      background: rgba(0, 212, 255, 0.1);
-      border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+      background: #1a1a1a;
+      border-bottom: 1px solid #333333;
     }
 
     .script-label {
@@ -284,7 +286,7 @@ export interface ChatMessage {
       min-height: 200px;
       max-height: 350px;
       overflow-y: auto;
-      background: rgba(0, 0, 0, 0.2);
+      background: #0a0a0a;
     }
 
     .no-messages {
@@ -327,14 +329,14 @@ export interface ChatMessage {
     }
 
     .user-message .message-text {
-      background: linear-gradient(135deg, #ff3b3f 0%, #e02f33 100%);
+      background: #ff3b3f;
       color: #ffffff;
     }
 
     .ai-message .message-text {
-      background: rgba(255, 255, 255, 0.1);
+      background: #1a1a1a;
       color: #ffffff;
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      border: 1px solid #333333;
     }
 
     /* Typing Indicator */
@@ -370,15 +372,15 @@ export interface ChatMessage {
       display: flex;
       gap: 0.5rem;
       padding: 1rem;
-      border-top: 1px solid rgba(0, 212, 255, 0.2);
-      background: rgba(0, 0, 0, 0.3);
+      border-top: 1px solid #333333;
+      background: #0a0a0a;
     }
 
     .raise-hand-btn {
       width: 44px;
       height: 44px;
-      background: rgba(255, 184, 0, 0.2);
-      border: 1px solid rgba(255, 184, 0, 0.4);
+      background: #1a1a1a;
+      border: 1px solid #333333;
       border-radius: 8px;
       font-size: 1.5rem;
       cursor: pointer;
@@ -387,14 +389,15 @@ export interface ChatMessage {
     }
 
     .raise-hand-btn:hover {
-      background: rgba(255, 184, 0, 0.3);
+      background: #ff3b3f;
+      border-color: #ff3b3f;
       transform: scale(1.05);
     }
 
     .chat-input {
       flex: 1;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: #1a1a1a;
+      border: 1px solid #333333;
       border-radius: 8px;
       padding: 0.75rem 1rem;
       color: #ffffff;
@@ -402,13 +405,13 @@ export interface ChatMessage {
     }
 
     .chat-input::placeholder {
-      color: rgba(255, 255, 255, 0.4);
+      color: #666666;
     }
 
     .chat-input:focus {
       outline: none;
-      border-color: #00d4ff;
-      background: rgba(255, 255, 255, 0.15);
+      border-color: #ff3b3f;
+      background: #1a1a1a;
     }
 
     .chat-input:disabled {
@@ -419,7 +422,7 @@ export interface ChatMessage {
     .send-btn {
       width: 44px;
       height: 44px;
-      background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+      background: #ff3b3f;
       border: none;
       border-radius: 8px;
       color: #ffffff;
@@ -433,7 +436,7 @@ export interface ChatMessage {
 
     .send-btn:hover:not(:disabled) {
       transform: scale(1.05);
-      box-shadow: 0 4px 12px rgba(0, 212, 255, 0.4);
+      box-shadow: 0 4px 12px rgba(255, 59, 63, 0.4);
     }
 
     .send-btn:disabled {
