@@ -64,7 +64,7 @@ export class ContentAnalyzerService {
 
     // 3. Get Fragment Builder interaction type
     const fragmentBuilder = await this.interactionTypeRepository.findOne({
-      where: { id: 'fragment-builder', isActive: true },
+      where: { id: 'true-false-selection', isActive: true },
     });
 
     if (!fragmentBuilder) {
@@ -114,7 +114,7 @@ export class ContentAnalyzerService {
     if (result.confidence >= fragmentBuilder.minConfidence) {
       await this.saveProcessedOutput({
         contentSourceId,
-        interactionTypeId: 'fragment-builder',
+        interactionTypeId: 'true-false-selection',
         output: result.output,
         confidence: result.confidence,
         tokensUsed: result.tokensUsed,
@@ -200,7 +200,7 @@ export class ContentAnalyzerService {
       // This is logged separately in analyzeContentSource method
 
       return {
-        interactionTypeId: 'fragment-builder',
+        interactionTypeId: 'true-false-selection',
         confidence: parsed.confidence || 0,
         output: parsed.output || parsed,
         tokensUsed,

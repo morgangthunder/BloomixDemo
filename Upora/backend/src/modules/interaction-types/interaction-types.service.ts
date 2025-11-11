@@ -15,17 +15,17 @@ export class InteractionTypesService implements OnModuleInit {
     // This avoids race condition with TypeORM synchronize
   }
 
-  async seedFragmentBuilder() {
+  async seedTrueFalseSelection() {
     const exists = await this.interactionTypeRepository.findOne({
-      where: { id: 'fragment-builder' },
+      where: { id: 'true-false-selection' },
     });
 
     if (!exists) {
-      const fragmentBuilder = this.interactionTypeRepository.create({
-        id: 'fragment-builder',
-        name: 'True/False Fragment Builder',
-        category: 'absorb-show',
-        description: 'Fragments of statements arrive on screen. Student must build a true/correct sentence by tapping fragments. Can click fragments for explanations.',
+      const trueFalseSelection = this.interactionTypeRepository.create({
+        id: 'true-false-selection',
+        name: 'True/False Selection',
+        category: 'tease-trigger',
+        description: 'Students must identify and select all the TRUE statements from a collection of fragments. Used to activate prior knowledge and surface misconceptions early in a lesson.',
         schema: {
           type: 'object',
           required: ['fragments', 'targetStatement'],
@@ -48,48 +48,49 @@ export class InteractionTypesService implements OnModuleInit {
         },
         generationPrompt: `FROM CONTENT: {contentText}
 
-TASK: Generate a True/False Fragment Builder interaction.
+TASK: Generate a True/False Selection interaction for the TEASE-Trigger phase.
 
-1. IDENTIFY: Core concept or statement from the content
-2. BREAK INTO FRAGMENTS: Split concept into 6-10 word/phrase fragments
-   - Some fragments are TRUE in context (should be selected)
-   - Some fragments are FALSE in context (should NOT be selected)
-   - Mix correct and incorrect fragments
-3. CREATE TARGET: Write the correct complete statement students should build
-4. WRITE EXPLANATIONS: For each fragment, explain why it's true/false in context
+PURPOSE: Activate prior knowledge, surface misconceptions, and hook students before diving into content.
+
+1. IDENTIFY: 6-10 statements related to the content topic
+   - Some statements are TRUE (based on content)
+   - Some statements are FALSE (common misconceptions or incorrect variants)
+   - Mix obvious and subtle differences
+2. CREATE TARGET: Write a brief context/question that frames what to look for
+3. WRITE EXPLANATIONS: For each statement, explain why it's true/false
 
 EXAMPLE:
 Content: "Photosynthesis converts light energy to chemical energy in plants"
-Fragments:
-  - "Plants" (TRUE - subject of photosynthesis) ✓
-  - "convert light energy" (TRUE - core process) ✓
-  - "eat soil" (FALSE - plants make food, don't eat soil) ✗
-  - "to chemical energy" (TRUE - output of process) ✓
-  - "at night" (FALSE - requires light) ✗
-  - "using chlorophyll" (TRUE - key molecule) ✓
+Statements:
+  - "Plants perform photosynthesis" (TRUE - core fact) ✓
+  - "Chlorophyll captures sunlight" (TRUE - key molecule) ✓
+  - "Plants eat soil" (FALSE - common misconception) ✗
+  - "Photosynthesis occurs without light" (FALSE - light is required) ✗
+  - "The process produces glucose and oxygen" (TRUE - outputs) ✓
+  - "All living things photosynthesize" (FALSE - only plants and some bacteria) ✗
 
-Target: "Plants convert light energy to chemical energy using chlorophyll"
+Target: "Which of these statements about photosynthesis are TRUE?"
 
 CONFIDENCE SCORING:
-- 0.9-1.0: Content has clear concept with good true/false options
-- 0.7-0.9: Content allows fragments but needs creative false options
-- <0.7: Content too complex or unclear for fragment approach
+- 0.9-1.0: Content has clear true/false statements with good misconceptions
+- 0.7-0.9: Content allows statements but false options need creativity
+- <0.7: Content too complex or unclear for true/false approach
 
 OUTPUT FORMAT: Return ONLY valid JSON matching this structure:
 {
-  "confidence": 0.85,
+  "confidence": 0.90,
   "output": {
     "fragments": [
-      {"text": "Plants", "isTrueInContext": true, "explanation": "Plants are the organisms that perform photosynthesis"},
-      {"text": "eat soil", "isTrueInContext": false, "explanation": "Plants make their own food through photosynthesis, they don't eat soil"}
+      {"text": "Plants perform photosynthesis", "isTrueInContext": true, "explanation": "Plants are primary organisms that carry out photosynthesis"},
+      {"text": "Plants eat soil", "isTrueInContext": false, "explanation": "Plants make their own food through photosynthesis, they don't consume soil"}
     ],
-    "targetStatement": "Plants convert light energy to chemical energy using chlorophyll",
+    "targetStatement": "Which of these statements about photosynthesis are TRUE?",
     "maxFragments": 8
   }
 }`,
-        pixiRenderer: 'FragmentBuilderComponent',
+        pixiRenderer: 'TrueFalseSelectionComponent',
         minConfidence: 0.8,
-        teachStageFit: ['absorb-show', 'tease-ignite'],
+        teachStageFit: ['tease-trigger'],
         cognitiveLoad: 'medium',
         estimatedDuration: 240, // 4 minutes
         assetRequirements: {
@@ -107,10 +108,10 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this structure:
         isActive: true,
       });
 
-      await this.interactionTypeRepository.save(fragmentBuilder);
-      console.log('[InteractionTypes] ✅ Fragment Builder seeded successfully');
+      await this.interactionTypeRepository.save(trueFalseSelection);
+      console.log('[InteractionTypes] ✅ True/False Selection seeded successfully');
     } else {
-      console.log('[InteractionTypes] ℹ️ Fragment Builder already exists');
+      console.log('[InteractionTypes] ℹ️ True/False Selection already exists');
     }
   }
 

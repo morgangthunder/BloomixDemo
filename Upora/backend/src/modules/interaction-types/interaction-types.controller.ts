@@ -17,8 +17,8 @@ export class InteractionTypesController {
 
   @Post('seed')
   async seed() {
-    await this.interactionTypesService.seedFragmentBuilder();
-    return { message: 'Fragment Builder seeded successfully' };
+    await this.interactionTypesService.seedTrueFalseSelection();
+    return { message: 'True/False Selection seeded successfully' };
   }
 }
 

@@ -71,7 +71,7 @@ export const routes: Routes = [
     loadComponent: () => import('./features/super-admin/ai-prompts.component').then(m => m.AiPromptsComponent)
   },
   {
-    path: 'test/fragment-builder',
-    loadComponent: () => import('./features/interactions/fragment-builder-test.component').then(m => m.FragmentBuilderTestComponent)
+    path: 'test/true-false-selection',
+    loadComponent: () => import('./features/interactions/fragment-builder-test.component').then(m => m.TrueFalseSelectionTestComponent)
   }
 ];

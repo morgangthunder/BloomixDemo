@@ -1,22 +1,22 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IonContent } from '@ionic/angular/standalone';
-import { FragmentBuilderComponent } from './fragment-builder/fragment-builder.component';
+import { TrueFalseSelectionComponent } from './true-false-selection/true-false-selection.component';
 
 @Component({
-  selector: 'app-fragment-builder-test',
+  selector: 'app-true-false-selection-test',
   standalone: true,
-  imports: [CommonModule, IonContent, FragmentBuilderComponent],
+  imports: [CommonModule, IonContent, TrueFalseSelectionComponent],
   template: `
     <ion-content [style.--padding-top]="'80px'">
       <div class="test-page">
-        <h1>Fragment Builder Test</h1>
-        <p>Testing the AI-generated Fragment Builder interaction</p>
+        <h1>True/False Selection Test</h1>
+        <p>Testing the AI-generated True/False Selection interaction (TEASE-Trigger)</p>
 
-        <app-fragment-builder
+        <app-true-false-selection
           [data]="testData"
           (completed)="onCompleted($event)"
-        ></app-fragment-builder>
+        ></app-true-false-selection>
 
         <div *ngIf="result" class="result">
           <h3>Result:</h3>
@@ -58,7 +58,7 @@ import { FragmentBuilderComponent } from './fragment-builder/fragment-builder.co
     }
   `]
 })
-export class FragmentBuilderTestComponent {
+export class TrueFalseSelectionTestComponent {
   // Real data from our successful Grok API test!
   testData = {
     targetStatement: "Plants use chlorophyll to convert light energy into chemical energy, producing glucose and oxygen from 6CO2 and 6H2O.",
@@ -79,7 +79,7 @@ export class FragmentBuilderTestComponent {
 
   onCompleted(event: { score: number; selectedFragments: string[] }) {
     this.result = event;
-    console.log('[Test] Fragment Builder completed:', event);
+    console.log('[Test] True/False Selection completed:', event);
   }
 }
 

@@ -7,25 +7,25 @@ interface Fragment {
   explanation: string;
 }
 
-interface FragmentBuilderData {
+interface TrueFalseSelectionData {
   fragments: Fragment[];
   targetStatement: string;
   maxFragments: number;
 }
 
 @Component({
-  selector: 'app-fragment-builder',
+  selector: 'app-true-false-selection',
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="fragment-builder-container">
+    <div class="true-false-container">
       <!-- Target Statement -->
       <div class="target-statement">
-        <div class="label">Build the correct statement by selecting the TRUE fragments:</div>
+        <div class="label">Select all the TRUE statements:</div>
         <div class="statement">{{ data?.targetStatement || 'Loading...' }}</div>
       </div>
 
-      <!-- Fragments Grid (HTML/CSS instead of Pixi) -->
+      <!-- Fragments Grid -->
       <div class="fragments-grid">
         <div 
           *ngFor="let fragment of data?.fragments; let i = index"
@@ -49,7 +49,7 @@ interface FragmentBuilderData {
 
       <!-- Instructions -->
       <div class="instructions" *ngIf="!showScore">
-        <p>💡 Tap fragments to select them • Hover for explanations</p>
+        <p>💡 Tap statements to select them • Hover for explanations</p>
       </div>
 
       <!-- Score Display -->
@@ -60,7 +60,7 @@ interface FragmentBuilderData {
           {{ getCorrectCount() }} out of {{ getTrueCount() }} correct
         </div>
         <div *ngIf="score === 100" class="perfect-message">🎉 Perfect Score!</div>
-        <div *ngIf="score < 100" class="try-again">Review the highlighted fragments</div>
+        <div *ngIf="score < 100" class="try-again">Review the highlighted statements</div>
       </div>
 
       <!-- Action Buttons -->
@@ -85,7 +85,7 @@ interface FragmentBuilderData {
     </div>
   `,
   styles: [`
-    .fragment-builder-container {
+    .true-false-container {
       width: 100%;
       max-width: 1200px;
       margin: 0 auto;
@@ -321,7 +321,7 @@ interface FragmentBuilderData {
     }
 
     @media (max-width: 768px) {
-      .fragment-builder-container {
+      .true-false-container {
         padding: 1rem;
         gap: 1.5rem;
       }
@@ -350,8 +350,8 @@ interface FragmentBuilderData {
     }
   `]
 })
-export class FragmentBuilderComponent {
-  @Input() data: FragmentBuilderData | null = null;
+export class TrueFalseSelectionComponent {
+  @Input() data: TrueFalseSelectionData | null = null;
   @Output() completed = new EventEmitter<{ score: number; selectedFragments: string[] }>();
 
   selectedFragments: Set<number> = new Set();
@@ -363,7 +363,7 @@ export class FragmentBuilderComponent {
   }
 
   toggleFragment(index: number) {
-    if (this.showScore) return; // Locked after checking
+    if (this.showScore) return;
 
     if (this.selectedFragments.has(index)) {
       this.selectedFragments.delete(index);
@@ -371,7 +371,7 @@ export class FragmentBuilderComponent {
       this.selectedFragments.add(index);
     }
 
-    console.log('[FragmentBuilder] Fragment', index, this.isSelected(index) ? 'selected' : 'deselected');
+    console.log('[TrueFalseSelection] Fragment', index, this.isSelected(index) ? 'selected' : 'deselected');
   }
 
   getTrueCount(): number {
@@ -394,7 +394,7 @@ export class FragmentBuilderComponent {
     this.score = trueCount > 0 ? Math.round((correctCount / trueCount) * 100) : 0;
     this.showScore = true;
 
-    console.log('[FragmentBuilder] Score:', this.score, '% -', correctCount, '/', trueCount, 'correct');
+    console.log('[TrueFalseSelection] Score:', this.score, '% -', correctCount, '/', trueCount, 'correct');
   }
 
   complete() {
@@ -406,4 +406,3 @@ export class FragmentBuilderComponent {
     });
   }
 }
-
