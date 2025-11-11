@@ -1184,14 +1184,18 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   }
 
   toggleNavCollapse() {
-    if (this.navWidth > 0) {
+    const wasOpen = this.navWidth > 0;
+    
+    if (wasOpen) {
       this.navWidthBeforeCollapse = this.navWidth;
       this.navWidth = 0;
-      this.isSidebarOpen = false; // ✅ Update sidebar state
+      this.isSidebarOpen = false;
     } else {
       this.navWidth = this.navWidthBeforeCollapse;
-      this.isSidebarOpen = true; // ✅ Update sidebar state
+      this.isSidebarOpen = true;
     }
+    
+    console.log('[LessonView] 📂 toggleNavCollapse - wasOpen:', wasOpen, '→ isSidebarOpen:', this.isSidebarOpen, 'navWidth:', this.navWidth);
     this.updateTogglePosition();
   }
   
