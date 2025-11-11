@@ -115,7 +115,7 @@ interface LlmProvider {
                 class="provider-dropdown"
               >
                 <option *ngFor="let p of providers" [value]="p.id">
-                  {{ p.name }}
+                  {{ p.name }}{{ p.isDefault ? ' ⭐ (Default)' : '' }}
                 </option>
               </select>
               <div class="provider-actions">
