@@ -729,6 +729,14 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     console.log('[LessonView] ngOnInit called');
     console.log('[LessonView] enableWebSockets:', environment.enableWebSockets);
     
+    // Start timer immediately when lesson loads (always running in background)
+    console.log('[LessonView] 🚀 Starting timer on lesson load');
+    this.startTimer();
+    
+    // Auto-play lesson
+    this.isScriptPlaying = true;
+    console.log('[LessonView] 🎬 Auto-playing lesson');
+    
     // Get lesson ID from route params
     this.route.params.subscribe(params => {
       const lessonId = params['id'];
@@ -1282,17 +1290,10 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    * Lesson Timer Methods
    */
   toggleTimer() {
-    console.log('[LessonView] ⏱️ TIMER TOGGLE - showTimer:', this.showTimer, '→', !this.showTimer);
+    console.log('[LessonView] ⏱️ TIMER DISPLAY TOGGLE - showTimer:', this.showTimer, '→', !this.showTimer);
     this.showTimer = !this.showTimer;
-    
-    console.log('[LessonView] Timer interval exists:', !!this.timerInterval);
-    
-    // Always start the timer interval when toggling on for the first time
-    if (this.showTimer && !this.timerInterval) {
-      console.log('[LessonView] Starting timer interval for first time');
-      this.startTimer();
-    }
-    // Keep timer running in background even when hidden (so it can still count)
+    // Timer button ONLY controls visibility, not timing
+    // Timer always runs in background from lesson load
   }
 
   private startTimer() {
