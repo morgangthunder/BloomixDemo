@@ -37,9 +37,6 @@
           "id": "substage-1-1",
           "title": "What is Photosynthesis?",
           "order": 0,
-          "content": "Photosynthesis is the process by which plants use sunlight to convert carbon dioxide and water into glucose (food) and oxygen.",
-          "interactionTypeId": "20000000-0000-0000-0000-000000000001",
-          "contentOutputId": "40000000-0000-0000-0000-000000000099",
           "scriptBlocks": [
             {
               "id": "script-1-1-intro",
@@ -68,13 +65,54 @@
                 "pauseOnInteraction": true,
                 "displayIfMissed": "asap"
               }
-            },
+            }
+          ],
+          "interaction": {
+            "type": "true-false-selection",
+            "config": {
+              "targetStatement": "About Photosynthesis",
+              "maxFragments": 6,
+              "fragments": [
+                {
+                  "text": "Plants use sunlight to make food",
+                  "isTrueInContext": true,
+                  "explanation": "Correct! Plants convert sunlight into glucose through photosynthesis."
+                },
+                {
+                  "text": "Photosynthesis produces carbon dioxide",
+                  "isTrueInContext": false,
+                  "explanation": "Incorrect. Photosynthesis USES carbon dioxide and produces oxygen."
+                },
+                {
+                  "text": "Chlorophyll gives plants their green color",
+                  "isTrueInContext": true,
+                  "explanation": "Correct! Chlorophyll is the green pigment that absorbs light for photosynthesis."
+                },
+                {
+                  "text": "Plants only photosynthesize at night",
+                  "isTrueInContext": false,
+                  "explanation": "Incorrect. Photosynthesis requires sunlight, so it occurs during the day."
+                },
+                {
+                  "text": "Water is needed for photosynthesis",
+                  "isTrueInContext": true,
+                  "explanation": "Correct! Water (H₂O) is a key reactant in the photosynthesis equation."
+                },
+                {
+                  "text": "Photosynthesis occurs in animal cells",
+                  "isTrueInContext": false,
+                  "explanation": "Incorrect. Photosynthesis only occurs in plant cells and some microorganisms, not animal cells."
+                }
+              ]
+            }
+          },
+          "scriptBlocksAfterInteraction": [
             {
               "id": "script-1-1-post-interaction",
-              "order": 2,
-              "idealTimestamp": null,
+              "order": 0,
+              "idealTimestamp": 0,
               "triggerCondition": "interactionComplete",
-              "text": "Excellent work! You're starting to understand the basics. Let's move on to explore why photosynthesis is so important for life on Earth.",
+              "text": "Excellent work! You scored {score}%. You're starting to understand the basics. Let's move on to explore why photosynthesis is so important for life on Earth.",
               "estimatedDuration": 8,
               "audioUrl": null,
               "playbackRules": {
@@ -90,9 +128,6 @@
           "id": "substage-1-2",
           "title": "Why is it Important?",
           "order": 1,
-          "content": "Photosynthesis provides oxygen for us to breathe and food for the plant. It is essential for life on Earth!",
-          "interactionTypeId": null,
-          "contentOutputId": null,
           "scriptBlocks": [
             {
               "id": "script-1-2-intro",
@@ -121,8 +156,23 @@
                 "pauseOnInteraction": false,
                 "displayIfMissed": "asap"
               }
+            },
+            {
+              "id": "script-1-2-conclusion",
+              "order": 2,
+              "idealTimestamp": 30,
+              "text": "Congratulations! You've completed this introduction to photosynthesis. You now understand what photosynthesis is, how it works, and why it's essential for life on Earth. Feel free to ask me any questions!",
+              "estimatedDuration": 10,
+              "audioUrl": null,
+              "playbackRules": {
+                "autoPlay": true,
+                "canSkip": true,
+                "pauseOnInteraction": false,
+                "displayIfMissed": "asap"
+              }
             }
-          ]
+          ],
+          "interaction": null
         }
       ]
     }

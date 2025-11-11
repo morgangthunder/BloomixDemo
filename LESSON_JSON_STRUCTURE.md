@@ -115,13 +115,33 @@ Substage Start (t=0s)
 
 ---
 
-## Interaction Types
+## Interaction Structure (Self-Contained)
 
-Each substage can have:
-- **`interactionTypeId`**: ID of the interaction type (e.g., "true-false-selection")
-- **`contentOutputId`**: ID of processed content that feeds the interaction
+Each substage can have an **embedded interaction** with all data:
 
-Interactions pause script playback based on `pauseOnInteraction` rule.
+```json
+{
+  "interaction": {
+    "type": "true-false-selection",
+    "config": {
+      "targetStatement": "About Photosynthesis",
+      "fragments": [
+        {
+          "text": "Plants use sunlight to make food",
+          "isTrueInContext": true,
+          "explanation": "Correct! ..."
+        }
+      ]
+    }
+  }
+}
+```
+
+**Key Points:**
+- **Self-contained**: All interaction data in the lesson JSON
+- **No external references**: No `interactionTypeId` or `contentOutputId`
+- **Complete**: Everything needed to run the interaction
+- Interactions pause script playback based on `pauseOnInteraction` rule
 
 ---
 
@@ -131,6 +151,7 @@ Interactions pause script playback based on `pauseOnInteraction` rule.
 {
   "id": "substage-1-1",
   "title": "What is Photosynthesis?",
+  "order": 0,
   "scriptBlocks": [
     {
       "id": "script-intro",
@@ -150,24 +171,58 @@ Interactions pause script playback based on `pauseOnInteraction` rule.
       "text": "Now let's test your knowledge with a quiz!",
       "playbackRules": {
         "autoPlay": true,
-        "pauseOnInteraction": true,  // Pause script while quiz is active
+        "pauseOnInteraction": true,
         "displayIfMissed": "asap"
       }
-    },
+    }
+  ],
+  "interaction": {
+    "type": "true-false-selection",
+    "config": {
+      "targetStatement": "About Photosynthesis",
+      "maxFragments": 3,
+      "fragments": [
+        {
+          "text": "Plants use sunlight to make food",
+          "isTrueInContext": true,
+          "explanation": "Correct! Plants convert sunlight into glucose."
+        },
+        {
+          "text": "Photosynthesis produces carbon dioxide",
+          "isTrueInContext": false,
+          "explanation": "Incorrect. It produces oxygen."
+        },
+        {
+          "text": "Water is needed for photosynthesis",
+          "isTrueInContext": true,
+          "explanation": "Correct! Water is a key reactant."
+        }
+      ]
+    }
+  },
+  "scriptBlocksAfterInteraction": [
     {
       "id": "script-post-quiz",
-      "order": 2,
-      "idealTimestamp": null,
-      "triggerCondition": "interactionComplete",  // Play after quiz
+      "order": 0,
+      "idealTimestamp": 0,
+      "triggerCondition": "interactionComplete",
       "text": "Great job! You scored {score}%.",
       "playbackRules": {
         "autoPlay": true,
-        "displayIfMissed": "never"  // Don't play if stage ends before quiz
+        "displayIfMissed": "never"
       }
     }
   ]
 }
 ```
+
+### Flow
+
+1. **Script intro** (t=0s) → Student watches
+2. **Script pre-quiz** (t=20s) → Introduces interaction
+3. **Interaction loads** → Student completes quiz
+4. **Script post-quiz** → Plays after interaction complete
+5. **Next substage** → Continues to next topic
 
 ---
 
