@@ -643,7 +643,9 @@ export class TrueFalseSelectionComponent {
         console.log('  - Class Average:', this.classAverage, '%');
         console.log('  - Total Attempts:', this.totalAttempts);
         console.log('  - Your Percentile:', this.percentile);
-        console.log('  - Performance:', this.score > this.classAverage ? '🌟 Above Average!' : this.score === this.classAverage ? '📊 On Average' : '💪 Below Average');
+        if (this.classAverage !== null) {
+          console.log('  - Performance:', this.score > this.classAverage ? '🌟 Above Average!' : this.score === this.classAverage ? '📊 On Average' : '💪 Below Average');
+        }
       }
     } catch (error) {
       console.error('[TrueFalseSelection] Failed to save result:', error);
