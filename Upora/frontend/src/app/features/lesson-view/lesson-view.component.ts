@@ -143,6 +143,7 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
           <!-- Fullscreen Toggle -->
           <button 
             class="fullscreen-toggle"
+            [style.left]="toggleLeftPosition"
             (click)="toggleFullscreen()"
             [title]="isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'">
             <svg *ngIf="!isFullscreen" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -856,6 +857,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   // Fullscreen
   isFullscreen = false;
   
+  // Fullscreen toggle dynamic positioning (only for desktop with sidebar open)
+  toggleLeftPosition = '1.5rem';
+  
   // Lesson Timer
   showTimer = false;
   elapsedSeconds = 0;
@@ -935,6 +939,10 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // Setup mouse listeners for resize
     window.addEventListener('mousemove', this.handleMouseMove.bind(this));
     window.addEventListener('mouseup', this.handleMouseUp.bind(this));
+    
+    // Initialize toggle position
+    this.updateTogglePosition();
+    window.addEventListener('resize', () => this.updateTogglePosition());
   }
 
   /**
@@ -1181,6 +1189,21 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       this.navWidth = 0;
     } else {
       this.navWidth = this.navWidthBeforeCollapse;
+    }
+    this.updateTogglePosition();
+  }
+  
+  /**
+   * Update toggle position ONLY for desktop with sidebar open
+   */
+  private updateTogglePosition() {
+    const isDesktop = window.innerWidth >= 768;
+    
+    // ONLY adjust if desktop AND sidebar open AND NOT fullscreen
+    if (isDesktop && this.navWidth > 0 && !this.isFullscreen) {
+      this.toggleLeftPosition = `calc(${this.navWidth}px + 1.5rem)`;
+    } else {
+      this.toggleLeftPosition = '1.5rem';
     }
   }
 
@@ -1587,6 +1610,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       this.fabLeft = 0;
       this.fabTop = 0;
     }
+    
+    // Update toggle position for new mode
+    this.updateTogglePosition();
     
     console.log('[LessonView] 🖥️ Fullscreen toggled to:', this.isFullscreen);
   }
