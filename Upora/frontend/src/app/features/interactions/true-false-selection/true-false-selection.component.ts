@@ -638,7 +638,12 @@ export class TrueFalseSelectionComponent {
         this.classAverage = response.classAverage;
         this.totalAttempts = response.totalAttempts;
         this.percentile = response.percentile;
-        console.log('[TrueFalseSelection] Class average:', this.classAverage, '% (', this.totalAttempts, 'attempts)');
+        console.log('[TrueFalseSelection] 📊 Class Stats Retrieved:');
+        console.log('  - Your Score:', this.score, '%');
+        console.log('  - Class Average:', this.classAverage, '%');
+        console.log('  - Total Attempts:', this.totalAttempts);
+        console.log('  - Your Percentile:', this.percentile);
+        console.log('  - Performance:', this.score > this.classAverage ? '🌟 Above Average!' : this.score === this.classAverage ? '📊 On Average' : '💪 Below Average');
       }
     } catch (error) {
       console.error('[TrueFalseSelection] Failed to save result:', error);
