@@ -1,5 +1,6 @@
 import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 
 export interface ScriptBlock {
   text: string;
@@ -11,10 +12,16 @@ export interface ScriptBlock {
   };
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp?: Date;
+}
+
 @Component({
   selector: 'app-floating-teacher-widget',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   template: `
     <div class="teacher-widget" [class.minimized]="isMinimized" [class.hidden]="isHidden">
       <!-- Minimized State -->
@@ -45,32 +52,59 @@ export interface ScriptBlock {
           </div>
         </div>
 
-        <!-- Speech Bubble -->
-        <div class="speech-bubble" [class.empty]="!currentScript">
-          <div *ngIf="currentScript" class="script-text">
-            {{ currentScript.text }}
+        <!-- Current Script (if playing) -->
+        <div *ngIf="currentScript" class="current-script">
+          <div class="script-label">📜 Script:</div>
+          <div class="script-text">{{ currentScript.text }}</div>
+        </div>
+
+        <!-- Chat History -->
+        <div class="chat-history" #chatHistory>
+          <div *ngIf="chatMessages.length === 0" class="no-messages">
+            <span class="muted-text">Ask me anything about this lesson!</span>
           </div>
-          <div *ngIf="!currentScript" class="no-script">
-            <span class="muted-text">Ready to teach...</span>
+          <div *ngFor="let msg of chatMessages" 
+               [class.user-message]="msg.role === 'user'"
+               [class.ai-message]="msg.role === 'assistant'"
+               class="message">
+            <div class="message-content">
+              <div class="message-icon">{{ msg.role === 'user' ? '👤' : '👨‍🏫' }}</div>
+              <div class="message-text">{{ msg.content }}</div>
+            </div>
+          </div>
+          <div *ngIf="isAITyping" class="ai-message message">
+            <div class="message-content">
+              <div class="message-icon">👨‍🏫</div>
+              <div class="message-text typing-indicator">
+                <span></span><span></span><span></span>
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- Controls -->
-        <div class="teacher-controls">
+        <!-- Chat Input -->
+        <div class="chat-input-container">
           <button 
-            class="control-button"
-            (click)="togglePlay()"
-            [disabled]="!currentScript"
-            [title]="isPlaying ? 'Pause' : 'Play'">
-            <span *ngIf="!isPlaying">▶️ Play</span>
-            <span *ngIf="isPlaying">⏸️ Pause</span>
+            class="raise-hand-btn"
+            (click)="raiseHand()"
+            title="Raise Hand">
+            ✋
           </button>
+          <input 
+            type="text"
+            [(ngModel)]="chatInput"
+            (keydown.enter)="sendMessage()"
+            placeholder="Ask the AI teacher..."
+            class="chat-input"
+            [disabled]="!isConnected">
           <button 
-            class="control-button secondary"
-            (click)="skip()"
-            [disabled]="!currentScript"
-            title="Skip current script">
-            ⏭️ Skip
+            class="send-btn"
+            (click)="sendMessage()"
+            [disabled]="!chatInput.trim() || !isConnected"
+            title="Send">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+            </svg>
           </button>
         </div>
       </div>
@@ -223,76 +257,188 @@ export interface ScriptBlock {
       border-color: rgba(255, 255, 255, 0.4);
     }
 
-    /* Speech Bubble */
-    .speech-bubble {
-      padding: 1.5rem;
-      min-height: 100px;
-      max-height: 300px;
-      overflow-y: auto;
+    /* Current Script Banner */
+    .current-script {
+      padding: 1rem;
+      background: rgba(0, 212, 255, 0.1);
+      border-bottom: 1px solid rgba(0, 212, 255, 0.2);
     }
 
-    .speech-bubble.empty {
-      display: flex;
-      align-items: center;
-      justify-content: center;
+    .script-label {
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.6);
+      margin-bottom: 0.5rem;
+      font-weight: 600;
     }
 
     .script-text {
-      font-size: 1rem;
-      line-height: 1.6;
+      font-size: 0.875rem;
+      line-height: 1.5;
       color: #ffffff;
       white-space: pre-wrap;
     }
 
-    .no-script {
+    /* Chat History */
+    .chat-history {
+      padding: 1rem;
+      min-height: 200px;
+      max-height: 350px;
+      overflow-y: auto;
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    .no-messages {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 200px;
       text-align: center;
     }
 
     .muted-text {
       color: rgba(255, 255, 255, 0.4);
       font-style: italic;
+      font-size: 0.875rem;
     }
 
-    /* Controls */
-    .teacher-controls {
+    .message {
+      margin-bottom: 1rem;
+    }
+
+    .message-content {
       display: flex;
       gap: 0.75rem;
-      padding: 1rem;
-      border-top: 1px solid rgba(0, 212, 255, 0.2);
-      background: rgba(0, 0, 0, 0.2);
+      align-items: flex-start;
     }
 
-    .control-button {
+    .message-icon {
+      font-size: 1.5rem;
+      flex-shrink: 0;
+      line-height: 1;
+    }
+
+    .message-text {
       flex: 1;
       padding: 0.75rem 1rem;
-      background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
-      border: none;
-      border-radius: 8px;
-      color: #ffffff;
+      border-radius: 12px;
       font-size: 0.875rem;
-      font-weight: 600;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
+    .user-message .message-text {
+      background: linear-gradient(135deg, #ff3b3f 0%, #e02f33 100%);
+      color: #ffffff;
+    }
+
+    .ai-message .message-text {
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* Typing Indicator */
+    .typing-indicator {
+      display: flex;
+      gap: 0.25rem;
+      padding: 0.5rem 1rem !important;
+    }
+
+    .typing-indicator span {
+      width: 8px;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.6);
+      border-radius: 50%;
+      animation: typingDot 1.4s infinite;
+    }
+
+    .typing-indicator span:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    .typing-indicator span:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+
+    @keyframes typingDot {
+      0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); }
+      30% { opacity: 1; transform: scale(1); }
+    }
+
+    /* Chat Input */
+    .chat-input-container {
+      display: flex;
+      gap: 0.5rem;
+      padding: 1rem;
+      border-top: 1px solid rgba(0, 212, 255, 0.2);
+      background: rgba(0, 0, 0, 0.3);
+    }
+
+    .raise-hand-btn {
+      width: 44px;
+      height: 44px;
+      background: rgba(255, 184, 0, 0.2);
+      border: 1px solid rgba(255, 184, 0, 0.4);
+      border-radius: 8px;
+      font-size: 1.5rem;
       cursor: pointer;
       transition: all 0.2s ease;
+      flex-shrink: 0;
     }
 
-    .control-button:hover:not(:disabled) {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(0, 212, 255, 0.4);
+    .raise-hand-btn:hover {
+      background: rgba(255, 184, 0, 0.3);
+      transform: scale(1.05);
     }
 
-    .control-button:disabled {
+    .chat-input {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      color: #ffffff;
+      font-size: 0.875rem;
+    }
+
+    .chat-input::placeholder {
+      color: rgba(255, 255, 255, 0.4);
+    }
+
+    .chat-input:focus {
+      outline: none;
+      border-color: #00d4ff;
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .chat-input:disabled {
       opacity: 0.5;
       cursor: not-allowed;
     }
 
-    .control-button.secondary {
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.2);
+    .send-btn {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+      border: none;
+      border-radius: 8px;
+      color: #ffffff;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
-    .control-button.secondary:hover:not(:disabled) {
-      background: rgba(255, 255, 255, 0.2);
-      box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2);
+    .send-btn:hover:not(:disabled) {
+      transform: scale(1.05);
+      box-shadow: 0 4px 12px rgba(0, 212, 255, 0.4);
+    }
+
+    .send-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     /* Mobile Responsive */
@@ -339,15 +485,21 @@ export interface ScriptBlock {
 export class FloatingTeacherWidgetComponent implements OnChanges {
   @Input() currentScript: ScriptBlock | null = null;
   @Input() autoPlay: boolean = true;
+  @Input() chatMessages: ChatMessage[] = [];
+  @Input() isAITyping: boolean = false;
+  @Input() isConnected: boolean = false;
   
   @Output() play = new EventEmitter<void>();
   @Output() pause = new EventEmitter<void>();
   @Output() skipRequested = new EventEmitter<void>();
   @Output() closed = new EventEmitter<void>();
+  @Output() sendChat = new EventEmitter<string>();
+  @Output() raiseHandClicked = new EventEmitter<void>();
 
   isPlaying = false;
   isMinimized = false;
   isHidden = false;
+  chatInput = '';
 
   ngOnChanges(changes: SimpleChanges) {
     if (changes['currentScript']) {
@@ -403,6 +555,17 @@ export class FloatingTeacherWidgetComponent implements OnChanges {
     this.isHidden = true;
     this.isPlaying = false;
     this.closed.emit();
+  }
+
+  sendMessage() {
+    if (!this.chatInput.trim() || !this.isConnected) return;
+    
+    this.sendChat.emit(this.chatInput.trim());
+    this.chatInput = '';
+  }
+
+  raiseHand() {
+    this.raiseHandClicked.emit();
   }
 }
 

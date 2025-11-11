@@ -207,84 +207,23 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
           </ng-template>
         </div>
 
-        <!-- Chat History (if messages exist) -->
-        <div *ngIf="chatMessages.length > 0 && isChatExpanded" class="border-t border-gray-700 bg-brand-black/50 max-h-64 overflow-y-auto">
-          <div class="p-4 space-y-3">
-            <div *ngFor="let msg of chatMessages" 
-                 [class]="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'">
-              <div [class]="msg.role === 'user' 
-                ? 'bg-brand-red text-white rounded-lg py-2 px-4 max-w-[80%]'
-                : 'bg-gray-700 text-white rounded-lg py-2 px-4 max-w-[80%]'">
-                <div class="flex items-start space-x-2">
-                  <svg *ngIf="msg.role === 'assistant'" class="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
-                  </svg>
-                  <div class="flex-1">
-                    <p class="text-sm whitespace-pre-wrap">{{ msg.content }}</p>
-                    <p class="text-xs opacity-60 mt-1">
-                      {{ msg.timestamp | date:'short' }}
-                      <span *ngIf="msg.tokensUsed"> • {{ msg.tokensUsed }} tokens</span>
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <!-- AI Typing Indicator -->
-            <div *ngIf="isAITyping" class="flex justify-start">
-              <div class="bg-gray-700 text-white rounded-lg py-2 px-4">
-                <div class="flex space-x-1">
-                  <div class="w-2 h-2 bg-white rounded-full animate-bounce" style="animation-delay: 0ms"></div>
-                  <div class="w-2 h-2 bg-white rounded-full animate-bounce" style="animation-delay: 150ms"></div>
-                  <div class="w-2 h-2 bg-white rounded-full animate-bounce" style="animation-delay: 300ms"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Bottom Controls -->
-        <div class="flex-shrink-0 p-4 md:p-6 bg-brand-black border-t border-gray-700">
-          <!-- Chat Toggle Button -->
-          <div class="flex items-center justify-between mb-3">
-            <button 
-              (click)="toggleChatExpanded()"
-              class="flex items-center space-x-2 text-sm text-gray-400 hover:text-white transition-colors">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-              </svg>
-              <span>{{ isChatExpanded ? 'Hide Chat' : 'Show Chat' }}</span>
-              <svg class="w-4 h-4 transition-transform" [class.rotate-180]="isChatExpanded" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-              </svg>
-            </button>
-            <span *ngIf="chatMessages.length > 0" class="text-xs text-gray-500">{{ chatMessages.length }} message{{ chatMessages.length === 1 ? '' : 's' }}</span>
-          </div>
-          
-          <div class="flex items-center space-x-4">
-            <button class="flex items-center justify-center bg-gray-700 text-white font-bold py-2 px-4 rounded hover:bg-gray-600 transition">
-              <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11"></path>
-              </svg>
-              Raise Hand
-            </button>
-            <div class="flex-1 relative">
-              <input 
-                [(ngModel)]="chatMessage"
-                (keyup.enter)="sendMessage()"
-                type="text"
-                placeholder="Ask the AI teacher a question..."
-                [disabled]="!isConnected"
-                class="w-full bg-brand-dark border border-gray-600 rounded-lg py-2 pl-4 pr-12 text-white placeholder-brand-gray focus:outline-none focus:ring-2 focus:ring-brand-red disabled:opacity-50 disabled:cursor-not-allowed"
-              />
-              <button (click)="sendMessage()" 
-                      [disabled]="!isConnected || !chatMessage.trim()"
-                      class="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-brand-gray hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
-                </svg>
-              </button>
-            </div>
+        <!-- Bottom Control Bar (YouTube-style) -->
+        <div class="lesson-control-bar">
+          <button 
+            class="control-bar-btn"
+            (click)="toggleScriptPlay()"
+            [title]="isScriptPlaying ? 'Pause' : 'Play'">
+            <span *ngIf="!isScriptPlaying">▶️</span>
+            <span *ngIf="isScriptPlaying">⏸️</span>
+          </button>
+          <button 
+            class="control-bar-btn"
+            (click)="skipScript()"
+            title="Skip">
+            ⏭️
+          </button>
+          <div class="script-progress-info">
+            <span class="script-title">{{ currentTeacherScript?.text?.substring(0, 50) || 'Ready to teach' }}{{ currentTeacherScript?.text && currentTeacherScript.text.length > 50 ? '...' : '' }}</span>
           </div>
         </div>
       </main>
@@ -293,10 +232,15 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       <app-floating-teacher-widget
         [currentScript]="currentTeacherScript"
         [autoPlay]="true"
+        [chatMessages]="chatMessages"
+        [isAITyping]="isAITyping"
+        [isConnected]="isConnected"
         (play)="onTeacherPlay()"
         (pause)="onTeacherPause()"
         (skipRequested)="onTeacherSkip()"
-        (closed)="onTeacherClosed()">
+        (closed)="onTeacherClosed()"
+        (sendChat)="sendChatMessage($event)"
+        (raiseHandClicked)="raiseHand()">
       </app-floating-teacher-widget>
     </div>
   `,
@@ -369,6 +313,74 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
         transform: none;
       }
     }
+
+    /* Lesson Control Bar (YouTube-style) */
+    .lesson-control-bar {
+      position: sticky;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(15, 15, 35, 0.95);
+      backdrop-filter: blur(10px);
+      border-top: 1px solid rgba(0, 212, 255, 0.2);
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      z-index: 100;
+      box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .control-bar-btn {
+      width: 44px;
+      height: 44px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      color: #ffffff;
+      font-size: 1.25rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .control-bar-btn:hover {
+      background: rgba(0, 212, 255, 0.2);
+      border-color: #00d4ff;
+      transform: scale(1.05);
+    }
+
+    .script-progress-info {
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .script-title {
+      font-size: 0.875rem;
+      color: rgba(255, 255, 255, 0.8);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: block;
+    }
+
+    @media (max-width: 768px) {
+      .lesson-control-bar {
+        padding: 0.5rem 1rem;
+      }
+
+      .control-bar-btn {
+        width: 40px;
+        height: 40px;
+      }
+
+      .script-title {
+        font-size: 0.75rem;
+      }
+    }
   `]
 })
 export class LessonViewComponent implements OnInit, OnDestroy {
@@ -398,6 +410,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   // Teacher Script
   currentTeacherScript: ScriptBlock | null = null;
   private teacherScriptTimeout: any = null;
+  isScriptPlaying = false;
   
   // Interaction data
   interactionData: any = null;
@@ -761,17 +774,20 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    */
   onTeacherPlay() {
     console.log('[LessonView] Teacher playing script');
+    this.isScriptPlaying = true;
     // TODO: Integrate TTS here when ready
     // For now, auto-clear after estimated duration
     if (this.currentTeacherScript?.estimatedDuration) {
       this.teacherScriptTimeout = setTimeout(() => {
         this.currentTeacherScript = null;
+        this.isScriptPlaying = false;
       }, this.currentTeacherScript.estimatedDuration * 1000);
     }
   }
 
   onTeacherPause() {
     console.log('[LessonView] Teacher paused');
+    this.isScriptPlaying = false;
     if (this.teacherScriptTimeout) {
       clearTimeout(this.teacherScriptTimeout);
       this.teacherScriptTimeout = null;
@@ -780,6 +796,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
 
   onTeacherSkip() {
     console.log('[LessonView] Teacher script skipped');
+    this.isScriptPlaying = false;
     if (this.teacherScriptTimeout) {
       clearTimeout(this.teacherScriptTimeout);
       this.teacherScriptTimeout = null;
@@ -789,7 +806,40 @@ export class LessonViewComponent implements OnInit, OnDestroy {
 
   onTeacherClosed() {
     console.log('[LessonView] Teacher widget closed');
+    this.isScriptPlaying = false;
     this.currentTeacherScript = null;
+  }
+
+  /**
+   * Bottom Control Bar Methods
+   */
+  toggleScriptPlay() {
+    if (this.isScriptPlaying) {
+      this.onTeacherPause();
+    } else {
+      this.onTeacherPlay();
+    }
+  }
+
+  skipScript() {
+    this.onTeacherSkip();
+  }
+
+  /**
+   * Chat Methods (delegated to widget)
+   */
+  sendChatMessage(message: string) {
+    console.log('[LessonView] Sending chat message:', message);
+    if (!this.isConnected) {
+      console.warn('[LessonView] Cannot send - not connected to WebSocket');
+      return;
+    }
+    this.wsService.sendMessage(message);
+  }
+
+  raiseHand() {
+    console.log('[LessonView] Raise hand clicked');
+    this.wsService.sendMessage('🖐️ Student raised hand');
   }
 
   /**
