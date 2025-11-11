@@ -1187,8 +1187,10 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     if (this.navWidth > 0) {
       this.navWidthBeforeCollapse = this.navWidth;
       this.navWidth = 0;
+      this.isSidebarOpen = false; // ✅ Update sidebar state
     } else {
       this.navWidth = this.navWidthBeforeCollapse;
+      this.isSidebarOpen = true; // ✅ Update sidebar state
     }
     this.updateTogglePosition();
   }
@@ -1199,10 +1201,10 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   private updateTogglePosition() {
     const isDesktop = window.innerWidth >= 768;
     
-    console.log('[LessonView] 🎯 updateTogglePosition - isDesktop:', isDesktop, 'navWidth:', this.navWidth, 'isFullscreen:', this.isFullscreen);
+    console.log('[LessonView] 🎯 updateTogglePosition - isDesktop:', isDesktop, 'isSidebarOpen:', this.isSidebarOpen, 'navWidth:', this.navWidth, 'isFullscreen:', this.isFullscreen);
     
     // ONLY adjust if desktop AND sidebar open AND NOT fullscreen
-    if (isDesktop && this.navWidth > 0 && !this.isFullscreen) {
+    if (isDesktop && this.isSidebarOpen && !this.isFullscreen) {
       this.toggleLeftPosition = `calc(${this.navWidth}px + 1.5rem)`;
       console.log('[LessonView] ✅ Desktop with sidebar open - left:', this.toggleLeftPosition);
     } else {
