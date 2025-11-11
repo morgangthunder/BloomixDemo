@@ -259,10 +259,11 @@ export class FragmentBuilderComponent implements OnInit, OnDestroy {
     if (!this.app || !this.data) return;
 
     const fragments = this.data.fragments;
-    const padding = 20;
-    const fragmentsPerRow = window.innerWidth < 768 ? 2 : 3;
-    const fragmentWidth = (this.app.screen.width - (padding * (fragmentsPerRow + 1))) / fragmentsPerRow;
-    const fragmentHeight = 80;
+    const padding = 15;
+    const canvasWidth = this.app.screen.width;
+    const fragmentsPerRow = window.innerWidth < 768 ? 1 : 2; // 1 column mobile, 2 desktop
+    const fragmentWidth = (canvasWidth - (padding * (fragmentsPerRow + 1))) / fragmentsPerRow;
+    const fragmentHeight = 100; // Taller for better text display
 
     fragments.forEach((fragment, index) => {
       const row = Math.floor(index / fragmentsPerRow);
@@ -275,7 +276,12 @@ export class FragmentBuilderComponent implements OnInit, OnDestroy {
       this.app!.stage.addChild(fragmentContainer);
     });
 
-    console.log('[FragmentBuilder] Created', fragments.length, 'fragments');
+    // Update canvas height to fit all fragments
+    const totalRows = Math.ceil(fragments.length / fragmentsPerRow);
+    const neededHeight = padding + totalRows * (fragmentHeight + padding);
+    this.app.renderer.resize(canvasWidth, neededHeight);
+
+    console.log('[FragmentBuilder] Created', fragments.length, 'fragments in', totalRows, 'rows');
   }
 
   private createFragmentTile(
@@ -304,16 +310,23 @@ export class FragmentBuilderComponent implements OnInit, OnDestroy {
       text: fragment.text,
       style: {
         fontFamily: 'Arial, sans-serif',
-        fontSize: 16,
+        fontSize: 14,
         fill: 0xffffff,
         wordWrap: true,
-        wordWrapWidth: width - 20,
+        wordWrapWidth: width - 30,
         align: 'center',
+        breakWords: true,
       }
     });
     text.x = width / 2;
     text.y = height / 2;
     text.anchor.set(0.5);
+    
+    // Ensure text fits within bounds
+    if (text.height > height - 20) {
+      text.style.fontSize = 12;
+    }
+    
     container.addChild(text);
 
     // Tap/Click Handler
@@ -329,19 +342,20 @@ export class FragmentBuilderComponent implements OnInit, OnDestroy {
     if (this.showScore) return; // Locked after checking answers
 
     const isSelected = this.selectedFragments.has(index);
+    const bounds = bg.getBounds();
 
     if (isSelected) {
       // Deselect
       this.selectedFragments.delete(index);
       bg.clear();
-      bg.rect(0, 0, container.width, container.height);
+      bg.rect(0, 0, bounds.width, bounds.height);
       bg.fill({ color: 0x1a1a2e });
       bg.stroke({ color: 0x00d4ff, width: 2, alpha: 0.3 });
     } else {
       // Select
       this.selectedFragments.add(index);
       bg.clear();
-      bg.rect(0, 0, container.width, container.height);
+      bg.rect(0, 0, bounds.width, bounds.height);
       bg.fill({ color: 0x00d4ff, alpha: 0.2 });
       bg.stroke({ color: 0x00d4ff, width: 3 });
     }
@@ -368,11 +382,12 @@ export class FragmentBuilderComponent implements OnInit, OnDestroy {
       if (!sprite) return;
 
       const bg = sprite.children[0] as PIXI.Graphics;
+      const bounds = bg.getBounds();
       const isSelected = this.selectedFragments.has(index);
       const isTrue = fragment.isTrueInContext;
 
       bg.clear();
-      bg.rect(0, 0, sprite.width, sprite.height);
+      bg.rect(0, 0, bounds.width, bounds.height);
 
       if (isTrue && isSelected) {
         // Correct selection - green
