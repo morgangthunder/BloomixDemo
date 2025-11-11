@@ -472,9 +472,11 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    */
   private setLessonData(lesson: Lesson) {
     this.lesson = lesson;
-    this.lessonStages = lesson.stages || [];
+    // Try data.stages first (from API), fallback to stages (for compatibility)
+    this.lessonStages = lesson.data?.stages || lesson.stages || [];
     
     console.log('[LessonView] Lesson set - ID:', lesson.id, 'Stages:', this.lessonStages.length);
+    console.log('[LessonView] Raw lesson data:', JSON.stringify(lesson.data, null, 2).substring(0, 500));
     
     // Auto-select first stage and substage if available
     if (this.lessonStages.length > 0) {
