@@ -385,7 +385,7 @@ export class AddTextContentModalComponent implements OnChanges {
           keywords: this.extractKeywords(this.textContent),
           wordCount: this.textContent.split(/\s+/).length,
         },
-        status: 'pending' as const,
+        // NOTE: status, tenantId, and createdBy are set server-side via headers
       };
 
       console.log('[AddTextContentModal] 📤 Emitting content data:', JSON.stringify(contentData, null, 2));
