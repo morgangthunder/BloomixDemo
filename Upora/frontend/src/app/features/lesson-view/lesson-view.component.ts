@@ -592,6 +592,13 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       z-index: 100; /* Above content but below sidebar (sidebar is z-index 1000) */
     }
     
+    /* Hide when mobile nav is open */
+    @media (max-width: 767px) {
+      .lesson-view-wrapper:has(.sidebar.translate-x-0) .fullscreen-toggle {
+        display: none;
+      }
+    }
+    
     /* When fullscreen, use fixed positioning at bottom-left */
     .content-area.fullscreen .fullscreen-toggle {
       position: fixed;
