@@ -667,17 +667,17 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     this.isLoadingInteraction = true;
 
     // Fetch processed content output
-    this.http.get(`${environment.apiUrl}/lesson-editor/processed-content/${contentOutputId}`)
+    this.http.get(`${environment.apiUrl}/lesson-editor/processed-outputs/${contentOutputId}`)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (output: any) => {
           console.log('[LessonView] Loaded interaction data:', output);
           
           // Extract interaction data from the output
-          if (output.data && output.interactionTypeId) {
+          if (output.outputData && output.outputData.interactionTypeId) {
             this.interactionData = {
-              ...output.data,
-              interactionTypeId: output.interactionTypeId
+              ...output.outputData,
+              interactionTypeId: output.outputData.interactionTypeId
             };
             console.log('[LessonView] Interaction ready:', this.interactionData.interactionTypeId);
           } else {
