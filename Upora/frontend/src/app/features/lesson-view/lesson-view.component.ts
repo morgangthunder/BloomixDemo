@@ -1096,7 +1096,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    * Teacher Widget Handlers
    */
   onTeacherPlay() {
-    console.log('[LessonView] Teacher playing script');
+    console.log('[LessonView] ▶️ PLAY - Setting isScriptPlaying = true');
+    console.log('[LessonView] Timer interval active:', !!this.timerInterval);
+    console.log('[LessonView] Current elapsed:', this.elapsedSeconds);
     this.isScriptPlaying = true;
     // Timer will now increment (if visible)
     // TODO: Integrate TTS here when ready
@@ -1104,7 +1106,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   }
 
   onTeacherPause() {
-    console.log('[LessonView] Teacher paused');
+    console.log('[LessonView] ⏸ PAUSE - Setting isScriptPlaying = false');
     this.isScriptPlaying = false;
     // Timer will now pause (stops incrementing)
   }
@@ -1283,10 +1285,14 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    * Lesson Timer Methods
    */
   toggleTimer() {
+    console.log('[LessonView] ⏱️ TIMER TOGGLE - showTimer:', this.showTimer, '→', !this.showTimer);
     this.showTimer = !this.showTimer;
+    
+    console.log('[LessonView] Timer interval exists:', !!this.timerInterval);
     
     // Always start the timer interval when toggling on for the first time
     if (this.showTimer && !this.timerInterval) {
+      console.log('[LessonView] Starting timer interval for first time');
       this.startTimer();
     }
     // Keep timer running in background even when hidden (so it can still count)
