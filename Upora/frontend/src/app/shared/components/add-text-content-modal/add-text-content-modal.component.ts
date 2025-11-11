@@ -280,19 +280,21 @@ export class AddTextContentModalComponent implements OnChanges {
         .filter(t => t.length > 0);
 
       const contentData = {
-        type: 'text',
+        type: 'text' as const,
         title: this.title,
         summary: this.summary || `Text content: ${this.title}`,
         fullText: this.textContent,
-        sourceUrl: null,
+        sourceUrl: '',
+        filePath: '',
         metadata: {
           topics: topicsArray,
           keywords: this.extractKeywords(this.textContent),
           wordCount: this.textContent.split(/\s+/).length,
         },
-        status: 'pending', // Will need approval
+        status: 'pending' as const,
       };
 
+      console.log('[AddTextContentModal] 📤 Emitting content data:', JSON.stringify(contentData, null, 2));
       this.contentAdded.emit(contentData);
       this.reset();
       this.close.emit();

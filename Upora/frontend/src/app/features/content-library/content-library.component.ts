@@ -1305,14 +1305,20 @@ export class ContentLibraryComponent implements OnInit, OnDestroy {
   }
 
   async onContentAdded(contentData: any) {
-    console.log('[ContentLibrary] Adding content:', contentData);
+    console.log('[ContentLibrary] 📥 Adding content:', contentData);
     try {
-      await this.contentSourceService.createContentSource(contentData);
+      const created = await this.contentSourceService.createContentSource(contentData);
+      console.log('[ContentLibrary] ✅ Content source created:', created);
       await this.loadContent();
       await this.loadPendingCount();
-    } catch (error) {
-      console.error('Failed to create content:', error);
-      alert('Failed to add content source');
+    } catch (error: any) {
+      console.error('[ContentLibrary] ❌ Failed to create content:', error);
+      console.error('[ContentLibrary] Error details:', {
+        message: error?.message,
+        status: error?.status,
+        error: error?.error
+      });
+      alert(`Failed to add content source: ${error?.message || 'Unknown error'}. Check console for details.`);
     }
   }
 
