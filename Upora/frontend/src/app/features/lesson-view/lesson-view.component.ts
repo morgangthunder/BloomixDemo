@@ -1134,9 +1134,6 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   getEmbeddedInteraction(): any {
     // Check if activeSubStage has an embedded interaction (from JSON)
     const interaction = (this.activeSubStage as any)?.interaction || null;
-    if (interaction) {
-      console.log('[LessonView] 🎮 Embedded interaction found:', interaction.type);
-    }
     return interaction;
   }
 
