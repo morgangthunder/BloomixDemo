@@ -67,7 +67,7 @@ interface TrueFalseSelectionData {
               <div class="score-label">Your Score</div>
               <div class="score-value">{{ score }}%</div>
               <div class="score-breakdown">
-                {{ getCorrectCount() }} out of {{ getTrueCount() }} correct
+                {{ getCorrectAnswersCount() }} out of {{ data?.fragments?.length || 0 }} correct
               </div>
             </div>
 
@@ -592,6 +592,17 @@ export class TrueFalseSelectionComponent {
     return Array.from(this.selectedFragments)
       .filter(index => this.data!.fragments[index].isTrueInContext).length;
   }
+  
+  getCorrectAnswersCount(): number {
+    if (!this.data) return 0;
+    let correct = 0;
+    this.data.fragments.forEach((frag, idx) => {
+      const isSelected = this.selectedFragments.has(idx);
+      const isCorrect = (isSelected && frag.isTrueInContext) || (!isSelected && !frag.isTrueInContext);
+      if (isCorrect) correct++;
+    });
+    return correct;
+  }
 
   async checkAnswers() {
     if (!this.data) return;
@@ -601,31 +612,38 @@ export class TrueFalseSelectionComponent {
     console.log('[TrueFalseSelection] ═══════════════════════════════════════');
 
     const totalFragments = this.data.fragments.length;
+    let correctPoints = 0;
     
-    // Count incorrect selections (selected FALSE statements + missed TRUE statements)
-    const incorrectSelections = Array.from(this.selectedFragments)
-      .filter(index => !this.data!.fragments[index].isTrueInContext).length;
+    // 1 point for each correct answer:
+    // - Selected TRUE = +1 point
+    // - Unselected FALSE = +1 point
+    this.data.fragments.forEach((frag, idx) => {
+      const isSelected = this.selectedFragments.has(idx);
+      const isCorrect = (isSelected && frag.isTrueInContext) || (!isSelected && !frag.isTrueInContext);
+      if (isCorrect) {
+        correctPoints++;
+      }
+    });
 
     console.log('[TrueFalseSelection] 📊 Raw Data:');
     console.log('  - Total fragments:', totalFragments);
-    console.log('  - Incorrect selections (selected FALSE):', incorrectSelections);
+    console.log('  - Correct points:', correctPoints);
     console.log('  - Selected fragments:', Array.from(this.selectedFragments));
     
     // Debug each fragment
     console.log('[TrueFalseSelection] 📝 Fragment Analysis:');
     this.data.fragments.forEach((frag, idx) => {
       const isSelected = this.selectedFragments.has(idx);
-      console.log(`  [${idx}] ${isSelected ? '✓' : '○'} ${frag.isTrueInContext ? 'TRUE' : 'FALSE'}: "${frag.text}"`);
+      const isCorrect = (isSelected && frag.isTrueInContext) || (!isSelected && !frag.isTrueInContext);
+      console.log(`  [${idx}] ${isSelected ? '✓' : '○'} ${frag.isTrueInContext ? 'TRUE' : 'FALSE'} ${isCorrect ? '✅' : '❌'}: "${frag.text}"`);
     });
 
-    // Score = (Total - Incorrect) / Total * 100
-    // Minimum score is 0
-    const calculatedScore = totalFragments > 0 ? Math.max(0, Math.round(((totalFragments - incorrectSelections) / totalFragments) * 100)) : 0;
+    // Score = Correct Points / Total * 100
+    const calculatedScore = totalFragments > 0 ? Math.round((correctPoints / totalFragments) * 100) : 0;
     
     console.log('[TrueFalseSelection] 🧮 Calculation:');
-    console.log('  - Total fragments:', totalFragments);
-    console.log('  - Incorrect selections:', incorrectSelections);
-    console.log('  - Formula: ((', totalFragments, '-', incorrectSelections, ') /', totalFragments, ') * 100');
+    console.log('  - Correct points:', correctPoints, 'out of', totalFragments);
+    console.log('  - Formula: (', correctPoints, '/', totalFragments, ') * 100');
     console.log('  - Calculated Score:', calculatedScore, '%');
     
     this.score = calculatedScore;

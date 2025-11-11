@@ -577,7 +577,7 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
     .fullscreen-toggle {
       position: absolute;
       bottom: 1.5rem;
-      right: 1.5rem; /* Bottom-right of content area */
+      left: 1.5rem; /* Bottom-LEFT of content area */
       width: 44px;
       height: 44px;
       background: rgba(0, 0, 0, 0.7);
@@ -597,7 +597,6 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       position: fixed;
       bottom: calc(60px + 1.5rem);
       left: 1.5rem;
-      right: auto;
       z-index: 9998;
     }
 
