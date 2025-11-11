@@ -9,7 +9,7 @@ export class LlmGenerationLog {
   id: string;
 
   @Column('varchar', { name: 'content_source_id', nullable: true })
-  contentSourceId: string;
+  contentSourceId: string | null;
 
   @ManyToOne(() => ContentSource, { nullable: true })
   @JoinColumn({ name: 'content_source_id' })

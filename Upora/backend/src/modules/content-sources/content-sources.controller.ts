@@ -34,11 +34,8 @@ export class ContentSourcesController {
     @Headers('x-tenant-id') tenantId: string,
     @Headers('x-user-id') userId: string,
   ) {
-    return this.contentSourcesService.create({
-      ...createDto,
-      tenantId,
-      createdBy: userId,
-    });
+    // tenantId and userId come from headers and are added by the service
+    return this.contentSourcesService.create(createDto, tenantId, userId);
   }
 
   @Get()

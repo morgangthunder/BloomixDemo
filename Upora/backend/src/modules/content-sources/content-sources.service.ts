@@ -25,11 +25,20 @@ export class ContentSourcesService {
   /**
    * Create a new content source
    */
-  async create(createDto: CreateContentSourceDto): Promise<ContentSource> {
-    const contentSource = this.contentSourcesRepository.create(createDto);
+  async create(
+    createDto: CreateContentSourceDto, 
+    tenantId: string, 
+    userId: string
+  ): Promise<ContentSource> {
+    const contentSource = this.contentSourcesRepository.create({
+      ...createDto,
+      tenantId,
+      createdBy: userId,
+      status: 'pending', // Default status
+    });
     const saved = await this.contentSourcesRepository.save(contentSource);
     
-    this.logger.log(`Created content source: ${saved.id} (${saved.type})`);
+    this.logger.log(`Created content source: ${saved.id} (${saved.type}) by user ${userId}`);
     return saved;
   }
 
