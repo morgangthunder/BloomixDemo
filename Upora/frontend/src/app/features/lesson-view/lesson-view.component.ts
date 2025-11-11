@@ -143,7 +143,7 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
           <!-- Fullscreen Toggle -->
           <button 
             class="fullscreen-toggle"
-            [style.--toggle-left]="fullscreenToggleLeft"
+            [style.left]="fullscreenToggleLeft"
             (click)="toggleFullscreen()"
             [title]="isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'">
             <svg *ngIf="!isFullscreen" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -578,7 +578,7 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
     .fullscreen-toggle {
       position: fixed;
       bottom: calc(60px + 1.5rem); /* Above control bar */
-      left: var(--toggle-left, 1.5rem); /* Dynamic left position */
+      /* left is set dynamically via [style.left] binding */
       width: 44px;
       height: 44px;
       background: rgba(0, 0, 0, 0.7);
@@ -1189,12 +1189,14 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    * Update fullscreen toggle position based on sidebar width and fullscreen state
    */
   private updateFullscreenTogglePosition() {
+    const isDesktop = window.innerWidth >= 768;
+    console.log('[LessonView] 🔧 Updating toggle position - fullscreen:', this.isFullscreen, 'desktop:', isDesktop, 'navWidth:', this.navWidth);
+    
     if (this.isFullscreen) {
       // In fullscreen, always simple left
       this.fullscreenToggleLeft = '1.5rem';
     } else {
       // In normal mode, adjust for sidebar on desktop
-      const isDesktop = window.innerWidth >= 768;
       if (isDesktop && this.navWidth > 0) {
         // Sidebar is open on desktop - position after sidebar
         this.fullscreenToggleLeft = `calc(${this.navWidth}px + 1.5rem)`;
@@ -1203,6 +1205,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         this.fullscreenToggleLeft = '1.5rem';
       }
     }
+    
+    console.log('[LessonView] ✅ Toggle left set to:', this.fullscreenToggleLeft);
   }
 
   openMobileNav() {
