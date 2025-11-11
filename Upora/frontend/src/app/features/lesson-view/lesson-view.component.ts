@@ -827,6 +827,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   private teacherScriptTimeout: any = null;
   isScriptPlaying = false;
   teacherWidgetHidden = true; // Start hidden, show on first script or manual open
+  private autoAdvanceTimeout: any = null;
   
   // Fullscreen
   isFullscreen = false;
@@ -1021,6 +1022,11 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // Stop timer
     this.stopTimer();
     
+    // Clear auto-advance timeout
+    if (this.autoAdvanceTimeout) {
+      clearTimeout(this.autoAdvanceTimeout);
+    }
+    
     // Disconnect from WebSocket
     this.wsService.leaveLesson();
     this.wsService.disconnect();
@@ -1072,6 +1078,41 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     
     console.log('[LessonView] Active substage updated:', this.activeSubStage?.title);
     console.log('[LessonView] Embedded interaction:', this.getEmbeddedInteraction());
+    
+    // Clear any existing auto-advance timeout
+    if (this.autoAdvanceTimeout) {
+      clearTimeout(this.autoAdvanceTimeout);
+      this.autoAdvanceTimeout = null;
+    }
+    
+    // If no interaction, auto-advance after script duration
+    if (!this.getEmbeddedInteraction() && this.activeSubStage) {
+      const scriptDuration = this.calculateSubStageScriptDuration();
+      console.log('[LessonView] No interaction - auto-advancing after', scriptDuration, 'seconds');
+      
+      this.autoAdvanceTimeout = setTimeout(() => {
+        console.log('[LessonView] ⏭️ Auto-advancing to next substage (no interaction)');
+        this.moveToNextSubStage();
+      }, scriptDuration * 1000);
+    }
+  }
+  
+  /**
+   * Calculate total script duration for current substage
+   */
+  private calculateSubStageScriptDuration(): number {
+    if (!this.activeSubStage) return 5; // Default 5 seconds
+    
+    const scriptBlocks = (this.activeSubStage as any)?.scriptBlocks || [];
+    const afterScripts = (this.activeSubStage as any)?.scriptBlocksAfterInteraction || [];
+    
+    const totalDuration = [...scriptBlocks, ...afterScripts].reduce(
+      (sum, script) => sum + (script.estimatedDuration || 10),
+      0
+    );
+    
+    // Minimum 5 seconds, use calculated duration
+    return Math.max(5, totalDuration);
   }
 
   getEmbeddedInteraction(): any {
