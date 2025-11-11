@@ -365,7 +365,7 @@ export class AiPromptsComponent implements OnInit {
       prompts: {
         textAutoPopulate: {
           label: 'Text Content Auto-Populate Prompt',
-          content: 'You are helping a user create educational content from raw text. Analyze the text and generate a concise title, summary, and relevant topics.\n\nGiven the text content, generate:\n1. **Title**: A clear, descriptive title (max 100 characters)\n2. **Summary**: A 2-3 sentence summary of the main points\n3. **Topics**: 3-5 relevant topic tags (comma-separated)\n\nGuidelines:\n- Title should be informative and engaging\n- Summary should capture the essence without jargon\n- Topics should be general categories (e.g., "Science", "Biology", "Cells") not overly specific\n\nReturn ONLY valid JSON:\n{\n  "title": "string",\n  "summary": "string",\n  "topics": ["topic1", "topic2", "topic3"]\n}',
+          content: 'You are helping a user create educational content from raw text. Analyze the text and generate a concise title, summary, and relevant topics.\n\nGiven the text content, generate:\n1. **Title**: A clear, descriptive title (max 100 characters)\n2. **Summary**: A 2-3 sentence summary of the main points\n3. **Topics**: Maximum 4 relevant topic tags\n\nGuidelines:\n- Title should be informative and engaging\n- Summary should capture the essence without jargon\n- Topics should be general categories (e.g., "Science", "Biology", "Cells") not overly specific\n- Maximum 4 topics\n\nReturn ONLY valid JSON:\n{\n  "title": "string",\n  "summary": "string",\n  "topics": ["topic1", "topic2", "topic3", "topic4"]\n}',
           placeholder: 'Enter the prompt for auto-populating text content fields...'
         },
         pdfAutoPopulate: {

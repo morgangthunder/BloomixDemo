@@ -11,6 +11,7 @@ import { AddImageModalComponent } from '../../shared/components/add-image-modal/
 import { AddPdfModalComponent } from '../../shared/components/add-pdf-modal/add-pdf-modal.component';
 import { ApprovalQueueModalComponent } from '../../shared/components/approval-queue-modal/approval-queue-modal.component';
 import { ProcessedContentService, ProcessedContentItem } from '../../core/services/processed-content.service';
+import { ToastService } from '../../core/services/toast.service';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 
@@ -1148,6 +1149,7 @@ export class ContentLibraryComponent implements OnInit, OnDestroy {
   constructor(
     private contentSourceService: ContentSourceService,
     private processedContentService: ProcessedContentService,
+    private toastService: ToastService,
     private http: HttpClient,
     private router: Router
   ) {}
@@ -1309,6 +1311,13 @@ export class ContentLibraryComponent implements OnInit, OnDestroy {
     try {
       const created = await this.contentSourceService.createContentSource(contentData);
       console.log('[ContentLibrary] ✅ Content source created:', created);
+      
+      // Show success toast
+      this.toastService.success(
+        `✓ Content source "${created.title}" added successfully! Pending approval.`,
+        4000
+      );
+      
       await this.loadContent();
       await this.loadPendingCount();
     } catch (error: any) {
@@ -1318,7 +1327,11 @@ export class ContentLibraryComponent implements OnInit, OnDestroy {
         status: error?.status,
         error: error?.error
       });
-      alert(`Failed to add content source: ${error?.message || 'Unknown error'}. Check console for details.`);
+      
+      this.toastService.error(
+        `Failed to add content: ${error?.message || 'Unknown error'}`,
+        5000
+      );
     }
   }
 

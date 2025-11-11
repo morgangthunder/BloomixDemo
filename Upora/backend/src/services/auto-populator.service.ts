@@ -22,18 +22,19 @@ export class AutoPopulatorService {
 Given the text content, generate:
 1. **Title**: A clear, descriptive title (max 100 characters)
 2. **Summary**: A 2-3 sentence summary of the main points
-3. **Topics**: 3-5 relevant topic tags
+3. **Topics**: Maximum 4 relevant topic tags
 
 Guidelines:
 - Title should be informative and engaging
 - Summary should capture the essence without jargon
 - Topics should be general categories (e.g., "Science", "Biology", "Cells") not overly specific
+- Maximum 4 topics
 
 Return ONLY valid JSON:
 {
   "title": "string",
   "summary": "string",
-  "topics": ["topic1", "topic2", "topic3"]
+  "topics": ["topic1", "topic2", "topic3", "topic4"]
 }`;
 
   constructor(
@@ -51,6 +52,7 @@ Return ONLY valid JSON:
     textContent: string,
     userId: string,
     tenantId: string,
+    customPrompt?: string,
   ): Promise<AutoPopulateResult> {
     this.logger.log('[AutoPopulator] 🎨 Auto-populating fields for text content...');
 
@@ -64,10 +66,11 @@ Return ONLY valid JSON:
     }
 
     const startTime = Date.now();
+    const promptToUse = customPrompt || this.DEFAULT_TEXT_PROMPT;
 
     try {
       // Call LLM API
-      const result = await this.callLLM(provider, textContent);
+      const result = await this.callLLM(provider, textContent, promptToUse);
 
       const processingTime = Date.now() - startTime;
 
@@ -77,7 +80,7 @@ Return ONLY valid JSON:
         tenantId,
         provider.id,
         'auto-populate-text',
-        this.DEFAULT_TEXT_PROMPT,
+        promptToUse,
         result.tokensUsed,
         processingTime,
         result.response,
@@ -94,18 +97,26 @@ Return ONLY valid JSON:
   }
 
   /**
+   * Get the default text auto-populate prompt (for display in UI)
+   */
+  getDefaultTextPrompt(): string {
+    return this.DEFAULT_TEXT_PROMPT;
+  }
+
+  /**
    * Call LLM API for auto-population
    */
   private async callLLM(
     provider: LlmProvider,
     textContent: string,
+    promptTemplate: string,
   ): Promise<{ data: AutoPopulateResult; tokensUsed: number; response: any }> {
     // Truncate text if too long (keep first 10,000 chars for metadata generation)
     const truncatedText = textContent.length > 10000 
       ? textContent.substring(0, 10000) + '...' 
       : textContent;
 
-    const prompt = `${this.DEFAULT_TEXT_PROMPT}\n\nText Content:\n${truncatedText}`;
+    const prompt = `${promptTemplate}\n\nText Content:\n${truncatedText}`;
 
     const response = await firstValueFrom(
       this.httpService.post(

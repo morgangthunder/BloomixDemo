@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterOutlet } from '@angular/router';
 import { IonApp, IonRouterOutlet } from '@ionic/angular/standalone';
 import { HeaderComponent } from './shared/components/header/header.component';
+import { ToastComponent } from './shared/components/toast/toast.component';
 import { LessonService } from './core/services/lesson.service';
 import { Observable } from 'rxjs';
 import { Lesson } from './core/models/lesson.model';
@@ -10,10 +11,11 @@ import { Lesson } from './core/models/lesson.model';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, IonApp, IonRouterOutlet, HeaderComponent],
+  imports: [CommonModule, RouterOutlet, IonApp, IonRouterOutlet, HeaderComponent, ToastComponent],
   template: `
     <ion-app>
       <app-header></app-header>
+      <app-toast></app-toast>
       <div class="main-content">
         <ion-router-outlet></ion-router-outlet>
       </div>
