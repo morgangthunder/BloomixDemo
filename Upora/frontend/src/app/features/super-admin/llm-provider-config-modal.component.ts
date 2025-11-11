@@ -720,8 +720,7 @@ export class LlmProviderConfigModalComponent implements OnInit, OnChanges {
 
       if (this.isEditMode && this.formData.id) {
         // Update existing (never change isDefault here - use dropdown instead)
-        const updateData = { ...this.formData };
-        delete updateData.isDefault; // Don't update isDefault via this modal
+        const { isDefault, ...updateData } = this.formData;
         
         result = await this.http.put<LlmProvider>(
           `${environment.apiUrl}/super-admin/llm-providers/${this.formData.id}`,
