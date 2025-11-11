@@ -15,36 +15,67 @@ Currently, there's no mechanism to control when the AI speaks or to ensure it de
 - No visual indication of script progress
 - No synchronization between script and lesson flow
 
-## Proposed Solution: Script Playback Bar
+## Proposed Solution: Floating Teacher Widget
 
-### 🎮 **Control Bar UI** (Bottom of lesson player)
+### 👨‍🏫 **Floating Teacher UI** (Over lesson content)
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  ⏯ Play  ⏸ Pause  ⏭ Skip  📍 Progress: 00:45 / 02:30 │
-│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
-│  🎙️ AI Teacher: "Welcome to Photosynthesis..."       │
-└─────────────────────────────────────────────────────┘
+┌─────── Lesson Content ───────────────────────────────┐
+│                                                       │
+│  [Lesson content displays here]                      │
+│                                                       │
+│                     ┌───────────────────────────┐    │
+│                     │  👨‍🏫  AI Teacher      [−][✕]│    │
+│                     │                           │    │
+│                     │  "Welcome to              │    │
+│                     │  Photosynthesis! Today    │    │
+│                     │  we'll discover how       │    │
+│                     │  plants turn sunlight     │    │
+│                     │  into food..."            │    │
+│                     │                           │    │
+│                     │  ⏸ Pause  ⏭ Skip         │    │
+│                     └───────────────────────────┘    │
+│                                                       │
+└───────────────────────────────────────────────────────┘
+
+When minimized:
+┌─────── Lesson Content ───────────────────────────────┐
+│                                                       │
+│  [Lesson content displays here]                      │
+│                                                       │
+│                                         ┌─────┐      │
+│                                         │ 👨‍🏫 │      │
+│                                         │ ... │      │
+│                                         └─────┘      │
+│                                                       │
+└───────────────────────────────────────────────────────┘
 ```
 
 ### Components:
-1. **⏯ Play/Pause Button**
-   - Starts/stops AI teacher narration
-   - Synthesizes script text to speech (TTS)
+1. **👨‍🏫 Teacher Avatar**
+   - Animated/pulsing when speaking
+   - Static when paused
    
-2. **⏭ Skip Button**
+2. **💬 Speech Bubble**
+   - Shows current script text
+   - Auto-scrolls as text progresses
+   - Closes when script ends
+   
+3. **⏸ Pause Button**
+   - Pauses current script
+   - Becomes ▶ Play when paused
+   
+4. **⏭ Skip Button**
    - Skip current script block
-   - Jump to next sub-stage or interaction
+   - Move to interaction/content
    
-3. **📍 Progress Bar**
-   - Shows position in current script block
-   - Shows total script duration
-   - Click to seek (optional)
+5. **[−] Minimize Button**
+   - Collapses to small icon
+   - Still shows "..." when speaking
    
-4. **🎙️ Live Caption**
-   - Shows current script text being spoken
-   - Helps students follow along
-   - Accessibility feature
+6. **[✕] Close Button**
+   - Completely hides teacher
+   - Auto-restores on next script
 
 ## Script Data Structure
 
@@ -254,41 +285,153 @@ interface SubStageScript {
 }
 ```
 
-## Questions for Morgan:
+## ✅ Design Decisions (Confirmed):
 
 1. **Auto-play vs Manual?**
-   - Should script auto-play when entering a sub-stage?
-   - Or require student to click Play?
+   - ✅ **Auto-play** when entering sub-stage
+   - Student can **pause anytime**
    
 2. **Skip Behavior**
-   - Skip just current block, or skip to next sub-stage?
+   - ✅ **Skip current block only** (not entire sub-stage)
    
-3. **Voice Preference**
-   - Start with browser TTS?
-   - Budget for cloud TTS ($4 per 1M characters)?
+3. **TTS/STT Provider System**
+   - ✅ **Multi-provider approach** (like LLM providers)
+   - Add to existing `llm-usage` dashboard as "TTS/STT Usage"
+   - Switch providers to explore cost vs performance
+   - **For now:** Basic text display in speech bubble
    
-4. **Script Source**
-   - Lesson builder writes manually?
-   - Or AI generates from content (with human review)?
+4. **Script Creation**
+   - ✅ **Manual entry** in lesson-builder interface
+   - AI assistant can **auto-populate** on request
+   - **Scaffolder AI** generates full lesson JSONs with scripts
+   - All scripts **editable** in lesson-builder
    
-5. **Progress Persistence**
-   - Save which scripts have been heard?
-   - Auto-skip heard scripts on re-entry?
+5. **UI Implementation (MVP)**
+   - ✅ **Floating teacher icon** with speech bubble
+   - Positioned over lesson content window
+   - **Auto-popup** when teacher speaks
+   - Can be **minimized** by student
+   - **Auto-restore** when new script starts
 
-## Next Steps
+## TTS/STT Provider System (Like LLM Providers)
 
-**Immediate:**
-1. ✅ Fix sub-stages display bug (in progress)
-2. Add script blocks to test lesson
-3. Create basic playback bar component
+### Database Schema:
+```sql
+CREATE TABLE tts_providers (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name VARCHAR(100) NOT NULL,
+  provider_type VARCHAR(50) NOT NULL, -- 'google-cloud-tts', 'amazon-polly', 'azure', 'elevenlabs'
+  api_endpoint VARCHAR(255),
+  api_key TEXT,
+  voice_id VARCHAR(100),
+  cost_per_million_chars DECIMAL(10, 4),
+  is_active BOOLEAN DEFAULT true,
+  is_default BOOLEAN DEFAULT false,
+  config JSONB, -- voice settings, speed, pitch, etc.
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
 
-**Short-term:**
-4. Implement Web Speech API
-5. Add play/pause controls
-6. Test with students
+CREATE TABLE tts_usage_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES users(id),
+  tenant_id UUID NOT NULL,
+  provider_id UUID REFERENCES tts_providers(id),
+  use_case VARCHAR(100), -- 'lesson-script', 'ai-chat-response', etc.
+  text_length INTEGER NOT NULL,
+  characters_used INTEGER NOT NULL,
+  processing_time_ms INTEGER,
+  voice_used VARCHAR(100),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+```
 
-**Long-term:**
-7. Cloud TTS integration
-8. Voice customization
-9. Multi-language support
+### Usage Dashboard Integration:
+Add to existing `/super-admin/llm-usage` page:
+- New tab: "TTS/STT Usage"
+- Cost tracking per provider
+- Characters used vs allocation
+- Cost per million characters
+- Provider comparison
+
+### Provider Examples:
+1. **Google Cloud TTS**
+   - Cost: ~$4-16 per 1M characters
+   - Voices: 380+ in 50+ languages
+   - Quality: Excellent
+   
+2. **Amazon Polly**
+   - Cost: ~$4-16 per 1M characters
+   - Voices: 60+ in 30+ languages
+   - Quality: Excellent
+   
+3. **ElevenLabs**
+   - Cost: ~$30 per 1M characters
+   - Voices: Ultra-realistic
+   - Quality: Best-in-class
+   
+4. **Browser Web Speech API**
+   - Cost: FREE
+   - Voices: Device-dependent
+   - Quality: Basic
+
+## Implementation Phases
+
+### Phase 1: MVP - Text-Only Script Display ✅ (Current Priority)
+- [x] Define script schema
+- [ ] Add floating teacher widget component
+- [ ] Speech bubble with text display
+- [ ] Pause/Skip controls
+- [ ] Minimize/Close functionality
+- [ ] Auto-popup on new script
+- [ ] Add script fields to lesson-builder interface
+
+### Phase 2: TTS Provider Infrastructure
+- [ ] Create `tts_providers` table
+- [ ] Create `tts_usage_logs` table
+- [ ] Backend API for provider CRUD
+- [ ] Frontend provider management (like LLM providers)
+- [ ] Usage dashboard integration
+
+### Phase 3: TTS Integration (Start with Google Cloud)
+- [ ] Google Cloud TTS API integration
+- [ ] Voice selection per lesson
+- [ ] Audio playback in widget
+- [ ] Usage tracking
+- [ ] Cost calculation
+
+### Phase 4: Multi-Provider Support
+- [ ] Amazon Polly integration
+- [ ] Azure TTS integration
+- [ ] ElevenLabs integration
+- [ ] Provider switching/comparison
+- [ ] Voice library per provider
+
+### Phase 5: Advanced Features
+- [ ] STT for student voice input
+- [ ] Real-time transcript
+- [ ] Multi-language support
+- [ ] Voice cloning (ElevenLabs)
+- [ ] Emotion/tone control
+
+## Next Steps (Prioritized)
+
+**NOW (Block E2E testing):**
+1. ✅ Fix sub-stages display bug → **DONE**
+2. Test lesson player with existing Python lesson
+3. Test interaction loading with Photosynthesis lesson
+4. Complete E2E test
+
+**THEN (Script System MVP):**
+1. Create `FloatingTeacherWidget` component
+2. Add script display (text only, no TTS yet)
+3. Add pause/skip/minimize controls
+4. Add script editor to lesson-builder
+5. Update test lessons with script content
+
+**LATER (TTS Infrastructure):**
+1. Design TTS provider system
+2. Implement provider management
+3. Integrate first TTS provider (Google Cloud)
+4. Add usage tracking/costs
 
