@@ -1116,6 +1116,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     }
     
     console.log('[LessonView] Fullscreen:', this.isFullscreen);
+    console.log('[LessonView] Teacher widget hidden:', this.teacherWidgetHidden);
+    console.log('[LessonView] Widget will receive isDraggable:', this.isFullscreen);
   }
 
   /**

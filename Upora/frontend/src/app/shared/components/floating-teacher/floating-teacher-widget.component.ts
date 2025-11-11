@@ -559,6 +559,8 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy {
   widgetTop = 0;  // Public for template binding
 
   ngOnChanges(changes: SimpleChanges) {
+    console.log('[TeacherWidget] ngOnChanges:', Object.keys(changes));
+    
     if (changes['currentScript']) {
       const newScript = changes['currentScript'].currentValue;
       const oldScript = changes['currentScript'].previousValue;
@@ -581,16 +583,22 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy {
     }
 
     // Initialize drag position when becoming draggable
-    if (changes['isDraggable'] && changes['isDraggable'].currentValue && !changes['isDraggable'].previousValue) {
-      // Set initial position to bottom-right when fullscreen activates
-      this.widgetLeft = window.innerWidth - 420; // 400px width + 20px margin
-      this.widgetTop = window.innerHeight - 420; // Approximate height + margin
-    }
+    if (changes['isDraggable']) {
+      console.log('[TeacherWidget] isDraggable changed:', changes['isDraggable'].previousValue, '→', changes['isDraggable'].currentValue);
+      
+      if (changes['isDraggable'].currentValue && !changes['isDraggable'].previousValue) {
+        // Set initial position to bottom-right when fullscreen activates
+        this.widgetLeft = window.innerWidth - 420; // 400px width + 20px margin
+        this.widgetTop = window.innerHeight - 420; // Approximate height + margin
+        console.log('[TeacherWidget] Initialized drag position:', this.widgetLeft, this.widgetTop);
+      }
 
-    // Reset position when no longer draggable
-    if (changes['isDraggable'] && !changes['isDraggable'].currentValue && changes['isDraggable'].previousValue) {
-      this.widgetLeft = 0;
-      this.widgetTop = 0;
+      // Reset position when no longer draggable
+      if (!changes['isDraggable'].currentValue && changes['isDraggable'].previousValue) {
+        this.widgetLeft = 0;
+        this.widgetTop = 0;
+        console.log('[TeacherWidget] Reset position to 0, 0');
+      }
     }
   }
 
