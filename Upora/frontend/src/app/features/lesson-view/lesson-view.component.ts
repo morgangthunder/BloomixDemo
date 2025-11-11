@@ -3,17 +3,19 @@ import { CommonModule } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { IonContent } from '@ionic/angular/standalone';
+import { HttpClient } from '@angular/common/http';
 import { LessonService } from '../../core/services/lesson.service';
 import { WebSocketService, ChatMessage } from '../../core/services/websocket.service';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { Lesson, Stage, SubStage } from '../../core/models/lesson.model';
 import { environment } from '../../../environments/environment';
+import { TrueFalseSelectionComponent } from '../interactions/true-false-selection/true-false-selection.component';
 
 @Component({
   selector: 'app-lesson-view',
   standalone: true,
-  imports: [CommonModule, FormsModule, IonContent],
+  imports: [CommonModule, FormsModule, IonContent, TrueFalseSelectionComponent],
   template: `
     <div class="bg-brand-dark text-white overflow-hidden flex flex-col md:flex-row lesson-view-wrapper">
       <!-- Mobile overlay -->
@@ -148,10 +150,44 @@ import { environment } from '../../../environments/environment';
             <h1 class="text-3xl md:text-4xl font-bold text-white mb-2">{{ activeSubStage.title }}</h1>
             <p class="text-brand-gray mb-8">{{ activeSubStage.type }} • {{ activeSubStage.interactionType }} • {{ activeSubStage.duration }} minutes</p>
 
-            <div class="bg-brand-black rounded-lg aspect-video flex items-center justify-center text-brand-gray">
+            <!-- Loading State -->
+            <div *ngIf="isLoadingInteraction" class="bg-brand-black rounded-lg p-12 flex items-center justify-center">
+              <div class="text-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red mx-auto mb-4"></div>
+                <p class="text-brand-gray">Loading interaction...</p>
+              </div>
+            </div>
+
+            <!-- True/False Selection Interaction -->
+            <div *ngIf="!isLoadingInteraction && interactionData?.interactionTypeId === 'true-false-selection'">
+              <app-true-false-selection
+                [data]="interactionData"
+                (completed)="onInteractionCompleted($event)">
+              </app-true-false-selection>
+            </div>
+
+            <!-- Score Display (after completion) -->
+            <div *ngIf="interactionScore !== null" class="mt-6 bg-brand-black rounded-lg p-6">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="text-xl font-bold text-white mb-2">Sub-stage Complete!</h3>
+                  <p class="text-brand-gray">You scored {{ interactionScore }}%</p>
+                </div>
+                <div class="text-5xl font-bold" 
+                     [class.text-green-500]="interactionScore === 100"
+                     [class.text-yellow-500]="interactionScore >= 70 && interactionScore < 100"
+                     [class.text-brand-red]="interactionScore < 70">
+                  {{ interactionScore }}%
+                </div>
+              </div>
+            </div>
+
+            <!-- Fallback for no interaction data -->
+            <div *ngIf="!isLoadingInteraction && !interactionData" class="bg-brand-black rounded-lg aspect-video flex items-center justify-center text-brand-gray">
               <div class="text-center">
                 <p class="text-xl mb-4">Content for "{{ activeSubStage.title }}"</p>
                 <p class="text-sm text-gray-500">Interaction Type: {{ activeSubStage.interactionType }}</p>
+                <p class="text-xs text-gray-600 mt-2">No interaction data available yet</p>
                 
                 <!-- Toggle "Passed" button for Evaluate stages -->
                 <button *ngIf="activeSubStage.type === 'Evaluate'"
@@ -348,13 +384,19 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   isConnected = false;
   isChatExpanded = false;
   
+  // Interaction data
+  interactionData: any = null;
+  interactionScore: number | null = null;
+  isLoadingInteraction = false;
+  
   private destroy$ = new Subject<void>();
 
   constructor(
     private lessonService: LessonService,
     private router: Router,
     private route: ActivatedRoute,
-    private wsService: WebSocketService
+    private wsService: WebSocketService,
+    private http: HttpClient
   ) {}
 
   ngOnInit() {
@@ -508,6 +550,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     );
     
     this.updateActiveSubStage();
+    
+    // Load interaction data if available
+    this.loadInteractionData();
   }
 
   private updateActiveSubStage() {
@@ -601,5 +646,77 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   exitLesson() {
     this.lessonService.exitLessonView();
     this.router.navigate(['/home']);
+  }
+
+  /**
+   * Load interaction data for the active sub-stage
+   */
+  private loadInteractionData() {
+    // Reset state
+    this.interactionData = null;
+    this.interactionScore = null;
+    
+    if (!this.activeSubStage?.contentOutputId) {
+      console.log('[LessonView] No contentOutputId for this sub-stage');
+      return;
+    }
+
+    const contentOutputId = this.activeSubStage.contentOutputId;
+    console.log('[LessonView] Loading interaction data for contentOutputId:', contentOutputId);
+    
+    this.isLoadingInteraction = true;
+
+    // Fetch processed content output
+    this.http.get(`${environment.apiUrl}/lesson-editor/processed-content/${contentOutputId}`)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (output: any) => {
+          console.log('[LessonView] Loaded interaction data:', output);
+          
+          // Extract interaction data from the output
+          if (output.data && output.interactionTypeId) {
+            this.interactionData = {
+              ...output.data,
+              interactionTypeId: output.interactionTypeId
+            };
+            console.log('[LessonView] Interaction ready:', this.interactionData.interactionTypeId);
+          } else {
+            console.warn('[LessonView] No interaction data in output');
+          }
+          
+          this.isLoadingInteraction = false;
+        },
+        error: (error) => {
+          console.error('[LessonView] Error loading interaction data:', error);
+          this.isLoadingInteraction = false;
+        }
+      });
+  }
+
+  /**
+   * Handle interaction completion with score
+   */
+  onInteractionCompleted(result: { score: number; selectedFragments: string[] }) {
+    console.log('[LessonView] Interaction completed with score:', result.score);
+    
+    this.interactionScore = result.score;
+    
+    // Mark sub-stage as completed
+    if (this.activeSubStageId) {
+      this.lessonStages = this.lessonStages.map(stage => ({
+        ...stage,
+        subStages: stage.subStages.map(ss =>
+          ss.id === this.activeSubStageId
+            ? { ...ss, completed: true }
+            : ss
+        )
+      }));
+      
+      this.updateActiveSubStage();
+    }
+    
+    // TODO: Save score to backend (student_topic_scores table)
+    // For now, just log it
+    console.log('[LessonView] Score:', result.score, '% - Selected:', result.selectedFragments);
   }
 }
