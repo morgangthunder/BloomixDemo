@@ -103,7 +103,7 @@ interface LlmProvider {
 
             <div class="summary-card highlight">
               <div class="card-label">Estimated Cost</div>
-              <div class="card-value">\${{ data.totals.estimatedCost.toFixed(2) }}</div>
+              <div class="card-value">\${{ formatCost(data.totals.estimatedCost) }}</div>
               <div class="card-subtext">{{ data.totals.currency }} @ \${{ data.pricing.perMillionTokens }}/1M tokens</div>
             </div>
 
@@ -874,7 +874,18 @@ export class LlmTokenUsageComponent implements OnInit {
   calculateAccountCost(tokensUsed: number): string {
     if (!this.data) return '0.00';
     const cost = (tokensUsed / 1000000) * this.data.pricing.perMillionTokens;
-    return cost.toFixed(2);
+    return this.formatCost(cost);
+  }
+
+  formatCost(cost: number): string {
+    // Show more precision for small amounts
+    if (cost < 0.01) {
+      return cost.toFixed(4); // e.g., $0.0013
+    } else if (cost < 1) {
+      return cost.toFixed(3); // e.g., $0.123
+    } else {
+      return cost.toFixed(2); // e.g., $12.34
+    }
   }
 
   async onProviderChange() {

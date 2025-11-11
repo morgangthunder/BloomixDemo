@@ -270,12 +270,10 @@ export class HeaderComponent implements OnInit, OnDestroy {
 
   async loadTokenUsage() {
     try {
-      const userId = environment.defaultUserId;
-      const tenantId = environment.tenantId;
-      
-      const usage = await this.apiService.get<TokenUsage>(`users/${userId}/token-usage`, {
-        headers: { 'x-tenant-id': tenantId }
-      }).toPromise();
+      // Token usage display in header is disabled for MVP
+      // Use the Super-Admin LLM Usage page instead
+      // TODO: Implement real-time token usage widget in header
+      return;
       
       this.tokenUsage = usage || null;
       console.log('[HeaderComponent] Token usage loaded:', usage);
