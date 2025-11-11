@@ -269,18 +269,10 @@ export class HeaderComponent implements OnInit, OnDestroy {
   }
 
   async loadTokenUsage() {
-    try {
-      // Token usage display in header is disabled for MVP
-      // Use the Super-Admin LLM Usage page instead
-      // TODO: Implement real-time token usage widget in header
-      return;
-      
-      this.tokenUsage = usage || null;
-      console.log('[HeaderComponent] Token usage loaded:', usage);
-    } catch (error) {
-      console.error('[HeaderComponent] Failed to load token usage:', error);
-      // Fail gracefully - just don't show the indicator
-    }
+    // Token usage display in header is disabled for MVP
+    // Use the Super-Admin LLM Usage page instead
+    // TODO: Implement real-time token usage widget in header
+    return;
   }
 
   formatTokens(tokens: number): string {
