@@ -28,9 +28,26 @@ import { FormsModule } from '@angular/forms';
             <label>Text Content *</label>
             <textarea 
               [(ngModel)]="textContent"
+              (input)="onTextChange()"
               placeholder="Paste or type your text content here..."
               rows="10"
-              class="form-control"></textarea>
+              class="form-control"
+              [class.error-border]="isTextTooLong()"></textarea>
+            <div class="char-counter" [class.error]="isTextTooLong()">
+              {{ getCharCount() }} / {{ maxChars }} characters
+              <span *ngIf="isTextTooLong()" class="error-badge">
+                ({{ getCharCount() - maxChars }} over limit)
+              </span>
+            </div>
+            <div class="token-estimate" [class.warning]="getEstimatedTokens() > maxTokens * 0.8">
+              Estimated tokens: ~{{ getEstimatedTokens() | number }} / {{ maxTokens | number }}
+            </div>
+            <small class="help-text" *ngIf="!isTextTooLong()">
+              Maximum ~{{ maxWords | number }} words ({{ maxTokens | number }} tokens for Grok 3 Mini)
+            </small>
+            <small class="error-help-text" *ngIf="isTextTooLong()">
+              ⚠️ Content exceeds Grok 3 Mini's limit! Please reduce to ~{{ maxWords | number }} words or split into multiple content sources.
+            </small>
           </div>
 
           <div class="form-group">
@@ -229,6 +246,51 @@ import { FormsModule } from '@angular/forms';
       opacity: 0.5;
       cursor: not-allowed;
     }
+
+    .error-border {
+      border-color: #ef4444 !important;
+      background: rgba(239, 68, 68, 0.05) !important;
+    }
+
+    .char-counter {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 6px;
+      font-size: 12px;
+      color: #9ca3af;
+    }
+
+    .char-counter.error {
+      color: #ef4444;
+      font-weight: 600;
+    }
+
+    .error-badge {
+      color: #ef4444;
+      font-weight: bold;
+      margin-left: 8px;
+    }
+
+    .token-estimate {
+      margin-top: 4px;
+      font-size: 11px;
+      color: #6b7280;
+      font-family: monospace;
+    }
+
+    .token-estimate.warning {
+      color: #f59e0b;
+      font-weight: 600;
+    }
+
+    .error-help-text {
+      display: block;
+      margin-top: 6px;
+      color: #ef4444;
+      font-size: 12px;
+      font-weight: 500;
+    }
   `]
 })
 export class AddTextContentModalComponent implements OnChanges {
@@ -242,6 +304,11 @@ export class AddTextContentModalComponent implements OnChanges {
   summary = '';
   topics = '';
   submitting = false;
+
+  // Grok 3 Mini limits (conservative estimates with headroom for prompt & response)
+  readonly maxTokens = 100000; // Safe limit (128k context - 28k for prompt/response/overhead)
+  readonly maxWords = 75000; // ~1.3 tokens per word
+  readonly maxChars = 400000; // ~4 chars per token
 
   ngOnChanges(changes: SimpleChanges) {
     // Lock/unlock body scroll and hide header when modal opens/closes
@@ -265,7 +332,34 @@ export class AddTextContentModalComponent implements OnChanges {
   }
 
   canSubmit(): boolean {
-    return this.title.trim().length > 0 && this.textContent.trim().length > 0;
+    return this.title.trim().length > 0 && 
+           this.textContent.trim().length > 0 && 
+           !this.isTextTooLong();
+  }
+
+  getCharCount(): number {
+    return this.textContent.length;
+  }
+
+  getEstimatedTokens(): number {
+    // Rough estimate: 1 token ≈ 4 characters for English text
+    return Math.ceil(this.textContent.length / 4);
+  }
+
+  isTextTooLong(): boolean {
+    return this.getCharCount() > this.maxChars || this.getEstimatedTokens() > this.maxTokens;
+  }
+
+  onTextChange(): void {
+    // Real-time validation feedback
+    if (this.isTextTooLong()) {
+      console.warn('[AddTextContentModal] ⚠️ Content exceeds limit:', {
+        chars: this.getCharCount(),
+        maxChars: this.maxChars,
+        estimatedTokens: this.getEstimatedTokens(),
+        maxTokens: this.maxTokens
+      });
+    }
   }
 
   async onSubmit() {
