@@ -27,6 +27,7 @@ import { InteractionTypesModule } from './modules/interaction-types/interaction-
 import { SuperAdminModule } from './modules/super-admin/super-admin.module';
 import { LlmProvidersModule } from './modules/llm-providers/llm-providers.module';
 import { ContentAnalyzerModule } from './services/content-analyzer.module';
+import { AutoPopulatorModule } from './services/auto-populator.module';
 import { WeaviateModule } from './services/weaviate.module';
 
 @Module({
@@ -52,6 +53,7 @@ import { WeaviateModule } from './services/weaviate.module';
     }),
     WeaviateModule, // Global module with WeaviateService
     ContentAnalyzerModule, // LLM content analysis service
+    AutoPopulatorModule, // LLM auto-population for content metadata
     UsersModule,
     LessonsModule,
     ChatModule,

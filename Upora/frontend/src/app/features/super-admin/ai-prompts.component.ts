@@ -358,6 +358,34 @@ export class AiPromptsComponent implements OnInit {
   selectedAssistant: AIAssistant | null = null;
   assistants: AIAssistant[] = [
     {
+      id: 'auto-populator',
+      name: 'Auto-Populator',
+      icon: '✨',
+      description: 'Automatically generates titles, summaries, and topics when adding content sources (PDF, URL, text, image)',
+      prompts: {
+        textAutoPopulate: {
+          label: 'Text Content Auto-Populate Prompt',
+          content: 'You are helping a user create educational content from raw text. Analyze the text and generate a concise title, summary, and relevant topics.\n\nGiven the text content, generate:\n1. **Title**: A clear, descriptive title (max 100 characters)\n2. **Summary**: A 2-3 sentence summary of the main points\n3. **Topics**: 3-5 relevant topic tags (comma-separated)\n\nGuidelines:\n- Title should be informative and engaging\n- Summary should capture the essence without jargon\n- Topics should be general categories (e.g., "Science", "Biology", "Cells") not overly specific\n\nReturn ONLY valid JSON:\n{\n  "title": "string",\n  "summary": "string",\n  "topics": ["topic1", "topic2", "topic3"]\n}',
+          placeholder: 'Enter the prompt for auto-populating text content fields...'
+        },
+        pdfAutoPopulate: {
+          label: 'PDF Auto-Populate Prompt',
+          content: 'You are helping a user catalog a PDF document. Analyze the extracted text and generate metadata.\n\nGiven the PDF content, generate:\n1. **Title**: Document title based on content (max 100 characters)\n2. **Summary**: Brief overview of the document\'s purpose\n3. **Topics**: 3-5 subject categories\n\nConsider:\n- Academic papers: Extract actual title if present\n- Textbooks: Use chapter/section name\n- Reports: Summarize main findings\n\nReturn ONLY valid JSON:\n{\n  "title": "string",\n  "summary": "string",\n  "topics": ["topic1", "topic2", "topic3"]\n}',
+          placeholder: 'Enter the prompt for auto-populating PDF fields...'
+        },
+        urlAutoPopulate: {
+          label: 'URL/Webpage Auto-Populate Prompt',
+          content: 'You are helping a user catalog a webpage or article. Analyze the content and generate metadata.\n\nGiven the webpage text, generate:\n1. **Title**: Article/page title (max 100 characters)\n2. **Summary**: Brief description of the content\n3. **Topics**: 3-5 relevant categories\n\nConsider:\n- News articles: Focus on main story\n- Tutorials: Highlight what will be learned\n- Reference pages: Summarize key information\n\nReturn ONLY valid JSON:\n{\n  "title": "string",\n  "summary": "string",\n  "topics": ["topic1", "topic2", "topic3"]\n}',
+          placeholder: 'Enter the prompt for auto-populating URL fields...'
+        },
+        imageAutoPopulate: {
+          label: 'Image Auto-Populate Prompt',
+          content: 'You are helping a user catalog an image for educational use. Based on image analysis results (OCR text, detected objects, scene description), generate metadata.\n\nGiven the image analysis data, generate:\n1. **Title**: Descriptive title for the image (max 100 characters)\n2. **Summary**: What the image shows and its educational value\n3. **Topics**: 3-5 relevant subject areas\n\nConsider:\n- Diagrams: Technical subject matter\n- Charts/Graphs: Data and trends\n- Photos: Subject and context\n\nReturn ONLY valid JSON:\n{\n  "title": "string",\n  "summary": "string",\n  "topics": ["topic1", "topic2", "topic3"]\n}',
+          placeholder: 'Enter the prompt for auto-populating image fields...'
+        }
+      }
+    },
+    {
       id: 'content-analyzer',
       name: 'Content Analyzer',
       icon: '🔍',

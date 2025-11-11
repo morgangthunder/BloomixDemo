@@ -1,6 +1,8 @@
 import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
+import { environment } from '../../../../environments/environment';
 
 @Component({
   selector: 'app-add-text-content-modal',
@@ -25,7 +27,17 @@ import { FormsModule } from '@angular/forms';
           </div>
 
           <div class="form-group">
-            <label>Text Content *</label>
+            <div class="label-with-button">
+              <label>Text Content *</label>
+              <button 
+                *ngIf="textContent.length > 100 && !title && !summary"
+                (click)="autoFillFields()"
+                [disabled]="autoFilling"
+                class="btn-auto-fill"
+                type="button">
+                {{ autoFilling ? '✨ Auto-filling...' : '✨ Auto-Fill Title & Summary' }}
+              </button>
+            </div>
             <textarea 
               [(ngModel)]="textContent"
               (input)="onTextChange()"
@@ -291,6 +303,41 @@ import { FormsModule } from '@angular/forms';
       font-size: 12px;
       font-weight: 500;
     }
+
+    .label-with-button {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .label-with-button label {
+      margin-bottom: 0;
+    }
+
+    .btn-auto-fill {
+      padding: 6px 12px;
+      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn-auto-fill:hover:not(:disabled) {
+      background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(139, 92, 246, 0.3);
+    }
+
+    .btn-auto-fill:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
   `]
 })
 export class AddTextContentModalComponent implements OnChanges {
@@ -304,11 +351,14 @@ export class AddTextContentModalComponent implements OnChanges {
   summary = '';
   topics = '';
   submitting = false;
+  autoFilling = false;
 
   // Grok 3 Mini limits (conservative estimates with headroom for prompt & response)
   readonly maxTokens = 100000; // Safe limit (128k context - 28k for prompt/response/overhead)
   readonly maxWords = 75000; // ~1.3 tokens per word
   readonly maxChars = 400000; // ~4 chars per token
+
+  constructor(private http: HttpClient) {}
 
   ngOnChanges(changes: SimpleChanges) {
     // Lock/unlock body scroll and hide header when modal opens/closes
@@ -359,6 +409,42 @@ export class AddTextContentModalComponent implements OnChanges {
         estimatedTokens: this.getEstimatedTokens(),
         maxTokens: this.maxTokens
       });
+    }
+  }
+
+  async autoFillFields(): Promise<void> {
+    if (!this.textContent || this.textContent.length < 100 || this.autoFilling) {
+      return;
+    }
+
+    this.autoFilling = true;
+    console.log('[AddTextContentModal] ✨ Auto-filling fields from text content...');
+
+    try {
+      const response = await this.http.post<{
+        title: string;
+        summary: string;
+        topics: string[];
+      }>(`${environment.apiUrl}/content-sources/auto-populate/text`, {
+        textContent: this.textContent
+      }).toPromise();
+
+      if (response) {
+        this.title = response.title;
+        this.summary = response.summary;
+        this.topics = response.topics.join(', ');
+
+        console.log('[AddTextContentModal] ✅ Auto-filled:', {
+          title: this.title,
+          summary: this.summary,
+          topics: this.topics
+        });
+      }
+    } catch (error: any) {
+      console.error('[AddTextContentModal] ❌ Auto-fill failed:', error);
+      alert(`Auto-fill failed: ${error?.message || 'Unknown error'}. You can still fill fields manually.`);
+    } finally {
+      this.autoFilling = false;
     }
   }
 

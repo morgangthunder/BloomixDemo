@@ -17,12 +17,14 @@ import { CreateContentSourceDto } from './dto/create-content-source.dto';
 import { UpdateContentSourceDto } from './dto/update-content-source.dto';
 import { SearchContentDto } from './dto/search-content.dto';
 import { ContentAnalyzerService } from '../../services/content-analyzer.service';
+import { AutoPopulatorService } from '../../services/auto-populator.service';
 
 @Controller('content-sources')
 export class ContentSourcesController {
   constructor(
     private readonly contentSourcesService: ContentSourcesService,
     private readonly contentAnalyzerService: ContentAnalyzerService,
+    private readonly autoPopulatorService: AutoPopulatorService,
   ) {}
 
   @Post()
@@ -163,6 +165,18 @@ export class ContentSourcesController {
         tokensUsed: r.tokensUsed,
       })),
     };
+  }
+
+  @Post('auto-populate/text')
+  @HttpCode(HttpStatus.OK)
+  async autoPopulateText(
+    @Body('textContent') textContent: string,
+    @Headers('x-user-id') userId: string,
+    @Headers('x-tenant-id') tenantId: string,
+  ) {
+    console.log('[ContentSourcesController] ✨ Auto-populating text content fields...');
+    const result = await this.autoPopulatorService.autoPopulateText(textContent, userId, tenantId);
+    return result;
   }
 }
 

@@ -7,11 +7,13 @@ import { LessonDataLink } from '../../entities/lesson-data-link.entity';
 import { WeaviateService } from '../../services/weaviate.service';
 import { YouTubeService } from '../../services/youtube.service';
 import { ContentAnalyzerModule } from '../../services/content-analyzer.module';
+import { AutoPopulatorModule } from '../../services/auto-populator.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([ContentSource, LessonDataLink]),
     ContentAnalyzerModule,
+    AutoPopulatorModule,
   ],
   controllers: [ContentSourcesController],
   providers: [ContentSourcesService, WeaviateService, YouTubeService],
