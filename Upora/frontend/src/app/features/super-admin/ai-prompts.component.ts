@@ -74,16 +74,33 @@ interface AIAssistant {
                 class="prompt-textarea"
                 rows="8"
               ></textarea>
-              <div class="char-count">
-                {{ selectedAssistant.prompts[promptKey].content.length }} characters
+              <div class="prompt-footer">
+                <div class="char-count">
+                  {{ selectedAssistant.prompts[promptKey].content.length }} characters
+                </div>
+                <div class="prompt-actions">
+                  <button 
+                    class="btn-cancel-small" 
+                    (click)="resetPrompt(selectedAssistant, promptKey)"
+                    [disabled]="savingPrompt === promptKey"
+                    title="Reset to last saved version">
+                    Cancel
+                  </button>
+                  <button 
+                    class="btn-save-small" 
+                    (click)="saveIndividualPrompt(selectedAssistant, promptKey)"
+                    [disabled]="savingPrompt === promptKey">
+                    {{ savingPrompt === promptKey ? 'Saving...' : 'Save' }}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
           <div class="editor-actions">
-            <button class="btn-secondary" (click)="cancelEdit()" [disabled]="saving">Cancel</button>
-            <button class="btn-primary" (click)="savePrompts()" [disabled]="saving">
-              {{ saving ? 'Saving...' : 'Save Changes' }}
+            <button class="btn-secondary" (click)="cancelEdit()">← Back to Assistants</button>
+            <button class="btn-primary" (click)="saveAllPrompts()" [disabled]="savingAll">
+              {{ savingAll ? 'Saving All...' : 'Save All Changes' }}
             </button>
           </div>
         </div>
@@ -282,11 +299,62 @@ interface AIAssistant {
       color: rgba(255, 255, 255, 0.3);
     }
 
+    .prompt-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 0.5rem;
+      gap: 1rem;
+    }
+
     .char-count {
       font-size: 0.75rem;
       color: rgba(255, 255, 255, 0.5);
-      margin-top: 0.5rem;
-      text-align: right;
+    }
+
+    .prompt-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .btn-save-small,
+    .btn-cancel-small {
+      padding: 6px 16px;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-save-small {
+      background: #10b981;
+      color: white;
+    }
+
+    .btn-save-small:hover:not(:disabled) {
+      background: #059669;
+      transform: translateY(-1px);
+    }
+
+    .btn-save-small:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-cancel-small {
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+    }
+
+    .btn-cancel-small:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .btn-cancel-small:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     .editor-actions {
@@ -544,7 +612,9 @@ export class AiPromptsComponent implements OnInit {
   ];
 
   loading = false;
-  saving = false;
+  savingAll = false;
+  savingPrompt: string | null = null; // Track which individual prompt is being saved
+  originalPrompts: Map<string, string> = new Map(); // Store original content for reset
 
   constructor(
     private router: Router,
@@ -568,11 +638,16 @@ export class AiPromptsComponent implements OnInit {
       console.log('[AIPrompts] 📥 Loaded prompts from backend:', dbPrompts?.length || 0);
       
       if (dbPrompts && dbPrompts.length > 0) {
-        // Update assistant prompts with database content
+        // Update assistant prompts with database content and store originals
         dbPrompts.forEach(dbPrompt => {
           const assistant = this.assistants.find(a => a.id === dbPrompt.assistantId);
           if (assistant && assistant.prompts[dbPrompt.promptKey]) {
             assistant.prompts[dbPrompt.promptKey].content = dbPrompt.content;
+            
+            // Store original content for reset functionality
+            const promptId = `${dbPrompt.assistantId}.${dbPrompt.promptKey}`;
+            this.originalPrompts.set(promptId, dbPrompt.content);
+            
             console.log(`[AIPrompts] ✓ Updated ${dbPrompt.assistantId}.${dbPrompt.promptKey}`);
           }
         });
@@ -597,11 +672,50 @@ export class AiPromptsComponent implements OnInit {
     this.selectedAssistant = null;
   }
 
-  async savePrompts() {
-    if (!this.selectedAssistant || this.saving) return;
+  async saveIndividualPrompt(assistant: AIAssistant, promptKey: string) {
+    if (this.savingPrompt) return;
 
-    console.log('[AIPrompts] 💾 Saving prompts for:', this.selectedAssistant.name);
-    this.saving = true;
+    this.savingPrompt = promptKey;
+    console.log('[AIPrompts] 💾 Saving individual prompt:', `${assistant.id}.${promptKey}`);
+
+    try {
+      const prompt = assistant.prompts[promptKey];
+      const promptId = `${assistant.id}.${promptKey}`;
+      
+      await this.http.put(`${environment.apiUrl}/ai-prompts/${promptId}`, {
+        content: prompt.content,
+        label: prompt.label
+      }).toPromise();
+      
+      // Update stored original
+      this.originalPrompts.set(promptId, prompt.content);
+      
+      console.log('[AIPrompts] ✅ Prompt saved:', promptKey);
+      this.toastService.success(`Prompt "${prompt.label}" saved successfully!`, 3000);
+    } catch (error: any) {
+      console.error('[AIPrompts] ❌ Failed to save prompt:', error);
+      this.toastService.error(`Failed to save: ${error?.message || 'Unknown error'}`, 5000);
+    } finally {
+      this.savingPrompt = null;
+    }
+  }
+
+  resetPrompt(assistant: AIAssistant, promptKey: string) {
+    const promptId = `${assistant.id}.${promptKey}`;
+    const original = this.originalPrompts.get(promptId);
+    
+    if (original) {
+      assistant.prompts[promptKey].content = original;
+      console.log('[AIPrompts] ↶ Reset prompt to original:', promptKey);
+      this.toastService.info(`Reset "${assistant.prompts[promptKey].label}" to last saved version`, 2000);
+    }
+  }
+
+  async saveAllPrompts() {
+    if (!this.selectedAssistant || this.savingAll) return;
+
+    console.log('[AIPrompts] 💾 Saving ALL prompts for:', this.selectedAssistant.name);
+    this.savingAll = true;
 
     try {
       const updates = [];
@@ -622,17 +736,18 @@ export class AiPromptsComponent implements OnInit {
       await Promise.all(updates);
       
       console.log('[AIPrompts] ✅ All prompts saved successfully');
+      const assistantName = this.selectedAssistant.name;
       this.toastService.success(
-        `✓ Prompts saved for ${this.selectedAssistant.name}! Changes will take effect immediately.`,
+        'Prompts saved for ' + assistantName + '! Changes will take effect immediately.',
         4000
       );
       
       this.selectedAssistant = null;
     } catch (error: any) {
       console.error('[AIPrompts] ❌ Failed to save prompts:', error);
-      this.toastService.error(`Failed to save prompts: ${error?.message || 'Unknown error'}`, 5000);
+      this.toastService.error('Failed to save prompts: ' + (error?.message || 'Unknown error'), 5000);
     } finally {
-      this.saving = false;
+      this.savingAll = false;
     }
   }
 
