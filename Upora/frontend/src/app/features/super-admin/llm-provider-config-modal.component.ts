@@ -536,6 +536,7 @@ export class LlmProviderConfigModalComponent implements OnInit, OnChanges {
   testResult: { success: boolean; message: string } | null = null;
   
   allPresets: ProviderPresets[] = [];
+  allProviders: LlmProvider[] = [];
   availableModels: ModelPreset[] = [];
   selectedModelPreset: ModelPreset | null = null;
   usingPreset = false;
@@ -559,11 +560,23 @@ export class LlmProviderConfigModalComponent implements OnInit, OnChanges {
     }
   }
 
+  async loadAllProviders() {
+    try {
+      this.allProviders = await this.http.get<LlmProvider[]>(
+        `${environment.apiUrl}/super-admin/llm-providers`
+      ).toPromise() as LlmProvider[];
+      console.log('[LlmProviderModal] All providers loaded:', this.allProviders.length);
+    } catch (error) {
+      console.error('[LlmProviderModal] Failed to load providers:', error);
+    }
+  }
+
   async ngOnChanges(changes: SimpleChanges) {
     if (changes['provider'] || changes['isOpen']) {
       if (this.isOpen) {
-        // Load presets if not already loaded
+        // Load presets and providers if not already loaded
         await this.loadPresets();
+        await this.loadAllProviders();
 
         // Hide header and lock body scroll when modal opens
         document.body.style.overflow = 'hidden';
@@ -741,6 +754,51 @@ export class LlmProviderConfigModalComponent implements OnInit, OnChanges {
       name: this.formData.name,
       isDefault: this.formData.isDefault
     });
+
+    // If this is the default provider, ask user to choose a new default first
+    if (this.formData.isDefault) {
+      // Get all other providers
+      const otherProviders = this.allProviders.filter(p => p.id !== this.formData.id);
+      
+      if (otherProviders.length === 0) {
+        alert('Cannot delete the only provider. Please add another provider first.');
+        return;
+      }
+
+      // Build selection message
+      const providerList = otherProviders
+        .map((p, i) => `${i + 1}. ${p.name}`)
+        .join('\n');
+      
+      const choice = prompt(
+        `"${this.formData.name}" is currently the DEFAULT provider.\n\n` +
+        `Before deleting, choose a new default provider:\n\n${providerList}\n\n` +
+        `Enter the number (1-${otherProviders.length}):`,
+        '1'
+      );
+
+      if (!choice) return; // User cancelled
+
+      const choiceIndex = parseInt(choice) - 1;
+      if (isNaN(choiceIndex) || choiceIndex < 0 || choiceIndex >= otherProviders.length) {
+        alert('Invalid selection. Deletion cancelled.');
+        return;
+      }
+
+      const newDefaultProvider = otherProviders[choiceIndex];
+
+      // Set the new default
+      try {
+        await this.http.put(
+          `${environment.apiUrl}/super-admin/llm-providers/${newDefaultProvider.id}/set-default`,
+          {}
+        ).toPromise();
+        console.log('[LlmProviderModal] Switched default to:', newDefaultProvider.name);
+      } catch (error: any) {
+        alert(`Failed to set new default: ${error.error?.message || 'Unknown error'}`);
+        return;
+      }
+    }
 
     const confirmDelete = confirm(`Are you sure you want to delete "${this.formData.name}"?\n\nThis action cannot be undone.`);
     if (!confirmDelete) return;
