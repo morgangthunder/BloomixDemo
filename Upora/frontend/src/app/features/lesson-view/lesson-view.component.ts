@@ -575,9 +575,9 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
     }
 
     .fullscreen-toggle {
-      position: absolute;
-      bottom: 1.5rem;
-      left: 1.5rem;
+      position: fixed;
+      bottom: calc(60px + 1.5rem); /* Above control bar */
+      right: calc(100vw - var(--content-area-left, 0px) - var(--content-area-width, 100vw) + 1.5rem + 44px);
       width: 44px;
       height: 44px;
       background: rgba(0, 0, 0, 0.7);
@@ -585,18 +585,33 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       border-radius: 8px;
       color: #ffffff;
       cursor: pointer;
-      transition: all 0.3s ease;
+      transition: none;
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 100; /* Above content but below sidebar (sidebar is z-index 1000) */
+      z-index: 100; /* Above content but below sidebar */
     }
     
-    /* When fullscreen, use fixed positioning */
+    /* Simpler approach: just use left margin for desktop */
+    @media (min-width: 768px) {
+      .fullscreen-toggle {
+        left: calc(320px + 1.5rem); /* Sidebar width + margin */
+        right: auto;
+      }
+    }
+    
+    /* Mobile: simple left positioning */
+    @media (max-width: 767px) {
+      .fullscreen-toggle {
+        left: 1.5rem;
+        right: auto;
+      }
+    }
+    
+    /* When fullscreen */
     .content-area.fullscreen .fullscreen-toggle {
-      position: fixed;
-      bottom: calc(60px + 1.5rem);
-      left: 1.5rem;
+      left: 1.5rem !important;
+      right: auto !important;
       z-index: 9998;
     }
 
