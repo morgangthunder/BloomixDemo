@@ -575,8 +575,8 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
     }
 
     .fullscreen-toggle {
-      position: fixed;
-      bottom: calc(60px + 1.5rem); /* Above control bar */
+      position: absolute;
+      bottom: 1.5rem;
       left: 1.5rem;
       width: 44px;
       height: 44px;
@@ -585,15 +585,18 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       border-radius: 8px;
       color: #ffffff;
       cursor: pointer;
-      transition: left 0.3s ease;
+      transition: all 0.3s ease;
       display: flex;
       align-items: center;
       justify-content: center;
       z-index: 100; /* Above content but below sidebar (sidebar is z-index 1000) */
     }
     
-    /* When fullscreen */
+    /* When fullscreen, use fixed positioning */
     .content-area.fullscreen .fullscreen-toggle {
+      position: fixed;
+      bottom: calc(60px + 1.5rem);
+      left: 1.5rem;
       z-index: 9998;
     }
 

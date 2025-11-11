@@ -592,17 +592,15 @@ export class TrueFalseSelectionComponent {
     console.log('[TrueFalseSelection] 🔍 SCORE CALCULATION DEBUG');
     console.log('[TrueFalseSelection] ═══════════════════════════════════════');
 
-    const trueCount = this.getTrueCount();
-    const correctSelections = this.getCorrectCount(); // Correctly selected TRUE statements
+    const totalFragments = this.data.fragments.length;
     
-    // Count incorrect selections (selected FALSE statements)
+    // Count incorrect selections (selected FALSE statements + missed TRUE statements)
     const incorrectSelections = Array.from(this.selectedFragments)
       .filter(index => !this.data!.fragments[index].isTrueInContext).length;
 
     console.log('[TrueFalseSelection] 📊 Raw Data:');
-    console.log('  - Total TRUE statements:', trueCount);
-    console.log('  - Correctly selected TRUE:', correctSelections);
-    console.log('  - Incorrectly selected FALSE:', incorrectSelections);
+    console.log('  - Total fragments:', totalFragments);
+    console.log('  - Incorrect selections (selected FALSE):', incorrectSelections);
     console.log('  - Selected fragments:', Array.from(this.selectedFragments));
     
     // Debug each fragment
@@ -612,14 +610,14 @@ export class TrueFalseSelectionComponent {
       console.log(`  [${idx}] ${isSelected ? '✓' : '○'} ${frag.isTrueInContext ? 'TRUE' : 'FALSE'}: "${frag.text}"`);
     });
 
-    // Score = (Correct - Incorrect) / Total TRUE statements
+    // Score = (Total - Incorrect) / Total * 100
     // Minimum score is 0
-    const netCorrect = Math.max(0, correctSelections - incorrectSelections);
-    const calculatedScore = trueCount > 0 ? Math.round((netCorrect / trueCount) * 100) : 0;
+    const calculatedScore = totalFragments > 0 ? Math.max(0, Math.round(((totalFragments - incorrectSelections) / totalFragments) * 100)) : 0;
     
     console.log('[TrueFalseSelection] 🧮 Calculation:');
-    console.log('  - Net Correct:', netCorrect, '=', correctSelections, '-', incorrectSelections);
-    console.log('  - Formula: (', netCorrect, '/', trueCount, ') * 100');
+    console.log('  - Total fragments:', totalFragments);
+    console.log('  - Incorrect selections:', incorrectSelections);
+    console.log('  - Formula: ((', totalFragments, '-', incorrectSelections, ') /', totalFragments, ') * 100');
     console.log('  - Calculated Score:', calculatedScore, '%');
     
     this.score = calculatedScore;
