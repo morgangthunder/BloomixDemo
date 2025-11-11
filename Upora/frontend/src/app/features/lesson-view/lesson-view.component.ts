@@ -589,24 +589,20 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 1001; /* Above sidebar (1000) on desktop */
+      z-index: 100; /* Below sidebar (1000) - sidebar covers it */
     }
     
-    /* Mobile: hide when nav is open, lower z-index */
+    /* Mobile: hide when nav is open */
     @media (max-width: 767px) {
-      .fullscreen-toggle {
-        z-index: 100; /* Below sidebar on mobile */
-      }
-      
       .lesson-view-wrapper:has(.sidebar.translate-x-0) .fullscreen-toggle {
         display: none;
       }
     }
     
-    /* When fullscreen, move to very bottom */
+    /* When fullscreen, move to very bottom and raise z-index */
     .content-area.fullscreen .fullscreen-toggle {
       bottom: 1rem !important; /* Very close to bottom */
-      z-index: 9998 !important;
+      z-index: 9998 !important; /* Above everything in fullscreen */
     }
 
     .fullscreen-toggle:hover {
