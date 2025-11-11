@@ -577,7 +577,7 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
     .fullscreen-toggle {
       position: absolute;
       bottom: 1.5rem;
-      right: 1.5rem;
+      left: 1.5rem; /* Always bottom-left */
       width: 44px;
       height: 44px;
       background: rgba(0, 0, 0, 0.7);

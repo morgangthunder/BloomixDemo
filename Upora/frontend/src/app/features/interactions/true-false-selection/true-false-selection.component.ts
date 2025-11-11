@@ -588,6 +588,10 @@ export class TrueFalseSelectionComponent {
   async checkAnswers() {
     if (!this.data) return;
 
+    console.log('[TrueFalseSelection] ═══════════════════════════════════════');
+    console.log('[TrueFalseSelection] 🔍 SCORE CALCULATION DEBUG');
+    console.log('[TrueFalseSelection] ═══════════════════════════════════════');
+
     const trueCount = this.getTrueCount();
     const correctSelections = this.getCorrectCount(); // Correctly selected TRUE statements
     
@@ -595,19 +599,42 @@ export class TrueFalseSelectionComponent {
     const incorrectSelections = Array.from(this.selectedFragments)
       .filter(index => !this.data!.fragments[index].isTrueInContext).length;
 
+    console.log('[TrueFalseSelection] 📊 Raw Data:');
+    console.log('  - Total TRUE statements:', trueCount);
+    console.log('  - Correctly selected TRUE:', correctSelections);
+    console.log('  - Incorrectly selected FALSE:', incorrectSelections);
+    console.log('  - Selected fragments:', Array.from(this.selectedFragments));
+    
+    // Debug each fragment
+    console.log('[TrueFalseSelection] 📝 Fragment Analysis:');
+    this.data.fragments.forEach((frag, idx) => {
+      const isSelected = this.selectedFragments.has(idx);
+      console.log(`  [${idx}] ${isSelected ? '✓' : '○'} ${frag.isTrueInContext ? 'TRUE' : 'FALSE'}: "${frag.text}"`);
+    });
+
     // Score = (Correct - Incorrect) / Total TRUE statements
     // Minimum score is 0
     const netCorrect = Math.max(0, correctSelections - incorrectSelections);
-    this.score = trueCount > 0 ? Math.round((netCorrect / trueCount) * 100) : 0;
-
-    console.log('[TrueFalseSelection] ✅ Score calculated:', this.score, '%');
-    console.log('[TrueFalseSelection] Breakdown:', correctSelections, 'correct,', incorrectSelections, 'incorrect,', trueCount, 'total true');
-    console.log('[TrueFalseSelection] Net correct:', netCorrect, 'Formula:', `(${netCorrect}/${trueCount}) * 100 = ${this.score}%`);
+    const calculatedScore = trueCount > 0 ? Math.round((netCorrect / trueCount) * 100) : 0;
+    
+    console.log('[TrueFalseSelection] 🧮 Calculation:');
+    console.log('  - Net Correct:', netCorrect, '=', correctSelections, '-', incorrectSelections);
+    console.log('  - Formula: (', netCorrect, '/', trueCount, ') * 100');
+    console.log('  - Calculated Score:', calculatedScore, '%');
+    
+    this.score = calculatedScore;
+    console.log('[TrueFalseSelection] ✅ this.score SET TO:', this.score, '%');
 
     // Save result and get class average
     await this.saveResultAndFetchAverage();
 
-    console.log('[TrueFalseSelection] 🎯 Final score before showing modal:', this.score, '%');
+    console.log('[TrueFalseSelection] 🎯 FINAL CHECK BEFORE MODAL:');
+    console.log('  - this.score:', this.score, '%');
+    console.log('  - this.classAverage:', this.classAverage, '%');
+    console.log('  - this.totalAttempts:', this.totalAttempts);
+    console.log('  - this.showScore:', this.showScore, '→ true');
+    console.log('[TrueFalseSelection] ═══════════════════════════════════════');
+    
     this.showScore = true;
   }
 
