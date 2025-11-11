@@ -555,8 +555,8 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy {
   private isDragging = false;
   private dragStartX = 0;
   private dragStartY = 0;
-  private widgetLeft = 0;
-  private widgetTop = 0;
+  widgetLeft = 0; // Public for template binding
+  widgetTop = 0;  // Public for template binding
 
   ngOnChanges(changes: SimpleChanges) {
     if (changes['currentScript']) {
