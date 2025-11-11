@@ -42,7 +42,7 @@ export interface ChatMessage {
              [class.draggable-header]="isDraggable"
              (mousedown)="startDrag($event)"
              (touchstart)="startDrag($event)">
-          <div class="teacher-avatar" [class.speaking]="isPlaying" (click)="close()" title="Minimize">
+          <div class="teacher-avatar" [class.speaking]="isPlaying" (click)="onAvatarClick($event)" [title]="isDraggable ? 'Hold to drag' : 'Minimize'">
             <span class="avatar-emoji">🎓</span>
           </div>
           <div class="teacher-title">AI Teacher</div>
@@ -638,17 +638,36 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy {
     this.raiseHandClicked.emit();
   }
 
-  startDrag(event: MouseEvent | TouchEvent) {
-    if (!this.isDraggable) return;
-    
-    // Don't drag if clicking on buttons
-    const target = event.target as HTMLElement;
-    if (target.closest('button') || target.closest('input')) {
+  onAvatarClick(event: Event) {
+    // If draggable, don't minimize on click (use drag instead)
+    if (this.isDraggable) {
+      console.log('[TeacherWidget] Avatar click ignored - use drag to move');
       return;
     }
     
-    event.preventDefault();
+    // Otherwise, minimize
     event.stopPropagation();
+    this.close();
+  }
+
+  startDrag(event: MouseEvent | TouchEvent) {
+    if (!this.isDraggable) {
+      console.log('[TeacherWidget] Drag disabled - isDraggable:', this.isDraggable);
+      return;
+    }
+    
+    // Don't drag if clicking on buttons or input (but allow avatar and title)
+    const target = event.target as HTMLElement;
+    if (target.tagName === 'BUTTON' || target.closest('button:not(.teacher-avatar)') || target.closest('input')) {
+      console.log('[TeacherWidget] Ignoring drag - clicked on:', target.tagName);
+      return;
+    }
+    
+    console.log('[TeacherWidget] Starting drag from:', target.className);
+    // Don't prevent default on avatar to allow click
+    if (!target.closest('.teacher-avatar')) {
+      event.preventDefault();
+    }
     this.isDragging = true;
     
     const clientX = 'touches' in event ? event.touches[0].clientX : event.clientX;
@@ -660,11 +679,14 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy {
       if (rect) {
         this.widgetLeft = rect.left;
         this.widgetTop = rect.top;
+        console.log('[TeacherWidget] Initialized position:', this.widgetLeft, this.widgetTop);
       }
     }
     
     this.dragStartX = clientX - this.widgetLeft;
     this.dragStartY = clientY - this.widgetTop;
+    
+    console.log('[TeacherWidget] Drag start:', { clientX, clientY, dragStartX: this.dragStartX, dragStartY: this.dragStartY });
     
     // Add global listeners
     document.addEventListener('mousemove', this.onDrag);

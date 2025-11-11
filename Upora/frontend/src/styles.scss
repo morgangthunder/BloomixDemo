@@ -43,3 +43,9 @@ app-root {
 body.fullscreen-active app-header {
   display: none !important;
 }
+
+/* Prevent text selection cursor on non-text elements */
+button, .teacher-header, .teacher-avatar, .control-bar-btn, .teacher-fab {
+  user-select: none;
+  -webkit-user-select: none;
+}
