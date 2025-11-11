@@ -8,6 +8,7 @@ import { ContentSource } from '../entities/content-source.entity';
 import { ProcessedContentOutput } from '../entities/processed-content-output.entity';
 import { LlmGenerationLog } from '../entities/llm-generation-log.entity';
 import { LlmProvider } from '../entities/llm-provider.entity';
+import { AiPrompt } from '../entities/ai-prompt.entity';
 
 interface AnalysisResult {
   interactionTypeId: string;
@@ -32,6 +33,8 @@ export class ContentAnalyzerService {
     private llmLogRepository: Repository<LlmGenerationLog>,
     @InjectRepository(LlmProvider)
     private llmProviderRepository: Repository<LlmProvider>,
+    @InjectRepository(AiPrompt)
+    private aiPromptRepository: Repository<AiPrompt>,
     private readonly httpService: HttpService,
   ) {}
 
@@ -82,12 +85,28 @@ export class ContentAnalyzerService {
       throw new Error('No active LLM provider configured. Please configure a provider in Super Admin.');
     }
 
-    // 5. Generate Fragment Builder output using active provider
-    this.logger.log(`[ContentAnalyzer] 🤖 Calling ${provider.name} for Fragment Builder generation...`);
+    // 5. Get prompt from database (or use interaction type's default)
+    const dbPrompt = await this.aiPromptRepository.findOne({
+      where: { 
+        assistantId: 'content-analyzer', 
+        promptKey: 'trueFalseSelection', 
+        isActive: true 
+      },
+    });
+    const promptToUse = dbPrompt?.content || fragmentBuilder.generationPrompt;
+    
+    if (dbPrompt) {
+      this.logger.log('[ContentAnalyzer] 📝 Using prompt from database');
+    } else {
+      this.logger.log('[ContentAnalyzer] ⚠️ No DB prompt found, using interaction type default');
+    }
+
+    // 6. Generate True/False Selection output using active provider
+    this.logger.log(`[ContentAnalyzer] 🤖 Calling ${provider.name} for True/False Selection generation...`);
     const startTime = Date.now();
     const result = await this.generateFragmentBuilder(
       contentText,
-      fragmentBuilder.generationPrompt,
+      promptToUse,
       provider,
     );
     const processingTime = Date.now() - startTime;

@@ -2,7 +2,10 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
 import { IonContent } from '@ionic/angular/standalone';
+import { environment } from '../../../environments/environment';
+import { ToastService } from '../../core/services/toast.service';
 
 interface AIAssistant {
   id: string;
@@ -78,8 +81,10 @@ interface AIAssistant {
           </div>
 
           <div class="editor-actions">
-            <button class="btn-secondary" (click)="cancelEdit()">Cancel</button>
-            <button class="btn-primary" (click)="savePrompts()">Save Changes</button>
+            <button class="btn-secondary" (click)="cancelEdit()" [disabled]="saving">Cancel</button>
+            <button class="btn-primary" (click)="savePrompts()" [disabled]="saving">
+              {{ saving ? 'Saving...' : 'Save Changes' }}
+            </button>
           </div>
         </div>
       </div>
@@ -538,11 +543,46 @@ export class AiPromptsComponent implements OnInit {
     }
   ];
 
-  constructor(private router: Router) {}
+  loading = false;
+  saving = false;
 
-  ngOnInit() {
-    // In the future, load prompts from backend
+  constructor(
+    private router: Router,
+    private http: HttpClient,
+    private toastService: ToastService
+  ) {}
+
+  async ngOnInit() {
     console.log('[AIPrompts] Component initialized');
+    await this.loadPromptsFromBackend();
+  }
+
+  /**
+   * Load prompts from backend and merge with frontend template
+   */
+  async loadPromptsFromBackend() {
+    this.loading = true;
+    try {
+      const dbPrompts = await this.http.get<any[]>(`${environment.apiUrl}/ai-prompts`).toPromise();
+      
+      console.log('[AIPrompts] 📥 Loaded prompts from backend:', dbPrompts?.length || 0);
+      
+      if (dbPrompts && dbPrompts.length > 0) {
+        // Update assistant prompts with database content
+        dbPrompts.forEach(dbPrompt => {
+          const assistant = this.assistants.find(a => a.id === dbPrompt.assistantId);
+          if (assistant && assistant.prompts[dbPrompt.promptKey]) {
+            assistant.prompts[dbPrompt.promptKey].content = dbPrompt.content;
+            console.log(`[AIPrompts] ✓ Updated ${dbPrompt.assistantId}.${dbPrompt.promptKey}`);
+          }
+        });
+      }
+    } catch (error) {
+      console.error('[AIPrompts] ❌ Failed to load prompts:', error);
+      this.toastService.warning('Using default prompts. Database prompts not available.');
+    } finally {
+      this.loading = false;
+    }
   }
 
   selectAssistant(assistant: AIAssistant) {
@@ -557,16 +597,42 @@ export class AiPromptsComponent implements OnInit {
     this.selectedAssistant = null;
   }
 
-  savePrompts() {
-    if (!this.selectedAssistant) return;
+  async savePrompts() {
+    if (!this.selectedAssistant || this.saving) return;
 
-    console.log('[AIPrompts] Saving prompts for:', this.selectedAssistant.name, this.selectedAssistant.prompts);
-    
-    // TODO: Send to backend API
-    // this.http.put(`/api/super-admin/ai-prompts/${this.selectedAssistant.id}`, this.selectedAssistant.prompts)
-    
-    alert(`Prompts saved for ${this.selectedAssistant.name}!\n\n(Backend integration coming soon)`);
-    this.selectedAssistant = null;
+    console.log('[AIPrompts] 💾 Saving prompts for:', this.selectedAssistant.name);
+    this.saving = true;
+
+    try {
+      const updates = [];
+      
+      // Save each prompt
+      for (const promptKey of Object.keys(this.selectedAssistant.prompts)) {
+        const prompt = this.selectedAssistant.prompts[promptKey];
+        const promptId = `${this.selectedAssistant.id}.${promptKey}`;
+        
+        updates.push(
+          this.http.put(`${environment.apiUrl}/ai-prompts/${promptId}`, {
+            content: prompt.content
+          }).toPromise()
+        );
+      }
+      
+      await Promise.all(updates);
+      
+      console.log('[AIPrompts] ✅ All prompts saved successfully');
+      this.toastService.success(
+        `✓ Prompts saved for ${this.selectedAssistant.name}! Changes will take effect immediately.`,
+        4000
+      );
+      
+      this.selectedAssistant = null;
+    } catch (error: any) {
+      console.error('[AIPrompts] ❌ Failed to save prompts:', error);
+      this.toastService.error(`Failed to save prompts: ${error?.message || 'Unknown error'}`, 5000);
+    } finally {
+      this.saving = false;
+    }
   }
 
   goBack() {

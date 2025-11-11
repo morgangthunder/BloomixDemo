@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { firstValueFrom } from 'rxjs';
 import { LlmProvider } from '../entities/llm-provider.entity';
 import { LlmGenerationLog } from '../entities/llm-generation-log.entity';
+import { AiPrompt } from '../entities/ai-prompt.entity';
 
 export interface AutoPopulateResult {
   title: string;
@@ -42,6 +43,8 @@ Return ONLY valid JSON:
     private llmProviderRepository: Repository<LlmProvider>,
     @InjectRepository(LlmGenerationLog)
     private llmLogRepository: Repository<LlmGenerationLog>,
+    @InjectRepository(AiPrompt)
+    private aiPromptRepository: Repository<AiPrompt>,
     private readonly httpService: HttpService,
   ) {}
 
@@ -66,7 +69,21 @@ Return ONLY valid JSON:
     }
 
     const startTime = Date.now();
-    const promptToUse = customPrompt || this.DEFAULT_TEXT_PROMPT;
+    
+    // Fetch prompt from database if not provided
+    let promptToUse = customPrompt;
+    if (!promptToUse) {
+      const dbPrompt = await this.aiPromptRepository.findOne({
+        where: { assistantId: 'auto-populator', promptKey: 'textAutoPopulate', isActive: true },
+      });
+      promptToUse = dbPrompt?.content || this.DEFAULT_TEXT_PROMPT;
+      
+      if (dbPrompt) {
+        this.logger.log('[AutoPopulator] 📝 Using prompt from database');
+      } else {
+        this.logger.log('[AutoPopulator] ⚠️ No DB prompt found, using default');
+      }
+    }
 
     try {
       // Call LLM API
