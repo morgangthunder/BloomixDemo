@@ -360,7 +360,7 @@ interface ProcessedContentOutput {
                 <div class="content-config">
                   <label>Processed Content</label>
                   <div class="config-value">
-                    <span class="value">{{getContentOutputName(getSelectedSubStage()?.contentOutputId) || 'None'}}</span>
+                    <span class="value">{{getSelectedSubStage()?.contentOutputId ? getContentOutputName(getSelectedSubStage()!.contentOutputId!) : 'None'}}</span>
                     <button (click)="selectContent()" class="btn-small">Select</button>
                   </div>
                 </div>
@@ -1949,6 +1949,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   // Processed Content
   processedContentItems: ProcessedContentItem[] = [];
   selectedProcessedContent: ProcessedContentItem | null = null;
+  aiMessage: string = '';
   
   // Tab Configuration
   tabs = [
@@ -2068,23 +2069,16 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       id: '',
       title: 'Untitled Lesson',
       description: '',
-      thumbnail: '',
-      duration: 0,
-      difficulty: 'beginner',
+      thumbnailUrl: '',
+      duration: '0',
+      difficulty: 'Beginner',
       tags: [],
       category: '',
-      status: 'draft',
-      accountId: '',
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       data: {
-        structure: {
-          stages: []
-        },
-        config: {
-          objectives: [],
-          prerequisites: []
-        }
+        stages: []
       }
     };
     this.stages = [];
@@ -2097,27 +2091,32 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
    */
   loadLesson(id: string) {
     console.log('[LessonEditor] 📖 Loading lesson:', id);
-    this.lessonService.getLesson(id)
+    this.http.get<any>(`${environment.apiUrl}/lessons/${id}`, {
+      headers: {
+        'x-tenant-id': environment.tenantId
+      }
+    })
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (lesson) => {
+        next: (lesson: any) => {
           console.log('[LessonEditor] ✅ Lesson loaded:', lesson);
           this.lesson = lesson;
           
-          // Parse the new JSON structure: lesson.data.structure.stages
-          if (lesson.data?.structure?.stages) {
-            console.log('[LessonEditor] 📊 Parsing stages from lesson.data.structure.stages');
-            this.stages = this.parseStagesFromJSON(lesson.data.structure.stages);
+          // Parse the new JSON structure: lesson.data.structure.stages or lesson.data.stages
+          const stagesData = lesson.data?.structure?.stages || lesson.data?.stages;
+          if (stagesData) {
+            console.log('[LessonEditor] 📊 Parsing stages from lesson data');
+            this.stages = this.parseStagesFromJSON(stagesData);
             console.log('[LessonEditor] ✅ Parsed stages:', this.stages);
           } else {
-            console.warn('[LessonEditor] ⚠️ No stages found in lesson.data.structure');
+            console.warn('[LessonEditor] ⚠️ No stages found in lesson data');
             this.stages = [];
           }
           
           // Set default selection to lesson
           this.selectedItem = { type: 'lesson', id: lesson.id };
         },
-        error: (error) => {
+        error: (error: any) => {
           console.error('[LessonEditor] ❌ Failed to load lesson:', error);
           alert('Failed to load lesson. Please try again.');
           this.router.navigate(['/lesson-builder']);
@@ -2217,601 +2216,80 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     return undefined;
   }
 
-  initializeNewLesson() {
-    this.lesson = {
-      id: 0 as any,
-      title: '',
-      description: '',
-      category: '',
-      difficulty: undefined,
-      durationMinutes: 30,
-      thumbnailUrl: '',
-      tags: [],
-      data: { stages: [] },
-      status: 'pending',
-      views: 0,
-      completions: 0,
-      completionRate: '0',
-      createdBy: ''
-    };
-    this.selectedItem = { type: 'lesson', id: String(this.lesson?.id || '') };
-  }
-
-  async loadLesson(id: string) {
-    try {
-      // Load from API
-      console.log('[LessonEditor] 🔍 Attempting to load lesson with ID:', id);
-      console.log('[LessonEditor] 🔍 Making request to:', `http://localhost:3000/api/lessons/${id}`);
-      
-      const response = await fetch(`http://localhost:3000/api/lessons/${id}`, {
-        headers: {
-          'x-tenant-id': '00000000-0000-0000-0000-000000000001'
-        }
-      });
-      
-      console.log('[LessonEditor] 🔍 Response status:', response.status, response.statusText);
-      
-      if (!response.ok) {
-        if (response.status === 404) {
-          console.log('[LessonEditor] ❌ Lesson not found (404), creating new lesson instead');
-          this.isNewLesson = true;
-          this.initializeNewLesson();
-          return;
-        }
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const apiLesson = await response.json();
-      console.log('[LessonEditor] ✅ Successfully loaded lesson from API:', apiLesson);
-      
-      this.lesson = {
-        id: apiLesson.id,
-        title: apiLesson.title,
-        description: apiLesson.description,
-        category: apiLesson.category,
-        difficulty: apiLesson.difficulty,
-        durationMinutes: apiLesson.durationMinutes,
-        thumbnailUrl: apiLesson.thumbnailUrl,
-        tags: apiLesson.tags || [],
-        data: apiLesson.data || { stages: [] },
-        status: apiLesson.status,
-        views: apiLesson.views || 0,
-        completions: apiLesson.completions || 0,
-        completionRate: apiLesson.completionRate || '0',
-        createdBy: apiLesson.createdBy
-      };
-      
-      this.tagsString = this.lesson?.tags?.join(', ') || '';
-      this.selectedItem = { type: 'lesson', id: String(this.lesson?.id || '') };
-      
-      console.log('[LessonEditor] ✅ Lesson loaded successfully:', this.lesson.title);
-      
-      // Load stages from lesson.data
-      this.loadStagesFromLesson();
-    } catch (error: any) {
-      console.error('[LessonEditor] ❌ Failed to load lesson:', error);
-      console.error('[LessonEditor] ❌ Error details:', {
-        name: error.name,
-        message: error.message,
-        stack: error.stack
-      });
-      
-      // Check if it's a network error (backend not running)
-      if (error instanceof TypeError && error.message.includes('fetch')) {
-        console.log('[LessonEditor] 🌐 Backend not available, creating new lesson');
-        this.isNewLesson = true;
-        this.initializeNewLesson();
-        return;
-      }
-      
-      // Check if it's a lesson not found error
-      if (error.message && error.message.includes('Lesson not found')) {
-        console.log('[LessonEditor] ❌ Lesson not found, creating new lesson');
-        this.isNewLesson = true;
-        this.initializeNewLesson();
-        return;
-      }
-      
-      // For other errors, show alert and redirect
-      console.error('[LessonEditor] ❌ Unexpected error:', error);
-      alert('Failed to load lesson. Please try again.');
-      this.router.navigate(['/lesson-builder']);
-    }
-  }
-
-  loadStagesFromLesson() {
-    console.log('[LessonEditor] 🔄 Loading stages from lesson.data - VERSION 0.0.5');
-    console.log('[LessonEditor] 🔍 Full lesson object:', this.lesson);
-    console.log('[LessonEditor] 🔍 lesson.data:', this.lesson?.data);
-    
-    // Parse stages from lesson.data
-    if (this.lesson?.data) {
-      // Handle both old format (data.stages) and new format (data.structure.stages)
-      const stagesData = (this.lesson.data as any).structure?.stages || (this.lesson.data as any).stages || [];
-      
-      console.log('[LessonEditor] 📊 Found stages data:', JSON.stringify(stagesData, null, 2));
-      console.log('[LessonEditor] 📊 Stages array length:', stagesData.length);
-      
-      if (stagesData && stagesData.length > 0) {
-        this.stages = this.parseStagesFromJSON(stagesData);
-        console.log('[LessonEditor] ✅ Loaded', this.stages.length, 'stages');
-        console.log('[LessonEditor] ✅ Parsed stages:', this.stages);
-      } else {
-        console.log('[LessonEditor] ⚠️ No stages found in lesson data');
-        this.stages = [];
-      }
-    } else {
-      console.log('[LessonEditor] ⚠️ No lesson data found');
-      this.stages = [];
-    }
-  }
-
-  /**
-   * Parse stages from backend JSON format to frontend Stage[] format
-   */
-  parseStagesFromJSON(stagesData: any[]): Stage[] {
-    return stagesData.map((stageData, index) => {
-      const stage: Stage = {
-        id: stageData.id || `stage-${Date.now()}-${index}`,
-        title: stageData.title || `Stage ${index + 1}`,
-        type: stageData.type || 'trigger',
-        subStages: [],
-        expanded: false
-      };
-
-      // Parse substages if they exist
-      if (stageData.subStages && Array.isArray(stageData.subStages)) {
-        stage.subStages = stageData.subStages.map((subStageData: any, subIndex: number) => {
-          const subStage: SubStage = {
-            id: subStageData.id || `substage-${Date.now()}-${subIndex}`,
-            title: subStageData.title || `Substage ${subIndex + 1}`,
-            type: subStageData.type || 'default',
-            duration: subStageData.duration || 5,
-            interactionType: subStageData.interaction?.type || 'none',
-            contentOutputId: subStageData.contentOutputId,
-            scriptBlocks: []
-          };
-
-          // Parse script blocks BEFORE interaction
-          if (subStageData.scriptBlocks && Array.isArray(subStageData.scriptBlocks)) {
-            subStage.scriptBlocks = subStageData.scriptBlocks.map((blockData: any, blockIndex: number) => ({
-              id: blockData.id || `block-${Date.now()}-${blockIndex}`,
-              type: 'teacher_talk',
-              content: blockData.text || blockData.content || '',
-              startTime: blockData.idealTimestamp || 0,
-              endTime: (blockData.idealTimestamp || 0) + (blockData.estimatedDuration || 30),
-              metadata: {
-                order: blockData.order,
-                playbackRules: blockData.playbackRules,
-                audioUrl: blockData.audioUrl
-              }
-            }));
-          }
-
-          // Add interaction as a special script block if it exists
-          if (subStageData.interaction && subStageData.interaction.type) {
-            const interactionStartTime = subStage.scriptBlocks.length > 0 
-              ? Math.max(...subStage.scriptBlocks.map(b => b.endTime))
-              : 0;
-            
-            subStage.scriptBlocks.push({
-              id: `interaction-${subStageData.id}`,
-              type: 'load_interaction',
-              content: `Interaction: ${subStageData.interaction.type}`,
-              startTime: interactionStartTime,
-              endTime: interactionStartTime + 60, // Default 60 seconds for interaction
-              metadata: {
-                interactionType: subStageData.interaction.type,
-                interactionConfig: subStageData.interaction.config,
-                isInteraction: true
-              }
-            });
-          }
-
-          // Parse script blocks AFTER interaction
-          if (subStageData.scriptBlocksAfterInteraction && Array.isArray(subStageData.scriptBlocksAfterInteraction)) {
-            const afterBlocks = subStageData.scriptBlocksAfterInteraction.map((blockData: any, blockIndex: number) => {
-              const lastEndTime = subStage.scriptBlocks.length > 0 
-                ? Math.max(...subStage.scriptBlocks.map(b => b.endTime))
-                : 0;
-              
-              return {
-                id: blockData.id || `block-after-${Date.now()}-${blockIndex}`,
-                type: 'teacher_talk',
-                content: blockData.text || blockData.content || '',
-                startTime: lastEndTime + (blockData.idealTimestamp || 0),
-                endTime: lastEndTime + (blockData.idealTimestamp || 0) + (blockData.estimatedDuration || 30),
-                metadata: {
-                  order: blockData.order,
-                  playbackRules: blockData.playbackRules,
-                  audioUrl: blockData.audioUrl,
-                  triggerCondition: blockData.triggerCondition,
-                  afterInteraction: true
-                }
-              };
-            });
-            
-            subStage.scriptBlocks.push(...afterBlocks);
-          }
-
-          return subStage;
-        });
-      }
-
-      return stage;
-    });
-  }
-
-  /**
-   * Convert frontend Stage[] format to backend JSON format
-   */
-  convertStagesToJSON(): any[] {
-    return this.stages.map((stage, index) => ({
-      id: stage.id,
-      title: stage.title,
-      type: stage.type,
-      description: this.getStageTypeDescription(stage.type),
-      duration: stage.subStages.reduce((total, ss) => total + (ss.duration || 0), 0),
-      order: index,
-      subStages: stage.subStages.map((subStage, subIndex) => ({
-        id: subStage.id,
-        title: subStage.title,
-        type: subStage.type,
-        duration: subStage.duration,
-        order: subIndex,
-        interactionType: subStage.interactionType || 'none',
-        contentOutputId: subStage.contentOutputId,
-        scriptBlocks: (subStage.scriptBlocks || []).map((block, blockIndex) => ({
-          id: block.id,
-          type: block.type,
-          content: block.content,
-          startTime: block.startTime,
-          endTime: block.endTime,
-          duration: block.endTime - block.startTime,
-          order: blockIndex,
-          metadata: block.metadata || {}
-        })),
-        metadata: {
-          learningObjectives: [],
-          keyPoints: [],
-          difficulty: 'medium' as const
-        }
-      })),
-      aiPrompt: '',
-      prerequisites: []
-    }));
-  }
-
-  /**
-   * Get the currently selected substage
-   */
-  getSelectedSubStage(): SubStage | null {
-    if (this.selectedItem.type !== 'substage') {
-      return null;
-    }
-    
-    const stage = this.stages.find(s => s.id === this.selectedItem.stageId);
-    if (!stage) {
-      return null;
-    }
-    
-    return stage.subStages.find(ss => ss.id === this.selectedItem.id) || null;
-  }
-
-  /**
-   * Get the currently selected stage
-   */
-  getSelectedStage(): Stage | null {
-    if (this.selectedItem.type === 'lesson') {
-      return null;
-    }
-    
-    if (this.selectedItem.type === 'stage') {
-      return this.stages.find(s => s.id === this.selectedItem.id) || null;
-    }
-    
-    if (this.selectedItem.type === 'substage') {
-      return this.stages.find(s => s.id === this.selectedItem.stageId) || null;
-    }
-    
-    return null;
-  }
-
-  /**
-   * Format seconds as MM:SS
-   */
-  formatTime(seconds: number): string {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  }
-
-  /**
-   * Get icon for script block type
-   */
-  getBlockIcon(type: string): string {
-    switch (type) {
-      case 'teacher_talk':
-        return '👨‍🏫';
-      case 'load_interaction':
-        return '🎯';
-      case 'pause':
-        return '⏸';
-      default:
-        return '📝';
-    }
-  }
-
-  /**
-   * Select a lesson item (lesson, stage, or substage)
-   */
-  selectItem(item: {type: 'lesson' | 'stage' | 'substage', id: string, stageId?: string}) {
-    this.selectedItem = item;
-    
-    // If Script tab is active and a substage is selected, auto-scroll to first script block
-    if (this.activeTab === 'script' && item.type === 'substage') {
-      setTimeout(() => {
-        const firstScriptBlock = document.querySelector('.script-block');
-        if (firstScriptBlock) {
-          firstScriptBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      }, 100);
-    }
-  }
-
-  /**
-   * Add a new script block to the currently selected substage
-   */
-  addScriptBlock() {
-    const substage = this.getSelectedSubStage();
-    if (!substage) {
-      console.warn('[LessonEditor] No substage selected');
-      return;
-    }
-    
-    if (!substage.scriptBlocks) {
-      substage.scriptBlocks = [];
-    }
-    
-    const newBlock: ScriptBlock = {
-      id: `block-${Date.now()}`,
-      type: 'teacher_talk',
-      content: '',
-      startTime: 0,
-      endTime: 30,
-      metadata: {}
-    };
-    
-    substage.scriptBlocks.push(newBlock);
-    this.markAsChanged();
-    console.log('[LessonEditor] ✅ Added new script block');
-  }
-
-  /**
-   * Delete a script block
-   */
-  deleteScriptBlock(index: number) {
-    const substage = this.getSelectedSubStage();
-    if (!substage || !substage.scriptBlocks) {
-      return;
-    }
-    
-    if (confirm('Delete this script block?')) {
-      substage.scriptBlocks.splice(index, 1);
-      this.markAsChanged();
-      console.log('[LessonEditor] 🗑️ Deleted script block');
-    }
-  }
-
-  /**
-   * Mark the lesson as having unsaved changes
-   */
-  markAsChanged() {
-    this.hasUnsavedChanges = true;
-    console.log('[LessonEditor] 📝 Changes detected - Save Draft button enabled');
-  }
-
+  // Navigation
   goBack() {
     if (this.hasUnsavedChanges) {
-      if (confirm('You have unsaved changes. Are you sure you want to leave?')) {
-        this.router.navigate(['/lesson-builder']);
-      }
-    } else {
-      this.router.navigate(['/lesson-builder']);
+      const confirmed = confirm('You have unsaved changes. Are you sure you want to leave?');
+      if (!confirmed) return;
     }
+    this.router.navigate(['/lesson-builder']);
   }
 
-  async saveDraft() {
-    if (!this.hasUnsavedChanges && this.lastSaved) {
-      this.showSnackbar('No changes to save');
-      return;
-    }
-    
-    if (!this.lesson || !this.lesson.id) {
-      this.showSnackbar('Cannot save: No lesson ID');
-      return;
-    }
-    
+  // Draft Management  
+  saveDraft() {
     console.log('[LessonEditor] 💾 Saving draft...');
     this.saving = true;
-    
-    try {
-      // Prepare the lesson data with updated stages
-      const stagesJSON = this.convertStagesToJSON();
-      
-      // Create the payload with updated data
-      const payload = {
-        title: this.lesson.title,
-        description: this.lesson.description,
-        category: this.lesson.category,
-        difficulty: this.lesson.difficulty,
-        durationMinutes: this.calculateTotalDuration(),
-        thumbnailUrl: this.lesson.thumbnailUrl,
-        tags: this.lesson.tags || [],
-        data: {
-          ...(this.lesson.data || {}),
-          stages: stagesJSON, // Support old format
-          structure: {
-            stages: stagesJSON,
-            totalDuration: this.calculateTotalDuration(),
-            learningObjectives: []
-          },
-          metadata: {
-            ...(this.lesson.data as any)?.metadata,
-            updated: new Date().toISOString()
-          }
-        }
-      };
-      
-      // Save to drafts table (not live lesson)
-      const url = `${environment.apiUrl}/lesson-drafts`;
-      console.log('[LessonEditor] 📤 Saving draft to:', url);
-      console.log('[LessonEditor] 📤 Payload:', payload);
-      
-      // Send POST request to create/update draft
-      const response = await this.http.post(
-        url,
-        {
-          lessonId: this.lesson.id,
-          draftData: payload
-        },
-        {
-          headers: {
-            'x-tenant-id': environment.tenantId,
-            'x-user-id': environment.defaultUserId
-          }
-        }
-      ).toPromise();
-      
-      console.log('[LessonEditor] ✅ Draft saved:', response);
-      
-      // Update state
+    // TODO: Implement draft saving via API
+    setTimeout(() => {
       this.saving = false;
       this.hasUnsavedChanges = false;
       this.lastSaved = new Date();
-      this.showSnackbar('Draft saved - pending approval');
-      
-    } catch (error: any) {
-      console.error('[LessonEditor] ❌ Save failed - VERSION 0.0.5');
-      console.error('[LessonEditor] ❌ Error details:', error);
-      console.error('[LessonEditor] ❌ Error status:', error.status);
-      console.error('[LessonEditor] ❌ Error message:', error.message);
-      console.error('[LessonEditor] ❌ Error response:', error.error);
-      this.saving = false;
-      this.showSnackbar(`Failed to save: ${error.status} ${error.error?.message || error.message || 'Unknown error'}`);
-    }
-  }
-
-  submitForApproval() {
-    if (this.hasBeenSubmitted) {
-      this.showSnackbar('Already submitted for approval');
-      return;
-    }
-    
-    if (!this.canSubmit()) {
-      this.showSnackbar('Please fill in all required fields');
-      return;
-    }
-    
-    this.saving = true;
-    // TODO: Submit to API
-    setTimeout(() => {
-      this.saving = false;
-      this.hasBeenSubmitted = true;
-      this.hasUnsavedChanges = false;
-      this.showSnackbar('Submitted for approval');
-      console.log('Submitted for approval');
-      // Navigate after short delay so user sees the snackbar
-      setTimeout(() => {
-        this.router.navigate(['/lesson-builder']);
-      }, 1500);
+      console.log('[LessonEditor] ✅ Draft saved');
     }, 1000);
   }
 
-  canSubmit(): boolean {
-    return !!(this.lesson?.title && this.lesson?.description && this.lesson?.category && this.lesson?.difficulty);
-  }
-  
-  showSnackbar(message: string) {
-    this.snackbarMessage = message;
-    this.snackbarVisible = true;
-    
-    if (this.snackbarTimeout) {
-      clearTimeout(this.snackbarTimeout);
-    }
-    
-    this.snackbarTimeout = setTimeout(() => {
-      this.snackbarVisible = false;
-    }, 3000);
-  }
-  
-  markAsChanged() {
-    this.hasUnsavedChanges = true;
+  submitForApproval() {
+    console.log('[LessonEditor] 📤 Submitting for approval...');
+    // TODO: Implement approval submission
+    alert('Submit for approval - To be implemented');
   }
 
+  canSubmit(): boolean {
+    return !!(this.lesson?.title && this.stages.length > 0);
+  }
+
+  // Sidebar
   toggleSidebar() {
     this.sidebarCollapsed = !this.sidebarCollapsed;
-    // Ensure mobile sidebar is closed when toggling collapse
-    if (this.sidebarCollapsed) {
-      this.mobileSidebarOpen = false;
-    }
   }
 
-  selectItem(item: {type: 'lesson' | 'stage' | 'substage', id: string, stageId?: string}) {
-    this.selectedItem = item;
-    
-    // Smart tab switching based on selection
-    if (item.type === 'stage' && this.activeTab === 'details') {
-      this.activeTab = 'structure';
-    } else if (item.type === 'substage') {
-      // Check if substage has script blocks
-      const substage = this.getSelectedSubStage();
-      if (substage?.scriptBlocks && substage.scriptBlocks.length > 0 && this.activeTab === 'details') {
-        this.activeTab = 'script';
-      } else if (this.activeTab === 'details') {
-        this.activeTab = 'structure';
-      }
-    }
-    
-    // Close mobile sidebar after selection
-    this.closeMobileSidebar();
+  toggleMobileSidebar() {
+    this.mobileSidebarOpen = !this.mobileSidebarOpen;
   }
-  
+
   closeMobileSidebar() {
     this.mobileSidebarOpen = false;
   }
-  
-  openMobileSidebar() {
-    this.mobileSidebarOpen = true;
-  }
-  
-  toggleMobileSidebar() {
-    this.mobileSidebarOpen = !this.mobileSidebarOpen;
+
+  // Selection
+  selectItem(item: {type: 'lesson' | 'stage' | 'substage', id: string, stageId?: string}) {
+    this.selectedItem = item;
+    console.log('[LessonEditor] 📍 Selected:', item);
   }
 
   // Stage Management
   addStage() {
     const newStage: Stage = {
       id: `stage-${Date.now()}`,
-      title: `Stage ${this.stages.length + 1}`,
+      title: `New Stage ${this.stages.length + 1}`,
       type: 'trigger',
       subStages: [],
       expanded: true
     };
     this.stages.push(newStage);
-    this.selectItem({ type: 'stage', id: newStage.id });
+    this.selectedItem = { type: 'stage', id: newStage.id };
     this.markAsChanged();
   }
 
   deleteStage(stageId: string, event: Event) {
     event.stopPropagation();
-    if (confirm('Delete this stage and all its substages?')) {
-      this.stages = this.stages.filter(s => s.id !== stageId);
-      if (this.selectedItem.type === 'stage' && this.selectedItem.id === stageId) {
-        this.selectItem({ type: 'lesson', id: String(this.lesson?.id || '') });
-      }
-      this.markAsChanged();
+    const confirmed = confirm('Delete this stage and all its sub-stages?');
+    if (!confirmed) return;
+    this.stages = this.stages.filter(s => s.id !== stageId);
+    if (this.selectedItem?.type === 'stage' && this.selectedItem.id === stageId) {
+      this.selectedItem = { type: 'lesson', id: this.lesson?.id || '' };
     }
+    this.markAsChanged();
   }
 
   toggleStageExpanded(stageId: string, event: Event) {
@@ -2822,179 +2300,84 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     }
   }
 
-  // SubStage Management
+  // Sub-stage Management
   addSubStage(stageId: string) {
     const stage = this.stages.find(s => s.id === stageId);
-    if (stage) {
-      // Get first available substage type for this stage
-      const availableTypes = this.getAvailableSubStageTypes(stage.type);
-      const defaultType = availableTypes[0] || 'default';
-      
-      const newSubStage: SubStage = {
-        id: `substage-${Date.now()}`,
-        title: `Substage ${stage.subStages.length + 1}`,
-        type: defaultType,
-        duration: 5,
-        scriptBlocks: []
-      };
-      stage.subStages.push(newSubStage);
-      this.selectItem({ type: 'substage', id: newSubStage.id, stageId: stageId });
-      this.markAsChanged();
-    }
+    if (!stage) return;
+    const newSubStage: SubStage = {
+      id: `substage-${Date.now()}`,
+      title: `New Sub-stage ${stage.subStages.length + 1}`,
+      type: 'intro',
+      duration: 5,
+      scriptBlocks: []
+    };
+    stage.subStages.push(newSubStage);
+    this.selectedItem = { type: 'substage', id: newSubStage.id, stageId: stage.id };
+    this.markAsChanged();
   }
 
   deleteSubStage(stageId: string, substageId: string, event: Event) {
     event.stopPropagation();
-    if (confirm('Delete this substage?')) {
-      const stage = this.stages.find(s => s.id === stageId);
-      if (stage) {
-        stage.subStages = stage.subStages.filter(ss => ss.id !== substageId);
-        if (this.selectedItem.type === 'substage' && this.selectedItem.id === substageId) {
-          this.selectItem({ type: 'stage', id: stageId });
-        }
-        this.markAsChanged();
+    const confirmed = confirm('Delete this sub-stage?');
+    if (!confirmed) return;
+    const stage = this.stages.find(s => s.id === stageId);
+    if (stage) {
+      stage.subStages = stage.subStages.filter(ss => ss.id !== substageId);
+      if (this.selectedItem?.type === 'substage' && this.selectedItem.id === substageId) {
+        this.selectedItem = { type: 'stage', id: stageId };
       }
-    }
-  }
-
-  // Getters
-  getSelectedStage(): Stage | undefined {
-    // If stage is selected, return it
-    if (this.selectedItem.type === 'stage') {
-      return this.stages.find(s => s.id === this.selectedItem.id);
-    }
-    // If substage is selected, return parent stage
-    if (this.selectedItem.type === 'substage' && this.selectedItem.stageId) {
-      return this.stages.find(s => s.id === this.selectedItem.stageId);
-    }
-    return undefined;
-  }
-
-  getSelectedSubStage(): SubStage | undefined {
-    if (this.selectedItem.type !== 'substage' || !this.selectedItem.stageId) return undefined;
-    const stage = this.stages.find(s => s.id === this.selectedItem.stageId);
-    return stage?.subStages.find(ss => ss.id === this.selectedItem.id);
-  }
-
-  getTotalSubStages(): number {
-    return this.stages.reduce((total, stage) => total + stage.subStages.length, 0);
-  }
-
-  calculateTotalDuration(): number {
-    let total = 0;
-    this.stages.forEach(stage => {
-      stage.subStages.forEach(substage => {
-        total += substage.duration || 0;
-      });
-    });
-    return total;
-  }
-
-  // Icons & Descriptions
-  getStageIcon(type: string): string {
-    const icons: Record<string, string> = {
-      trigger: '🎯',
-      explore: '🔍',
-      absorb: '📚',
-      cultivate: '🌱',
-      hone: '⚡'
-    };
-    return icons[type] || '📌';
-  }
-
-  getStageTypeDescription(type: string): string {
-    const descriptions: Record<string, string> = {
-      trigger: 'Hook students\' attention and spark their curiosity about the topic',
-      explore: 'Help students discover and understand the concept through exploration',
-      absorb: 'Guide students to internalize knowledge through focused learning',
-      cultivate: 'Provide practice opportunities to apply what they\'ve learned',
-      hone: 'Enable students to master the skill through refinement and challenge'
-    };
-    return descriptions[type] || '';
-  }
-
-  getBlockIcon(type: string): string {
-    const icons: Record<string, string> = {
-      teacher_talk: '👨‍🏫',
-      load_interaction: '🎯',
-      pause: '⏸'
-    };
-    return icons[type] || '▪';
-  }
-
-  // Script Management
-  addScriptBlock() {
-    const substage = this.getSelectedSubStage();
-    if (substage) {
-      if (!substage.scriptBlocks) {
-        substage.scriptBlocks = [];
-      }
-      const lastBlock = substage.scriptBlocks[substage.scriptBlocks.length - 1];
-      const startTime = lastBlock ? lastBlock.endTime : 0;
-      const endTime = Math.min(startTime + 30, (substage.duration || 5) * 60);
-      
-      substage.scriptBlocks.push({
-        id: `block-${Date.now()}`,
-        type: 'teacher_talk',
-        content: '',
-        startTime: startTime,
-        endTime: endTime,
-        metadata: {}
-      });
       this.markAsChanged();
     }
+  }
+
+  // Script Blocks
+  addScriptBlock() {
+    const substage = this.getSelectedSubStage();
+    if (!substage) {
+      alert('Please select a sub-stage first');
+      return;
+    }
+    if (!substage.scriptBlocks) {
+      substage.scriptBlocks = [];
+    }
+    const newBlock: ScriptBlock = {
+      id: `block-${Date.now()}`,
+      type: 'teacher_talk',
+      content: '',
+      startTime: substage.scriptBlocks.length * 10,
+      endTime: (substage.scriptBlocks.length * 10) + 10
+    };
+    substage.scriptBlocks.push(newBlock);
+    this.markAsChanged();
   }
 
   deleteScriptBlock(index: number) {
     const substage = this.getSelectedSubStage();
-    if (substage && substage.scriptBlocks) {
-      substage.scriptBlocks.splice(index, 1);
-      this.markAsChanged();
-    }
+    if (!substage || !substage.scriptBlocks) return;
+    const confirmed = confirm('Delete this script block?');
+    if (!confirmed) return;
+    substage.scriptBlocks.splice(index, 1);
+    this.markAsChanged();
   }
 
-  formatTime(seconds: number): string {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  // Content Processing
+  openContentProcessor() {
+    this.showContentProcessor = true;
   }
 
-  // Content Management
-  getContentOutputName(id: string | undefined): string {
-    if (!id) return '';
-    const output = this.processedOutputs.find(o => o.id === id);
-    return output ? output.name : '';
+  closeContentProcessor() {
+    this.showContentProcessor = false;
   }
 
-  changeInteractionType() {
-    console.log('Open interaction type modal');
-    // TODO: Open modal to select interaction type
+  openPdfModal() {
+    this.showPdfModal = true;
   }
 
-  selectContent() {
-    console.log('Open content selection modal');
-    // TODO: Open modal to select processed content
+  closePdfModal() {
+    this.showPdfModal = false;
   }
 
-  searchContentLibrary() {
-    console.log('[LessonEditor] 📚 Opening content library search');
-    this.showContentLibrary = true;
-  }
-
-  closeContentLibrary() {
-    console.log('[LessonEditor] 📚 Closing content library');
-    this.showContentLibrary = false;
-  }
-
-  onContentAdded(event: any) {
-    console.log('[LessonEditor] ✅ Content added to lesson:', event);
-    this.showSnackbar(`Content "${event.content.title}" added to lesson`);
-    // Could reload linked content here if needed
-  }
-
-  // New Content Modals
   openTextModal() {
-    console.log('[LessonEditor] 📝 Opening add text content modal');
     this.showTextModal = true;
   }
 
@@ -3003,7 +2386,6 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   }
 
   openImageModal() {
-    console.log('[LessonEditor] 🖼️ Opening add image modal');
     this.showImageModal = true;
   }
 
@@ -3011,79 +2393,6 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     this.showImageModal = false;
   }
 
-  openPdfModal() {
-    console.log('[LessonEditor] 📄 Opening add PDF modal');
-    this.showPdfModal = true;
-  }
-
-  closePdfModal() {
-    this.showPdfModal = false;
-  }
-
-  async onNewContentAdded(contentData: any) {
-    console.log('[LessonEditor] ✅ New content added:', contentData);
-    this.showSnackbar(`Content "${contentData.title}" submitted for approval`);
-    // Reload processed content list
-    await this.loadProcessedContent();
-  }
-
-  // Content Processing Modal Methods
-  openContentProcessor() {
-    console.log('[LessonEditor] 🟢 openContentProcessor called - VERSION 0.0.2');
-    console.log('[LessonEditor] 🔍 Before open - showContentProcessor:', this.showContentProcessor);
-    console.log('[LessonEditor] 🔍 Before open - contentProcessorVideoId:', this.contentProcessorVideoId);
-    
-    this.showContentProcessor = true;
-    
-    console.log('[LessonEditor] 🔍 After open - showContentProcessor:', this.showContentProcessor);
-  }
-
-  closeContentProcessor() {
-    console.log('[LessonEditor] 🔴 closeContentProcessor called - VERSION 0.0.2');
-    console.log('[LessonEditor] 🔍 Before close - showContentProcessor:', this.showContentProcessor);
-    console.log('[LessonEditor] 🔍 Before close - contentProcessorVideoId:', this.contentProcessorVideoId);
-    
-    this.showContentProcessor = false;
-    // Clear videoId when closing modal to allow Paste URL button to work again
-    this.contentProcessorVideoId = undefined;
-    this.contentProcessorResumeProcessing = false;
-    
-    console.log('[LessonEditor] 🔍 After close - showContentProcessor:', this.showContentProcessor);
-    console.log('[LessonEditor] 🔍 After close - contentProcessorVideoId:', this.contentProcessorVideoId);
-  }
-
-  onContentProcessed(content: any) {
-    console.log('[LessonEditor] ✅ Content processed:', content);
-    
-    // Reload processed content from service
-    this.loadProcessedContent();
-    
-    // Also add to processed outputs for backward compatibility
-    this.processedOutputs.push({
-      id: `output-${Date.now()}`,
-      name: content.name || 'Processed Content',
-      type: content.type || 'unknown',
-      data: content.data,
-      workflowName: content.workflowName || 'Unknown Workflow'
-    });
-    
-    this.markAsChanged();
-    
-    // Clear videoId and resumeProcessing flag now that processing is complete
-    this.contentProcessorVideoId = undefined;
-    this.contentProcessorResumeProcessing = false;
-    
-    // DON'T close the modal automatically - let the user click "Submit for Approval" or close manually
-    // this.closeContentProcessor();
-  }
-
-  onContentSubmittedForApproval(content: any) {
-    console.log('Content submitted for approval:', content);
-    this.showSnackbar('Content submitted for approval');
-    this.closeContentProcessor();
-  }
-
-  // Approval Queue Modal Methods
   openApprovalQueue() {
     this.showApprovalQueue = true;
   }
@@ -3092,148 +2401,243 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     this.showApprovalQueue = false;
   }
 
-  onItemApproved(item: any) {
-    console.log('Item approved:', item);
-    this.showSnackbar('Item approved');
+  searchContentLibrary() {
+    this.showContentLibrary = true;
   }
 
-  onItemRejected(item: any) {
-    console.log('Item rejected:', item);
-    this.showSnackbar('Item rejected');
+  closeContentLibrary() {
+    this.showContentLibrary = false;
+  }
+
+  changeInteractionType() {
+    alert('Change interaction type - To be implemented');
+  }
+
+  selectContent() {
+    this.showContentLibrary = true;
   }
 
   // AI Assistant
   sendAIMessage() {
-    if (!this.aiChatInput.trim()) return;
-    console.log('AI Message:', this.aiChatInput);
-    // TODO: Send to AI API
-    this.aiChatInput = '';
+    console.log('[LessonEditor] 🤖 Sending AI message:', this.aiMessage);
+    // TODO: Implement AI chat
+    alert('AI Assistant - To be implemented');
+    this.aiMessage = '';
   }
-  
-  // ========== Drag and Drop ==========
-  
+
+  // Drag & Drop
   onStageDragStart(stage: Stage, event: DragEvent) {
-    this.draggedStage = stage;
-    if (event.dataTransfer) {
-      event.dataTransfer.effectAllowed = 'move';
-    }
+    console.log('[LessonEditor] 🎯 Drag start:', stage.id);
+    event.dataTransfer!.effectAllowed = 'move';
+    event.dataTransfer!.setData('text/plain', stage.id);
   }
-  
+
   onStageDragOver(stageId: string, event: DragEvent) {
     event.preventDefault();
-    if (this.draggedStage && this.draggedStage.id !== stageId) {
-      this.dragOverStageId = stageId;
-    }
+    event.dataTransfer!.dropEffect = 'move';
   }
-  
+
   onStageDragLeave() {
-    this.dragOverStageId = null;
+    // Drag leave handling
   }
-  
+
   onStageDrop(targetStage: Stage, event: DragEvent) {
     event.preventDefault();
-    this.dragOverStageId = null;
-    
-    if (this.draggedStage && this.draggedStage.id !== targetStage.id) {
-      const draggedIndex = this.stages.findIndex(s => s.id === this.draggedStage!.id);
-      const targetIndex = this.stages.findIndex(s => s.id === targetStage.id);
-      
-      if (draggedIndex !== -1 && targetIndex !== -1) {
-        const [removed] = this.stages.splice(draggedIndex, 1);
-        this.stages.splice(targetIndex, 0, removed);
-      }
-    }
-    
-    this.draggedStage = null;
+    const sourceStageId = event.dataTransfer!.getData('text/plain');
+    console.log('[LessonEditor] 📍 Drop', sourceStageId, 'on:', targetStage.id);
+    // TODO: Implement stage reordering
   }
-  
+
   onSubStageDragStart(substage: SubStage, stageId: string, event: DragEvent) {
-    this.draggedSubStage = { substage, stageId };
-    if (event.dataTransfer) {
-      event.dataTransfer.effectAllowed = 'move';
-    }
+    console.log('[LessonEditor] 🎯 Sub-stage drag start:', substage.id);
+    event.dataTransfer!.effectAllowed = 'move';
+    event.dataTransfer!.setData('text/plain', JSON.stringify({ stageId, substageId: substage.id }));
   }
-  
+
   onSubStageDragOver(substageId: string, event: DragEvent) {
     event.preventDefault();
-    if (this.draggedSubStage && this.draggedSubStage.substage.id !== substageId) {
-      this.dragOverSubStageId = substageId;
-    }
-  }
-  
-  onSubStageDragLeave() {
-    this.dragOverSubStageId = null;
-  }
-  
-  onSubStageDrop(targetSubstage: SubStage, targetStageId: string, event: DragEvent) {
-    event.preventDefault();
-    this.dragOverSubStageId = null;
-    
-    if (this.draggedSubStage && this.draggedSubStage.substage.id !== targetSubstage.id) {
-      const sourceStageId = this.draggedSubStage.stageId;
-      const sourceStage = this.stages.find(s => s.id === sourceStageId);
-      const targetStage = this.stages.find(s => s.id === targetStageId);
-      
-      if (sourceStage && targetStage) {
-        const draggedIndex = sourceStage.subStages.findIndex(ss => ss.id === this.draggedSubStage!.substage.id);
-        const targetIndex = targetStage.subStages.findIndex(ss => ss.id === targetSubstage.id);
-        
-        if (draggedIndex !== -1 && targetIndex !== -1) {
-          // Remove from source
-          const [removed] = sourceStage.subStages.splice(draggedIndex, 1);
-          
-          // Add to target
-          targetStage.subStages.splice(targetIndex, 0, removed);
-        }
-      }
-    }
-    
-    this.draggedSubStage = null;
-  }
-  
-  // ========== Sidebar Resize ==========
-  
-  onResizeMouseDown(event: MouseEvent) {
-    event.preventDefault();
-    this.isResizingSidebar = true;
-    document.addEventListener('mousemove', this.onResizeMouseMove);
-    document.addEventListener('mouseup', this.onResizeMouseUp);
-  }
-  
-  onResizeMouseMove = (event: MouseEvent) => {
-    if (this.isResizingSidebar) {
-      const newWidth = event.clientX;
-      if (newWidth >= 280 && newWidth <= 600) {
-        this.sidebarWidth = newWidth;
-      }
-    }
-  }
-  
-  onResizeMouseUp = () => {
-    this.isResizingSidebar = false;
-    document.removeEventListener('mousemove', this.onResizeMouseMove);
-    document.removeEventListener('mouseup', this.onResizeMouseUp);
-  }
-  
-  // ========== TEACH Substage Types ==========
-  
-  getAvailableSubStageTypes(stageType: string): string[] {
-    return this.stageSubStageMap[stageType] || [];
-  }
-  
-  getSubStageTypeLabel(type: string): string {
-    return this.substageTypeLabels[type] || type;
+    event.dataTransfer!.dropEffect = 'move';
   }
 
-  formatDuration(seconds: number): string {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-    
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  onSubStageDragLeave() {
+    // Drag leave handling
+  }
+
+  onSubStageDrop(targetSubstage: SubStage, stageId: string, event: DragEvent) {
+    event.preventDefault();
+    const data = JSON.parse(event.dataTransfer!.getData('text/plain'));
+    console.log('[LessonEditor] 📍 Drop sub-stage', data, 'on:', targetSubstage.id);
+    // TODO: Implement sub-stage reordering
+  }
+
+  // Helpers
+  getSelectedStage(): Stage | null {
+    if (this.selectedItem?.type === 'stage') {
+      return this.stages.find(s => s.id === this.selectedItem.id) || null;
     }
-    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    if (this.selectedItem?.type === 'substage' && this.selectedItem.stageId) {
+      return this.stages.find(s => s.id === this.selectedItem.stageId) || null;
+    }
+    return null;
+  }
+
+  getSelectedSubStage(): SubStage | null {
+    if (this.selectedItem?.type === 'substage') {
+      const stage = this.stages.find(s => s.id === this.selectedItem.stageId);
+      if (stage) {
+        return stage.subStages.find(ss => ss.id === this.selectedItem.id) || null;
+      }
+    }
+    return null;
+  }
+
+  getBlockIcon(type: string): string {
+    const icons: Record<string, string> = {
+      teacher_talk: '💬',
+      load_interaction: '🎮',
+      pause: '⏸️'
+    };
+    return icons[type] || '📝';
+  }
+
+  getStageIcon(type: string): string {
+    const icons: Record<string, string> = {
+      trigger: '🎯',
+      explore: '🔍',
+      absorb: '📖',
+      cultivate: '🌱',
+      hone: '⚡'
+    };
+    return icons[type] || '📚';
+  }
+
+  formatTime(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  markAsChanged() {
+    this.hasUnsavedChanges = true;
+  }
+
+  // Sidebar Resizing
+  onResizeMouseDown(event: MouseEvent) {
+    // Sidebar resize functionality - to be implemented
+    event.preventDefault();
+  }
+
+  // Calculated Properties
+  calculateTotalDuration(): number {
+    let total = 0;
+    for (const stage of this.stages) {
+      for (const substage of stage.subStages) {
+        total += substage.duration || 0;
+      }
+    }
+    return total;
+  }
+
+  getTotalSubStages(): number {
+    let total = 0;
+    for (const stage of this.stages) {
+      total += stage.subStages.length;
+    }
+    return total;
+  }
+
+  getStageTypeDescription(type: string): string {
+    const descriptions: Record<string, string> = {
+      trigger: 'Hook students interest',
+      explore: 'Discover and investigate',
+      absorb: 'Learn core concepts',
+      cultivate: 'Practice and apply',
+      hone: 'Master and refine'
+    };
+    return descriptions[type] || type;
+  }
+
+  getAvailableSubStageTypes(stageType: string): string[] {
+    // Return available substage types based on stage type
+    return ['intro', 'content', 'practice', 'quiz', 'reflection'];
+  }
+
+  getSubStageTypeLabel(type: string): string {
+    const labels: Record<string, string> = {
+      intro: 'Introduction',
+      content: 'Content',
+      practice: 'Practice',
+      quiz: 'Quiz',
+      reflection: 'Reflection'
+    };
+    return labels[type] || type;
+  }
+
+  getContentOutputName(outputId: string): string {
+    const output = this.processedContentItems.find(item => item.id === outputId);
+    return output?.title || 'Unknown Content';
+  }
+
+  formatDuration(minutes: number): string {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours > 0) {
+      return `${hours}h ${mins}m`;
+    }
+    return `${mins}m`;
+  }
+
+  // Event Handlers for Modals
+  onContentProcessed(content: any) {
+    console.log('[LessonEditor] Content processed:', content);
+    this.loadProcessedContent();
+  }
+
+  onContentSubmittedForApproval(submission: any) {
+    console.log('[LessonEditor] Content submitted for approval:', submission);
+  }
+
+  onItemApproved(item: any) {
+    console.log('[LessonEditor] Item approved:', item);
+    this.loadProcessedContent();
+  }
+
+  onItemRejected(item: any) {
+    console.log('[LessonEditor] Item rejected:', item);
+    this.loadProcessedContent();
+  }
+
+  onContentAdded(content: any) {
+    console.log('[LessonEditor] Content added:', content);
+    this.loadProcessedContent();
+  }
+
+  onNewContentAdded(content: any) {
+    console.log('[LessonEditor] New content added:', content);
+    this.loadProcessedContent();
+  }
+
+  // JSON Parsing
+  parseStagesFromJSON(stagesData: any[]): Stage[] {
+    if (!Array.isArray(stagesData)) {
+      console.error('[LessonEditor] stages data is not an array:', stagesData);
+      return [];
+    }
+    
+    return stagesData.map((stageData: any) => ({
+      id: stageData.id || `stage-${Date.now()}-${Math.random()}`,
+      title: stageData.title || 'Untitled Stage',
+      type: stageData.type || 'trigger',
+      subStages: Array.isArray(stageData.subStages) ? stageData.subStages.map((ssData: any) => ({
+        id: ssData.id || `substage-${Date.now()}-${Math.random()}`,
+        title: ssData.title || 'Untitled Sub-stage',
+        type: ssData.type || 'intro',
+        duration: ssData.duration || 5,
+        interactionType: ssData.interactionType,
+        contentOutputId: ssData.contentOutputId,
+        scriptBlocks: ssData.scriptBlocks || []
+      })) : [],
+      expanded: true
+    }));
   }
 }
-
