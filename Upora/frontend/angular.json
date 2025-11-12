@@ -1,6 +1,11 @@
 {
   "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
   "version": 1,
+  "cli": {
+    "cache": {
+      "enabled": false
+    }
+  },
   "newProjectRoot": "projects",
   "projects": {
     "Upora": {
@@ -85,7 +90,10 @@
             "development": {
               "optimization": false,
               "extractLicenses": false,
-              "sourceMap": true
+              "sourceMap": true,
+              "buildOptimizer": false,
+              "vendorChunk": false,
+              "namedChunks": true
             }
           },
           "defaultConfiguration": "production"
@@ -93,10 +101,11 @@
         "serve": {
           "builder": "@angular/build:dev-server",
           "options": {
-            "poll": 500,
+            "poll": 2000,
             "liveReload": true,
             "hmr": false,
-            "watch": true
+            "watch": true,
+            "forceEsbuild": true
           },
           "configurations": {
             "production": {
