@@ -103,7 +103,7 @@ Upora lessons are structured using the TEACH methodology - a pedagogically sound
 
 ### **Stage Types & Sub-Stage Types**
 
-#### **1. TEASE (Trigger) Stage**
+#### **1. TEASE  Stage**
 **Goal:** Spark curiosity and activate schemas  
 **Research Basis:** Loewenstein's Information Gap Theory (1994) - Creates 20% higher engagement via dopamine spike
 

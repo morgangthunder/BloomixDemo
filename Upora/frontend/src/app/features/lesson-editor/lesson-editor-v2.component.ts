@@ -56,8 +56,8 @@ interface ProcessedContentOutput {
   workflowName: string;
 }
 
-        // VERSION CHECK: This component should show "VERSION 3.5.0" in console logs
-        const LESSON_EDITOR_VERSION = '3.5.0';
+        // VERSION CHECK: This component should show "VERSION 3.6.0" in console logs
+        const LESSON_EDITOR_VERSION = '3.6.0';
         const LESSON_EDITOR_VERSION_CHECK_MESSAGE = `🚀 LESSON EDITOR COMPONENT VERSION ${LESSON_EDITOR_VERSION} LOADED - ${new Date().toISOString()} - CACHE BUST ID: ${Math.random().toString(36).substr(2, 9)}`;
 
 @Component({
@@ -104,9 +104,9 @@ interface ProcessedContentOutput {
           </span>
           <button (click)="submitForApproval()" 
                   class="btn-primary desktop-full mobile-icon" 
-                  [disabled]="hasBeenSubmitted || saving || !canSubmit() || !hasDraft" 
+                  [disabled]="hasBeenSubmitted || saving || !canSubmit()" 
                   [class.submitted]="hasBeenSubmitted"
-                  title="{{hasBeenSubmitted ? 'Already submitted' : !hasDraft ? 'Save draft first' : 'Submit for Approval'}}">
+                  title="{{hasBeenSubmitted ? 'Already submitted' : 'Submit for Approval'}}">
             <span class="desktop-only">{{hasBeenSubmitted ? '✓ Submitted' : '✓ Submit for Approval'}}</span>
             <span class="mobile-only">✓</span>
           </button>
@@ -2091,8 +2091,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   ngOnInit() {
     // VERSION CHECK: This log should always appear when new code is loaded
-    console.log('🔥🔥🔥 LESSON EDITOR VERSION 3.5.0 - MM:SS TIME INPUT 🔥🔥🔥');
-    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 3.5.0');
+    console.log('🔥🔥🔥 LESSON EDITOR VERSION 3.6.0 - DRAFT API INTEGRATION 🔥🔥🔥');
+    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 3.6.0');
     console.log('[LessonEditor] ✅ Parses actual DB JSON with scriptBlocks, scriptBlocksAfterInteraction!');
     console.log('[LessonEditor] ✅ Converts DB format to editor format!');
     console.log('[LessonEditor] ✅ Database-first development - no mock data!');
@@ -2314,17 +2314,71 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   // Draft Management  
   saveDraft() {
+    if (!this.lesson) {
+      this.showSnackbar('No lesson to save', 'error');
+      return;
+    }
+
     console.log('[LessonEditor] 💾 Saving draft...');
     this.saving = true;
-    // TODO: Implement draft saving via API
-    setTimeout(() => {
-      this.saving = false;
-      this.hasUnsavedChanges = false;
-      this.hasDraft = true; // Mark that a draft exists
-      this.lastSaved = new Date();
-      console.log('[LessonEditor] ✅ Draft saved');
-      this.showSnackbar('Draft saved successfully', 'success');
-    }, 1000);
+
+    // Build the draft data from current state
+    const draftData = {
+      title: this.lesson.title,
+      description: this.lesson.description,
+      category: this.lesson.category,
+      difficulty: this.lesson.difficulty,
+      durationMinutes: this.calculateTotalDuration(),
+      thumbnailUrl: this.lesson.thumbnailUrl,
+      tags: this.lesson.tags,
+      structure: {
+        stages: this.stages.map(stage => ({
+          id: stage.id,
+          title: stage.title,
+          type: stage.type,
+          subStages: stage.subStages.map(substage => ({
+            id: substage.id,
+            title: substage.title,
+            type: substage.type,
+            duration: substage.duration,
+            scriptBlocks: substage.scriptBlocks || [],
+            interaction: substage.interactionType ? {
+              type: substage.interactionType,
+              config: {}
+            } : null
+          }))
+        }))
+      }
+    };
+
+    const payload = {
+      lessonId: this.lesson.id,
+      draftData: draftData,
+      changeSummary: this.generateChangeSummary(),
+      changesCount: this.countChanges()
+    };
+
+    this.http.post(`${environment.apiUrl}/lesson-drafts`, payload, {
+      headers: {
+        'x-tenant-id': environment.tenantId,
+        'x-user-id': environment.defaultUserId
+      }
+    }).pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response: any) => {
+          this.saving = false;
+          this.hasUnsavedChanges = false;
+          this.hasDraft = true;
+          this.lastSaved = new Date();
+          console.log('[LessonEditor] ✅ Draft saved:', response);
+          this.showSnackbar('Draft saved successfully', 'success');
+        },
+        error: (error: any) => {
+          this.saving = false;
+          console.error('[LessonEditor] ❌ Failed to save draft:', error);
+          this.showSnackbar('Failed to save draft', 'error');
+        }
+      });
   }
 
   submitForApproval() {
@@ -2334,10 +2388,40 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       this.showSnackbar('You must make changes and Save Draft first', 'error');
       return;
     }
+
+    if (!this.lesson) {
+      this.showSnackbar('No lesson to submit', 'error');
+      return;
+    }
     
-    console.log('[LessonEditor] 📤 Submitting for approval...');
-    // TODO: Implement approval submission
-    this.showSnackbar('Submit for approval - To be implemented', 'info');
+    console.log('[LessonEditor] 📤 Submitting draft for approval...');
+    
+    // In the approval workflow, submitting means the draft is already created
+    // and set to 'pending' status. We just need to mark it locally as submitted.
+    this.hasBeenSubmitted = true;
+    this.showSnackbar('Draft submitted for approval! Check the Approval Queue.', 'success');
+  }
+
+  // Helper methods for draft
+  generateChangeSummary(): string {
+    const changes: string[] = [];
+    if (this.lesson?.title) changes.push('Updated lesson structure');
+    if (this.stages.length > 0) changes.push(`${this.stages.length} stage(s)`);
+    const totalSubStages = this.getTotalSubStages();
+    if (totalSubStages > 0) changes.push(`${totalSubStages} substage(s)`);
+    return changes.join(', ') || 'Minor changes';
+  }
+
+  countChanges(): number {
+    let count = 0;
+    for (const stage of this.stages) {
+      count++; // Each stage counts
+      count += stage.subStages.length; // Each substage counts
+      for (const substage of stage.subStages) {
+        count += (substage.scriptBlocks?.length || 0); // Each script block counts
+      }
+    }
+    return count;
   }
 
   // Snackbar helper
