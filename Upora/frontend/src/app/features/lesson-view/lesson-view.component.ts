@@ -606,10 +606,11 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       }
     }
     
-    /* When fullscreen, move to very bottom and reset left */
+    /* When fullscreen, move to very bottom and ALWAYS reset to left edge */
+    .fullscreen-active .fullscreen-toggle,
     .content-area.fullscreen .fullscreen-toggle {
       bottom: 1rem !important; /* Very close to bottom */
-      left: 1.5rem !important; /* Back to left edge */
+      left: 1.5rem !important; /* ALWAYS back to left edge */
       z-index: 9998 !important; /* Above everything in fullscreen */
     }
 
