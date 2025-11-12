@@ -9,7 +9,7 @@ import { ContentSourceService } from '../../core/services/content-source.service
 import { Lesson } from '../../core/models/lesson.model';
 import { ContentSource } from '../../core/models/content-source.model';
 import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { takeUntil, switchMap, map } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { ContentProcessorModalComponent } from '../../shared/components/content-processor-modal/content-processor-modal.component';
 import { ApprovalQueueModalComponent } from '../../shared/components/approval-queue-modal/approval-queue-modal.component';
@@ -56,8 +56,8 @@ interface ProcessedContentOutput {
   workflowName: string;
 }
 
-        // VERSION CHECK: This component should show "VERSION 3.9.0" in console logs
-        const LESSON_EDITOR_VERSION = '3.9.0';
+        // VERSION CHECK: This component should show "VERSION 4.0.0" in console logs
+        const LESSON_EDITOR_VERSION = '4.0.0';
         const LESSON_EDITOR_VERSION_CHECK_MESSAGE = `🚀 LESSON EDITOR COMPONENT VERSION ${LESSON_EDITOR_VERSION} LOADED - ${new Date().toISOString()} - CACHE BUST ID: ${Math.random().toString(36).substr(2, 9)}`;
 
 @Component({
@@ -2091,8 +2091,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   ngOnInit() {
     // VERSION CHECK: This log should always appear when new code is loaded
-    console.log('🔥🔥🔥 LESSON EDITOR VERSION 3.9.0 - STRING COERCION FOR LESSON ID 🔥🔥🔥');
-    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 3.9.0');
+    console.log('🔥🔥🔥 LESSON EDITOR VERSION 4.0.0 - DRAFT LOADING IMPLEMENTED 🔥🔥🔥');
+    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 4.0.0');
     console.log('[LessonEditor] ✅ Parses actual DB JSON with scriptBlocks, scriptBlocksAfterInteraction!');
     console.log('[LessonEditor] ✅ Converts DB format to editor format!');
     console.log('[LessonEditor] ✅ Database-first development - no mock data!');
@@ -2178,12 +2178,40 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
    */
   loadLesson(id: string) {
     console.log('[LessonEditor] 📖 Loading lesson:', id);
-    this.http.get<any>(`${environment.apiUrl}/lessons/${id}`, {
+    
+    // First, check if there's a pending draft for this lesson
+    this.http.get<any>(`${environment.apiUrl}/lesson-drafts/lesson/${id}`, {
       headers: {
-        'x-tenant-id': environment.tenantId
+        'x-tenant-id': environment.tenantId,
+        'x-user-id': environment.defaultUserId
       }
     })
-      .pipe(takeUntil(this.destroy$))
+      .pipe(
+        switchMap((draft: any) => {
+          if (draft) {
+            console.log('[LessonEditor] 📝 Found pending draft, loading draft data');
+            this.hasDraft = true;
+            this.lastSaved = new Date(draft.createdAt);
+            // Return the draft data merged with lesson metadata
+            return this.http.get<any>(`${environment.apiUrl}/lessons/${id}`, {
+              headers: { 'x-tenant-id': environment.tenantId }
+            }).pipe(
+              map(lesson => ({
+                ...lesson,
+                ...draft.draftData,
+                id: lesson.id // Ensure we keep the lesson ID
+              }))
+            );
+          } else {
+            console.log('[LessonEditor] 📖 No draft found, loading published lesson');
+            // Load the published lesson
+            return this.http.get<any>(`${environment.apiUrl}/lessons/${id}`, {
+              headers: { 'x-tenant-id': environment.tenantId }
+            });
+          }
+        }),
+        takeUntil(this.destroy$)
+      )
       .subscribe({
         next: (lesson: any) => {
           console.log('[LessonEditor] ✅ Lesson loaded:', lesson);
