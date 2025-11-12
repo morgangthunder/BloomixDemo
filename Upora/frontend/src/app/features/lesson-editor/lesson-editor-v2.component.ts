@@ -2386,10 +2386,12 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
         },
         error: (error: any) => {
           this.saving = false;
-          console.error('[LessonEditor] ❌ Failed to save draft:', error);
-          console.error('[LessonEditor] ❌ Error status:', error.status);
-          console.error('[LessonEditor] ❌ Error message:', error.error?.message || error.message);
-          console.error('[LessonEditor] ❌ Full error object:', JSON.stringify(error.error, null, 2));
+          console.error('[LessonEditor] ❌ v3.9.0 - Failed to save draft:', error);
+          console.error('[LessonEditor] ❌ v3.9.0 - Error status:', error.status);
+          console.error('[LessonEditor] ❌ v3.9.0 - Error message:', error.error?.message || error.message);
+          console.error('[LessonEditor] ❌ v3.9.0 - Full error object:', JSON.stringify(error.error, null, 2));
+          console.error('[LessonEditor] ❌ v3.9.0 - Lesson ID that was sent:', this.lesson.id, 'Type:', typeof this.lesson.id);
+          console.error('[LessonEditor] ❌ v3.9.0 - Request payload that was sent:', payload);
           this.showSnackbar(`Failed to save draft: ${error.error?.message || error.message}`, 'error');
         }
       });
