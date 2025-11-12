@@ -56,8 +56,8 @@ interface ProcessedContentOutput {
   workflowName: string;
 }
 
-        // VERSION CHECK: This component should show "VERSION 4.0.0" in console logs
-        const LESSON_EDITOR_VERSION = '4.0.0';
+        // VERSION CHECK: This component should show "VERSION 4.1.0" in console logs
+        const LESSON_EDITOR_VERSION = '4.1.0';
         const LESSON_EDITOR_VERSION_CHECK_MESSAGE = `🚀 LESSON EDITOR COMPONENT VERSION ${LESSON_EDITOR_VERSION} LOADED - ${new Date().toISOString()} - CACHE BUST ID: ${Math.random().toString(36).substr(2, 9)}`;
 
 @Component({
@@ -2091,8 +2091,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   ngOnInit() {
     // VERSION CHECK: This log should always appear when new code is loaded
-    console.log('🔥🔥🔥 LESSON EDITOR VERSION 4.0.0 - DRAFT LOADING IMPLEMENTED 🔥🔥🔥');
-    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 4.0.0');
+    console.log('🔥🔥🔥 LESSON EDITOR VERSION 4.1.0 - SUBMISSION STATUS RESET ON CHANGES 🔥🔥🔥');
+    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 4.1.0');
     console.log('[LessonEditor] ✅ Parses actual DB JSON with scriptBlocks, scriptBlocksAfterInteraction!');
     console.log('[LessonEditor] ✅ Converts DB format to editor format!');
     console.log('[LessonEditor] ✅ Database-first development - no mock data!');
@@ -2785,6 +2785,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   markAsChanged() {
     this.hasUnsavedChanges = true;
+    this.hasBeenSubmitted = false; // Reset submission status when changes are made
   }
 
   // Sidebar Resizing
