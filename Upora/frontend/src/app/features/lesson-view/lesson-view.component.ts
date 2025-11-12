@@ -592,9 +592,9 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       z-index: 100; /* Below sidebar */
     }
     
-    /* Desktop: when sidebar is visible (not width 0), move toggle right */
+    /* Desktop: when sidebar is visible (not width 0) AND not fullscreen, move toggle right */
     @media (min-width: 768px) {
-      .lesson-view-wrapper:has(.sidebar:not([style*="width: 0px"])) .fullscreen-toggle:not(.content-area.fullscreen .fullscreen-toggle) {
+      .lesson-view-wrapper:not(.fullscreen-active):has(.sidebar:not([style*="width: 0px"])) .fullscreen-toggle {
         left: calc(280px + 1.5rem) !important; /* Move right when sidebar open */
       }
     }
@@ -606,11 +606,17 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       }
     }
     
-    /* When fullscreen, FORCE to bottom-left (overrides desktop sidebar rule) */
+    /* When fullscreen on ANY screen size */
     body.fullscreen-active .fullscreen-toggle {
-      bottom: 1rem !important; /* Very close to bottom */
       left: 1.5rem !important; /* FORCE to left edge */
       z-index: 9998 !important; /* Above everything in fullscreen */
+    }
+    
+    /* When fullscreen on DESKTOP only, move to very bottom */
+    @media (min-width: 768px) {
+      body.fullscreen-active .fullscreen-toggle {
+        bottom: 1rem !important; /* Very close to bottom on desktop */
+      }
     }
 
     .fullscreen-toggle:hover {
