@@ -1,7 +1,7 @@
 import { IsString, IsUUID, IsOptional, IsNumber, IsObject } from 'class-validator';
 
 export class CreateLessonDraftDto {
-  @IsUUID()
+  @IsUUID('all')
   lessonId: string;
 
   @IsOptional()
