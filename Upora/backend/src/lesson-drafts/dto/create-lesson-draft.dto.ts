@@ -1,7 +1,10 @@
-import { IsString, IsUUID, IsOptional, IsNumber, IsObject } from 'class-validator';
+import { IsString, IsUUID, IsOptional, IsNumber, IsObject, Matches } from 'class-validator';
 
 export class CreateLessonDraftDto {
-  @IsUUID('all')
+  @IsString()
+  @Matches(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, {
+    message: 'lessonId must be a valid UUID format'
+  })
   lessonId: string;
 
   @IsOptional()
