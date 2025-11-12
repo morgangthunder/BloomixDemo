@@ -13,6 +13,8 @@ services:
       - WS_URL=ws://backend:3000
     volumes:
       - ./Upora/frontend/src:/app/src
+      - ./Upora/frontend/angular.json:/app/angular.json
+      - ./Upora/frontend/package.json:/app/package.json
       - /app/node_modules
     depends_on:
       - backend
