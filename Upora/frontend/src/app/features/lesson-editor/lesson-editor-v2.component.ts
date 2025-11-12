@@ -56,8 +56,8 @@ interface ProcessedContentOutput {
   workflowName: string;
 }
 
-        // VERSION CHECK: This component should show "VERSION 3.1.0" in console logs
-        const LESSON_EDITOR_VERSION = '3.1.0';
+        // VERSION CHECK: This component should show "VERSION 3.2.0" in console logs
+        const LESSON_EDITOR_VERSION = '3.2.0';
         const LESSON_EDITOR_VERSION_CHECK_MESSAGE = `🚀 LESSON EDITOR COMPONENT VERSION ${LESSON_EDITOR_VERSION} LOADED - ${new Date().toISOString()} - CACHE BUST ID: ${Math.random().toString(36).substr(2, 9)}`;
 
 @Component({
@@ -1162,6 +1162,32 @@ interface ProcessedContentOutput {
       text-align: center;
       font-size: 0.875rem;
     }
+    .interaction-selector {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      padding: 1rem;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 6px;
+    }
+    .interaction-selector label {
+      font-size: 0.875rem;
+      color: #999;
+      font-weight: 500;
+    }
+    .interaction-selector select {
+      background: #0a0a0a;
+      border: 1px solid #333;
+      border-radius: 4px;
+      padding: 0.5rem;
+      color: white;
+      font-size: 0.875rem;
+    }
+    .interaction-selector select:focus {
+      outline: none;
+      border-color: #cc0000;
+    }
     .time-display {
       font-size: 0.75rem;
       color: #777;
@@ -2006,9 +2032,10 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   ngOnInit() {
     // VERSION CHECK: This log should always appear when new code is loaded
-    console.log('🔥🔥🔥 LESSON EDITOR VERSION 3.1.0 - FIXED PARSER 🔥🔥🔥');
-    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 3.1.0');
-    console.log('[LessonEditor] ✅ Now parses actual lesson JSON format with interactions!');
+    console.log('🔥🔥🔥 LESSON EDITOR VERSION 3.2.0 - ENHANCED PARSER 🔥🔥🔥');
+    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 3.2.0');
+    console.log('[LessonEditor] ✅ Handles both subStages and substages formats!');
+    console.log('[LessonEditor] ✅ Parses interaction.type correctly!');
     
     // Reset body overflow when entering page (in case it was left locked)
     document.body.style.overflow = '';
@@ -2617,27 +2644,44 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     this.loadProcessedContent();
   }
 
-  // JSON Parsing
+  // JSON Parsing - handles both old and new JSON formats
   parseStagesFromJSON(stagesData: any[]): Stage[] {
     if (!Array.isArray(stagesData)) {
       console.error('[LessonEditor] stages data is not an array:', stagesData);
       return [];
     }
     
-    return stagesData.map((stageData: any) => ({
-      id: stageData.id || `stage-${Date.now()}-${Math.random()}`,
-      title: stageData.title || 'Untitled Stage',
-      type: stageData.type || 'trigger',
-      subStages: Array.isArray(stageData.subStages) ? stageData.subStages.map((ssData: any) => ({
-        id: ssData.id || `substage-${Date.now()}-${Math.random()}`,
-        title: ssData.title || 'Untitled Sub-stage',
-        type: ssData.type || 'intro',
-        duration: ssData.duration || 5,
-        interactionType: ssData.interactionType,
-        contentOutputId: ssData.contentOutputId,
-        scriptBlocks: ssData.scriptBlocks || []
-      })) : [],
-      expanded: true
-    }));
+    console.log('[LessonEditor] 📊 Parsing stages, count:', stagesData.length);
+    
+    return stagesData.map((stageData: any, stageIdx: number) => {
+      // Handle both 'subStages' (new) and 'substages' (old) formats
+      const subStagesData = stageData.subStages || stageData.substages || [];
+      console.log(`[LessonEditor] Stage ${stageIdx}: ${stageData.title}, subStages:`, subStagesData.length);
+      
+      const stage: Stage = {
+        id: stageData.id || `stage-${Date.now()}-${stageIdx}`,
+        title: stageData.title || 'Untitled Stage',
+        type: stageData.type || 'trigger',
+        subStages: Array.isArray(subStagesData) ? subStagesData.map((ssData: any, ssIdx: number) => {
+          console.log(`[LessonEditor]   SubStage ${ssIdx}:`, ssData.title);
+          console.log(`[LessonEditor]   Script blocks:`, ssData.scriptBlocks?.length || 0);
+          console.log(`[LessonEditor]   Interaction:`, ssData.interaction);
+          
+          return {
+            id: ssData.id || `substage-${Date.now()}-${ssIdx}`,
+            title: ssData.title || 'Untitled Sub-stage',
+            type: ssData.type || 'intro',
+            duration: ssData.duration || 5,
+            interactionType: ssData.interaction?.type || ssData.interactionType,
+            contentOutputId: ssData.contentOutputId,
+            scriptBlocks: ssData.scriptBlocks || []
+          };
+        }) : [],
+        expanded: true
+      };
+      
+      console.log('[LessonEditor] ✅ Parsed stage:', stage);
+      return stage;
+    });
   }
 }
