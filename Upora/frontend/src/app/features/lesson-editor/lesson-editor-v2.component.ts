@@ -56,8 +56,8 @@ interface ProcessedContentOutput {
   workflowName: string;
 }
 
-        // VERSION CHECK: This component should show "VERSION 3.2.0" in console logs
-        const LESSON_EDITOR_VERSION = '3.2.0';
+        // VERSION CHECK: This component should show "VERSION 3.3.0" in console logs
+        const LESSON_EDITOR_VERSION = '3.3.0';
         const LESSON_EDITOR_VERSION_CHECK_MESSAGE = `🚀 LESSON EDITOR COMPONENT VERSION ${LESSON_EDITOR_VERSION} LOADED - ${new Date().toISOString()} - CACHE BUST ID: ${Math.random().toString(36).substr(2, 9)}`;
 
 @Component({
@@ -2032,10 +2032,11 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   ngOnInit() {
     // VERSION CHECK: This log should always appear when new code is loaded
-    console.log('🔥🔥🔥 LESSON EDITOR VERSION 3.2.0 - ENHANCED PARSER 🔥🔥🔥');
-    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 3.2.0');
-    console.log('[LessonEditor] ✅ Handles both subStages and substages formats!');
-    console.log('[LessonEditor] ✅ Parses interaction.type correctly!');
+    console.log('🔥🔥🔥 LESSON EDITOR VERSION 3.3.0 - COMPLETE DB PARSER 🔥🔥🔥');
+    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 3.3.0');
+    console.log('[LessonEditor] ✅ Parses actual DB JSON with scriptBlocks, scriptBlocksAfterInteraction!');
+    console.log('[LessonEditor] ✅ Converts DB format to editor format!');
+    console.log('[LessonEditor] ✅ Database-first development - no mock data!');
     
     // Reset body overflow when entering page (in case it was left locked)
     document.body.style.overflow = '';
@@ -2644,7 +2645,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     this.loadProcessedContent();
   }
 
-  // JSON Parsing - handles both old and new JSON formats
+  // JSON Parsing - handles the actual lesson JSON format with scriptBlocks
   parseStagesFromJSON(stagesData: any[]): Stage[] {
     if (!Array.isArray(stagesData)) {
       console.error('[LessonEditor] stages data is not an array:', stagesData);
@@ -2652,6 +2653,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     }
     
     console.log('[LessonEditor] 📊 Parsing stages, count:', stagesData.length);
+    console.log('[LessonEditor] 📊 Raw stages data:', JSON.stringify(stagesData, null, 2));
     
     return stagesData.map((stageData: any, stageIdx: number) => {
       // Handle both 'subStages' (new) and 'substages' (old) formats
@@ -2664,23 +2666,73 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
         type: stageData.type || 'trigger',
         subStages: Array.isArray(subStagesData) ? subStagesData.map((ssData: any, ssIdx: number) => {
           console.log(`[LessonEditor]   SubStage ${ssIdx}:`, ssData.title);
-          console.log(`[LessonEditor]   Script blocks:`, ssData.scriptBlocks?.length || 0);
-          console.log(`[LessonEditor]   Interaction:`, ssData.interaction);
+          
+          // Parse script blocks - convert from DB format to editor format
+          const scriptBlocks: ScriptBlock[] = [];
+          
+          // Add pre-interaction script blocks
+          if (Array.isArray(ssData.scriptBlocks)) {
+            console.log(`[LessonEditor]     Pre-interaction scripts:`, ssData.scriptBlocks.length);
+            ssData.scriptBlocks.forEach((block: any) => {
+              scriptBlocks.push({
+                id: block.id || `block-${Date.now()}-${Math.random()}`,
+                type: 'teacher_talk',
+                content: block.text || '',
+                startTime: block.idealTimestamp || 0,
+                endTime: (block.idealTimestamp || 0) + (block.estimatedDuration || 10),
+                metadata: block.playbackRules || {}
+              });
+            });
+          }
+          
+          // Add interaction load block if interaction exists
+          if (ssData.interaction) {
+            console.log(`[LessonEditor]     Interaction:`, ssData.interaction.type);
+            scriptBlocks.push({
+              id: `interaction-${ssData.id}`,
+              type: 'load_interaction',
+              content: '',
+              startTime: scriptBlocks.length > 0 ? scriptBlocks[scriptBlocks.length - 1].endTime : 0,
+              endTime: (scriptBlocks.length > 0 ? scriptBlocks[scriptBlocks.length - 1].endTime : 0) + 60,
+              metadata: {
+                interactionType: ssData.interaction.type,
+                interactionConfig: ssData.interaction.config
+              }
+            });
+          }
+          
+          // Add post-interaction script blocks
+          if (Array.isArray(ssData.scriptBlocksAfterInteraction)) {
+            console.log(`[LessonEditor]     Post-interaction scripts:`, ssData.scriptBlocksAfterInteraction.length);
+            ssData.scriptBlocksAfterInteraction.forEach((block: any) => {
+              const lastEndTime = scriptBlocks.length > 0 ? scriptBlocks[scriptBlocks.length - 1].endTime : 0;
+              scriptBlocks.push({
+                id: block.id || `block-${Date.now()}-${Math.random()}`,
+                type: 'teacher_talk',
+                content: block.text || '',
+                startTime: lastEndTime,
+                endTime: lastEndTime + (block.estimatedDuration || 10),
+                metadata: block.playbackRules || {}
+              });
+            });
+          }
+          
+          console.log(`[LessonEditor]     Total script blocks parsed:`, scriptBlocks.length);
           
           return {
             id: ssData.id || `substage-${Date.now()}-${ssIdx}`,
             title: ssData.title || 'Untitled Sub-stage',
             type: ssData.type || 'intro',
-            duration: ssData.duration || 5,
+            duration: ssData.duration || stageData.duration || 5,
             interactionType: ssData.interaction?.type || ssData.interactionType,
             contentOutputId: ssData.contentOutputId,
-            scriptBlocks: ssData.scriptBlocks || []
+            scriptBlocks: scriptBlocks
           };
         }) : [],
         expanded: true
       };
       
-      console.log('[LessonEditor] ✅ Parsed stage:', stage);
+      console.log('[LessonEditor] ✅ Parsed stage:', stage.title, 'with', stage.subStages.length, 'substages');
       return stage;
     });
   }
