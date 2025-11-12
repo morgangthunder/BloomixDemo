@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Param, Body, Headers } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Param, Body, Headers, UsePipes, ValidationPipe } from '@nestjs/common';
 import { LessonDraftsService } from './lesson-drafts.service';
 import { CreateLessonDraftDto } from './dto/create-lesson-draft.dto';
 import { ApproveDraftDto } from './dto/approve-draft.dto';
@@ -16,6 +16,11 @@ export class LessonDraftsController {
     @Headers('x-tenant-id') tenantId: string,
     @Headers('x-user-id') userId: string,
   ) {
+    console.log('[LessonDraftsController] 📥 Received draft creation request');
+    console.log('[LessonDraftsController] 📥 DTO:', JSON.stringify(dto, null, 2));
+    console.log('[LessonDraftsController] 📥 Tenant ID from header:', tenantId);
+    console.log('[LessonDraftsController] 📥 User ID from header:', userId);
+    
     dto.tenantId = tenantId;
     dto.accountId = userId;
     
