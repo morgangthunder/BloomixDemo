@@ -56,8 +56,8 @@ interface ProcessedContentOutput {
   workflowName: string;
 }
 
-        // VERSION CHECK: This component should show "VERSION 3.4.0" in console logs
-        const LESSON_EDITOR_VERSION = '3.4.0';
+        // VERSION CHECK: This component should show "VERSION 3.5.0" in console logs
+        const LESSON_EDITOR_VERSION = '3.5.0';
         const LESSON_EDITOR_VERSION_CHECK_MESSAGE = `🚀 LESSON EDITOR COMPONENT VERSION ${LESSON_EDITOR_VERSION} LOADED - ${new Date().toISOString()} - CACHE BUST ID: ${Math.random().toString(36).substr(2, 9)}`;
 
 @Component({
@@ -416,10 +416,21 @@ interface ProcessedContentOutput {
                         </button>
                       </div>
                       <div class="block-time">
-                        <input type="number" [(ngModel)]="block.startTime" (ngModelChange)="markAsChanged()" min="0" [max]="(getSelectedSubStage()?.duration || 5) * 60" placeholder="Start" />
+                        <input type="text" 
+                               [value]="formatTime(block.startTime)" 
+                               (blur)="updateTimeFromString($event, block, 'startTime')"
+                               (keydown.enter)="updateTimeFromString($event, block, 'startTime')"
+                               placeholder="0:00" 
+                               pattern="[0-9]{1,2}:[0-5][0-9]"
+                               title="Enter time as MM:SS (e.g., 0:30)" />
                         <span>-</span>
-                        <input type="number" [(ngModel)]="block.endTime" (ngModelChange)="markAsChanged()" min="0" [max]="(getSelectedSubStage()?.duration || 5) * 60" placeholder="End" />
-                        <span class="time-display">({{formatTime(block.startTime)}} - {{formatTime(block.endTime)}})</span>
+                        <input type="text" 
+                               [value]="formatTime(block.endTime)" 
+                               (blur)="updateTimeFromString($event, block, 'endTime')"
+                               (keydown.enter)="updateTimeFromString($event, block, 'endTime')"
+                               placeholder="0:00" 
+                               pattern="[0-9]{1,2}:[0-5][0-9]"
+                               title="Enter time as MM:SS (e.g., 1:30)" />
                       </div>
                       <textarea *ngIf="block.type === 'teacher_talk'" 
                                 [(ngModel)]="block.content" 
@@ -2080,8 +2091,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   ngOnInit() {
     // VERSION CHECK: This log should always appear when new code is loaded
-    console.log('🔥🔥🔥 LESSON EDITOR VERSION 3.4.0 - INTERACTION DISPLAY + VALIDATION 🔥🔥🔥');
-    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 3.4.0');
+    console.log('🔥🔥🔥 LESSON EDITOR VERSION 3.5.0 - MM:SS TIME INPUT 🔥🔥🔥');
+    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 3.5.0');
     console.log('[LessonEditor] ✅ Parses actual DB JSON with scriptBlocks, scriptBlocksAfterInteraction!');
     console.log('[LessonEditor] ✅ Converts DB format to editor format!');
     console.log('[LessonEditor] ✅ Database-first development - no mock data!');
@@ -2615,6 +2626,29 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  updateTimeFromString(event: any, block: ScriptBlock, field: 'startTime' | 'endTime') {
+    const input = event.target.value.trim();
+    
+    // Parse MM:SS format
+    const timeRegex = /^(\d{1,2}):([0-5]?\d)$/;
+    const match = input.match(timeRegex);
+    
+    if (match) {
+      const minutes = parseInt(match[1], 10);
+      const seconds = parseInt(match[2], 10);
+      const totalSeconds = (minutes * 60) + seconds;
+      
+      block[field] = totalSeconds;
+      this.markAsChanged();
+      console.log(`[LessonEditor] ⏱️ Time updated: ${input} = ${totalSeconds}s`);
+    } else {
+      // Invalid format - revert to current value
+      console.warn(`[LessonEditor] ⚠️ Invalid time format: ${input}. Use MM:SS (e.g., 1:30)`);
+      event.target.value = this.formatTime(block[field]);
+      this.showSnackbar('Invalid time format. Use MM:SS (e.g., 1:30)', 'error');
+    }
   }
 
   markAsChanged() {
