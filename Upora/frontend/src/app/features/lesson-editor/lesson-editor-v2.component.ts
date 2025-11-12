@@ -2387,7 +2387,10 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
         error: (error: any) => {
           this.saving = false;
           console.error('[LessonEditor] ❌ Failed to save draft:', error);
-          this.showSnackbar('Failed to save draft', 'error');
+          console.error('[LessonEditor] ❌ Error status:', error.status);
+          console.error('[LessonEditor] ❌ Error message:', error.error?.message || error.message);
+          console.error('[LessonEditor] ❌ Full error object:', JSON.stringify(error.error, null, 2));
+          this.showSnackbar(`Failed to save draft: ${error.error?.message || error.message}`, 'error');
         }
       });
   }
