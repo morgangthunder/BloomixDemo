@@ -67,18 +67,16 @@ export class LessonDraftsController {
     const draft = await this.lessonDraftsService.getDraftByLessonId(lessonId);
     
     if (!draft) {
-      return { hasDraft: false };
+      return null; // Return null so frontend can detect no draft
     }
 
     return {
-      hasDraft: true,
-      draft: {
-        id: draft.id,
-        status: draft.status,
-        createdAt: draft.createdAt,
-        updatedAt: draft.updatedAt,
-        changesCount: draft.changesCount
-      }
+      id: draft.id,
+      status: draft.status,
+      createdAt: draft.createdAt,
+      updatedAt: draft.updatedAt,
+      changesCount: draft.changesCount,
+      draftData: draft.draftData // Include the actual draft data!
     };
   }
 

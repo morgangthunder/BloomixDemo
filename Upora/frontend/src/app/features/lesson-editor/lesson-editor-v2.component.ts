@@ -2191,7 +2191,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
           if (draft) {
             console.log('[LessonEditor] 📝 Found pending draft, loading draft data');
             this.hasDraft = true;
-            this.lastSaved = new Date(draft.createdAt);
+            this.lastSaved = draft.createdAt ? new Date(draft.createdAt) : null;
+            console.log('[LessonEditor] Draft lastSaved:', this.lastSaved);
             // Return the draft data merged with lesson metadata
             return this.http.get<any>(`${environment.apiUrl}/lessons/${id}`, {
               headers: { 'x-tenant-id': environment.tenantId }
