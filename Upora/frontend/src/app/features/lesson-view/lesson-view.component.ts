@@ -607,7 +607,9 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
     }
     
     /* When fullscreen - ALL screens - move to very bottom and left edge */
-    body.fullscreen-active .fullscreen-toggle {
+    body.fullscreen-active .fullscreen-toggle,
+    .content-area.fullscreen .fullscreen-toggle,
+    .fullscreen-active .content-area .fullscreen-toggle {
       bottom: 1rem !important; /* Very close to bottom */
       left: 1.5rem !important; /* FORCE to left edge */
       z-index: 9998 !important; /* Above everything in fullscreen */
