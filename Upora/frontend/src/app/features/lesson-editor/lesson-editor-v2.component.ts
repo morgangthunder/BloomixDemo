@@ -56,8 +56,8 @@ interface ProcessedContentOutput {
   workflowName: string;
 }
 
-        // VERSION CHECK: This component should show "VERSION 2.3.0" in console logs
-        const LESSON_EDITOR_VERSION = '2.3.0';
+        // VERSION CHECK: This component should show "VERSION 3.0.0" in console logs
+        const LESSON_EDITOR_VERSION = '3.0.0';
         const LESSON_EDITOR_VERSION_CHECK_MESSAGE = `🚀 LESSON EDITOR COMPONENT VERSION ${LESSON_EDITOR_VERSION} LOADED - ${new Date().toISOString()} - CACHE BUST ID: ${Math.random().toString(36).substr(2, 9)}`;
 
 @Component({
@@ -404,7 +404,7 @@ interface ProcessedContentOutput {
                          [class.pause]="block.type === 'pause'">
                       <div class="block-header">
                         <span class="block-type-icon">{{getBlockIcon(block.type)}}</span>
-                        <select [(ngModel)]="block.type" class="block-type-select">
+                        <select [(ngModel)]="block.type" (ngModelChange)="markAsChanged()" class="block-type-select">
                           <option value="teacher_talk">👨‍🏫 Teacher Talk</option>
                           <option value="load_interaction">🎯 Load Interaction</option>
                           <option value="pause">⏸ Pause for Question</option>
@@ -416,13 +416,14 @@ interface ProcessedContentOutput {
                         </button>
                       </div>
                       <div class="block-time">
-                        <input type="number" [(ngModel)]="block.startTime" min="0" [max]="(getSelectedSubStage()?.duration || 5) * 60" placeholder="Start" />
+                        <input type="number" [(ngModel)]="block.startTime" (ngModelChange)="markAsChanged()" min="0" [max]="(getSelectedSubStage()?.duration || 5) * 60" placeholder="Start" />
                         <span>-</span>
-                        <input type="number" [(ngModel)]="block.endTime" min="0" [max]="(getSelectedSubStage()?.duration || 5) * 60" placeholder="End" />
+                        <input type="number" [(ngModel)]="block.endTime" (ngModelChange)="markAsChanged()" min="0" [max]="(getSelectedSubStage()?.duration || 5) * 60" placeholder="End" />
                         <span class="time-display">({{formatTime(block.startTime)}} - {{formatTime(block.endTime)}})</span>
                       </div>
                       <textarea *ngIf="block.type === 'teacher_talk'" 
                                 [(ngModel)]="block.content" 
+                                (ngModelChange)="markAsChanged()"
                                 placeholder="Enter what the AI teacher should say..."
                                 rows="3"></textarea>
                       <div *ngIf="block.type === 'load_interaction'" class="interaction-selector">
@@ -2004,9 +2005,9 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   ngOnInit() {
     // VERSION CHECK: This log should always appear when new code is loaded
-    console.log('🔥🔥🔥 LESSON EDITOR VERSION 0.0.5 - CODE UPDATED 🔥🔥🔥');
-    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 0.0.5');
-    console.log('[LessonEditor] 🔍 Debugging persistence issue - Version 0.0.5');
+    console.log('🔥🔥🔥 LESSON EDITOR VERSION 3.0.0 - FULLY FUNCTIONAL 🔥🔥🔥');
+    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 3.0.0');
+    console.log('[LessonEditor] ✅ Load/Edit/Save lesson data now working!');
     
     // Reset body overflow when entering page (in case it was left locked)
     document.body.style.overflow = '';
@@ -2056,6 +2057,72 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     
     // Load processed content for this lesson
     this.loadProcessedContent();
+  }
+
+  /**
+   * Initialize a new blank lesson
+   */
+  initializeNewLesson() {
+    console.log('[LessonEditor] 🆕 Initializing new lesson');
+    this.lesson = {
+      id: '',
+      title: 'Untitled Lesson',
+      description: '',
+      thumbnail: '',
+      duration: 0,
+      difficulty: 'beginner',
+      tags: [],
+      category: '',
+      status: 'draft',
+      accountId: '',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      data: {
+        structure: {
+          stages: []
+        },
+        config: {
+          objectives: [],
+          prerequisites: []
+        }
+      }
+    };
+    this.stages = [];
+    this.selectedItem = { type: 'lesson', id: '' };
+    console.log('[LessonEditor] ✅ New lesson initialized');
+  }
+
+  /**
+   * Load an existing lesson from the database
+   */
+  loadLesson(id: string) {
+    console.log('[LessonEditor] 📖 Loading lesson:', id);
+    this.lessonService.getLesson(id)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (lesson) => {
+          console.log('[LessonEditor] ✅ Lesson loaded:', lesson);
+          this.lesson = lesson;
+          
+          // Parse the new JSON structure: lesson.data.structure.stages
+          if (lesson.data?.structure?.stages) {
+            console.log('[LessonEditor] 📊 Parsing stages from lesson.data.structure.stages');
+            this.stages = this.parseStagesFromJSON(lesson.data.structure.stages);
+            console.log('[LessonEditor] ✅ Parsed stages:', this.stages);
+          } else {
+            console.warn('[LessonEditor] ⚠️ No stages found in lesson.data.structure');
+            this.stages = [];
+          }
+          
+          // Set default selection to lesson
+          this.selectedItem = { type: 'lesson', id: lesson.id };
+        },
+        error: (error) => {
+          console.error('[LessonEditor] ❌ Failed to load lesson:', error);
+          alert('Failed to load lesson. Please try again.');
+          this.router.navigate(['/lesson-builder']);
+        }
+      });
   }
 
   loadProcessedContent() {
@@ -2363,6 +2430,110 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       aiPrompt: '',
       prerequisites: []
     }));
+  }
+
+  /**
+   * Get the currently selected substage
+   */
+  getSelectedSubStage(): SubStage | null {
+    if (this.selectedItem.type !== 'substage') {
+      return null;
+    }
+    
+    const stage = this.stages.find(s => s.id === this.selectedItem.stageId);
+    if (!stage) {
+      return null;
+    }
+    
+    return stage.subStages.find(ss => ss.id === this.selectedItem.id) || null;
+  }
+
+  /**
+   * Get the currently selected stage
+   */
+  getSelectedStage(): Stage | null {
+    if (this.selectedItem.type === 'lesson') {
+      return null;
+    }
+    
+    if (this.selectedItem.type === 'stage') {
+      return this.stages.find(s => s.id === this.selectedItem.id) || null;
+    }
+    
+    if (this.selectedItem.type === 'substage') {
+      return this.stages.find(s => s.id === this.selectedItem.stageId) || null;
+    }
+    
+    return null;
+  }
+
+  /**
+   * Format seconds as MM:SS
+   */
+  formatTime(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  /**
+   * Get icon for script block type
+   */
+  getBlockIcon(type: string): string {
+    switch (type) {
+      case 'teacher_talk':
+        return '👨‍🏫';
+      case 'load_interaction':
+        return '🎯';
+      case 'pause':
+        return '⏸';
+      default:
+        return '📝';
+    }
+  }
+
+  /**
+   * Add a new script block to the currently selected substage
+   */
+  addScriptBlock() {
+    const substage = this.getSelectedSubStage();
+    if (!substage) {
+      console.warn('[LessonEditor] No substage selected');
+      return;
+    }
+    
+    if (!substage.scriptBlocks) {
+      substage.scriptBlocks = [];
+    }
+    
+    const newBlock: ScriptBlock = {
+      id: `block-${Date.now()}`,
+      type: 'teacher_talk',
+      content: '',
+      startTime: 0,
+      endTime: 30,
+      metadata: {}
+    };
+    
+    substage.scriptBlocks.push(newBlock);
+    this.markAsChanged();
+    console.log('[LessonEditor] ✅ Added new script block');
+  }
+
+  /**
+   * Delete a script block
+   */
+  deleteScriptBlock(index: number) {
+    const substage = this.getSelectedSubStage();
+    if (!substage || !substage.scriptBlocks) {
+      return;
+    }
+    
+    if (confirm('Delete this script block?')) {
+      substage.scriptBlocks.splice(index, 1);
+      this.markAsChanged();
+      console.log('[LessonEditor] 🗑️ Deleted script block');
+    }
   }
 
   goBack() {
