@@ -1,7 +1,9 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterModule } from '@angular/router';
 import { IonContent } from '@ionic/angular/standalone';
+import { HttpClient } from '@angular/common/http';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-super-admin-dashboard',
@@ -91,12 +93,15 @@ import { IonContent } from '@ionic/angular/standalone';
           </div>
 
           <!-- Lesson Approval Queue -->
-          <div class="dashboard-card disabled">
+          <div class="dashboard-card" (click)="navigateTo('/super-admin/approval-queue')">
             <div class="card-icon">✅</div>
             <div class="card-content">
               <h3>Lesson Approval Queue</h3>
-              <p>Review lessons submitted for approval, AI rejections, and approval history</p>
-              <div class="card-status">Coming Soon</div>
+              <p>Review lesson drafts, approve or reject changes</p>
+              <div class="card-stats">
+                <span class="stat-value">{{pendingDraftsCount}}</span>
+                <span class="stat-label">Pending</span>
+              </div>
             </div>
           </div>
         </div>
@@ -244,11 +249,36 @@ import { IonContent } from '@ionic/angular/standalone';
     }
   `]
 })
-export class SuperAdminDashboardComponent {
-  constructor(private router: Router) {}
+export class SuperAdminDashboardComponent implements OnInit {
+  constructor(
+    private router: Router,
+    private http: HttpClient
+  ) {}
 
   navigateTo(path: string) {
     this.router.navigate([path]);
+  }
+
+  pendingDraftsCount = 0;
+
+  ngOnInit() {
+    this.loadPendingDraftsCount();
+  }
+
+  loadPendingDraftsCount() {
+    this.http.get<any[]>(`${environment.apiUrl}/lesson-drafts/pending`, {
+      headers: {
+        'x-tenant-id': environment.tenantId
+      }
+    }).subscribe({
+      next: (drafts) => {
+        this.pendingDraftsCount = drafts.length;
+      },
+      error: (err) => {
+        console.error('Failed to load pending drafts count:', err);
+        this.pendingDraftsCount = 0;
+      }
+    });
   }
 }
 

@@ -21,6 +21,7 @@ import { LlmProvider } from './entities/llm-provider.entity';
 import { AiPrompt } from './entities/ai-prompt.entity';
 import { InteractionResult } from './entities/interaction-result.entity';
 import { InteractionAverage } from './entities/interaction-average.entity';
+import { LessonDraft } from './lesson-drafts/entities/lesson-draft.entity';
 import { UsersModule } from './modules/users/users.module';
 import { LessonsModule } from './modules/lessons/lessons.module';
 import { ChatModule } from './modules/chat/chat.module';
@@ -34,6 +35,7 @@ import { InteractionResultsModule } from './modules/interaction-results/interact
 import { ContentAnalyzerModule } from './services/content-analyzer.module';
 import { AutoPopulatorModule } from './services/auto-populator.module';
 import { WeaviateModule } from './services/weaviate.module';
+import { LessonDraftsModule } from './lesson-drafts/lesson-drafts.module';
 
 @Module({
   imports: [
@@ -51,7 +53,7 @@ import { WeaviateModule } from './services/weaviate.module';
         username: configService.get('database.username'),
         password: configService.get('database.password'),
         database: configService.get('database.database'),
-        entities: [User, Lesson, InteractionType, Workflow, Usage, ContentSource, LessonDataLink, ProcessedContentOutput, ScriptBlock, Course, LlmGenerationLog, StudentTopicScore, StudentMistake, LlmProvider, AiPrompt, InteractionResult, InteractionAverage],
+        entities: [User, Lesson, InteractionType, Workflow, Usage, ContentSource, LessonDataLink, ProcessedContentOutput, ScriptBlock, Course, LlmGenerationLog, StudentTopicScore, StudentMistake, LlmProvider, AiPrompt, InteractionResult, InteractionAverage, LessonDraft],
         synchronize: configService.get('database.synchronize'),
         logging: configService.get('database.logging'),
       }),
@@ -69,6 +71,7 @@ import { WeaviateModule } from './services/weaviate.module';
     LlmProvidersModule,
     AiPromptsModule,
     InteractionResultsModule,
+    LessonDraftsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

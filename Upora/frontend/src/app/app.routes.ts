@@ -71,6 +71,10 @@ export const routes: Routes = [
     loadComponent: () => import('./features/super-admin/ai-prompts.component').then(m => m.AiPromptsComponent)
   },
   {
+    path: 'super-admin/approval-queue',
+    loadComponent: () => import('./features/super-admin/approval-queue.component').then(m => m.ApprovalQueueComponent)
+  },
+  {
     path: 'test/true-false-selection',
     loadComponent: () => import('./features/interactions/true-false-selection-test.component').then(m => m.TrueFalseSelectionTestComponent)
   },

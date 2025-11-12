@@ -1,0 +1,674 @@
+import { Component, OnInit } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { HttpClient } from '@angular/common/http';
+import { Router } from '@angular/router';
+import { IonContent } from '@ionic/angular/standalone';
+import { environment } from '../../../environments/environment';
+
+interface DraftChange {
+  type: string;
+  field: string;
+  from: any;
+  to: any;
+  context?: string;
+}
+
+interface PendingDraft {
+  id: string;
+  lessonId: string;
+  lessonTitle: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  changesCount: number;
+  changeSummary: string;
+}
+
+interface DraftDiff {
+  draftId: string;
+  lessonId: string;
+  lessonTitle: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  changes: DraftChange[];
+  changesCount: number;
+}
+
+@Component({
+  selector: 'app-approval-queue',
+  standalone: true,
+  imports: [CommonModule, IonContent],
+  template: `
+    <ion-content>
+      <div class="approval-queue-page">
+        <!-- Header -->
+        <div class="page-header">
+          <button (click)="goBack()" class="back-button">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+            </svg>
+          </button>
+          <div>
+            <h1>Lesson Approval Queue</h1>
+            <p class="subtitle">Review pending lesson drafts</p>
+          </div>
+        </div>
+
+        <!-- Loading State -->
+        <div *ngIf="loading" class="loading-state">
+          <div class="spinner"></div>
+          <p>Loading pending drafts...</p>
+        </div>
+
+        <!-- Empty State -->
+        <div *ngIf="!loading && pendingDrafts.length === 0" class="empty-state">
+          <div class="empty-icon">✅</div>
+          <h2>No Pending Drafts</h2>
+          <p>All lesson changes have been reviewed!</p>
+        </div>
+
+        <!-- Drafts List -->
+        <div *ngIf="!loading && pendingDrafts.length > 0" class="drafts-list">
+          <div *ngFor="let draft of pendingDrafts" class="draft-card">
+            <div class="draft-header">
+              <div class="draft-info">
+                <h3>{{draft.lessonTitle}}</h3>
+                <p class="draft-meta">
+                  <span>{{draft.changesCount}} change{{draft.changesCount === 1 ? '' : 's'}}</span>
+                  <span>•</span>
+                  <span>Updated {{formatDate(draft.updatedAt)}}</span>
+                </p>
+              </div>
+              <div class="draft-actions">
+                <button class="btn-view" (click)="viewChanges(draft)">
+                  👁️ View Changes
+                </button>
+                <button class="btn-approve" (click)="approveDraft(draft)">
+                  ✅ Approve
+                </button>
+                <button class="btn-reject" (click)="rejectDraft(draft)">
+                  ❌ Reject
+                </button>
+              </div>
+            </div>
+            <div class="draft-summary" *ngIf="draft.changeSummary">
+              {{draft.changeSummary}}
+            </div>
+          </div>
+        </div>
+
+        <!-- Changes Modal -->
+        <div *ngIf="selectedDraft && showChangesModal" class="modal-overlay" (click)="closeChangesModal()">
+          <div class="modal-content" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <h2>Changes for: {{selectedDraftDiff?.lessonTitle}}</h2>
+              <button (click)="closeChangesModal()" class="close-button">✕</button>
+            </div>
+            
+            <div class="modal-body" *ngIf="selectedDraftDiff">
+              <div *ngIf="loadingDiff" class="loading-diff">
+                <div class="spinner"></div>
+                <p>Loading changes...</p>
+              </div>
+
+              <div *ngIf="!loadingDiff && selectedDraftDiff.changes.length === 0" class="no-changes">
+                <p>No changes detected</p>
+              </div>
+
+              <div *ngIf="!loadingDiff && selectedDraftDiff.changes.length > 0" class="changes-list">
+                <div *ngFor="let change of selectedDraftDiff.changes" class="change-item">
+                  <div class="change-header">
+                    <span class="change-type-badge" [class]="'badge-' + change.type">
+                      {{getChangeTypeLabel(change.type)}}
+                    </span>
+                    <span class="change-field">{{change.field}}</span>
+                  </div>
+                  <div class="change-content">
+                    <div class="change-from" *ngIf="change.from">
+                      <div class="label">Before:</div>
+                      <div class="value">{{change.from}}</div>
+                    </div>
+                    <div class="change-arrow" *ngIf="change.from">→</div>
+                    <div class="change-to">
+                      <div class="label">{{change.from ? 'After' : 'New'}}:</div>
+                      <div class="value">{{change.to}}</div>
+                    </div>
+                  </div>
+                  <div class="change-context" *ngIf="change.context">
+                    <small>{{change.context}}</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="modal-footer">
+              <button class="btn-secondary" (click)="closeChangesModal()">Close</button>
+              <button class="btn-reject" (click)="rejectDraft(selectedDraft)">❌ Reject</button>
+              <button class="btn-approve" (click)="approveDraft(selectedDraft)">✅ Approve</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </ion-content>
+  `,
+  styles: [`
+    .approval-queue-page {
+      min-height: 100vh;
+      background: #0a0a0a;
+      color: white;
+      padding: 80px 20px 20px;
+    }
+
+    .page-header {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+
+    .back-button {
+      background: none;
+      border: none;
+      color: #00d4ff;
+      cursor: pointer;
+      padding: 8px;
+      display: flex;
+      align-items: center;
+      transition: opacity 0.2s;
+    }
+
+    .back-button:hover {
+      opacity: 0.7;
+    }
+
+    .page-header h1 {
+      margin: 0;
+      font-size: 2rem;
+      font-weight: 700;
+    }
+
+    .subtitle {
+      color: rgba(255, 255, 255, 0.6);
+      margin: 4px 0 0 0;
+    }
+
+    .loading-state,
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      border-top-color: #00d4ff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 20px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .empty-icon {
+      font-size: 4rem;
+      margin-bottom: 20px;
+    }
+
+    .drafts-list {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .draft-card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 20px;
+      transition: all 0.3s;
+    }
+
+    .draft-card:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(0, 212, 255, 0.3);
+    }
+
+    .draft-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 20px;
+    }
+
+    .draft-info h3 {
+      margin: 0 0 8px 0;
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .draft-meta {
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 0.875rem;
+      margin: 0;
+      display: flex;
+      gap: 8px;
+    }
+
+    .draft-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn-view,
+    .btn-approve,
+    .btn-reject,
+    .btn-secondary {
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: none;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn-view {
+      background: rgba(0, 212, 255, 0.1);
+      color: #00d4ff;
+      border: 1px solid rgba(0, 212, 255, 0.3);
+    }
+
+    .btn-view:hover {
+      background: rgba(0, 212, 255, 0.2);
+    }
+
+    .btn-approve {
+      background: rgba(34, 197, 94, 0.1);
+      color: #22c55e;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+
+    .btn-approve:hover {
+      background: rgba(34, 197, 94, 0.2);
+    }
+
+    .btn-reject {
+      background: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .btn-reject:hover {
+      background: rgba(239, 68, 68, 0.2);
+    }
+
+    .draft-summary {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 0.875rem;
+    }
+
+    /* Modal Styles */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      padding: 20px;
+    }
+
+    .modal-content {
+      background: #1a1a1a;
+      border-radius: 16px;
+      max-width: 800px;
+      width: 100%;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 24px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .modal-header h2 {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+
+    .close-button {
+      background: none;
+      border: none;
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 1.5rem;
+      cursor: pointer;
+      padding: 4px 8px;
+      transition: color 0.2s;
+    }
+
+    .close-button:hover {
+      color: white;
+    }
+
+    .modal-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    .loading-diff {
+      text-align: center;
+      padding: 40px;
+    }
+
+    .no-changes {
+      text-align: center;
+      padding: 40px;
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .changes-list {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .change-item {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .change-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .change-type-badge {
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .badge-title,
+    .badge-description {
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+    }
+
+    .badge-script_text,
+    .badge-script_added {
+      background: rgba(139, 92, 246, 0.2);
+      color: #a78bfa;
+    }
+
+    .badge-interaction_type {
+      background: rgba(34, 197, 94, 0.2);
+      color: #22c55e;
+    }
+
+    .change-field {
+      font-weight: 600;
+      font-size: 0.875rem;
+    }
+
+    .change-content {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .change-from,
+    .change-to {
+      flex: 1;
+    }
+
+    .change-from .label,
+    .change-to .label {
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.5);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .change-from .value {
+      color: rgba(239, 68, 68, 0.8);
+      background: rgba(239, 68, 68, 0.1);
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 0.875rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .change-to .value {
+      color: rgba(34, 197, 94, 0.8);
+      background: rgba(34, 197, 94, 0.1);
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 0.875rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .change-arrow {
+      color: rgba(255, 255, 255, 0.4);
+      font-size: 1.5rem;
+      padding-top: 20px;
+    }
+
+    .change-context {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      color: rgba(255, 255, 255, 0.5);
+      font-size: 0.75rem;
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      padding: 24px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    @media (max-width: 768px) {
+      .draft-header {
+        flex-direction: column;
+      }
+
+      .draft-actions {
+        width: 100%;
+      }
+
+      .draft-actions button {
+        flex: 1;
+      }
+
+      .change-content {
+        flex-direction: column;
+      }
+
+      .change-arrow {
+        transform: rotate(90deg);
+        padding: 8px 0;
+      }
+    }
+  `]
+})
+export class ApprovalQueueComponent implements OnInit {
+  pendingDrafts: PendingDraft[] = [];
+  loading = true;
+  showChangesModal = false;
+  selectedDraft: PendingDraft | null = null;
+  selectedDraftDiff: DraftDiff | null = null;
+  loadingDiff = false;
+
+  constructor(
+    private http: HttpClient,
+    private router: Router
+  ) {}
+
+  ngOnInit() {
+    this.loadPendingDrafts();
+  }
+
+  loadPendingDrafts() {
+    this.loading = true;
+    this.http.get<PendingDraft[]>(`${environment.apiUrl}/lesson-drafts/pending`, {
+      headers: {
+        'x-tenant-id': environment.tenantId
+      }
+    }).subscribe({
+      next: (drafts) => {
+        this.pendingDrafts = drafts;
+        this.loading = false;
+        console.log('[ApprovalQueue] Loaded drafts:', drafts);
+      },
+      error: (err) => {
+        console.error('[ApprovalQueue] Failed to load drafts:', err);
+        this.loading = false;
+      }
+    });
+  }
+
+  viewChanges(draft: PendingDraft) {
+    this.selectedDraft = draft;
+    this.showChangesModal = true;
+    this.loadingDiff = true;
+
+    // Load diff
+    this.http.get<DraftDiff>(`${environment.apiUrl}/lesson-drafts/${draft.id}/diff`).subscribe({
+      next: (diff) => {
+        this.selectedDraftDiff = diff;
+        this.loadingDiff = false;
+        console.log('[ApprovalQueue] Loaded diff:', diff);
+      },
+      error: (err) => {
+        console.error('[ApprovalQueue] Failed to load diff:', err);
+        this.loadingDiff = false;
+      }
+    });
+  }
+
+  closeChangesModal() {
+    this.showChangesModal = false;
+    this.selectedDraft = null;
+    this.selectedDraftDiff = null;
+  }
+
+  approveDraft(draft: PendingDraft) {
+    if (!confirm(`Approve changes to "${draft.lessonTitle}"? This will make the changes live.`)) {
+      return;
+    }
+
+    this.http.post(`${environment.apiUrl}/lesson-drafts/${draft.id}/approve`, {}, {
+      headers: {
+        'x-user-id': environment.defaultUserId
+      }
+    }).subscribe({
+      next: () => {
+        console.log('[ApprovalQueue] Draft approved');
+        this.showChangesModal = false;
+        this.loadPendingDrafts(); // Reload list
+        alert('Draft approved successfully! Changes are now live.');
+      },
+      error: (err) => {
+        console.error('[ApprovalQueue] Failed to approve:', err);
+        alert('Failed to approve draft');
+      }
+    });
+  }
+
+  rejectDraft(draft: PendingDraft) {
+    if (!confirm(`Reject changes to "${draft.lessonTitle}"? The draft will be marked as rejected.`)) {
+      return;
+    }
+
+    this.http.post(`${environment.apiUrl}/lesson-drafts/${draft.id}/reject`, {}, {
+      headers: {
+        'x-user-id': environment.defaultUserId
+      }
+    }).subscribe({
+      next: () => {
+        console.log('[ApprovalQueue] Draft rejected');
+        this.showChangesModal = false;
+        this.loadPendingDrafts(); // Reload list
+        alert('Draft rejected');
+      },
+      error: (err) => {
+        console.error('[ApprovalQueue] Failed to reject:', err);
+        alert('Failed to reject draft');
+      }
+    });
+  }
+
+  getChangeTypeLabel(type: string): string {
+    const labels: Record<string, string> = {
+      'title': 'Title',
+      'description': 'Description',
+      'script_text': 'Script Text',
+      'script_added': 'New Script',
+      'interaction_type': 'Interaction'
+    };
+    return labels[type] || type;
+  }
+
+  formatDate(dateStr: string): string {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} min ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
+    return date.toLocaleDateString();
+  }
+
+  goBack() {
+    this.router.navigate(['/super-admin']);
+  }
+}
+

@@ -2603,6 +2603,14 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Mark the lesson as having unsaved changes
+   */
+  markAsChanged() {
+    this.hasUnsavedChanges = true;
+    console.log('[LessonEditor] 📝 Changes detected - Save Draft button enabled');
+  }
+
   goBack() {
     if (this.hasUnsavedChanges) {
       if (confirm('You have unsaved changes. Are you sure you want to leave?')) {
@@ -2655,18 +2663,18 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
         }
       };
       
-      const url = `${environment.apiUrl}/lessons/${this.lesson.id}`;
-      console.log('[LessonEditor] 📤 Sending PATCH to:', url);
-      console.log('[LessonEditor] 📤 Headers:', {
-        'x-tenant-id': environment.tenantId,
-        'x-user-id': environment.defaultUserId
-      });
+      // Save to drafts table (not live lesson)
+      const url = `${environment.apiUrl}/lesson-drafts`;
+      console.log('[LessonEditor] 📤 Saving draft to:', url);
       console.log('[LessonEditor] 📤 Payload:', payload);
       
-      // Send PATCH request to update lesson
-      const response = await this.http.patch(
+      // Send POST request to create/update draft
+      const response = await this.http.post(
         url,
-        payload,
+        {
+          lessonId: this.lesson.id,
+          draftData: payload
+        },
         {
           headers: {
             'x-tenant-id': environment.tenantId,
@@ -2675,13 +2683,13 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
         }
       ).toPromise();
       
-      console.log('[LessonEditor] ✅ Save successful:', response);
+      console.log('[LessonEditor] ✅ Draft saved:', response);
       
       // Update state
       this.saving = false;
       this.hasUnsavedChanges = false;
       this.lastSaved = new Date();
-      this.showSnackbar('Lesson saved successfully');
+      this.showSnackbar('Draft saved - pending approval');
       
     } catch (error: any) {
       console.error('[LessonEditor] ❌ Save failed - VERSION 0.0.5');
