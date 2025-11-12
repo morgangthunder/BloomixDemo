@@ -594,7 +594,7 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
     
     /* Desktop: when sidebar is visible (not width 0), move toggle right */
     @media (min-width: 768px) {
-      .lesson-view-wrapper:has(.sidebar:not([style*="width: 0px"])) .fullscreen-toggle {
+      .lesson-view-wrapper:has(.sidebar:not([style*="width: 0px"])) .fullscreen-toggle:not(.content-area.fullscreen .fullscreen-toggle) {
         left: calc(280px + 1.5rem) !important; /* Move right when sidebar open */
       }
     }
@@ -606,11 +606,10 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       }
     }
     
-    /* When fullscreen, move to very bottom and ALWAYS reset to left edge */
-    .fullscreen-active .fullscreen-toggle,
-    .content-area.fullscreen .fullscreen-toggle {
+    /* When fullscreen, FORCE to bottom-left (overrides desktop sidebar rule) */
+    body.fullscreen-active .fullscreen-toggle {
       bottom: 1rem !important; /* Very close to bottom */
-      left: 1.5rem !important; /* ALWAYS back to left edge */
+      left: 1.5rem !important; /* FORCE to left edge */
       z-index: 9998 !important; /* Above everything in fullscreen */
     }
 
