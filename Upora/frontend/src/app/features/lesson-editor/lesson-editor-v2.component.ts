@@ -56,8 +56,8 @@ interface ProcessedContentOutput {
   workflowName: string;
 }
 
-        // VERSION CHECK: This component should show "VERSION 3.3.0" in console logs
-        const LESSON_EDITOR_VERSION = '3.3.0';
+        // VERSION CHECK: This component should show "VERSION 3.4.0" in console logs
+        const LESSON_EDITOR_VERSION = '3.4.0';
         const LESSON_EDITOR_VERSION_CHECK_MESSAGE = `🚀 LESSON EDITOR COMPONENT VERSION ${LESSON_EDITOR_VERSION} LOADED - ${new Date().toISOString()} - CACHE BUST ID: ${Math.random().toString(36).substr(2, 9)}`;
 
 @Component({
@@ -104,9 +104,9 @@ interface ProcessedContentOutput {
           </span>
           <button (click)="submitForApproval()" 
                   class="btn-primary desktop-full mobile-icon" 
-                  [disabled]="hasBeenSubmitted || saving || !canSubmit()" 
+                  [disabled]="hasBeenSubmitted || saving || !canSubmit() || !hasDraft" 
                   [class.submitted]="hasBeenSubmitted"
-                  title="{{hasBeenSubmitted ? 'Already submitted' : 'Submit for Approval'}}">
+                  title="{{hasBeenSubmitted ? 'Already submitted' : !hasDraft ? 'Save draft first' : 'Submit for Approval'}}">
             <span class="desktop-only">{{hasBeenSubmitted ? '✓ Submitted' : '✓ Submit for Approval'}}</span>
             <span class="mobile-only">✓</span>
           </button>
@@ -427,12 +427,14 @@ interface ProcessedContentOutput {
                                 placeholder="Enter what the AI teacher should say..."
                                 rows="3"></textarea>
                       <div *ngIf="block.type === 'load_interaction'" class="interaction-selector">
-                        <label>Interaction:</label>
-                        <select [(ngModel)]="block.metadata.interactionId">
-                          <option value="">Select interaction...</option>
-                          <option value="drag-drop-1">Drag & Drop</option>
-                          <option value="multiple-choice-1">Multiple Choice</option>
-                        </select>
+                        <label>Interaction Type:</label>
+                        <div class="interaction-display">
+                          <span class="interaction-badge">{{block.metadata?.interactionType || 'None'}}</span>
+                          <button (click)="changeInteractionType()" class="btn-small">Change</button>
+                        </div>
+                        <div *ngIf="block.metadata?.interactionConfig" class="interaction-preview">
+                          <small>Fragments: {{block.metadata.interactionConfig.fragments?.length || 0}}</small>
+                        </div>
                       </div>
                     </div>
 
@@ -586,7 +588,11 @@ interface ProcessedContentOutput {
       </div>
 
       <!-- Snackbar -->
-      <div class="snackbar" [class.visible]="snackbarVisible">
+      <div class="snackbar" 
+           [class.visible]="snackbarVisible"
+           [class.success]="snackbarType === 'success'"
+           [class.error]="snackbarType === 'error'"
+           [class.info]="snackbarType === 'info'">
         {{snackbarMessage}}
       </div>
 
@@ -1176,6 +1182,31 @@ interface ProcessedContentOutput {
       color: #999;
       font-weight: 500;
     }
+    .interaction-display {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .interaction-badge {
+      background: rgba(0, 212, 255, 0.1);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      color: #00d4ff;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      flex: 1;
+    }
+    .interaction-preview {
+      margin-top: 0.5rem;
+      padding: 0.5rem;
+      background: rgba(0, 212, 255, 0.05);
+      border-radius: 4px;
+    }
+    .interaction-preview small {
+      color: #999;
+      font-size: 0.75rem;
+    }
     .interaction-selector select {
       background: #0a0a0a;
       border: 1px solid #333;
@@ -1732,6 +1763,21 @@ interface ProcessedContentOutput {
     .snackbar.visible {
       transform: translateX(-50%) translateY(0);
     }
+    .snackbar.success {
+      background: #22c55e;
+      border-color: #16a34a;
+      color: white;
+    }
+    .snackbar.error {
+      background: #ef4444;
+      border-color: #dc2626;
+      color: white;
+    }
+    .snackbar.info {
+      background: #00d4ff;
+      border-color: #00b8e6;
+      color: #0a0a0a;
+    }
     @media (max-width: 1024px) {
       .snackbar {
         bottom: 5rem; /* Above mobile bottom bar */
@@ -1924,11 +1970,13 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   saving: boolean = false;
   hasUnsavedChanges: boolean = false;
   hasBeenSubmitted: boolean = false;
+  hasDraft: boolean = false;
   lastSaved: Date | null = null;
   
   // Snackbar state
   snackbarMessage: string = '';
   snackbarVisible: boolean = false;
+  snackbarType: 'success' | 'error' | 'info' = 'info';
   private snackbarTimeout: any = null;
   
   // UI State
@@ -2032,8 +2080,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   ngOnInit() {
     // VERSION CHECK: This log should always appear when new code is loaded
-    console.log('🔥🔥🔥 LESSON EDITOR VERSION 3.3.0 - COMPLETE DB PARSER 🔥🔥🔥');
-    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 3.3.0');
+    console.log('🔥🔥🔥 LESSON EDITOR VERSION 3.4.0 - INTERACTION DISPLAY + VALIDATION 🔥🔥🔥');
+    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 3.4.0');
     console.log('[LessonEditor] ✅ Parses actual DB JSON with scriptBlocks, scriptBlocksAfterInteraction!');
     console.log('[LessonEditor] ✅ Converts DB format to editor format!');
     console.log('[LessonEditor] ✅ Database-first development - no mock data!');
@@ -2261,15 +2309,39 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     setTimeout(() => {
       this.saving = false;
       this.hasUnsavedChanges = false;
+      this.hasDraft = true; // Mark that a draft exists
       this.lastSaved = new Date();
       console.log('[LessonEditor] ✅ Draft saved');
+      this.showSnackbar('Draft saved successfully', 'success');
     }, 1000);
   }
 
   submitForApproval() {
+    // Check if draft has been saved
+    if (!this.hasDraft) {
+      console.log('[LessonEditor] ❌ Cannot submit - no draft saved');
+      this.showSnackbar('You must make changes and Save Draft first', 'error');
+      return;
+    }
+    
     console.log('[LessonEditor] 📤 Submitting for approval...');
     // TODO: Implement approval submission
-    alert('Submit for approval - To be implemented');
+    this.showSnackbar('Submit for approval - To be implemented', 'info');
+  }
+
+  // Snackbar helper
+  showSnackbar(message: string, type: 'success' | 'error' | 'info' = 'info') {
+    this.snackbarMessage = message;
+    this.snackbarType = type;
+    this.snackbarVisible = true;
+    
+    // Auto-hide after 3 seconds
+    if (this.snackbarTimeout) {
+      clearTimeout(this.snackbarTimeout);
+    }
+    this.snackbarTimeout = setTimeout(() => {
+      this.snackbarVisible = false;
+    }, 3000);
   }
 
   canSubmit(): boolean {
