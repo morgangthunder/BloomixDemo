@@ -606,17 +606,11 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
       }
     }
     
-    /* When fullscreen on ANY screen size */
+    /* When fullscreen - ALL screens - move to very bottom and left edge */
     body.fullscreen-active .fullscreen-toggle {
+      bottom: 1rem !important; /* Very close to bottom */
       left: 1.5rem !important; /* FORCE to left edge */
       z-index: 9998 !important; /* Above everything in fullscreen */
-    }
-    
-    /* When fullscreen on DESKTOP only, move to very bottom */
-    @media (min-width: 768px) {
-      body.fullscreen-active .fullscreen-toggle {
-        bottom: 1rem !important; /* Very close to bottom on desktop */
-      }
     }
 
     .fullscreen-toggle:hover {
