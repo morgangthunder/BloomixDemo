@@ -2319,7 +2319,13 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       return;
     }
 
-    console.log('[LessonEditor] 💾 Saving draft...');
+    if (!this.lesson.id || this.lesson.id === '' || this.lesson.id === 'new') {
+      this.showSnackbar('Cannot save draft for a new lesson. Please create the lesson first.', 'error');
+      console.error('[LessonEditor] ❌ Cannot save draft - invalid lesson ID:', this.lesson.id);
+      return;
+    }
+
+    console.log('[LessonEditor] 💾 Saving draft for lesson:', this.lesson.id);
     this.saving = true;
 
     // Build the draft data from current state
@@ -2357,6 +2363,11 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       changeSummary: this.generateChangeSummary(),
       changesCount: this.countChanges()
     };
+
+    console.log('[LessonEditor] 📤 Draft payload:', JSON.stringify(payload, null, 2));
+    console.log('[LessonEditor] 📤 Lesson ID:', this.lesson.id, 'Type:', typeof this.lesson.id);
+    console.log('[LessonEditor] 📤 API URL:', `${environment.apiUrl}/lesson-drafts`);
+    console.log('[LessonEditor] 📤 Headers:', { 'x-tenant-id': environment.tenantId, 'x-user-id': environment.defaultUserId });
 
     this.http.post(`${environment.apiUrl}/lesson-drafts`, payload, {
       headers: {
