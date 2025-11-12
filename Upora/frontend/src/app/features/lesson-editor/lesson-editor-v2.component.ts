@@ -56,8 +56,8 @@ interface ProcessedContentOutput {
   workflowName: string;
 }
 
-        // VERSION CHECK: This component should show "VERSION 3.0.0" in console logs
-        const LESSON_EDITOR_VERSION = '3.0.0';
+        // VERSION CHECK: This component should show "VERSION 3.1.0" in console logs
+        const LESSON_EDITOR_VERSION = '3.1.0';
         const LESSON_EDITOR_VERSION_CHECK_MESSAGE = `🚀 LESSON EDITOR COMPONENT VERSION ${LESSON_EDITOR_VERSION} LOADED - ${new Date().toISOString()} - CACHE BUST ID: ${Math.random().toString(36).substr(2, 9)}`;
 
 @Component({
@@ -2005,9 +2005,9 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   ngOnInit() {
     // VERSION CHECK: This log should always appear when new code is loaded
-    console.log('🔥🔥🔥 LESSON EDITOR VERSION 3.0.0 - FULLY FUNCTIONAL 🔥🔥🔥');
-    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 3.0.0');
-    console.log('[LessonEditor] ✅ Load/Edit/Save lesson data now working!');
+    console.log('🔥🔥🔥 LESSON EDITOR VERSION 3.1.0 - FIXED PARSER 🔥🔥🔥');
+    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 3.1.0');
+    console.log('[LessonEditor] ✅ Now parses actual lesson JSON format with interactions!');
     
     // Reset body overflow when entering page (in case it was left locked)
     document.body.style.overflow = '';
@@ -2367,21 +2367,71 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
             title: subStageData.title || `Substage ${subIndex + 1}`,
             type: subStageData.type || 'default',
             duration: subStageData.duration || 5,
-            interactionType: subStageData.interactionType,
+            interactionType: subStageData.interaction?.type || 'none',
             contentOutputId: subStageData.contentOutputId,
             scriptBlocks: []
           };
 
-          // Parse script blocks if they exist
+          // Parse script blocks BEFORE interaction
           if (subStageData.scriptBlocks && Array.isArray(subStageData.scriptBlocks)) {
-            subStage.scriptBlocks = subStageData.scriptBlocks.map((blockData: any) => ({
-              id: blockData.id || `block-${Date.now()}`,
-              type: blockData.type || 'teacher_talk',
-              content: blockData.content || '',
-              startTime: blockData.startTime || 0,
-              endTime: blockData.endTime || 30,
-              metadata: blockData.metadata || {}
+            subStage.scriptBlocks = subStageData.scriptBlocks.map((blockData: any, blockIndex: number) => ({
+              id: blockData.id || `block-${Date.now()}-${blockIndex}`,
+              type: 'teacher_talk',
+              content: blockData.text || blockData.content || '',
+              startTime: blockData.idealTimestamp || 0,
+              endTime: (blockData.idealTimestamp || 0) + (blockData.estimatedDuration || 30),
+              metadata: {
+                order: blockData.order,
+                playbackRules: blockData.playbackRules,
+                audioUrl: blockData.audioUrl
+              }
             }));
+          }
+
+          // Add interaction as a special script block if it exists
+          if (subStageData.interaction && subStageData.interaction.type) {
+            const interactionStartTime = subStage.scriptBlocks.length > 0 
+              ? Math.max(...subStage.scriptBlocks.map(b => b.endTime))
+              : 0;
+            
+            subStage.scriptBlocks.push({
+              id: `interaction-${subStageData.id}`,
+              type: 'load_interaction',
+              content: `Interaction: ${subStageData.interaction.type}`,
+              startTime: interactionStartTime,
+              endTime: interactionStartTime + 60, // Default 60 seconds for interaction
+              metadata: {
+                interactionType: subStageData.interaction.type,
+                interactionConfig: subStageData.interaction.config,
+                isInteraction: true
+              }
+            });
+          }
+
+          // Parse script blocks AFTER interaction
+          if (subStageData.scriptBlocksAfterInteraction && Array.isArray(subStageData.scriptBlocksAfterInteraction)) {
+            const afterBlocks = subStageData.scriptBlocksAfterInteraction.map((blockData: any, blockIndex: number) => {
+              const lastEndTime = subStage.scriptBlocks.length > 0 
+                ? Math.max(...subStage.scriptBlocks.map(b => b.endTime))
+                : 0;
+              
+              return {
+                id: blockData.id || `block-after-${Date.now()}-${blockIndex}`,
+                type: 'teacher_talk',
+                content: blockData.text || blockData.content || '',
+                startTime: lastEndTime + (blockData.idealTimestamp || 0),
+                endTime: lastEndTime + (blockData.idealTimestamp || 0) + (blockData.estimatedDuration || 30),
+                metadata: {
+                  order: blockData.order,
+                  playbackRules: blockData.playbackRules,
+                  audioUrl: blockData.audioUrl,
+                  triggerCondition: blockData.triggerCondition,
+                  afterInteraction: true
+                }
+              };
+            });
+            
+            subStage.scriptBlocks.push(...afterBlocks);
           }
 
           return subStage;
@@ -2489,6 +2539,23 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
         return '⏸';
       default:
         return '📝';
+    }
+  }
+
+  /**
+   * Select a lesson item (lesson, stage, or substage)
+   */
+  selectItem(item: {type: 'lesson' | 'stage' | 'substage', id: string, stageId?: string}) {
+    this.selectedItem = item;
+    
+    // If Script tab is active and a substage is selected, auto-scroll to first script block
+    if (this.activeTab === 'script' && item.type === 'substage') {
+      setTimeout(() => {
+        const firstScriptBlock = document.querySelector('.script-block');
+        if (firstScriptBlock) {
+          firstScriptBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
     }
   }
 
