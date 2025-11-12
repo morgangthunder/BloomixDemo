@@ -14,6 +14,7 @@ interface TrueFalseSelectionData {
   fragments: Fragment[];
   targetStatement: string;
   maxFragments: number;
+  showHints?: boolean; // Show explanations before submission (default: false)
 }
 
 @Component({
@@ -39,7 +40,7 @@ interface TrueFalseSelectionData {
           [class.missed]="showScore && fragment.isTrueInContext && !isSelected(i)"
           [class.locked]="showScore"
           (click)="toggleFragment(i)"
-          [title]="fragment.explanation"
+          [title]="(data?.showHints || showScore) ? fragment.explanation : ''"
         >
           <div class="fragment-text">{{ fragment.text }}</div>
           <div *ngIf="showScore" class="fragment-feedback">
@@ -52,7 +53,8 @@ interface TrueFalseSelectionData {
 
       <!-- Instructions -->
       <div class="instructions" *ngIf="!showScore">
-        <p>💡 Tap statements to select them • Hover for explanations</p>
+        <p *ngIf="data?.showHints">💡 Tap statements to select them • Hover for hints</p>
+        <p *ngIf="!data?.showHints">💡 Tap statements to select them</p>
       </div>
 
       <!-- Score Popup Modal -->

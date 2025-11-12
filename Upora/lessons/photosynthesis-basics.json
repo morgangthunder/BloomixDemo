@@ -72,6 +72,7 @@
             "config": {
               "targetStatement": "About Photosynthesis",
               "maxFragments": 6,
+              "showHints": false,
               "fragments": [
                 {
                   "text": "Plants use sunlight to make food",
