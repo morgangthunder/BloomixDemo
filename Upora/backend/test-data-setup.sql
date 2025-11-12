@@ -44,7 +44,7 @@ INSERT INTO lessons (
   created_by,
   objectives
 ) VALUES (
-  '30000000-0000-0000-0000-000000000099',
+  'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', -- Real UUID v4 for Photosynthesis lesson
   '00000000-0000-0000-0000-000000000001',
   'Photosynthesis Basics',
   'Learn how plants convert sunlight into energy',
@@ -139,7 +139,7 @@ INSERT INTO processed_content_outputs (
   created_by
 ) VALUES (
   '40000000-0000-0000-0000-000000000099',
-  '30000000-0000-0000-0000-000000000099',
+  'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
   NULL,
   NULL,
   'Photosynthesis True/False Quiz',
@@ -198,7 +198,7 @@ SELECT
   status,
   (data->'stages'->0->'subStages'->0->>'interactionTypeId') as interaction_type_id
 FROM lessons 
-WHERE id = '30000000-0000-0000-0000-000000000099';
+WHERE id = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d';
 
 SELECT 
   'Processed content created:' as status,

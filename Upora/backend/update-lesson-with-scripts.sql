@@ -23,7 +23,7 @@ SET data = jsonb_set(
   }]'::jsonb
 ),
 updated_at = NOW()
-WHERE id = '30000000-0000-0000-0000-000000000099';
+WHERE id = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d';
 
 -- Verify the update
 SELECT 
@@ -32,5 +32,5 @@ SELECT
   jsonb_pretty(data->'stages'->0->'subStages'->0->'scriptBlocks') as first_script,
   jsonb_pretty(data->'stages'->0->'subStages'->1->'scriptBlocks') as second_script
 FROM lessons
-WHERE id = '30000000-0000-0000-0000-000000000099';
+WHERE id = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d';
 

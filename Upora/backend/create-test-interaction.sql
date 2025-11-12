@@ -12,7 +12,7 @@ INSERT INTO processed_content_outputs (
   created_by
 ) VALUES (
   '40000000-0000-0000-0000-000000000099',
-  '30000000-0000-0000-0000-000000000099',
+  'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
   NULL,
   NULL,
   'Photosynthesis True/False Quiz',
