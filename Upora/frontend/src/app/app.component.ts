@@ -45,11 +45,7 @@ export class AppComponent implements OnInit {
   }
 
   ngOnInit() {
-    // VERSION CHECK - This should show in console
-    console.log('🔥🔥🔥 FRONTEND VERSION 0.3.6 LOADED 🔥🔥🔥');
-    console.log('📅 Build Date:', new Date().toISOString());
-    console.log('🎯 Cache Bust:', Math.random().toString(36).substr(2, 9));
-    console.log('✅ Draft API Integration Complete!');
     // Initialize any app-wide setup here
+    // Note: Main version logging is in main.ts to avoid duplication
   }
 }

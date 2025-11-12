@@ -3,15 +3,16 @@ import { appConfig } from './app/app.config';
 import { AppComponent } from './app/app.component';
 
 // ========================================
-// 🔥 FRONTEND VERSION 0.3.0 🔥
+// 🔥 FRONTEND VERSION 0.3.7 🔥
 // ========================================
-const FRONTEND_VERSION = '0.3.0';
+const FRONTEND_VERSION = '0.3.7';
 const CACHE_BUST_ID = Math.random().toString(36).substr(2, 9);
 console.log('');
 console.log('═══════════════════════════════════════════════════════════');
 console.log(`🔥🔥🔥 FRONTEND VERSION ${FRONTEND_VERSION} LOADED 🔥🔥🔥`);
 console.log(`📅 Timestamp: ${new Date().toISOString()}`);
 console.log(`🆔 Cache Bust ID: ${CACHE_BUST_ID}`);
+console.log(`✅ Draft API Integration | MM:SS Time Input | DB-First`);
 console.log('═══════════════════════════════════════════════════════════');
 console.log('');
 
