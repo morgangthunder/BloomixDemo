@@ -56,8 +56,8 @@ interface ProcessedContentOutput {
   workflowName: string;
 }
 
-        // VERSION CHECK: This component should show "VERSION 3.8.0" in console logs
-        const LESSON_EDITOR_VERSION = '3.8.0';
+        // VERSION CHECK: This component should show "VERSION 3.9.0" in console logs
+        const LESSON_EDITOR_VERSION = '3.9.0';
         const LESSON_EDITOR_VERSION_CHECK_MESSAGE = `🚀 LESSON EDITOR COMPONENT VERSION ${LESSON_EDITOR_VERSION} LOADED - ${new Date().toISOString()} - CACHE BUST ID: ${Math.random().toString(36).substr(2, 9)}`;
 
 @Component({
@@ -2091,8 +2091,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   ngOnInit() {
     // VERSION CHECK: This log should always appear when new code is loaded
-    console.log('🔥🔥🔥 LESSON EDITOR VERSION 3.8.0 - ENHANCED ERROR LOGGING 🔥🔥🔥');
-    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 3.8.0');
+    console.log('🔥🔥🔥 LESSON EDITOR VERSION 3.9.0 - STRING COERCION FOR LESSON ID 🔥🔥🔥');
+    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 3.9.0');
     console.log('[LessonEditor] ✅ Parses actual DB JSON with scriptBlocks, scriptBlocksAfterInteraction!');
     console.log('[LessonEditor] ✅ Converts DB format to editor format!');
     console.log('[LessonEditor] ✅ Database-first development - no mock data!');
@@ -2358,7 +2358,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     };
 
     const payload = {
-      lessonId: this.lesson.id,
+      lessonId: String(this.lesson.id), // Ensure it's a string
       draftData: draftData,
       changeSummary: this.generateChangeSummary(),
       changesCount: this.countChanges()
