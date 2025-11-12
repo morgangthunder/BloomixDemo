@@ -102,8 +102,10 @@ export class LessonDraftsService {
     }
 
     // Compare script blocks
-    const liveStages = liveLesson.data?.structure?.stages || [];
-    const draftStages = draftData.structure?.stages || [];
+    // Handle both data structures: liveLesson uses data.stages, draft uses structure.stages
+    const liveLessonData: any = liveLesson.data || {};
+    const liveStages = liveLessonData.stages || liveLessonData.structure?.stages || [];
+    const draftStages = draftData.structure?.stages || (draftData as any).stages || [];
 
     liveStages.forEach((liveStage, stageIdx) => {
       const draftStage = draftStages[stageIdx];
@@ -121,13 +123,17 @@ export class LessonDraftsService {
           const draftBlock = draftScripts[blockIdx];
           if (!draftBlock) return;
 
-          if (liveBlock.text !== draftBlock.text) {
+          // Handle both text and content fields
+          const liveText = liveBlock.text || liveBlock.content;
+          const draftText = draftBlock.text || draftBlock.content;
+
+          if (liveText !== draftText) {
             changes.push({
               type: 'script_text',
               field: `Script Block - ${liveStage.title} > ${liveSubStage.title}`,
-              from: liveBlock.text,
-              to: draftBlock.text,
-              context: `Block ${blockIdx + 1} at ${liveBlock.idealTimestamp}s`
+              from: liveText,
+              to: draftText,
+              context: `Block ${blockIdx + 1}`
             });
           }
         });
@@ -140,7 +146,7 @@ export class LessonDraftsService {
               type: 'script_added',
               field: `New Script Block - ${liveStage.title} > ${liveSubStage.title}`,
               from: null,
-              to: newBlock.text,
+              to: newBlock.text || newBlock.content,
               context: `New block ${liveScripts.length + idx + 1}`
             });
           });
