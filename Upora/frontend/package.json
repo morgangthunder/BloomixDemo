@@ -3,9 +3,9 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve --poll 2000 --live-reload true --disable-host-check",
-    "start:docker": "ng serve --host 0.0.0.0 --port 8100 --poll 2000 --live-reload true --disable-host-check",
-    "start:fresh": "ng cache clean && ng serve --poll 2000 --live-reload true --disable-host-check",
+    "start": "ng serve --poll 2000 --live-reload true",
+    "start:docker": "ng serve --host 0.0.0.0 --port 8100 --poll 2000 --live-reload true",
+    "start:fresh": "ng cache clean && ng serve --poll 2000 --live-reload true",
     "build": "ng build",
     "build:dev": "ng build --configuration development",
     "watch": "ng build --watch --configuration development",
