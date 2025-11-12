@@ -406,7 +406,7 @@ interface ProcessedContentOutput {
                         <span class="block-type-icon">{{getBlockIcon(block.type)}}</span>
                         <select [(ngModel)]="block.type" (ngModelChange)="markAsChanged()" class="block-type-select">
                           <option value="teacher_talk">👨‍🏫 Teacher Talk</option>
-                          <option value="load_interaction">🎯 Load Interaction</option>
+                          <option value="load_interaction">🎯 Interaction</option>
                           <option value="pause">⏸ Pause for Question</option>
                         </select>
                         <button (click)="deleteScriptBlock(i)" class="btn-icon" title="Delete block">
