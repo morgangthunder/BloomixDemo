@@ -104,8 +104,7 @@
             "poll": 2000,
             "liveReload": true,
             "hmr": false,
-            "watch": true,
-            "forceEsbuild": true
+            "watch": true
           },
           "configurations": {
             "production": {
