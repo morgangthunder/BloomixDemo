@@ -50,12 +50,19 @@ interface ChatMessage {
           </svg>
         </button>
         <h1>Interaction Builder</h1>
-        <div class="header-actions">
-          <button (click)="resetToLastWorking()" class="btn-secondary" [disabled]="!hasLastWorking" title="Reset to last working version">
+        <div class="header-actions" style="display: flex; gap: 0.75rem;">
+          <button (click)="resetToLastWorking()" 
+                  class="btn-secondary" 
+                  [disabled]="!hasLastWorking" 
+                  title="Reset to last working version"
+                  style="padding: 0.625rem 1.25rem; border-radius: 0.5rem; background: #2a2a2a; color: white; border: 1px solid #444; font-weight: 500;">
             🔄 Reset
           </button>
-          <button (click)="saveInteraction()" class="btn-primary" [disabled]="saving" style="background: #00d4ff; color: #0f0f23; font-weight: 600; padding: 0.625rem 1.25rem; border-radius: 0.5rem;">
-            {{ saving ? 'Saving...' : '💾 Save' }}
+          <button (click)="saveInteraction()" 
+                  [disabled]="saving" 
+                  title="Save all changes"
+                  style="padding: 0.625rem 1.5rem; border-radius: 0.5rem; background: #00d4ff !important; color: #0f0f23 !important; font-weight: 700 !important; border: none; font-size: 1rem; cursor: pointer; box-shadow: 0 2px 8px rgba(0, 212, 255, 0.4);">
+            {{ saving ? '⏳ Saving...' : '💾 SAVE' }}
           </button>
         </div>
       </header>
@@ -405,9 +412,12 @@ export class MyPixiInteraction {
                 <div class="section-header">
                   <h3>Live Preview</h3>
                   <p class="hint">See how your interaction looks with the sample data</p>
+                  <button (click)="refreshPreview()" class="btn-refresh" style="margin-top: 0.5rem;">
+                    🔄 Refresh Preview
+                  </button>
                 </div>
 
-                <div class="preview-container">
+                <div class="preview-container" [attr.data-preview-key]="previewKey">
                   <!-- HTML Preview (prioritize this for HTML types) -->
                   <div *ngIf="currentInteraction?.interactionTypeCategory === 'html' && currentInteraction?.htmlCode" class="html-preview">
                     <div [innerHTML]="getHtmlPreview()"></div>
@@ -1108,6 +1118,23 @@ export class MyPixiInteraction {
       cursor: not-allowed;
     }
 
+    .btn-refresh {
+      background: #10b981;
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 0.375rem;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.875rem;
+      transition: all 0.2s;
+    }
+
+    .btn-refresh:hover {
+      background: #059669;
+      transform: translateY(-1px);
+    }
+
     .test-result {
       margin-top: 1rem;
       padding: 1rem;
@@ -1721,6 +1748,9 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   lastWorkingVersion: InteractionType | null = null;
   hasLastWorking = false;
 
+  // Preview refresh
+  previewKey = Date.now();
+
   @ViewChild('aiChatHistory') aiChatHistory?: ElementRef;
 
   constructor(
@@ -2121,21 +2151,41 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
 
           // Try to parse HTML (basic check)
           const tempDiv = document.createElement('div');
-          tempDiv.innerHTML = this.currentInteraction.htmlCode;
+          try {
+            tempDiv.innerHTML = this.currentInteraction.htmlCode;
+          } catch (htmlError: any) {
+            throw new Error(`HTML parsing error: ${htmlError.message}`);
+          }
 
           // Check for required elements based on interaction type
           if (this.currentInteraction.id === 'true-false-selection') {
-            if (!this.currentInteraction.htmlCode.includes('fragments-grid')) {
-              throw new Error('HTML must include element with id="fragmentsGrid"');
+            if (!this.currentInteraction.htmlCode.includes('fragments-grid') && 
+                !this.currentInteraction.htmlCode.includes('fragmentsGrid')) {
+              throw new Error('HTML must include element with id="fragmentsGrid" or class="fragments-grid"');
             }
           }
 
-          // Validate JS syntax (basic check)
+          // Validate JS syntax (strict check)
           if (this.currentInteraction.jsCode) {
             try {
-              new Function(this.currentInteraction.jsCode);
+              // Use strict mode
+              new Function('"use strict";' + this.currentInteraction.jsCode);
+              
+              // Check for common breaking patterns
+              if (this.currentInteraction.jsCode.includes('undefined.')) {
+                throw new Error('Code contains potential undefined access');
+              }
+              if (this.currentInteraction.jsCode.includes('null.')) {
+                throw new Error('Code contains potential null access');
+              }
+              
+              // Try to actually execute in a safe context
+              const testWindow: any = { interactionData: {} };
+              const testFn = new Function('window', '"use strict";' + this.currentInteraction.jsCode);
+              testFn(testWindow);
+              
             } catch (jsError: any) {
-              throw new Error(`JavaScript syntax error: ${jsError.message}`);
+              throw new Error(`JavaScript error: ${jsError.message}`);
             }
           }
 
@@ -2208,8 +2258,25 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
 
     this.hasChanges = false;
     this.testResult = null;
+    this.refreshPreview();
 
     console.log('[InteractionBuilder] ✅ Reset to last working version');
+  }
+
+  refreshPreview() {
+    // Force preview re-render by changing key
+    this.previewKey = Date.now();
+    console.log('[InteractionBuilder] 🔄 Preview refreshed');
+    
+    // Also update sample data from text field
+    if (this.sampleDataText.trim()) {
+      try {
+        this.currentInteraction!.sampleData = JSON.parse(this.sampleDataText);
+        console.log('[InteractionBuilder] ✅ Sample data updated for preview');
+      } catch (e) {
+        console.error('[InteractionBuilder] ❌ Sample data JSON invalid:', e);
+      }
+    }
   }
 
   goBack() {
