@@ -2008,15 +2008,18 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   }
 
   loadInteractions() {
+    console.log('[InteractionBuilder] 📡 Loading interactions from API...');
     this.http.get<InteractionType[]>(`${environment.apiUrl}/interaction-types`)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (data) => {
+          console.log('[InteractionBuilder] ✅ Received', data.length, 'interactions:', data);
           this.interactions = data;
           this.filterInteractions();
+          console.log('[InteractionBuilder] 📋 Filtered to', this.filteredInteractions.length, 'interactions');
         },
         error: (err) => {
-          console.error('Failed to load interactions:', err);
+          console.error('[InteractionBuilder] ❌ Failed to load interactions:', err);
         }
       });
   }
@@ -2234,6 +2237,8 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   switchTab(tab: 'settings' | 'code' | 'config' | 'sample' | 'preview') {
     if (!this.currentInteraction) {
       this.showSuccessSnackbar('⚠️ You must select or create an interaction first');
+      // Stay on settings tab
+      this.activeTab = 'settings';
       return;
     }
     this.activeTab = tab;
