@@ -133,28 +133,29 @@ interface ChatMessage {
 
         <!-- Main Content -->
         <main class="builder-main">
-          <div *ngIf="!currentInteraction" class="empty-builder">
-            <div class="empty-icon">🎯</div>
-            <h2>Select an interaction to edit</h2>
-            <p>Or create a new one to get started</p>
-          </div>
-
-          <div *ngIf="currentInteraction" class="editor-container">
+          <div class="editor-container" [class.no-interaction]="!currentInteraction">
             <!-- Tabs -->
             <div class="editor-tabs-main">
               <button class="sidebar-toggle mobile-only" (click)="toggleSidebar()">
                 {{ sidebarHidden ? '📚 Show' : '📚 Hide' }}
               </button>
               <button [class.active]="activeTab === 'settings'" 
-                      (click)="activeTab = 'settings'">⚙️ Settings</button>
+                      (click)="switchTab('settings')">⚙️ Settings</button>
               <button [class.active]="activeTab === 'code'" 
-                      (click)="activeTab = 'code'">💻 Code</button>
+                      (click)="switchTab('code')">💻 Code</button>
               <button [class.active]="activeTab === 'config'" 
-                      (click)="activeTab = 'config'">🔧 Config</button>
+                      (click)="switchTab('config')">🔧 Config</button>
               <button [class.active]="activeTab === 'sample'" 
-                      (click)="activeTab = 'sample'">📋 Sample</button>
+                      (click)="switchTab('sample')">📋 Sample</button>
               <button [class.active]="activeTab === 'preview'" 
-                      (click)="activeTab = 'preview'">👁️ Preview</button>
+                      (click)="switchTab('preview')">👁️ Preview</button>
+            </div>
+
+            <!-- Empty State -->
+            <div *ngIf="!currentInteraction" class="empty-builder-inline">
+              <div class="empty-icon">🎯</div>
+              <h2>Select an interaction to edit</h2>
+              <p>Or create a new one to get started</p>
             </div>
 
             <!-- Settings Tab -->
@@ -565,6 +566,11 @@ export class MyPixiInteraction {
         (closed)="closeConfigModal()"
         (saved)="onConfigModalSaved($event)">
       </app-interaction-configure-modal>
+
+      <!-- Success Snackbar -->
+      <div *ngIf="showSnackbar" class="snackbar">
+        {{ snackbarMessage }}
+      </div>
     </div>
   `,
   styles: [`
@@ -1876,6 +1882,52 @@ export class MyPixiInteraction {
         width: calc(100vw - 2rem);
         max-width: 400px;
       }
+
+      .interaction-library {
+        z-index: 300 !important;
+      }
+    }
+
+    /* Snackbar */
+    .snackbar {
+      position: fixed;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1a1a1a;
+      color: #fff;
+      padding: 1rem 1.5rem;
+      border-radius: 0.5rem;
+      border: 1px solid #333;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      z-index: 5000;
+      animation: slideUp 0.3s ease;
+      font-weight: 500;
+    }
+
+    .empty-builder-inline {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 4rem 2rem;
+      color: #666;
+    }
+
+    .empty-builder-inline .empty-icon {
+      font-size: 4rem;
+      margin-bottom: 1rem;
+    }
+
+    .empty-builder-inline h2 {
+      margin: 0 0 0.5rem 0;
+      font-size: 1.5rem;
+      color: #999;
+    }
+
+    .empty-builder-inline p {
+      margin: 0;
+      font-size: 1rem;
     }
   `]
 })
@@ -1928,6 +1980,10 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
 
   // Preview refresh
   previewKey = Date.now();
+
+  // Snackbar
+  showSnackbar = false;
+  snackbarMessage = '';
 
   @ViewChild('aiChatHistory') aiChatHistory?: ElementRef;
 
@@ -2155,13 +2211,32 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
           
           // Update current
           this.currentInteraction = saved;
+          
+          // Show success snackbar
+          this.showSuccessSnackbar('✅ Saved successfully!');
         },
         error: (err) => {
           console.error('Failed to save interaction:', err);
-          alert('Failed to save: ' + (err.error?.message || err.message));
+          this.showSuccessSnackbar('❌ Save failed: ' + (err.error?.message || err.message));
           this.saving = false;
         }
       });
+  }
+
+  showSuccessSnackbar(message: string) {
+    this.snackbarMessage = message;
+    this.showSnackbar = true;
+    setTimeout(() => {
+      this.showSnackbar = false;
+    }, 3000);
+  }
+
+  switchTab(tab: 'settings' | 'code' | 'config' | 'sample' | 'preview') {
+    if (!this.currentInteraction) {
+      this.showSuccessSnackbar('⚠️ You must select or create an interaction first');
+      return;
+    }
+    this.activeTab = tab;
   }
 
   getTypeLabel(type?: string): string {
