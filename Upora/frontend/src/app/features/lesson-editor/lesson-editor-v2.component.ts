@@ -18,6 +18,7 @@ import { ContentLibraryModalComponent } from '../../shared/components/content-li
 import { AddTextContentModalComponent } from '../../shared/components/add-text-content-modal/add-text-content-modal.component';
 import { AddImageModalComponent } from '../../shared/components/add-image-modal/add-image-modal.component';
 import { AddPdfModalComponent } from '../../shared/components/add-pdf-modal/add-pdf-modal.component';
+import { TrueFalseSelectionComponent } from '../interactions/true-false-selection/true-false-selection.component';
 
 type EditorTab = 'details' | 'structure' | 'script' | 'content' | 'preview' | 'ai-assistant';
 
@@ -76,7 +77,8 @@ interface ProcessedContentOutput {
     ContentLibraryModalComponent,
     AddTextContentModalComponent,
     AddImageModalComponent,
-    AddPdfModalComponent
+    AddPdfModalComponent,
+    TrueFalseSelectionComponent
   ],
   template: `
     <div class="lesson-editor-v2" *ngIf="lesson">
@@ -771,34 +773,56 @@ interface ProcessedContentOutput {
       <div class="modal-overlay-fullscreen" *ngIf="showInteractionConfigModal" (click)="closeInteractionConfigModal()">
         <div class="modal-container-fullscreen" (click)="$event.stopPropagation()">
           <div class="modal-header-sticky">
-            <h2>⚙️ Configure Interaction</h2>
+            <h2>⚙️ {{getSelectedSubStage()?.interaction?.type || 'Interaction'}} Configuration</h2>
             <button (click)="closeInteractionConfigModal()" class="close-btn">✕</button>
           </div>
 
+          <!-- Tab Navigation -->
+          <div class="modal-tabs">
+            <button 
+              class="modal-tab"
+              [class.active]="interactionConfigTab === 'configure'"
+              (click)="interactionConfigTab = 'configure'">
+              ⚙️ Configure
+            </button>
+            <button 
+              class="modal-tab"
+              [class.active]="interactionConfigTab === 'preview'"
+              (click)="interactionConfigTab = 'preview'">
+              👁️ Preview
+            </button>
+          </div>
+
           <div class="modal-body-scrollable">
-            <div class="config-section">
-              <h3>{{getSelectedSubStage()?.interaction?.type}} Configuration</h3>
-              
+            <!-- Configure Tab -->
+            <div *ngIf="interactionConfigTab === 'configure'" class="config-section">
               <!-- Dynamic config fields based on interaction type -->
               <div *ngIf="getSelectedSubStage()?.interaction?.type === 'true-false-selection'">
                 <div class="form-group">
                   <label for="interaction-title">Title</label>
-                  <input id="interaction-title" type="text" [(ngModel)]="interactionConfig.title" placeholder="e.g., Test Your Understanding" />
+                  <input id="interaction-title" type="text" [(ngModel)]="interactionConfig.title" placeholder="e.g., Test Your Understanding" class="form-input" />
                 </div>
                 <div class="form-group">
                   <label for="interaction-instructions">Instructions</label>
-                  <textarea id="interaction-instructions" [(ngModel)]="interactionConfig.instructions" rows="2" placeholder="e.g., Select all the TRUE statements"></textarea>
+                  <textarea id="interaction-instructions" [(ngModel)]="interactionConfig.instructions" rows="3" placeholder="e.g., Select all the TRUE statements" class="form-input"></textarea>
                 </div>
               </div>
+            </div>
 
-              <!-- Preview Section -->
-              <div class="preview-section">
-                <h4>Preview</h4>
-                <div class="interaction-preview-box">
-                  <p><strong>Title:</strong> {{interactionConfig?.title || 'Not set'}}</p>
-                  <p><strong>Instructions:</strong> {{interactionConfig?.instructions || 'Not set'}}</p>
-                  <p class="preview-note">Full interaction preview will render here</p>
-                </div>
+            <!-- Preview Tab -->
+            <div *ngIf="interactionConfigTab === 'preview'" class="preview-tab-content">
+              <div class="interaction-preview-fullscreen">
+                <!-- Import the actual interaction component for live preview -->
+                <app-true-false-selection
+                  *ngIf="getSelectedSubStage()?.interaction?.type === 'true-false-selection'"
+                  [config]="interactionConfig"
+                  [contentOutputId]="getSelectedSubStage()?.interaction?.contentOutputId || ''"
+                  (completed)="onPreviewCompleted($event)">
+                </app-true-false-selection>
+                
+                <p *ngIf="!getSelectedSubStage()?.interaction?.type" class="preview-placeholder">
+                  No interaction type selected
+                </p>
               </div>
             </div>
           </div>
@@ -2245,10 +2269,64 @@ interface ProcessedContentOutput {
       margin: 0;
     }
 
+    .modal-tabs {
+      display: flex;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      background: #1a1a1a;
+    }
+
+    .modal-tab {
+      flex: 1;
+      padding: 12px 16px;
+      background: none;
+      border: none;
+      color: #999;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      border-bottom: 2px solid transparent;
+    }
+
+    .modal-tab:hover {
+      color: white;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .modal-tab.active {
+      color: white;
+      border-bottom-color: #dc2626;
+      background: rgba(220, 38, 38, 0.1);
+    }
+
     .modal-body-scrollable {
       flex: 1;
       overflow-y: auto;
       padding: 24px;
+    }
+
+    .preview-tab-content {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .interaction-preview-fullscreen {
+      flex: 1;
+      background: #0f0f0f;
+      border-radius: 8px;
+      border: 1px solid #333;
+      padding: 2rem;
+      min-height: 400px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .preview-placeholder {
+      color: #666;
+      font-style: italic;
+      text-align: center;
     }
 
     .modal-footer-sticky {
@@ -2424,6 +2502,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   contentProcessorResumeProcessing: boolean = false;
   showInteractionConfigModal: boolean = false;
   interactionConfig: any = null;
+  interactionConfigTab: 'configure' | 'preview' = 'configure';
   showSourceContentModal: boolean = false;
   selectedSourceContent: any = null;
   showProcessedContentJsonModal: boolean = false;
@@ -3379,6 +3458,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     
     // Load interaction config (or create default if doesn't exist)
     this.interactionConfig = substage.interaction.config ? { ...substage.interaction.config } : {};
+    this.interactionConfigTab = 'configure'; // Reset to configure tab
     this.showInteractionConfigModal = true;
     console.log('[LessonEditor] Opening interaction config modal:', this.interactionConfig);
     // Hide header
@@ -3405,10 +3485,16 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   closeInteractionConfigModal() {
     this.showInteractionConfigModal = false;
     this.interactionConfig = null;
+    this.interactionConfigTab = 'configure';
     // Show header
     document.body.style.overflow = '';
     const header = document.querySelector('app-header');
     if (header) (header as HTMLElement).style.display = '';
+  }
+
+  onPreviewCompleted(result: any) {
+    console.log('[LessonEditor] Preview interaction completed:', result);
+    // Don't do anything - this is just a preview, not recording results
   }
 
   formatDuration(minutes: number): string {
