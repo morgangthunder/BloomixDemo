@@ -161,8 +161,8 @@ import { TrueFalseSelectionComponent } from '../../../features/interactions/true
                 <p>⚠️ No sample data provided for preview</p>
               </div>
               
-              <!-- HTML/PixiJS Iframe Preview -->
-              <div *ngIf="previewData && (interactionCategory === 'html' || interactionCategory === 'pixijs') && htmlCode" 
+              <!-- HTML/PixiJS/iFrame Preview -->
+              <div *ngIf="previewData && (interactionCategory === 'html' || interactionCategory === 'pixijs' || interactionCategory === 'iframe') && htmlCode" 
                    class="iframe-preview-container">
                 <iframe 
                   [src]="getInteractionPreviewBlobUrl()"
@@ -172,13 +172,13 @@ import { TrueFalseSelectionComponent } from '../../../features/interactions/true
               
               <!-- True/False Selection Preview (legacy component-based preview) -->
               <app-true-false-selection
-                *ngIf="previewData && interactionType === 'true-false-selection' && interactionCategory !== 'html' && interactionCategory !== 'pixijs'"
+                *ngIf="previewData && interactionType === 'true-false-selection' && interactionCategory !== 'html' && interactionCategory !== 'pixijs' && interactionCategory !== 'iframe'"
                 [data]="previewData"
                 (interactionComplete)="onPreviewComplete($event)">
               </app-true-false-selection>
               
               <!-- Placeholder for other types -->
-              <div *ngIf="previewData && interactionType && interactionCategory !== 'html' && interactionCategory !== 'pixijs' && interactionType !== 'true-false-selection'" 
+              <div *ngIf="previewData && interactionType && interactionCategory !== 'html' && interactionCategory !== 'pixijs' && interactionCategory !== 'iframe' && interactionType !== 'true-false-selection'" 
                    class="preview-placeholder">
                 <p>Preview for {{interactionType}} ({{interactionCategory}}) not yet implemented</p>
                 <pre>{{previewDataJson}}</pre>
