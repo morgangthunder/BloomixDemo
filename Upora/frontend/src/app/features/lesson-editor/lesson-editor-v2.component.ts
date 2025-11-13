@@ -18,7 +18,6 @@ import { ContentLibraryModalComponent } from '../../shared/components/content-li
 import { AddTextContentModalComponent } from '../../shared/components/add-text-content-modal/add-text-content-modal.component';
 import { AddImageModalComponent } from '../../shared/components/add-image-modal/add-image-modal.component';
 import { AddPdfModalComponent } from '../../shared/components/add-pdf-modal/add-pdf-modal.component';
-import { TrueFalseSelectionComponent } from '../interactions/true-false-selection/true-false-selection.component';
 
 type EditorTab = 'details' | 'structure' | 'script' | 'content' | 'preview' | 'ai-assistant';
 
@@ -77,8 +76,7 @@ interface ProcessedContentOutput {
     ContentLibraryModalComponent,
     AddTextContentModalComponent,
     AddImageModalComponent,
-    AddPdfModalComponent,
-    TrueFalseSelectionComponent
+    AddPdfModalComponent
   ],
   template: `
     <div class="lesson-editor-v2" *ngIf="lesson">
@@ -812,17 +810,19 @@ interface ProcessedContentOutput {
             <!-- Preview Tab -->
             <div *ngIf="interactionConfigTab === 'preview'" class="preview-tab-content">
               <div class="interaction-preview-fullscreen">
-                <!-- Import the actual interaction component for live preview -->
-                <app-true-false-selection
-                  *ngIf="getSelectedSubStage()?.interaction?.type === 'true-false-selection'"
-                  [config]="interactionConfig"
-                  [contentOutputId]="getSelectedSubStage()?.interaction?.contentOutputId || ''"
-                  (completed)="onPreviewCompleted($event)">
-                </app-true-false-selection>
-                
-                <p *ngIf="!getSelectedSubStage()?.interaction?.type" class="preview-placeholder">
-                  No interaction type selected
-                </p>
+                <div class="preview-content">
+                  <h3>How students will see it:</h3>
+                  
+                  <div class="preview-card">
+                    <h4 class="interaction-title">{{interactionConfig?.title || '[No title set]'}}</h4>
+                    <p class="interaction-instructions">{{interactionConfig?.instructions || '[No instructions set]'}}</p>
+                    
+                    <div class="preview-note-box">
+                      <p><strong>Note:</strong> The actual interaction will load the questions/statements from the linked processed content.</p>
+                      <p>Content ID: {{getSelectedSubStage()?.interaction?.contentOutputId}}</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -2327,6 +2327,62 @@ interface ProcessedContentOutput {
       color: #666;
       font-style: italic;
       text-align: center;
+    }
+
+    .preview-content {
+      width: 100%;
+    }
+
+    .preview-content h3 {
+      color: white;
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0 0 1.5rem 0;
+    }
+
+    .preview-card {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 2rem;
+    }
+
+    .interaction-title {
+      color: white;
+      font-size: 24px;
+      font-weight: 600;
+      margin: 0 0 1rem 0;
+      text-align: center;
+    }
+
+    .interaction-instructions {
+      color: #d1d5db;
+      font-size: 16px;
+      text-align: center;
+      margin: 0 0 2rem 0;
+      line-height: 1.6;
+    }
+
+    .preview-note-box {
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 6px;
+      padding: 1rem;
+      margin-top: 2rem;
+    }
+
+    .preview-note-box p {
+      color: #93c5fd;
+      font-size: 13px;
+      margin: 0.5rem 0;
+    }
+
+    .preview-note-box p:first-child {
+      margin-top: 0;
+    }
+
+    .preview-note-box p:last-child {
+      margin-bottom: 0;
     }
 
     .modal-footer-sticky {
