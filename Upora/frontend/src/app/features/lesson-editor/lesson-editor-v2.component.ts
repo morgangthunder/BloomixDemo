@@ -19,6 +19,7 @@ import { AddTextContentModalComponent } from '../../shared/components/add-text-c
 import { AddImageModalComponent } from '../../shared/components/add-image-modal/add-image-modal.component';
 import { AddPdfModalComponent } from '../../shared/components/add-pdf-modal/add-pdf-modal.component';
 import { TrueFalseSelectionComponent } from '../interactions/true-false-selection/true-false-selection.component';
+import { InteractionConfigureModalComponent } from '../../shared/components/interaction-configure-modal/interaction-configure-modal.component';
 
 type EditorTab = 'details' | 'structure' | 'script' | 'content' | 'preview' | 'ai-assistant';
 
@@ -78,7 +79,8 @@ interface ProcessedContentOutput {
     AddTextContentModalComponent,
     AddImageModalComponent,
     AddPdfModalComponent,
-    TrueFalseSelectionComponent
+    TrueFalseSelectionComponent,
+    InteractionConfigureModalComponent
   ],
   template: `
     <div class="lesson-editor-v2" *ngIf="lesson">
@@ -769,78 +771,17 @@ interface ProcessedContentOutput {
         </div>
       </div>
 
-      <!-- Interaction Configuration Modal -->
-      <div class="modal-overlay-fullscreen" *ngIf="showInteractionConfigModal" (click)="closeInteractionConfigModal()">
-        <div class="modal-container-fullscreen" (click)="$event.stopPropagation()">
-          <div class="modal-header-sticky">
-            <h2>⚙️ {{getSelectedSubStage()?.interaction?.type || 'Interaction'}} Configuration</h2>
-            <button (click)="closeInteractionConfigModal()" class="close-btn">✕</button>
-          </div>
-
-          <!-- Tab Navigation -->
-          <div class="modal-tabs">
-            <button 
-              class="modal-tab"
-              [class.active]="interactionConfigTab === 'configure'"
-              (click)="interactionConfigTab = 'configure'">
-              ⚙️ Configure
-            </button>
-            <button 
-              class="modal-tab"
-              [class.active]="interactionConfigTab === 'preview'"
-              (click)="interactionConfigTab = 'preview'">
-              👁️ Preview
-            </button>
-          </div>
-
-          <div class="modal-body-scrollable">
-            <!-- Configure Tab -->
-            <div *ngIf="interactionConfigTab === 'configure'" class="config-section">
-              <!-- Dynamic config fields based on interaction type -->
-              <div *ngIf="getSelectedSubStage()?.interaction?.type === 'true-false-selection'">
-                <div class="form-group">
-                  <label for="interaction-title">Title</label>
-                  <input id="interaction-title" type="text" [(ngModel)]="interactionConfig.title" (ngModelChange)="updatePreviewData()" placeholder="e.g., Test Your Understanding" class="form-input" />
-                </div>
-                <div class="form-group">
-                  <label for="interaction-instructions">Instructions</label>
-                  <textarea id="interaction-instructions" [(ngModel)]="interactionConfig.instructions" (ngModelChange)="updatePreviewData()" rows="3" placeholder="e.g., Select all the TRUE statements" class="form-input"></textarea>
-                </div>
-              </div>
-            </div>
-
-            <!-- Preview Tab -->
-            <div *ngIf="interactionConfigTab === 'preview'" class="preview-tab-content">
-              <div class="interaction-preview-fullscreen">
-                <!-- Loading state -->
-                <div *ngIf="!interactionPreviewData" class="preview-loading">
-                  <p>Loading preview...</p>
-                </div>
-                
-                <!-- True/False Selection Preview -->
-                <app-true-false-selection
-                  *ngIf="interactionPreviewData && getSelectedSubStage()?.interaction?.type === 'true-false-selection'"
-                  [data]="interactionPreviewData"
-                  [lessonId]="lesson?.id || null"
-                  [stageId]="selectedItem.type === 'substage' ? selectedItem.stageId || null : null"
-                  [substageId]="selectedItem.type === 'substage' ? selectedItem.id : null"
-                  (completed)="onPreviewCompleted($event)">
-                </app-true-false-selection>
-                
-                <!-- Other interaction types can be added here -->
-                <p *ngIf="interactionPreviewData && getSelectedSubStage()?.interaction?.type && getSelectedSubStage()?.interaction?.type !== 'true-false-selection'" class="preview-placeholder">
-                  Preview for {{getSelectedSubStage()?.interaction?.type}} not yet implemented
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div class="modal-footer-sticky">
-            <button (click)="closeInteractionConfigModal()" class="btn-secondary">Cancel</button>
-            <button (click)="saveInteractionConfig()" class="btn-primary">Save Configuration</button>
-          </div>
-        </div>
-      </div>
+      <!-- Interaction Configuration Modal (Reusable Component) -->
+      <app-interaction-configure-modal
+        [isOpen]="showInteractionConfigModal"
+        [interactionType]="getSelectedSubStage()?.interaction?.type || ''"
+        [interactionName]="currentInteractionType?.name || 'Interaction'"
+        [configSchema]="currentInteractionType?.configSchema"
+        [sampleData]="interactionPreviewData"
+        [initialConfig]="interactionConfig"
+        (closed)="closeInteractionConfigModal()"
+        (saved)="saveInteractionConfig($event)">
+      </app-interaction-configure-modal>
     </div>
   `,
   styles: [`
@@ -2730,6 +2671,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   interactionConfig: any = null;
   interactionConfigTab: 'configure' | 'preview' = 'configure';
   interactionPreviewData: any = null;
+  currentInteractionType: any = null;
   showSourceContentModal: boolean = false;
   selectedSourceContent: any = null;
   showProcessedContentJsonModal: boolean = false;
@@ -3687,52 +3629,59 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     this.interactionConfig = substage.interaction.config ? { ...substage.interaction.config } : {};
     this.interactionConfigTab = 'configure'; // Reset to configure tab
     
-    // Fetch the processed output data for preview
-    const contentOutputId = substage.interaction.contentOutputId;
-    if (contentOutputId) {
-      this.http.get(`${environment.apiUrl}/lesson-editor/processed-outputs/${contentOutputId}`)
-        .subscribe({
-          next: (outputData: any) => {
-            console.log('[LessonEditor] Loaded processed output for preview:', outputData);
-            // Merge config with output data for preview
-            this.interactionPreviewData = {
-              ...this.interactionConfig,
-              fragments: outputData.outputData?.statements?.map((stmt: any) => ({
-                text: stmt.text,
-                isTrueInContext: stmt.isTrue
-              })) || [],
-              interactionTypeId: substage.interaction?.type || 'true-false-selection'
-            };
-            console.log('[LessonEditor] Preview data prepared:', this.interactionPreviewData);
-          },
-          error: (err) => {
-            console.error('[LessonEditor] Failed to load processed output:', err);
-            this.interactionPreviewData = null;
-          }
-        });
-    }
+    const interactionTypeId = substage.interaction.type;
     
-    this.showInteractionConfigModal = true;
-    console.log('[LessonEditor] Opening interaction config modal:', this.interactionConfig);
-    // Hide header
-    document.body.style.overflow = 'hidden';
-    const header = document.querySelector('app-header');
-    if (header) (header as HTMLElement).style.display = 'none';
+    // Fetch the interaction type to get configSchema
+    this.http.get(`${environment.apiUrl}/interaction-types/${interactionTypeId}`)
+      .subscribe({
+        next: (interactionType: any) => {
+          console.log('[LessonEditor] Loaded interaction type:', interactionType);
+          this.currentInteractionType = interactionType;
+          
+          // Fetch the processed output data for preview
+          const contentOutputId = substage.interaction?.contentOutputId;
+          if (contentOutputId) {
+            this.http.get(`${environment.apiUrl}/lesson-editor/processed-outputs/${contentOutputId}`)
+              .subscribe({
+                next: (outputData: any) => {
+                  console.log('[LessonEditor] Loaded processed output for preview:', outputData);
+                  // Merge config with output data for preview
+                  this.interactionPreviewData = {
+                    ...this.interactionConfig,
+                    fragments: outputData.outputData?.statements?.map((stmt: any) => ({
+                      text: stmt.text,
+                      isTrueInContext: stmt.isTrue
+                    })) || [],
+                    interactionTypeId: substage.interaction?.type || 'true-false-selection'
+                  };
+                  console.log('[LessonEditor] Preview data prepared:', this.interactionPreviewData);
+                },
+                error: (err) => {
+                  console.error('[LessonEditor] Failed to load processed output:', err);
+                  this.interactionPreviewData = null;
+                }
+              });
+          }
+          
+          this.showInteractionConfigModal = true;
+          console.log('[LessonEditor] Opening interaction config modal:', this.interactionConfig);
+        },
+        error: (err) => {
+          console.error('[LessonEditor] Failed to load interaction type:', err);
+          this.showSnackbar('Failed to load interaction configuration', 'error');
+        }
+      });
   }
 
-  saveInteractionConfig() {
+  saveInteractionConfig(config: any) {
     const substage = this.getSelectedSubStage();
     if (!substage?.interaction) return;
     
     // Update the interaction config
-    substage.interaction.config = { ...this.interactionConfig };
+    substage.interaction.config = { ...config };
     this.markAsChanged();
     this.showInteractionConfigModal = false;
     this.showSnackbar('Interaction configuration saved', 'success');
-    // Show header
-    document.body.style.overflow = '';
-    const header = document.querySelector('app-header');
-    if (header) (header as HTMLElement).style.display = '';
   }
 
   closeInteractionConfigModal() {
@@ -3740,10 +3689,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     this.interactionConfig = null;
     this.interactionConfigTab = 'configure';
     this.interactionPreviewData = null;
-    // Show header
-    document.body.style.overflow = '';
-    const header = document.querySelector('app-header');
-    if (header) (header as HTMLElement).style.display = '';
+    this.currentInteractionType = null;
   }
 
   updatePreviewData() {
