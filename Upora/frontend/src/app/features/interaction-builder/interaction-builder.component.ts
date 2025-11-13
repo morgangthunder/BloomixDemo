@@ -159,7 +159,7 @@ interface ChatMessage {
             </div>
 
             <!-- Settings Tab -->
-            <div *ngIf="activeTab === 'settings'" class="tab-content">
+            <div *ngIf="activeTab === 'settings' && currentInteraction" class="tab-content">
               <div class="info-section">
                 <h3>Basic Information</h3>
                 <div class="form-row">
@@ -223,7 +223,7 @@ interface ChatMessage {
             </div>
 
             <!-- Code Tab -->
-            <div *ngIf="activeTab === 'code'" class="tab-content">
+            <div *ngIf="activeTab === 'code' && currentInteraction" class="tab-content">
               <div class="code-section">
                 <div class="section-header">
                   <h3>Interaction Code</h3>
@@ -334,7 +334,7 @@ export class MyPixiInteraction {
             </div>
 
             <!-- Config Schema Tab -->
-            <div *ngIf="activeTab === 'config'" class="tab-content">
+            <div *ngIf="activeTab === 'config' && currentInteraction" class="tab-content">
               <div class="config-schema-section">
                 <div class="section-header">
                   <h3>Configuration Schema</h3>
@@ -388,7 +388,7 @@ export class MyPixiInteraction {
             </div>
 
             <!-- Sample Data Tab -->
-            <div *ngIf="activeTab === 'sample'" class="tab-content">
+            <div *ngIf="activeTab === 'sample' && currentInteraction" class="tab-content">
               <div class="sample-data-section">
                 <div class="section-header">
                   <h3>Sample Data</h3>
@@ -434,7 +434,7 @@ export class MyPixiInteraction {
             </div>
 
             <!-- Preview Tab -->
-            <div *ngIf="activeTab === 'preview'" class="tab-content">
+            <div *ngIf="activeTab === 'preview' && currentInteraction" class="tab-content">
               <div class="preview-section">
                 <div class="section-header">
                   <h3>Live Preview</h3>
