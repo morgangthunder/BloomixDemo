@@ -1,6 +1,7 @@
 import { Component, Input, Output, EventEmitter, OnChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { TrueFalseSelectionComponent } from '../../../features/interactions/true-false-selection/true-false-selection.component';
 
 @Component({
@@ -160,16 +161,26 @@ import { TrueFalseSelectionComponent } from '../../../features/interactions/true
                 <p>⚠️ No sample data provided for preview</p>
               </div>
               
-              <!-- True/False Selection Preview -->
+              <!-- HTML/PixiJS Iframe Preview -->
+              <div *ngIf="previewData && (interactionCategory === 'html' || interactionCategory === 'pixijs') && htmlCode" 
+                   class="iframe-preview-container">
+                <iframe 
+                  [src]="getInteractionPreviewBlobUrl()"
+                  style="width: 100%; height: 600px; border: 1px solid #333; border-radius: 0.5rem; background: #0f0f23;"
+                  frameborder="0"></iframe>
+              </div>
+              
+              <!-- True/False Selection Preview (legacy component-based preview) -->
               <app-true-false-selection
-                *ngIf="previewData && interactionType === 'true-false-selection'"
+                *ngIf="previewData && interactionType === 'true-false-selection' && interactionCategory !== 'html' && interactionCategory !== 'pixijs'"
                 [data]="previewData"
                 (interactionComplete)="onPreviewComplete($event)">
               </app-true-false-selection>
               
               <!-- Placeholder for other types -->
-              <div *ngIf="previewData && interactionType && interactionType !== 'true-false-selection'" class="preview-placeholder">
-                <p>Preview for {{interactionType}} not yet implemented</p>
+              <div *ngIf="previewData && interactionType && interactionCategory !== 'html' && interactionCategory !== 'pixijs' && interactionType !== 'true-false-selection'" 
+                   class="preview-placeholder">
+                <p>Preview for {{interactionType}} ({{interactionCategory}}) not yet implemented</p>
                 <pre>{{previewDataJson}}</pre>
               </div>
             </div>
@@ -514,6 +525,10 @@ export class InteractionConfigureModalComponent implements OnChanges {
   @Input() configSchema: any = null;
   @Input() sampleData: any = null;
   @Input() initialConfig: any = {};
+  @Input() interactionCategory: string = ''; // html, pixijs, iframe, legacy
+  @Input() htmlCode: string = '';
+  @Input() cssCode: string = '';
+  @Input() jsCode: string = '';
 
   @Output() closed = new EventEmitter<void>();
   @Output() saved = new EventEmitter<any>();
@@ -521,6 +536,9 @@ export class InteractionConfigureModalComponent implements OnChanges {
   activeTab: 'configure' | 'preview' = 'configure';
   config: any = {};
   previewData: any = null;
+  currentBlobUrl: SafeResourceUrl | null = null;
+
+  constructor(private domSanitizer: DomSanitizer) {}
 
   get configSchemaJson(): string {
     return this.configSchema ? JSON.stringify(this.configSchema, null, 2) : 'No config schema defined';
@@ -614,6 +632,72 @@ export class InteractionConfigureModalComponent implements OnChanges {
     }
     
     document.body.style.overflow = 'auto';
+  }
+
+  getInteractionPreviewBlobUrl(): SafeResourceUrl {
+    console.log('[ConfigModal] 🎬 Generating preview blob URL...');
+    console.log('[ConfigModal] Category:', this.interactionCategory);
+    console.log('[ConfigModal] Has HTML:', !!this.htmlCode);
+    console.log('[ConfigModal] Has CSS:', !!this.cssCode);
+    console.log('[ConfigModal] Has JS:', !!this.jsCode);
+    
+    if (!this.htmlCode && !this.jsCode) {
+      console.log('[ConfigModal] ⚠️ No code to render');
+      return this.domSanitizer.bypassSecurityTrustResourceUrl('');
+    }
+
+    const sampleDataJson = this.sampleData ? JSON.stringify(this.sampleData) : '{}';
+    const configJson = JSON.stringify(this.config);
+
+    console.log('[ConfigModal] 📋 Sample data for injection:', sampleDataJson.substring(0, 100) + '...');
+    console.log('[ConfigModal] ⚙️ Config for injection:', configJson);
+
+    const htmlDoc = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { margin: 0; padding: 0; }
+    ${this.cssCode || ''}
+  </style>
+</head>
+<body>
+  ${this.htmlCode || ''}
+  <script>
+    // Set interaction data FIRST
+    window.interactionData = ${sampleDataJson};
+    console.log('[Interaction] 🎯 Data injected:', window.interactionData);
+
+    // Set interaction config
+    window.interactionConfig = ${configJson};
+    console.log('[Interaction] ⚙️ Config injected:', window.interactionConfig);
+
+    // Then run the interaction code
+    ${this.jsCode || ''}
+  </script>
+</body>
+</html>
+    `;
+
+    console.log('[ConfigModal] ✅ Complete HTML document generated');
+    console.log('[ConfigModal] 📄 HTML Document Length:', htmlDoc.length);
+
+    // Create a Blob URL to bypass Angular's sanitization
+    const blob = new Blob([htmlDoc], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+
+    // Revoke previous blob URL to prevent memory leaks
+    if (this.currentBlobUrl) {
+      const oldUrl = (this.currentBlobUrl as any).changingThisBreaksApplicationSecurity;
+      if (oldUrl && oldUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(oldUrl);
+      }
+    }
+    this.currentBlobUrl = this.domSanitizer.bypassSecurityTrustResourceUrl(url);
+    console.log('[ConfigModal] 🔗 Created blob URL:', url);
+    return this.currentBlobUrl;
   }
 
   close() {

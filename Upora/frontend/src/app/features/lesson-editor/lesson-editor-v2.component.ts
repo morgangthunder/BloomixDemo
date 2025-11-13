@@ -820,6 +820,10 @@ interface ProcessedContentOutput {
         [configSchema]="currentInteractionType?.configSchema"
         [sampleData]="interactionPreviewData"
         [initialConfig]="interactionConfig"
+        [interactionCategory]="currentInteractionType?.interactionTypeCategory || ''"
+        [htmlCode]="currentInteractionType?.htmlCode || ''"
+        [cssCode]="currentInteractionType?.cssCode || ''"
+        [jsCode]="currentInteractionType?.jsCode || ''"
         (closed)="closeInteractionConfigModal()"
         (saved)="saveInteractionConfig($event)">
       </app-interaction-configure-modal>
