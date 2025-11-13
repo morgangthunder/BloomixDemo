@@ -62,8 +62,8 @@ interface ProcessedContentOutput {
   workflowName: string;
 }
 
-        // VERSION CHECK: This component should show "VERSION 5.0.0" in console logs
-        const LESSON_EDITOR_VERSION = '5.0.0';
+        // VERSION CHECK: This component should show "VERSION 5.0.1" in console logs
+        const LESSON_EDITOR_VERSION = '5.0.1';
         const LESSON_EDITOR_VERSION_CHECK_MESSAGE = `🚀 LESSON EDITOR COMPONENT VERSION ${LESSON_EDITOR_VERSION} LOADED - ${new Date().toISOString()} - CACHE BUST ID: ${Math.random().toString(36).substr(2, 9)}`;
 
 @Component({
@@ -1824,13 +1824,52 @@ interface ProcessedContentOutput {
         padding: 0.75rem 1rem !important;
         font-size: 0.9375rem !important;
       }
+      
+      /* Interaction display and actions - prevent overflow */
+      .interaction-display {
+        flex-wrap: wrap !important;
+        gap: 0.5rem !important;
+      }
+      .interaction-badge {
+        flex: 1 1 100% !important; /* Full width on mobile */
+        min-width: 0 !important;
+        word-break: break-word;
+      }
       .interaction-actions {
-        flex-wrap: wrap;
-        gap: 0.5rem;
+        flex-wrap: wrap !important;
+        gap: 0.5rem !important;
+        width: 100%;
       }
       .interaction-actions button {
-        flex: 1 1 auto;
-        min-width: 100px;
+        flex: 1 1 calc(50% - 0.25rem) !important; /* Two buttons per row */
+        min-width: 0 !important;
+        font-size: 0.875rem !important;
+        padding: 0.625rem 0.75rem !important;
+      }
+      
+      /* Script block interaction selector */
+      .interaction-selector {
+        padding: 0.75rem !important;
+      }
+      .interaction-selector .interaction-display {
+        flex-direction: column !important;
+        align-items: stretch !important;
+      }
+      
+      /* Config value sections (Structure tab) */
+      .config-value {
+        flex-wrap: wrap !important;
+        gap: 0.5rem !important;
+      }
+      .config-value .value {
+        flex: 1 1 100% !important;
+        word-break: break-word;
+      }
+      .config-value button,
+      .content-config button,
+      .interaction-config button {
+        flex: 1 1 calc(50% - 0.25rem) !important;
+        min-width: 0 !important;
       }
     }
     @media (min-width: 1025px) {
