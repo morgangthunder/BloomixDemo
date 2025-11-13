@@ -491,7 +491,7 @@ export class MyPixiInteraction {
           <div class="chat-input-container">
             <textarea 
               [(ngModel)]="aiInput"
-              (keydown.enter)="onAiEnter($event)"
+              (keydown.enter)="onAiEnter($any($event))"
               placeholder="Ask about HTML, PixiJS, config schemas..."
               rows="2"></textarea>
             <button (click)="sendAiMessage()" [disabled]="!aiInput.trim() || aiTyping" class="send-btn">
@@ -1710,10 +1710,12 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     const endpoint = this.isNewInteraction 
       ? `${environment.apiUrl}/interaction-types`
       : `${environment.apiUrl}/interaction-types/${this.currentInteraction.id}`;
-    
-    const method = this.isNewInteraction ? 'post' : 'put';
 
-    this.http[method]<InteractionType>(endpoint, this.currentInteraction)
+    const request$ = this.isNewInteraction
+      ? this.http.post<InteractionType>(endpoint, this.currentInteraction)
+      : this.http.put<InteractionType>(endpoint, this.currentInteraction);
+    
+    request$
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (saved) => {
