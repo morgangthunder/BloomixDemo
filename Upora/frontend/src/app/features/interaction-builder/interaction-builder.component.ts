@@ -2419,20 +2419,6 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     console.log('Preview interaction completed:', result);
   }
 
-  showConfigModal() {
-    this.refreshPreview(); // Ensure sample data is current
-    this.showingConfigModal = true;
-    console.log('[InteractionBuilder] 👁️ Opening config modal');
-  }
-
-  closeConfigModal() {
-    this.showingConfigModal = false;
-  }
-
-  onConfigModalSaved(config: any) {
-    console.log('[InteractionBuilder] 💾 Config modal saved:', config);
-    this.showingConfigModal = false;
-  }
 
   // AI Assistant methods
   onAiEnter(event: KeyboardEvent) {
