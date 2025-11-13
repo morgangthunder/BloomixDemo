@@ -2321,7 +2321,7 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
             throw new Error('HTML code is required');
           }
 
-          // Try to parse HTML (basic check)
+          // Parse HTML and validate structure
           const tempDiv = document.createElement('div');
           try {
             tempDiv.innerHTML = this.currentInteraction.htmlCode;
@@ -2331,9 +2331,34 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
 
           // Check for required elements based on interaction type
           if (this.currentInteraction.id === 'true-false-selection') {
-            if (!this.currentInteraction.htmlCode.includes('fragments-grid') && 
-                !this.currentInteraction.htmlCode.includes('fragmentsGrid')) {
+            // Must have fragments grid
+            const hasFragmentsGrid = tempDiv.querySelector('#fragmentsGrid') || 
+                                    tempDiv.querySelector('.fragments-grid');
+            if (!hasFragmentsGrid) {
               throw new Error('HTML must include element with id="fragmentsGrid" or class="fragments-grid"');
+            }
+
+            // Must have target statement
+            const hasTargetStatement = tempDiv.querySelector('#targetStatement') ||
+                                      tempDiv.querySelector('.target-statement');
+            if (!hasTargetStatement) {
+              throw new Error('HTML must include element with id="targetStatement" or class="target-statement"');
+            }
+
+            // Must have submit button
+            const hasSubmitBtn = tempDiv.querySelector('#submitBtn') ||
+                                tempDiv.querySelector('.submit-btn');
+            if (!hasSubmitBtn) {
+              throw new Error('HTML must include element with id="submitBtn" or class="submit-btn"');
+            }
+
+            // Warn about common attribute typos
+            const htmlLower = this.currentInteraction.htmlCode.toLowerCase();
+            if (htmlLower.includes('clas=') || htmlLower.includes('classs=')) {
+              throw new Error('HTML contains typo: "clas=" or "classs=" instead of "class="');
+            }
+            if (htmlLower.includes('ide=') || htmlLower.includes('idd=')) {
+              throw new Error('HTML contains typo: "ide=" or "idd=" instead of "id="');
             }
           }
 
