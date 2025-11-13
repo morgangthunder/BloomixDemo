@@ -62,8 +62,8 @@ interface ProcessedContentOutput {
   workflowName: string;
 }
 
-        // VERSION CHECK: This component should show "VERSION 4.5.0" in console logs
-        const LESSON_EDITOR_VERSION = '4.5.0';
+        // VERSION CHECK: This component should show "VERSION 5.0.0" in console logs
+        const LESSON_EDITOR_VERSION = '5.0.0';
         const LESSON_EDITOR_VERSION_CHECK_MESSAGE = `🚀 LESSON EDITOR COMPONENT VERSION ${LESSON_EDITOR_VERSION} LOADED - ${new Date().toISOString()} - CACHE BUST ID: ${Math.random().toString(36).substr(2, 9)}`;
 
 @Component({
@@ -1130,6 +1130,13 @@ interface ProcessedContentOutput {
       display: flex;
       flex-direction: column;
     }
+    
+    /* Mobile: Add bottom padding to prevent FAB overlap */
+    @media (max-width: 1024px) {
+      .panel {
+        padding-bottom: 10rem; /* Space for FAB + bottom nav */
+      }
+    }
     .panel-title {
       font-size: 1.5rem;
       font-weight: 600;
@@ -1622,10 +1629,53 @@ interface ProcessedContentOutput {
         display: none; /* Hide desktop tabs */
       }
       .header-title h1 {
-        font-size: 1rem;
+        font-size: 0.9rem;
       }
       .header-title .subtitle {
         display: none; /* Hide subtitle on mobile for space */
+      }
+      .header-actions {
+        gap: 0.375rem !important; /* Tighter spacing on mobile */
+      }
+      .header-actions .btn-icon,
+      .header-actions .btn-secondary,
+      .header-actions .btn-primary {
+        width: 36px !important;
+        height: 36px !important;
+        min-width: 36px !important;
+        padding: 0.375rem !important;
+        font-size: 14px !important;
+      }
+      
+      /* Form improvements for mobile */
+      .form-group label {
+        font-size: 0.9375rem !important; /* Slightly larger for readability */
+      }
+      .form-group input,
+      .form-group select,
+      .form-group textarea {
+        font-size: 1rem !important; /* Prevent zoom on iOS */
+        padding: 0.875rem !important;
+        min-height: 44px; /* Touch-friendly height */
+      }
+      .form-group input[type="url"],
+      .form-group input[type="text"] {
+        word-break: break-all; /* Allow URL wrapping */
+        overflow-x: auto;
+      }
+      .hint {
+        font-size: 0.8125rem !important;
+      }
+      
+      /* Card text improvements */
+      .info-card p,
+      .config-card p,
+      .panel-description {
+        font-size: 0.9375rem !important;
+        line-height: 1.6;
+      }
+      .tree-item-label {
+        font-size: 0.9375rem !important;
       }
       
       /* Sidebar - completely hidden when not open */
@@ -1665,9 +1715,9 @@ interface ProcessedContentOutput {
       .mobile-fab {
         position: fixed;
         bottom: 5.5rem; /* Above mobile bottom bar */
-        right: 1.5rem;
-        width: 56px;
-        height: 56px;
+        right: 1rem;
+        width: 52px;
+        height: 52px;
         border-radius: 50%;
         background: #cc0000;
         color: white;
@@ -1678,6 +1728,10 @@ interface ProcessedContentOutput {
         box-shadow: 0 4px 12px rgba(0,0,0,0.5);
         cursor: pointer;
         z-index: 50;
+      }
+      .mobile-fab svg {
+        width: 24px;
+        height: 24px;
       }
       
       /* Mobile Bottom Bar */
@@ -1719,6 +1773,64 @@ interface ProcessedContentOutput {
         .mobile-tab-btn .tab-icon {
           font-size: 1.125rem; /* Slightly smaller on very small screens */
         }
+      }
+      
+      /* Modal improvements for mobile */
+      .modal-overlay {
+        padding: 0 !important;
+      }
+      .modal-content {
+        width: 100% !important;
+        max-width: 100% !important;
+        max-height: 100% !important;
+        height: 100% !important;
+        border-radius: 0 !important;
+      }
+      .modal-body {
+        max-height: none !important;
+        flex: 1;
+        overflow-y: auto;
+      }
+      
+      /* Config card improvements */
+      .config-card,
+      .info-card {
+        padding: 1rem !important;
+        margin-bottom: 1rem !important;
+      }
+      .config-card h3,
+      .info-card h3 {
+        font-size: 1rem !important;
+      }
+      
+      /* Interaction config modal */
+      .interaction-config-modal .modal-content {
+        padding: 0;
+      }
+      .modal-tabs {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+      }
+      .modal-tab-btn {
+        flex-shrink: 0;
+        min-width: 100px;
+      }
+      
+      /* Button improvements */
+      .btn-small,
+      .btn-secondary,
+      .btn-primary {
+        min-height: 44px !important;
+        padding: 0.75rem 1rem !important;
+        font-size: 0.9375rem !important;
+      }
+      .interaction-actions {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+      .interaction-actions button {
+        flex: 1 1 auto;
+        min-width: 100px;
       }
     }
     @media (min-width: 1025px) {
