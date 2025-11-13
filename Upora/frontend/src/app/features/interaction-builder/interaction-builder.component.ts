@@ -453,12 +453,21 @@ export class MyPixiInteraction {
                             frameborder="0"></iframe>
                   </div>
 
-                  <!-- iFrame Preview -->
-                  <div *ngIf="currentInteraction?.interactionTypeCategory === 'iframe' && currentInteraction?.iframeUrl" class="iframe-preview">
-                    <iframe [src]="getSafeIframeUrl()" 
-                            [style.width]="getIframeWidth()"
-                            [style.height]="getIframeHeight()"
+                  <!-- iFrame Preview (uses same iframe approach as HTML/PixiJS) -->
+                  <div *ngIf="currentInteraction?.interactionTypeCategory === 'iframe' && currentInteraction?.htmlCode" class="html-preview">
+                    <iframe #previewIframe 
+                            [src]="getHtmlPreviewBlobUrl()" 
+                            style="width: 100%; height: 600px; border: 1px solid #333; border-radius: 0.5rem; background: #1a1a2e;"
                             frameborder="0"></iframe>
+                  </div>
+
+                  <!-- iFrame Preview Placeholder (if no code yet) -->
+                  <div *ngIf="currentInteraction?.interactionTypeCategory === 'iframe' && !currentInteraction?.htmlCode" class="iframe-preview-placeholder">
+                    <div class="placeholder-content">
+                      <span class="placeholder-icon">🖼️</span>
+                      <h4>iFrame Preview</h4>
+                      <p>Add sample data with a URL in the Sample Data tab to see a preview.</p>
+                    </div>
                   </div>
 
                   <!-- PixiJS Preview (uses same iframe approach as HTML) -->
