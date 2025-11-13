@@ -4,7 +4,7 @@ import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
-const BACKEND_VERSION = '0.3.6';
+const BACKEND_VERSION = '0.3.7';
 
 async function bootstrap() {
   console.log(`🔥🔥🔥 BACKEND VERSION ${BACKEND_VERSION} STARTING 🔥🔥🔥`);
@@ -45,12 +45,12 @@ async function bootstrap() {
   await app.listen(port);
   
   // ========================================
-  // 🔥 BACKEND VERSION 0.3.6 🔥
+  // 🔥 BACKEND VERSION 0.3.7 🔥
   // ========================================
   console.log('');
   console.log('═══════════════════════════════════════════════════════════');
   console.log(`🔥🔥🔥 BACKEND VERSION ${BACKEND_VERSION} STARTED 🔥🔥🔥`);
-  console.log('🔧 Auto-Generate Source Content | Interaction JSON → Text');
+  console.log('🔧 Transform API Response | Field Mapping for Frontend');
   console.log(`🚀 API running on: http://localhost:${port}/api`);
   console.log(`📅 Timestamp: ${new Date().toISOString()}`);
   console.log('═══════════════════════════════════════════════════════════');

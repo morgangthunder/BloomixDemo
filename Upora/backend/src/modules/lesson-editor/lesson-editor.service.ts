@@ -29,7 +29,7 @@ export class LessonEditorService {
 
   // ========== Processed Content Outputs ==========
 
-  async getProcessedOutputs(lessonId: string): Promise<ProcessedContentOutput[]> {
+  async getProcessedOutputs(lessonId: string): Promise<any[]> {
     const outputs = await this.processedOutputRepo.find({
       where: { lessonId },
       relations: ['contentSource'],
@@ -44,11 +44,42 @@ export class LessonEditorService {
     }
     
     // Re-fetch to get the updated contentSourceId
-    return this.processedOutputRepo.find({
+    const updatedOutputs = await this.processedOutputRepo.find({
       where: { lessonId },
       relations: ['contentSource'],
       order: { createdAt: 'DESC' },
     });
+    
+    // Transform to match frontend expectations
+    return updatedOutputs.map(output => ({
+      id: output.id,
+      type: output.outputType,
+      title: output.outputName,
+      description: output.description,
+      thumbnail: output.thumbnail,
+      duration: output.duration,
+      channel: output.channel,
+      videoId: output.videoId,
+      transcript: output.transcript,
+      startTime: output.startTime,
+      endTime: output.endTime,
+      validationScore: output.validationScore,
+      status: 'ready',
+      createdAt: output.createdAt.toISOString(),
+      lessonId: output.lessonId,
+      metadata: {},
+      contentSourceId: output.contentSourceId,
+      workflowName: output.workflowName,
+      contentSource: output.contentSource ? {
+        id: output.contentSource.id,
+        title: output.contentSource.title,
+        type: output.contentSource.type,
+        sourceUrl: output.contentSource.sourceUrl,
+        summary: output.contentSource.summary,
+        fullText: output.contentSource.fullText,
+        metadata: output.contentSource.metadata
+      } : undefined
+    }));
   }
   
   /**

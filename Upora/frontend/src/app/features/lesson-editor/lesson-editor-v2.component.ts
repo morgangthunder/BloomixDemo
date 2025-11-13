@@ -61,8 +61,8 @@ interface ProcessedContentOutput {
   workflowName: string;
 }
 
-        // VERSION CHECK: This component should show "VERSION 4.2.0" in console logs
-        const LESSON_EDITOR_VERSION = '4.2.0';
+        // VERSION CHECK: This component should show "VERSION 4.3.0" in console logs
+        const LESSON_EDITOR_VERSION = '4.3.0';
         const LESSON_EDITOR_VERSION_CHECK_MESSAGE = `🚀 LESSON EDITOR COMPONENT VERSION ${LESSON_EDITOR_VERSION} LOADED - ${new Date().toISOString()} - CACHE BUST ID: ${Math.random().toString(36).substr(2, 9)}`;
 
 @Component({
@@ -2414,8 +2414,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   ngOnInit() {
     // VERSION CHECK: This log should always appear when new code is loaded
-    console.log('🔥🔥🔥 LESSON EDITOR VERSION 4.2.0 - CONTENT TAB + TEACH + CONFIGURE 🔥🔥🔥');
-    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 4.2.0');
+    console.log('🔥🔥🔥 LESSON EDITOR VERSION 4.3.0 - INTERACTION OBJECT + API MAPPING 🔥🔥🔥');
+    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 4.3.0');
     console.log('[LessonEditor] ✅ Parses actual DB JSON with scriptBlocks, scriptBlocksAfterInteraction!');
     console.log('[LessonEditor] ✅ Converts DB format to editor format!');
     console.log('[LessonEditor] ✅ Database-first development - no mock data!');
@@ -3355,7 +3355,12 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
             duration: ssData.duration || stageData.duration || 5,
             interactionType: ssData.interaction?.type || ssData.interactionType,
             contentOutputId: ssData.contentOutputId,
-            scriptBlocks: scriptBlocks
+            scriptBlocks: scriptBlocks,
+            interaction: ssData.interaction || (ssData.interactionType ? {
+              type: ssData.interactionType,
+              contentOutputId: ssData.contentOutputId,
+              config: {}
+            } : undefined)
           };
         }) : [],
         expanded: true
