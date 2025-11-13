@@ -61,8 +61,8 @@ interface ProcessedContentOutput {
   workflowName: string;
 }
 
-        // VERSION CHECK: This component should show "VERSION 4.4.0" in console logs
-        const LESSON_EDITOR_VERSION = '4.4.0';
+        // VERSION CHECK: This component should show "VERSION 4.5.0" in console logs
+        const LESSON_EDITOR_VERSION = '4.5.0';
         const LESSON_EDITOR_VERSION_CHECK_MESSAGE = `🚀 LESSON EDITOR COMPONENT VERSION ${LESSON_EDITOR_VERSION} LOADED - ${new Date().toISOString()} - CACHE BUST ID: ${Math.random().toString(36).substr(2, 9)}`;
 
 @Component({
@@ -2490,8 +2490,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   ngOnInit() {
     // VERSION CHECK: This log should always appear when new code is loaded
-    console.log('🔥🔥🔥 LESSON EDITOR VERSION 4.4.0 - MODAL Z-INDEX FIX + DEBUG LOGGING 🔥🔥🔥');
-    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 4.4.0');
+    console.log('🔥🔥🔥 LESSON EDITOR VERSION 4.5.0 - HIDE HEADER IN MODALS + DRAFT DEBUG 🔥🔥🔥');
+    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 4.5.0');
     console.log('[LessonEditor] ✅ Parses actual DB JSON with scriptBlocks, scriptBlocksAfterInteraction!');
     console.log('[LessonEditor] ✅ Converts DB format to editor format!');
     console.log('[LessonEditor] ✅ Database-first development - no mock data!');
@@ -2589,6 +2589,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
         switchMap((draft: any) => {
           if (draft) {
             console.log('[LessonEditor] 📝 Found pending draft, loading draft data');
+            console.log('[LessonEditor] 🔍 Draft data preview:', draft.draftData);
             this.hasDraft = true;
             this.lastSaved = draft.createdAt ? new Date(draft.createdAt) : null;
             console.log('[LessonEditor] Draft lastSaved:', this.lastSaved);
@@ -2596,11 +2597,16 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
             return this.http.get<any>(`${environment.apiUrl}/lessons/${id}`, {
               headers: { 'x-tenant-id': environment.tenantId }
             }).pipe(
-              map(lesson => ({
-                ...lesson,
-                ...draft.draftData,
-                id: lesson.id // Ensure we keep the lesson ID
-              }))
+              map(lesson => {
+                console.log('[LessonEditor] 🔍 Live lesson data:', lesson.data);
+                const merged = {
+                  ...lesson,
+                  ...draft.draftData,
+                  id: lesson.id // Ensure we keep the lesson ID
+                };
+                console.log('[LessonEditor] 🔍 Merged lesson data:', merged.data || merged.structure);
+                return merged;
+              })
             );
           } else {
             console.log('[LessonEditor] 📖 No draft found, loading published lesson');
@@ -2675,6 +2681,10 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
             outputDataJson: JSON.stringify(fullData.outputData || {}, null, 2)
           };
           this.showProcessedContentJsonModal = true;
+          // Hide header
+          document.body.style.overflow = 'hidden';
+          const header = document.querySelector('app-header');
+          if (header) (header as HTMLElement).style.display = 'none';
         },
         error: (err) => {
           console.error('[LessonEditor] Failed to load processed content:', err);
@@ -2686,6 +2696,10 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   closeProcessedContentViewer() {
     this.showProcessedContentJsonModal = false;
     this.selectedProcessedJson = null;
+    // Show header
+    document.body.style.overflow = '';
+    const header = document.querySelector('app-header');
+    if (header) (header as HTMLElement).style.display = '';
   }
 
   saveProcessedContentJson() {
@@ -3295,17 +3309,29 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     console.log('[LessonEditor] View source content:', source);
     this.selectedSourceContent = { ...source };
     this.showSourceContentModal = true;
+    // Hide header
+    document.body.style.overflow = 'hidden';
+    const header = document.querySelector('app-header');
+    if (header) (header as HTMLElement).style.display = 'none';
   }
 
   editSourceContent(source: any) {
     console.log('[LessonEditor] Edit source content:', source);
     this.selectedSourceContent = { ...source };
     this.showSourceContentModal = true;
+    // Hide header
+    document.body.style.overflow = 'hidden';
+    const header = document.querySelector('app-header');
+    if (header) (header as HTMLElement).style.display = 'none';
   }
 
   closeSourceContentModal() {
     this.showSourceContentModal = false;
     this.selectedSourceContent = null;
+    // Show header
+    document.body.style.overflow = '';
+    const header = document.querySelector('app-header');
+    if (header) (header as HTMLElement).style.display = '';
   }
 
   saveSourceContent() {
@@ -3336,7 +3362,9 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   configureInteraction() {
     const substage = this.getSelectedSubStage();
+    console.log('[LessonEditor] 🔧 Configure interaction called for substage:', substage);
     if (!substage?.interaction) {
+      console.warn('[LessonEditor] ⚠️ No interaction found on substage');
       this.showSnackbar('No interaction to configure', 'error');
       return;
     }
@@ -3345,6 +3373,10 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     this.interactionConfig = substage.interaction.config ? { ...substage.interaction.config } : {};
     this.showInteractionConfigModal = true;
     console.log('[LessonEditor] Opening interaction config modal:', this.interactionConfig);
+    // Hide header
+    document.body.style.overflow = 'hidden';
+    const header = document.querySelector('app-header');
+    if (header) (header as HTMLElement).style.display = 'none';
   }
 
   saveInteractionConfig() {
@@ -3356,11 +3388,19 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     this.markAsChanged();
     this.showInteractionConfigModal = false;
     this.showSnackbar('Interaction configuration saved', 'success');
+    // Show header
+    document.body.style.overflow = '';
+    const header = document.querySelector('app-header');
+    if (header) (header as HTMLElement).style.display = '';
   }
 
   closeInteractionConfigModal() {
     this.showInteractionConfigModal = false;
     this.interactionConfig = null;
+    // Show header
+    document.body.style.overflow = '';
+    const header = document.querySelector('app-header');
+    if (header) (header as HTMLElement).style.display = '';
   }
 
   formatDuration(minutes: number): string {
