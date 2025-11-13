@@ -448,9 +448,8 @@ export class MyPixiInteraction {
                   <!-- HTML Preview (prioritize this for HTML types) -->
                   <div *ngIf="currentInteraction?.interactionTypeCategory === 'html' && currentInteraction?.htmlCode" class="html-preview">
                     <iframe #previewIframe 
-                            [attr.srcdoc]="getHtmlPreviewSrcDoc()" 
+                            [src]="getHtmlPreviewBlobUrl()" 
                             style="width: 100%; height: 600px; border: 1px solid #333; border-radius: 0.5rem; background: #0f0f23;"
-                            sandbox="allow-scripts"
                             frameborder="0"></iframe>
                   </div>
 
@@ -1983,6 +1982,9 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
 
   // Preview refresh
   previewKey = Date.now();
+  
+  // Blob URL for HTML preview (to bypass Angular sanitization)
+  private currentBlobUrl: SafeResourceUrl | null = null;
 
   // Snackbar
   showSnackbar = false;
@@ -2008,6 +2010,14 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.destroy$.next();
     this.destroy$.complete();
+    
+    // Clean up blob URL
+    if (this.currentBlobUrl) {
+      const url = (this.currentBlobUrl as any).changingThisBreaksApplicationSecurity;
+      if (url && url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+      }
+    }
   }
 
   loadInteractions() {
@@ -2333,6 +2343,33 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     console.log('[Preview] 📄 Contains <script>:', htmlDoc.includes('<script>'));
     console.log('[Preview] 📄 Contains window.interactionData:', htmlDoc.includes('window.interactionData'));
     return htmlDoc;
+  }
+
+  getHtmlPreviewBlobUrl(): SafeResourceUrl {
+    // Revoke previous blob URL to prevent memory leaks
+    if (this.currentBlobUrl) {
+      const url = (this.currentBlobUrl as any).changingThisBreaksApplicationSecurity;
+      if (url && url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+      }
+    }
+
+    // Get the HTML document
+    const htmlDoc = this.getHtmlPreviewSrcDoc();
+    if (!htmlDoc) {
+      return this.sanitizer.bypassSecurityTrustResourceUrl('about:blank');
+    }
+
+    // Create a Blob from the HTML string
+    const blob = new Blob([htmlDoc], { type: 'text/html' });
+    
+    // Create a URL for the blob
+    const url = URL.createObjectURL(blob);
+    console.log('[Preview] 🔗 Created blob URL:', url);
+    
+    // Bypass security and store it
+    this.currentBlobUrl = this.sanitizer.bypassSecurityTrustResourceUrl(url);
+    return this.currentBlobUrl;
   }
 
   getSafeIframeUrl(): SafeResourceUrl {
