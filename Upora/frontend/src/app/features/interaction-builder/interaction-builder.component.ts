@@ -51,8 +51,8 @@ interface ChatMessage {
         </button>
         <h1>Interaction Builder</h1>
         <div class="header-actions">
-          <button (click)="saveInteraction()" class="btn-primary" [disabled]="saving || !hasChanges">
-            {{ saving ? 'Saving...' : hasChanges ? 'Save Changes' : 'Saved' }}
+          <button (click)="saveInteraction()" class="btn-primary" [disabled]="saving">
+            {{ saving ? 'Saving...' : 'Save' }}
           </button>
         </div>
       </header>
@@ -503,9 +503,9 @@ export class MyPixiInteraction {
         </div>
       </div>
 
-      <!-- Configure Modal (for previewing config schema) -->
+      <!-- Configure Modal (for previewing config schema and interaction) -->
       <div *ngIf="showingConfigModal" class="modal-overlay" (click)="closeConfigModal()">
-        <div class="modal-content config-modal" (click)="$event.stopPropagation()">
+        <div class="modal-content config-modal large-modal" (click)="$event.stopPropagation()">
           <div class="modal-header">
             <h2>Configure {{currentInteraction?.name}}</h2>
             <button (click)="closeConfigModal()" class="close-btn">
@@ -515,14 +515,43 @@ export class MyPixiInteraction {
             </button>
           </div>
           <div class="modal-body">
-            <p class="modal-note">This is how lesson-builders will see the configuration options:</p>
-            <div class="config-form-preview">
-              <pre>{{configSchemaText || 'No config schema defined yet'}}</pre>
-              <p class="hint">Full interactive form rendering coming soon</p>
+            <p class="modal-note">💡 This is how lesson-builders will configure this interaction:</p>
+            
+            <!-- Show Config Schema -->
+            <div class="config-section">
+              <h3>Configuration Schema</h3>
+              <div class="config-form-preview">
+                <pre>{{configSchemaText || 'No config schema defined yet'}}</pre>
+              </div>
+            </div>
+
+            <!-- Show Preview with Sample Data -->
+            <div *ngIf="currentInteraction?.sampleData" class="preview-section-modal">
+              <h3>Live Preview with Sample Data</h3>
+              <div class="modal-preview-container">
+                <!-- True/False Selection Preview -->
+                <div *ngIf="currentInteraction?.id === 'true-false-selection'" class="interaction-preview">
+                  <app-true-false-selection 
+                    [data]="currentInteraction?.sampleData || {}"
+                    (interactionComplete)="onPreviewComplete($event)">
+                  </app-true-false-selection>
+                </div>
+
+                <!-- Other interaction types -->
+                <div *ngIf="currentInteraction?.id !== 'true-false-selection'" class="no-preview">
+                  <p>Preview not available for this interaction type yet.</p>
+                  <div>Sample Data:</div>
+                  <pre>{{sampleDataText}}</pre>
+                </div>
+              </div>
+            </div>
+
+            <div *ngIf="!currentInteraction?.sampleData" class="no-sample-data">
+              <p>⚠️ Add sample data in the "Sample Data" tab to see a preview.</p>
             </div>
           </div>
           <div class="modal-footer">
-            <button (click)="closeConfigModal()" class="btn-secondary">Close</button>
+            <button (click)="closeConfigModal()" class="btn-primary">Close</button>
           </div>
         </div>
       </div>
@@ -1365,6 +1394,11 @@ export class MyPixiInteraction {
       animation: slideUp 0.3s ease;
     }
 
+    .modal-content.large-modal {
+      max-width: 900px;
+      max-height: 90vh;
+    }
+
     @keyframes slideUp {
       from { opacity: 0; transform: translateY(20px); }
       to { opacity: 1; transform: translateY(0); }
@@ -1446,6 +1480,33 @@ export class MyPixiInteraction {
       gap: 0.75rem;
     }
 
+    .config-section,
+    .preview-section-modal {
+      margin-bottom: 2rem;
+    }
+
+    .config-section h3,
+    .preview-section-modal h3 {
+      font-size: 1.125rem;
+      font-weight: 600;
+      margin: 0 0 1rem 0;
+      color: #00d4ff;
+    }
+
+    .modal-preview-container {
+      background: #0a0a0a;
+      border: 1px solid #333;
+      border-radius: 0.5rem;
+      padding: 1rem;
+      min-height: 300px;
+    }
+
+    .no-sample-data {
+      text-align: center;
+      padding: 2rem;
+      color: #ffc107;
+    }
+
     /* Mobile Responsiveness */
     @media (max-width: 1024px) {
       .interaction-library {
@@ -1473,8 +1534,41 @@ export class MyPixiInteraction {
         border-bottom: 1px solid #333;
       }
 
+      .editor-container {
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - 60px - 40vh);
+        padding: 0;
+      }
+
+      .editor-tabs-main {
+        position: sticky;
+        bottom: 0;
+        z-index: 50;
+        background: #0a0a0a;
+        border-top: 1px solid #333;
+        border-bottom: none;
+        margin-bottom: 0;
+        padding: 0.5rem;
+        overflow-x: auto;
+        white-space: nowrap;
+        order: 2;
+      }
+
+      .editor-tabs-main button {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.875rem;
+      }
+
+      .tab-content {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1rem;
+        order: 1;
+      }
+
       .ai-assistant-widget {
-        bottom: 1rem;
+        bottom: 60px;
         right: 1rem;
       }
 
