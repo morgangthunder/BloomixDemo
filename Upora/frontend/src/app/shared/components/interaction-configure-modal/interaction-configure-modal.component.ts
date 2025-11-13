@@ -35,35 +35,100 @@ import { TrueFalseSelectionComponent } from '../../../features/interactions/true
           <!-- Configure Tab -->
           <div *ngIf="activeTab === 'configure'" class="config-section">
             <!-- Dynamic config form based on configSchema -->
-            <div *ngIf="interactionType === 'true-false-selection'">
-              <div class="form-group">
-                <label for="interaction-title">Title</label>
-                <input 
-                  id="interaction-title" 
-                  type="text" 
-                  [(ngModel)]="config.title" 
-                  (ngModelChange)="onConfigChange()"
-                  placeholder="e.g., Test Your Understanding" 
-                  class="form-input" />
-              </div>
-              <div class="form-group">
-                <label for="interaction-instructions">Instructions</label>
-                <textarea 
-                  id="interaction-instructions" 
-                  [(ngModel)]="config.instructions" 
-                  (ngModelChange)="onConfigChange()"
-                  rows="3" 
-                  placeholder="e.g., Select all the TRUE statements" 
-                  class="form-input"></textarea>
+            <div *ngIf="configSchema && configSchema.fields && configSchema.fields.length > 0">
+              <div *ngFor="let field of configSchema.fields" class="form-group">
+                <!-- String Input -->
+                <div *ngIf="field.type === 'string' && !field.multiline">
+                  <label [for]="'field-' + field.key">{{field.label || field.key}}</label>
+                  <input 
+                    [id]="'field-' + field.key"
+                    type="text" 
+                    [(ngModel)]="config[field.key]" 
+                    (ngModelChange)="onConfigChange()"
+                    [placeholder]="field.placeholder || ''" 
+                    class="form-input" />
+                  <p *ngIf="field.hint" class="hint">{{field.hint}}</p>
+                </div>
+
+                <!-- Multiline Text Input -->
+                <div *ngIf="field.type === 'string' && field.multiline">
+                  <label [for]="'field-' + field.key">{{field.label || field.key}}</label>
+                  <textarea 
+                    [id]="'field-' + field.key"
+                    [(ngModel)]="config[field.key]" 
+                    (ngModelChange)="onConfigChange()"
+                    [rows]="field.rows || 3"
+                    [placeholder]="field.placeholder || ''" 
+                    class="form-input"></textarea>
+                  <p *ngIf="field.hint" class="hint">{{field.hint}}</p>
+                </div>
+
+                <!-- Boolean Checkbox -->
+                <div *ngIf="field.type === 'boolean'" class="checkbox-group">
+                  <label class="checkbox-label">
+                    <input 
+                      type="checkbox"
+                      [(ngModel)]="config[field.key]" 
+                      (ngModelChange)="onConfigChange()"
+                      class="form-checkbox" />
+                    <span>{{field.label || field.key}}</span>
+                  </label>
+                  <p *ngIf="field.hint" class="hint">{{field.hint}}</p>
+                </div>
+
+                <!-- Number Input -->
+                <div *ngIf="field.type === 'number'">
+                  <label [for]="'field-' + field.key">{{field.label || field.key}}</label>
+                  <input 
+                    [id]="'field-' + field.key"
+                    type="number" 
+                    [(ngModel)]="config[field.key]" 
+                    (ngModelChange)="onConfigChange()"
+                    [placeholder]="field.placeholder || ''" 
+                    [min]="field.min"
+                    [max]="field.max"
+                    class="form-input" />
+                  <p *ngIf="field.hint" class="hint">{{field.hint}}</p>
+                </div>
+
+                <!-- Select Dropdown -->
+                <div *ngIf="field.type === 'select'">
+                  <label [for]="'field-' + field.key">{{field.label || field.key}}</label>
+                  <select 
+                    [id]="'field-' + field.key"
+                    [(ngModel)]="config[field.key]" 
+                    (ngModelChange)="onConfigChange()"
+                    class="form-input">
+                    <option *ngFor="let option of field.options" [value]="option.value">
+                      {{option.label || option.value}}
+                    </option>
+                  </select>
+                  <p *ngIf="field.hint" class="hint">{{field.hint}}</p>
+                </div>
+
+                <!-- Array/List (Read-only display for now) -->
+                <div *ngIf="field.type === 'array'" class="array-field">
+                  <label>{{field.label || field.key}}</label>
+                  <p class="hint">{{field.hint || 'This field is managed by the processed content output'}}</p>
+                  <div class="array-preview">
+                    <div *ngIf="config[field.key] && config[field.key].length > 0" class="array-items">
+                      <div *ngFor="let item of config[field.key]; let i = index" class="array-item">
+                        {{i + 1}}. {{getArrayItemPreview(item)}}
+                      </div>
+                    </div>
+                    <p *ngIf="!config[field.key] || config[field.key].length === 0" class="empty-array">
+                      No items yet
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <!-- Show raw configSchema for other types -->
-            <div *ngIf="interactionType !== 'true-false-selection'" class="config-schema-display">
-              <h3>Configuration Schema</h3>
-              <p class="hint">This defines what can be configured for this interaction:</p>
-              <pre class="schema-preview">{{configSchemaJson}}</pre>
-              <p class="hint">Full interactive form for this interaction type coming soon.</p>
+            <!-- Show message if no configSchema -->
+            <div *ngIf="!configSchema || !configSchema.fields || configSchema.fields.length === 0" class="config-schema-display">
+              <h3>No Configuration Schema</h3>
+              <p class="hint">This interaction doesn't have a configuration schema defined yet.</p>
+              <p class="hint">Add a <code>configSchema</code> to this interaction type to enable dynamic form generation.</p>
             </div>
           </div>
 
@@ -323,6 +388,68 @@ import { TrueFalseSelectionComponent } from '../../../features/interactions/true
       background: #333;
       border-color: #555;
     }
+
+    .checkbox-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      cursor: pointer;
+      color: #e5e5e5;
+    }
+
+    .form-checkbox {
+      width: 1.25rem;
+      height: 1.25rem;
+      cursor: pointer;
+      accent-color: #00d4ff;
+    }
+
+    .array-field {
+      margin-bottom: 1.5rem;
+    }
+
+    .array-preview {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 0.5rem;
+      padding: 1rem;
+      margin-top: 0.5rem;
+    }
+
+    .array-items {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .array-item {
+      padding: 0.5rem;
+      background: #0a0a0a;
+      border: 1px solid #2a2a2a;
+      border-radius: 0.25rem;
+      font-size: 0.875rem;
+      color: #999;
+    }
+
+    .empty-array {
+      text-align: center;
+      color: #666;
+      font-style: italic;
+      margin: 0;
+    }
+
+    code {
+      background: #2a2a2a;
+      padding: 0.125rem 0.375rem;
+      border-radius: 0.25rem;
+      font-family: 'Courier New', monospace;
+      font-size: 0.875rem;
+      color: #00d4ff;
+    }
   `]
 })
 export class InteractionConfigureModalComponent implements OnChanges {
@@ -351,8 +478,22 @@ export class InteractionConfigureModalComponent implements OnChanges {
   ngOnChanges() {
     if (this.isOpen) {
       this.activeTab = 'configure';
+      
+      // Initialize config with defaults from schema
       this.config = { ...this.initialConfig };
-      this.previewData = this.sampleData;
+      if (this.configSchema && this.configSchema.fields) {
+        this.configSchema.fields.forEach((field: any) => {
+          if (field.default !== undefined && this.config[field.key] === undefined) {
+            this.config[field.key] = field.default;
+          }
+        });
+      }
+      
+      // Merge sample data with config for preview
+      this.previewData = {
+        ...this.sampleData,
+        ...this.config
+      };
       
       // Hide page header and prevent scroll
       this.hidePageElements();
@@ -360,16 +501,32 @@ export class InteractionConfigureModalComponent implements OnChanges {
       console.log('[ConfigModal] 🎯 Opened for:', this.interactionType);
       console.log('[ConfigModal] 📋 Config Schema:', this.configSchema);
       console.log('[ConfigModal] 📊 Sample Data:', this.sampleData);
+      console.log('[ConfigModal] ⚙️ Initial Config:', this.config);
     }
   }
 
   onConfigChange() {
-    // In future, dynamically update preview data based on config changes
+    // Dynamically update preview data based on config changes
     console.log('[ConfigModal] ⚙️ Config changed:', this.config);
+    if (this.previewData) {
+      this.previewData = {
+        ...this.previewData,
+        ...this.config
+      };
+    }
   }
 
   onPreviewComplete(result: any) {
     console.log('[ConfigModal] ✅ Preview completed:', result);
+  }
+
+  getArrayItemPreview(item: any): string {
+    if (typeof item === 'string') return item;
+    if (typeof item === 'object') {
+      // Try common preview fields
+      return item.text || item.label || item.name || item.title || JSON.stringify(item).substring(0, 50) + '...';
+    }
+    return String(item);
   }
 
   hidePageElements() {
