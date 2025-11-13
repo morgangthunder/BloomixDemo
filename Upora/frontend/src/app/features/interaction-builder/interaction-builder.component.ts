@@ -10,6 +10,7 @@ import { takeUntil } from 'rxjs/operators';
 
 // Import the true-false selection component for preview
 import { TrueFalseSelectionComponent } from '../interactions/true-false-selection/true-false-selection.component';
+import { InteractionConfigureModalComponent } from '../../shared/components/interaction-configure-modal/interaction-configure-modal.component';
 
 interface InteractionType {
   id: string;
@@ -39,7 +40,7 @@ interface ChatMessage {
 @Component({
   selector: 'app-interaction-builder',
   standalone: true,
-  imports: [CommonModule, FormsModule, TrueFalseSelectionComponent],
+  imports: [CommonModule, FormsModule, TrueFalseSelectionComponent, InteractionConfigureModalComponent],
   template: `
     <div class="interaction-builder">
       <!-- Header -->
@@ -207,10 +208,17 @@ interface ChatMessage {
                       <option value="absorb-show">Absorb - Show</option>
                       <option value="cultivate-practice">Cultivate - Practice</option>
                       <option value="hone-apply">Hone - Apply</option>
-                    </select>
-                  </div>
+                  </select>
                 </div>
               </div>
+
+              <!-- Settings Actions -->
+              <div class="settings-actions">
+                <button (click)="saveInteraction()" class="btn-save-inline" [disabled]="saving">
+                  {{ saving ? '⏳ Saving...' : '💾 Save' }}
+                </button>
+              </div>
+            </div>
             </div>
 
             <!-- Code Tab -->
@@ -546,76 +554,17 @@ export class MyPixiInteraction {
         </div>
       </div>
 
-      <!-- Configure Modal (mimics lesson-editor style) -->
-      <div *ngIf="showingConfigModal" class="modal-overlay-fullscreen" (click)="closeConfigModal()">
-        <div class="modal-container-fullscreen" (click)="$event.stopPropagation()">
-          <div class="modal-header-sticky">
-            <h2>⚙️ Configure {{currentInteraction?.name}}</h2>
-            <button (click)="closeConfigModal()" class="close-btn">✕</button>
-          </div>
-
-          <!-- Tab Navigation -->
-          <div class="modal-tabs">
-            <button 
-              class="modal-tab"
-              [class.active]="configModalTab === 'configure'"
-              (click)="configModalTab = 'configure'">
-              ⚙️ Configure
-            </button>
-            <button 
-              class="modal-tab"
-              [class.active]="configModalTab === 'preview'"
-              (click)="configModalTab = 'preview'">
-              👁️ Preview
-            </button>
-          </div>
-
-          <div class="modal-body-scrollable">
-            <!-- Configure Tab -->
-            <div *ngIf="configModalTab === 'configure'" class="config-tab-content">
-              <p class="modal-note">💡 This is how lesson-builders will see configuration options:</p>
-              <div class="config-form-preview">
-                <pre>{{configSchemaText || 'No config schema defined yet'}}</pre>
-                <p class="hint" style="margin-top: 1rem; color: #666;">Full interactive form rendering coming soon</p>
-              </div>
-            </div>
-
-            <!-- Preview Tab -->
-            <div *ngIf="configModalTab === 'preview'" class="preview-tab-content">
-              <div class="interaction-preview-fullscreen">
-                <!-- HTML Preview -->
-                <div *ngIf="currentInteraction?.interactionTypeCategory === 'html' && currentInteraction?.htmlCode">
-                  <div [innerHTML]="getHtmlPreview()" [attr.data-preview-key]="previewKey"></div>
-                </div>
-
-                <!-- iFrame Preview -->
-                <div *ngIf="currentInteraction?.interactionTypeCategory === 'iframe' && currentInteraction?.iframeUrl">
-                  <iframe [src]="getSafeIframeUrl()" 
-                          [style.width]="getIframeWidth()"
-                          [style.height]="getIframeHeight()"
-                          frameborder="0"></iframe>
-                </div>
-
-                <!-- Angular Component Fallback -->
-                <app-true-false-selection
-                  *ngIf="currentInteraction?.id === 'true-false-selection' && !currentInteraction?.htmlCode && currentInteraction?.sampleData"
-                  [data]="currentInteraction?.sampleData"
-                  (interactionComplete)="onPreviewComplete($event)">
-                </app-true-false-selection>
-
-                <!-- No Preview -->
-                <div *ngIf="!currentInteraction?.htmlCode && !currentInteraction?.iframeUrl && !currentInteraction?.sampleData" class="no-preview">
-                  <p>⚠️ Add code and sample data to see preview</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="modal-footer-sticky">
-            <button (click)="closeConfigModal()" class="btn-secondary">Close</button>
-          </div>
-        </div>
-      </div>
+      <!-- Shared Configure Modal Component -->
+      <app-interaction-configure-modal
+        [isOpen]="showingConfigModal"
+        [interactionType]="currentInteraction?.id || ''"
+        [interactionName]="currentInteraction?.name || ''"
+        [configSchema]="currentInteraction?.configSchema"
+        [sampleData]="currentInteraction?.sampleData"
+        [initialConfig]="{}"
+        (closed)="closeConfigModal()"
+        (saved)="onConfigModalSaved($event)">
+      </app-interaction-configure-modal>
     </div>
   `,
   styles: [`
@@ -1114,7 +1063,8 @@ export class MyPixiInteraction {
     /* Code Actions */
     .code-actions,
     .config-actions,
-    .sample-actions {
+    .sample-actions,
+    .settings-actions {
       margin-top: 1.5rem;
       padding: 1rem;
       background: rgba(102, 126, 234, 0.05);
@@ -1876,39 +1826,39 @@ export class MyPixiInteraction {
         margin-bottom: 0;
         padding: 0.5rem;
         display: grid;
-        grid-template-columns: 1fr 1fr 1fr auto;
+        grid-template-columns: auto 1fr 1fr 1fr;
         grid-template-rows: auto auto;
         gap: 0.375rem;
         order: 2;
       }
 
       .sidebar-toggle {
-        grid-column: 4;
+        grid-column: 1;
         grid-row: 1 / 3;
         background: #667eea;
         color: white;
         border: none;
         padding: 0.5rem;
         border-radius: 0.375rem;
-        font-size: 0.75rem;
+        font-size: 0.7rem;
         font-weight: 600;
         cursor: pointer;
-        writing-mode: vertical-rl;
-        text-orientation: mixed;
-        min-width: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
       .editor-tabs-main button:not(.sidebar-toggle) {
-        padding: 0.625rem 0.25rem;
+        padding: 0.5rem 0.375rem;
         font-size: 0.7rem;
         text-align: center;
       }
 
-      .editor-tabs-main button:nth-child(2) { grid-column: 1; grid-row: 1; }
-      .editor-tabs-main button:nth-child(3) { grid-column: 2; grid-row: 1; }
-      .editor-tabs-main button:nth-child(4) { grid-column: 3; grid-row: 1; }
-      .editor-tabs-main button:nth-child(5) { grid-column: 1; grid-row: 2; }
-      .editor-tabs-main button:nth-child(6) { grid-column: 2; grid-row: 2; }
+      .editor-tabs-main button:nth-child(2) { grid-column: 2; grid-row: 1; }
+      .editor-tabs-main button:nth-child(3) { grid-column: 3; grid-row: 1; }
+      .editor-tabs-main button:nth-child(4) { grid-column: 4; grid-row: 1; }
+      .editor-tabs-main button:nth-child(5) { grid-column: 2; grid-row: 2; }
+      .editor-tabs-main button:nth-child(6) { grid-column: 3; grid-row: 2; }
 
       .tab-content {
         flex: 1;
@@ -1967,7 +1917,6 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
 
   // Modal
   showingConfigModal = false;
-  configModalTab: 'configure' | 'preview' = 'configure';
 
   // Testing
   testing = false;
@@ -2304,29 +2253,18 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   }
 
   showConfigModal() {
-    this.configModalTab = 'configure';
+    this.refreshPreview(); // Ensure sample data is current
     this.showingConfigModal = true;
-    this.refreshPreview(); // Ensure preview is fresh
-    
-    // Hide header like in lesson-editor
-    const header = document.querySelector('.builder-header');
-    if (header) {
-      (header as HTMLElement).style.display = 'none';
-    }
-    document.body.style.overflow = 'hidden';
-    
     console.log('[InteractionBuilder] 👁️ Opening config modal');
   }
 
   closeConfigModal() {
     this.showingConfigModal = false;
-    
-    // Restore header
-    const header = document.querySelector('.builder-header');
-    if (header) {
-      (header as HTMLElement).style.display = 'flex';
-    }
-    document.body.style.overflow = 'auto';
+  }
+
+  onConfigModalSaved(config: any) {
+    console.log('[InteractionBuilder] 💾 Config modal saved:', config);
+    this.showingConfigModal = false;
   }
 
   // AI Assistant methods
