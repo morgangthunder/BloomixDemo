@@ -21,11 +21,15 @@ export interface ProcessedContentItem {
   lessonId: string;
   metadata?: any;
   contentSourceId?: string;
+  workflowName?: string;
   contentSource?: {
     id: string;
     title: string;
     type: string;
     sourceUrl?: string;
+    summary?: string;
+    fullText?: string;
+    metadata?: any;
   };
 }
 

@@ -37,6 +37,11 @@ interface SubStage {
   interactionType?: string;
   contentOutputId?: string;
   scriptBlocks?: ScriptBlock[];
+  interaction?: {
+    type: string;
+    contentOutputId: string;
+    config?: any;
+  };
 }
 
 interface ScriptBlock {
@@ -3161,21 +3166,18 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
    * Get source content items used in this lesson
    */
   getSourceContentForLesson(): any[] {
-    // Get unique source content IDs from processed content
-    const sourceIds = new Set<string>();
+    // Get unique source content items from processed content
+    const sources: any[] = [];
+    const seenIds = new Set<string>();
+    
     this.processedContentItems.forEach(item => {
-      if (item.contentSource?.id) {
-        sourceIds.add(item.contentSource.id);
+      if (item.contentSource && !seenIds.has(item.contentSource.id)) {
+        sources.push(item.contentSource);
+        seenIds.add(item.contentSource.id);
       }
     });
     
-    // Return unique source content items
-    return this.processedContentItems
-      .filter(item => item.contentSource)
-      .map(item => item.contentSource)
-      .filter((source, index, self) => 
-        index === self.findIndex(s => s.id === source.id)
-      );
+    return sources;
   }
 
   viewSourceContent(source: any) {
@@ -3212,7 +3214,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     }
     
     // Load interaction config (or create default if doesn't exist)
-    this.interactionConfig = { ...substage.interaction.config } || {};
+    this.interactionConfig = substage.interaction.config ? { ...substage.interaction.config } : {};
     this.showInteractionConfigModal = true;
     console.log('[LessonEditor] Opening interaction config modal:', this.interactionConfig);
   }
