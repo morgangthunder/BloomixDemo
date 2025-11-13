@@ -38,33 +38,41 @@ import { TrueFalseSelectionComponent } from '../../../features/interactions/true
             <div *ngIf="configSchema && configSchema.fields && configSchema.fields.length > 0">
               <div *ngFor="let field of configSchema.fields" class="form-group">
                 <!-- String Input -->
-                <div *ngIf="field.type === 'string' && !field.multiline">
-                  <label [for]="'field-' + field.key">{{field.label || field.key}}</label>
+                <div *ngIf="field.type === 'string' && !field.multiline && !field.readOnly">
+                  <label [for]="'field-' + field.key">
+                    {{field.label || field.key}}
+                    <span *ngIf="field.required" class="required-indicator">*</span>
+                  </label>
                   <input 
                     [id]="'field-' + field.key"
                     type="text" 
                     [(ngModel)]="config[field.key]" 
                     (ngModelChange)="onConfigChange()"
                     [placeholder]="field.placeholder || ''" 
+                    [required]="field.required"
                     class="form-input" />
                   <p *ngIf="field.hint" class="hint">{{field.hint}}</p>
                 </div>
 
                 <!-- Multiline Text Input -->
-                <div *ngIf="field.type === 'string' && field.multiline">
-                  <label [for]="'field-' + field.key">{{field.label || field.key}}</label>
+                <div *ngIf="field.type === 'string' && field.multiline && !field.readOnly">
+                  <label [for]="'field-' + field.key">
+                    {{field.label || field.key}}
+                    <span *ngIf="field.required" class="required-indicator">*</span>
+                  </label>
                   <textarea 
                     [id]="'field-' + field.key"
                     [(ngModel)]="config[field.key]" 
                     (ngModelChange)="onConfigChange()"
                     [rows]="field.rows || 3"
                     [placeholder]="field.placeholder || ''" 
+                    [required]="field.required"
                     class="form-input"></textarea>
                   <p *ngIf="field.hint" class="hint">{{field.hint}}</p>
                 </div>
 
                 <!-- Boolean Checkbox -->
-                <div *ngIf="field.type === 'boolean'" class="checkbox-group">
+                <div *ngIf="field.type === 'boolean' && !field.readOnly" class="checkbox-group">
                   <label class="checkbox-label">
                     <input 
                       type="checkbox"
@@ -77,8 +85,11 @@ import { TrueFalseSelectionComponent } from '../../../features/interactions/true
                 </div>
 
                 <!-- Number Input -->
-                <div *ngIf="field.type === 'number'">
-                  <label [for]="'field-' + field.key">{{field.label || field.key}}</label>
+                <div *ngIf="field.type === 'number' && !field.readOnly">
+                  <label [for]="'field-' + field.key">
+                    {{field.label || field.key}}
+                    <span *ngIf="field.required" class="required-indicator">*</span>
+                  </label>
                   <input 
                     [id]="'field-' + field.key"
                     type="number" 
@@ -87,6 +98,7 @@ import { TrueFalseSelectionComponent } from '../../../features/interactions/true
                     [placeholder]="field.placeholder || ''" 
                     [min]="field.min"
                     [max]="field.max"
+                    [required]="field.required"
                     class="form-input" />
                   <p *ngIf="field.hint" class="hint">{{field.hint}}</p>
                 </div>
@@ -106,19 +118,27 @@ import { TrueFalseSelectionComponent } from '../../../features/interactions/true
                   <p *ngIf="field.hint" class="hint">{{field.hint}}</p>
                 </div>
 
-                <!-- Array/List (Read-only display for now) -->
+                <!-- Array/List (Read-only or editable) -->
                 <div *ngIf="field.type === 'array'" class="array-field">
-                  <label>{{field.label || field.key}}</label>
-                  <p class="hint">{{field.hint || 'This field is managed by the processed content output'}}</p>
-                  <div class="array-preview">
+                  <label>
+                    {{field.label || field.key}}
+                    <span *ngIf="field.required" class="required-indicator">*</span>
+                    <span *ngIf="field.readOnly" class="readonly-badge">Read-only</span>
+                  </label>
+                  <p *ngIf="field.hint" class="hint">{{field.hint}}</p>
+                  <div class="array-preview" *ngIf="field.readOnly">
                     <div *ngIf="config[field.key] && config[field.key].length > 0" class="array-items">
                       <div *ngFor="let item of config[field.key]; let i = index" class="array-item">
                         {{i + 1}}. {{getArrayItemPreview(item)}}
                       </div>
                     </div>
                     <p *ngIf="!config[field.key] || config[field.key].length === 0" class="empty-array">
-                      No items yet
+                      No items configured yet
                     </p>
+                  </div>
+                  <!-- Future: Editable array editor for non-readOnly arrays -->
+                  <div *ngIf="!field.readOnly" class="array-editor-placeholder">
+                    <p class="hint">Array editor coming soon. For now, arrays are managed externally.</p>
                   </div>
                 </div>
               </div>
@@ -449,6 +469,41 @@ import { TrueFalseSelectionComponent } from '../../../features/interactions/true
       font-family: 'Courier New', monospace;
       font-size: 0.875rem;
       color: #00d4ff;
+    }
+
+    .required-indicator {
+      color: #ff4444;
+      margin-left: 0.25rem;
+      font-weight: bold;
+    }
+
+    .readonly-badge {
+      display: inline-block;
+      margin-left: 0.5rem;
+      padding: 0.125rem 0.5rem;
+      background: #2a2a2a;
+      color: #999;
+      font-size: 0.75rem;
+      font-weight: 500;
+      border-radius: 0.25rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .array-editor-placeholder {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      text-align: center;
+      color: #666;
+      font-style: italic;
+    }
+
+    label {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
     }
   `]
 })
