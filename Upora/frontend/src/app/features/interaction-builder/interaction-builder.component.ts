@@ -448,8 +448,9 @@ export class MyPixiInteraction {
                   <!-- HTML Preview (prioritize this for HTML types) -->
                   <div *ngIf="currentInteraction?.interactionTypeCategory === 'html' && currentInteraction?.htmlCode" class="html-preview">
                     <iframe #previewIframe 
-                            [srcdoc]="getHtmlPreviewSrcDoc()" 
+                            [attr.srcdoc]="getHtmlPreviewSrcDoc()" 
                             style="width: 100%; height: 600px; border: 1px solid #333; border-radius: 0.5rem; background: #0f0f23;"
+                            sandbox="allow-scripts allow-same-origin"
                             frameborder="0"></iframe>
                   </div>
 
@@ -1832,9 +1833,8 @@ export class MyPixiInteraction {
         background: #0a0a0a;
         border-top: 1px solid #333;
         border-bottom: none;
-        margin-bottom: 0;
+        margin: 0;
         padding: 0.5rem;
-        padding-bottom: 0.5rem;
         display: grid;
         grid-template-columns: 1fr 1fr 1fr;
         grid-template-rows: auto auto;
