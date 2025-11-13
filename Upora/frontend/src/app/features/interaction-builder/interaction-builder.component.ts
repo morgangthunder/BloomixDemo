@@ -1834,8 +1834,7 @@ export class MyPixiInteraction {
       .editor-container {
         display: flex;
         flex-direction: column;
-        min-height: calc(100vh - 64px);
-        max-height: calc(100vh - 64px);
+        height: calc(100vh - 64px);
         padding: 0;
         overflow: hidden;
       }
