@@ -3553,7 +3553,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
                 text: stmt.text,
                 isTrueInContext: stmt.isTrue
               })) || [],
-              interactionTypeId: substage.interaction.type
+              interactionTypeId: substage.interaction?.type || 'true-false-selection'
             };
             console.log('[LessonEditor] Preview data prepared:', this.interactionPreviewData);
           },
