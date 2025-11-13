@@ -51,8 +51,11 @@ interface ChatMessage {
         </button>
         <h1>Interaction Builder</h1>
         <div class="header-actions">
-          <button (click)="saveInteraction()" class="btn-primary" [disabled]="saving">
-            {{ saving ? 'Saving...' : 'Save' }}
+          <button (click)="resetToLastWorking()" class="btn-secondary" [disabled]="!hasLastWorking" title="Reset to last working version">
+            🔄 Reset
+          </button>
+          <button (click)="saveInteraction()" class="btn-primary" [disabled]="saving" style="background: #00d4ff; color: #0f0f23; font-weight: 600; padding: 0.625rem 1.25rem; border-radius: 0.5rem;">
+            {{ saving ? 'Saving...' : '💾 Save' }}
           </button>
         </div>
       </header>
@@ -289,6 +292,18 @@ export class MyPixiInteraction {
 
                 <div *ngIf="!currentInteraction.interactionTypeCategory" class="no-type-selected">
                   <p>⚠️ Please select an interaction type in the Settings tab first.</p>
+                </div>
+
+                <!-- Test Button -->
+                <div *ngIf="currentInteraction?.interactionTypeCategory" class="test-section">
+                  <button (click)="testCode()" class="btn-test" [disabled]="testing">
+                    {{ testing ? '⏳ Testing...' : '🧪 Test Code' }}
+                  </button>
+                  <div *ngIf="testResult" class="test-result" [class.success]="testResult.success" [class.error]="!testResult.success">
+                    <div class="result-icon">{{ testResult.success ? '✅' : '❌' }}</div>
+                    <div class="result-message">{{ testResult.message }}</div>
+                    <pre *ngIf="testResult.error" class="error-details">{{testResult.error}}</pre>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1063,6 +1078,76 @@ export class MyPixiInteraction {
       margin: 0;
     }
 
+    /* Test Section */
+    .test-section {
+      margin-top: 2rem;
+      padding: 1.5rem;
+      background: rgba(102, 126, 234, 0.1);
+      border: 1px solid #667eea;
+      border-radius: 0.75rem;
+    }
+
+    .btn-test {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-test:hover:not(:disabled) {
+      background: #5568d3;
+      transform: translateY(-1px);
+    }
+
+    .btn-test:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .test-result {
+      margin-top: 1rem;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-start;
+    }
+
+    .test-result.success {
+      background: rgba(76, 175, 80, 0.1);
+      border: 1px solid #4caf50;
+    }
+
+    .test-result.error {
+      background: rgba(244, 67, 54, 0.1);
+      border: 1px solid #f44336;
+    }
+
+    .result-icon {
+      font-size: 1.5rem;
+      flex-shrink: 0;
+    }
+
+    .result-message {
+      flex: 1;
+      font-weight: 500;
+    }
+
+    .error-details {
+      margin-top: 0.5rem;
+      padding: 0.75rem;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+      color: #f44336;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
     /* Config & Sample */
     .error-message {
       background: rgba(239, 68, 68, 0.1);
@@ -1628,6 +1713,14 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   // Modal
   showingConfigModal = false;
 
+  // Testing
+  testing = false;
+  testResult: { success: boolean; message: string; error?: string } | null = null;
+
+  // Reset functionality
+  lastWorkingVersion: InteractionType | null = null;
+  hasLastWorking = false;
+
   @ViewChild('aiChatHistory') aiChatHistory?: ElementRef;
 
   constructor(
@@ -1689,15 +1782,28 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
       return;
     }
 
+    console.log('[InteractionBuilder] 📥 Loading interaction:', interaction.id);
+
     this.currentInteraction = { ...interaction };
     this.isNewInteraction = false;
     this.hasChanges = false;
     this.activeTab = 'settings';
+    this.testResult = null;
 
     // Load JSON fields into text areas
     this.iframeConfigText = interaction.iframeConfig ? JSON.stringify(interaction.iframeConfig, null, 2) : '';
     this.configSchemaText = interaction.configSchema ? JSON.stringify(interaction.configSchema, null, 2) : '';
     this.sampleDataText = interaction.sampleData ? JSON.stringify(interaction.sampleData, null, 2) : '';
+
+    // Store as last working version if it has code
+    if (interaction.htmlCode || interaction.jsCode || interaction.iframeUrl) {
+      this.lastWorkingVersion = JSON.parse(JSON.stringify(interaction));
+      this.hasLastWorking = true;
+      console.log('[InteractionBuilder] ✅ Stored as last working version');
+    }
+
+    console.log('[InteractionBuilder] 📝 Config Schema Text:', this.configSchemaText.substring(0, 50) + '...');
+    console.log('[InteractionBuilder] 📝 Sample Data Text:', this.sampleDataText.substring(0, 50) + '...');
   }
 
   createNew() {
@@ -1998,6 +2104,112 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     }
     
     return 'I can help you with HTML, PixiJS, iFrame interactions, config schemas, and sample data. What would you like to know?';
+  }
+
+  testCode() {
+    this.testing = true;
+    this.testResult = null;
+
+    // Simulate a delay for testing
+    setTimeout(() => {
+      try {
+        // Validate HTML/CSS/JS
+        if (this.currentInteraction?.interactionTypeCategory === 'html') {
+          if (!this.currentInteraction.htmlCode || this.currentInteraction.htmlCode.trim() === '') {
+            throw new Error('HTML code is required');
+          }
+
+          // Try to parse HTML (basic check)
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = this.currentInteraction.htmlCode;
+
+          // Check for required elements based on interaction type
+          if (this.currentInteraction.id === 'true-false-selection') {
+            if (!this.currentInteraction.htmlCode.includes('fragments-grid')) {
+              throw new Error('HTML must include element with id="fragmentsGrid"');
+            }
+          }
+
+          // Validate JS syntax (basic check)
+          if (this.currentInteraction.jsCode) {
+            try {
+              new Function(this.currentInteraction.jsCode);
+            } catch (jsError: any) {
+              throw new Error(`JavaScript syntax error: ${jsError.message}`);
+            }
+          }
+
+          // Validate sample data if provided
+          if (this.sampleDataText.trim()) {
+            try {
+              JSON.parse(this.sampleDataText);
+            } catch (jsonError: any) {
+              throw new Error(`Sample data JSON error: ${jsonError.message}`);
+            }
+          }
+
+          // All checks passed - store as last working version
+          this.lastWorkingVersion = JSON.parse(JSON.stringify(this.currentInteraction));
+          this.hasLastWorking = true;
+
+          this.testResult = {
+            success: true,
+            message: '✨ Code is valid! Preview should work.'
+          };
+        } else if (this.currentInteraction?.interactionTypeCategory === 'iframe') {
+          if (!this.currentInteraction.iframeUrl) {
+            throw new Error('iFrame URL is required');
+          }
+
+          // Basic URL validation
+          try {
+            new URL(this.currentInteraction.iframeUrl);
+          } catch (urlError) {
+            throw new Error('Invalid URL format');
+          }
+
+          this.lastWorkingVersion = JSON.parse(JSON.stringify(this.currentInteraction));
+          this.hasLastWorking = true;
+
+          this.testResult = {
+            success: true,
+            message: '✨ iFrame URL is valid!'
+          };
+        } else {
+          throw new Error('Unknown interaction type');
+        }
+      } catch (error: any) {
+        this.testResult = {
+          success: false,
+          message: 'Code validation failed',
+          error: error.message || 'Unknown error'
+        };
+      } finally {
+        this.testing = false;
+      }
+    }, 500);
+  }
+
+  resetToLastWorking() {
+    if (!this.lastWorkingVersion || !confirm('Reset to last working version? Current changes will be lost.')) {
+      return;
+    }
+
+    // Deep clone the last working version
+    this.currentInteraction = JSON.parse(JSON.stringify(this.lastWorkingVersion));
+
+    // Update text fields
+    this.iframeConfigText = this.currentInteraction?.iframeConfig ? 
+      JSON.stringify(this.currentInteraction.iframeConfig, null, 2) : '';
+    this.configSchemaText = this.currentInteraction?.configSchema ? 
+      JSON.stringify(this.currentInteraction.configSchema, null, 2) : '';
+    this.sampleDataText = this.currentInteraction?.sampleData ? 
+      JSON.stringify(this.currentInteraction.sampleData, null, 2) : '';
+
+    this.hasChanges = false;
+    this.testResult = null;
+
+    console.log('[InteractionBuilder] ✅ Reset to last working version');
   }
 
   goBack() {
