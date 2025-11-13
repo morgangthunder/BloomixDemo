@@ -301,13 +301,19 @@ export class MyPixiInteraction {
                   <p>⚠️ Please select an interaction type in the Settings tab first.</p>
                 </div>
 
-                <!-- Test Button -->
-                <div *ngIf="currentInteraction?.interactionTypeCategory" class="test-section">
+                <!-- Test Button and Save -->
+                <div *ngIf="currentInteraction?.interactionTypeCategory" class="code-actions">
                   <button (click)="testCode()" class="btn-test" [disabled]="testing">
                     {{ testing ? '⏳ Testing...' : '🧪 Test Code' }}
                   </button>
-                  <div *ngIf="testResult" class="test-result" [class.success]="testResult.success" [class.error]="!testResult.success">
-                    <div class="result-icon">{{ testResult.success ? '✅' : '❌' }}</div>
+                  <button (click)="saveInteraction()" class="btn-save-inline" [disabled]="saving">
+                    {{ saving ? '⏳ Saving...' : '💾 Save' }}
+                  </button>
+                </div>
+                <div *ngIf="testResult" class="test-result" [class.success]="testResult.success" [class.error]="!testResult.success">
+                  <button (click)="testResult = null" class="close-test-result" title="Close">✕</button>
+                  <div class="result-icon">{{ testResult.success ? '✅' : '❌' }}</div>
+                  <div class="result-content">
                     <div class="result-message">{{ testResult.message }}</div>
                     <pre *ngIf="testResult.error" class="error-details">{{testResult.error}}</pre>
                   </div>
@@ -358,9 +364,12 @@ export class MyPixiInteraction {
                   ⚠️ Invalid JSON: {{configSchemaError}}
                 </div>
 
-                <div class="config-preview-btn">
+                <div class="config-actions">
                   <button (click)="showConfigModal()" class="btn-secondary" [disabled]="!currentInteraction?.configSchema">
                     👁️ Preview Config Modal
+                  </button>
+                  <button (click)="saveInteraction()" class="btn-save-inline" [disabled]="saving || configSchemaError">
+                    {{ saving ? '⏳ Saving...' : '💾 Save' }}
                   </button>
                 </div>
               </div>
@@ -402,6 +411,12 @@ export class MyPixiInteraction {
 
                 <div *ngIf="sampleDataError" class="error-message">
                   ⚠️ Invalid JSON: {{sampleDataError}}
+                </div>
+
+                <div class="sample-actions">
+                  <button (click)="saveInteraction()" class="btn-save-inline" [disabled]="saving || sampleDataError">
+                    {{ saving ? '⏳ Saving...' : '💾 Save' }}
+                  </button>
                 </div>
               </div>
             </div>
@@ -528,68 +543,73 @@ export class MyPixiInteraction {
         </div>
       </div>
 
-      <!-- Configure Modal (for previewing config schema and interaction) -->
-      <div *ngIf="showingConfigModal" class="modal-overlay" (click)="closeConfigModal()">
-        <div class="modal-content config-modal large-modal" (click)="$event.stopPropagation()">
-          <div class="modal-header">
-            <h2>Configure {{currentInteraction?.name}}</h2>
-            <button (click)="closeConfigModal()" class="close-btn">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-              </svg>
+      <!-- Configure Modal (mimics lesson-editor style) -->
+      <div *ngIf="showingConfigModal" class="modal-overlay-fullscreen" (click)="closeConfigModal()">
+        <div class="modal-container-fullscreen" (click)="$event.stopPropagation()">
+          <div class="modal-header-sticky">
+            <h2>⚙️ Configure {{currentInteraction?.name}}</h2>
+            <button (click)="closeConfigModal()" class="close-btn">✕</button>
+          </div>
+
+          <!-- Tab Navigation -->
+          <div class="modal-tabs">
+            <button 
+              class="modal-tab"
+              [class.active]="configModalTab === 'configure'"
+              (click)="configModalTab = 'configure'">
+              ⚙️ Configure
+            </button>
+            <button 
+              class="modal-tab"
+              [class.active]="configModalTab === 'preview'"
+              (click)="configModalTab = 'preview'">
+              👁️ Preview
             </button>
           </div>
-          <div class="modal-body">
-            <p class="modal-note">💡 This is how lesson-builders will configure this interaction:</p>
-            
-            <!-- Show Config Schema -->
-            <div class="config-section">
-              <h3>Configuration Schema</h3>
+
+          <div class="modal-body-scrollable">
+            <!-- Configure Tab -->
+            <div *ngIf="configModalTab === 'configure'" class="config-tab-content">
+              <p class="modal-note">💡 This is how lesson-builders will see configuration options:</p>
               <div class="config-form-preview">
                 <pre>{{configSchemaText || 'No config schema defined yet'}}</pre>
+                <p class="hint" style="margin-top: 1rem; color: #666;">Full interactive form rendering coming soon</p>
               </div>
             </div>
 
-            <!-- Show Preview with Sample Data -->
-            <div *ngIf="currentInteraction?.sampleData" class="preview-section-modal">
-              <h3>Live Preview with Sample Data</h3>
-              <div class="modal-preview-container">
-                <!-- HTML Preview (for HTML types) -->
-                <div *ngIf="currentInteraction?.interactionTypeCategory === 'html' && currentInteraction?.htmlCode" class="html-preview">
-                  <div [innerHTML]="getHtmlPreview()"></div>
+            <!-- Preview Tab -->
+            <div *ngIf="configModalTab === 'preview'" class="preview-tab-content">
+              <div class="interaction-preview-fullscreen">
+                <!-- HTML Preview -->
+                <div *ngIf="currentInteraction?.interactionTypeCategory === 'html' && currentInteraction?.htmlCode">
+                  <div [innerHTML]="getHtmlPreview()" [attr.data-preview-key]="previewKey"></div>
                 </div>
 
                 <!-- iFrame Preview -->
-                <div *ngIf="currentInteraction?.interactionTypeCategory === 'iframe' && currentInteraction?.iframeUrl" class="iframe-preview">
+                <div *ngIf="currentInteraction?.interactionTypeCategory === 'iframe' && currentInteraction?.iframeUrl">
                   <iframe [src]="getSafeIframeUrl()" 
                           [style.width]="getIframeWidth()"
                           [style.height]="getIframeHeight()"
                           frameborder="0"></iframe>
                 </div>
 
-                <!-- Angular Component Fallback (for true-false if no HTML code) -->
-                <div *ngIf="currentInteraction?.id === 'true-false-selection' && !currentInteraction?.htmlCode" class="interaction-preview">
-                  <app-true-false-selection 
-                    [data]="currentInteraction?.sampleData || {}"
-                    (interactionComplete)="onPreviewComplete($event)">
-                  </app-true-false-selection>
-                </div>
+                <!-- Angular Component Fallback -->
+                <app-true-false-selection
+                  *ngIf="currentInteraction?.id === 'true-false-selection' && !currentInteraction?.htmlCode && currentInteraction?.sampleData"
+                  [data]="currentInteraction?.sampleData"
+                  (interactionComplete)="onPreviewComplete($event)">
+                </app-true-false-selection>
 
-                <!-- Other/Unknown types -->
-                <div *ngIf="!currentInteraction?.htmlCode && !currentInteraction?.iframeUrl && currentInteraction?.id !== 'true-false-selection'" class="no-preview">
-                  <p>Preview not available for this interaction type yet.</p>
-                  <div>Sample Data:</div>
-                  <pre>{{sampleDataText}}</pre>
+                <!-- No Preview -->
+                <div *ngIf="!currentInteraction?.htmlCode && !currentInteraction?.iframeUrl && !currentInteraction?.sampleData" class="no-preview">
+                  <p>⚠️ Add code and sample data to see preview</p>
                 </div>
               </div>
             </div>
-
-            <div *ngIf="!currentInteraction?.sampleData" class="no-sample-data">
-              <p>⚠️ Add sample data in the "Sample Data" tab to see a preview.</p>
-            </div>
           </div>
-          <div class="modal-footer">
-            <button (click)="closeConfigModal()" class="btn-primary">Close</button>
+
+          <div class="modal-footer-sticky">
+            <button (click)="closeConfigModal()" class="btn-secondary">Close</button>
           </div>
         </div>
       </div>
@@ -1088,13 +1108,18 @@ export class MyPixiInteraction {
       margin: 0;
     }
 
-    /* Test Section */
-    .test-section {
-      margin-top: 2rem;
-      padding: 1.5rem;
-      background: rgba(102, 126, 234, 0.1);
-      border: 1px solid #667eea;
-      border-radius: 0.75rem;
+    /* Code Actions */
+    .code-actions,
+    .config-actions,
+    .sample-actions {
+      margin-top: 1.5rem;
+      padding: 1rem;
+      background: rgba(102, 126, 234, 0.05);
+      border: 1px solid #333;
+      border-radius: 0.5rem;
+      display: flex;
+      gap: 1rem;
+      justify-content: flex-end;
     }
 
     .btn-test {
@@ -1118,6 +1143,29 @@ export class MyPixiInteraction {
       cursor: not-allowed;
     }
 
+    .btn-save-inline {
+      background: #00d4ff;
+      color: #0f0f23;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 0.5rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 2px 8px rgba(0, 212, 255, 0.3);
+    }
+
+    .btn-save-inline:hover:not(:disabled) {
+      background: #00bce6;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 212, 255, 0.5);
+    }
+
+    .btn-save-inline:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
     .btn-refresh {
       background: #10b981;
       color: white;
@@ -1137,11 +1185,32 @@ export class MyPixiInteraction {
 
     .test-result {
       margin-top: 1rem;
-      padding: 1rem;
+      padding: 1rem 1rem 1rem 1rem;
       border-radius: 0.5rem;
       display: flex;
       gap: 0.75rem;
       align-items: flex-start;
+      position: relative;
+    }
+
+    .close-test-result {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      background: transparent;
+      border: none;
+      color: #999;
+      font-size: 1.25rem;
+      cursor: pointer;
+      padding: 0.25rem 0.5rem;
+      line-height: 1;
+      border-radius: 0.25rem;
+      transition: all 0.2s;
+    }
+
+    .close-test-result:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
     }
 
     .test-result.success {
@@ -1159,9 +1228,13 @@ export class MyPixiInteraction {
       flex-shrink: 0;
     }
 
-    .result-message {
+    .result-content {
       flex: 1;
+    }
+
+    .result-message {
       font-weight: 500;
+      margin-bottom: 0.5rem;
     }
 
     .error-details {
@@ -1506,6 +1579,101 @@ export class MyPixiInteraction {
       animation: fadeIn 0.2s ease;
     }
 
+    .modal-overlay-fullscreen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.95);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .modal-container-fullscreen {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 1rem;
+      width: 95%;
+      max-width: 1200px;
+      height: 90vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      animation: slideUp 0.3s ease;
+    }
+
+    .modal-header-sticky {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.5rem;
+      border-bottom: 1px solid #333;
+      background: #1a1a1a;
+    }
+
+    .modal-header-sticky h2 {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+
+    .modal-tabs {
+      display: flex;
+      gap: 0.5rem;
+      padding: 0 1.5rem;
+      border-bottom: 1px solid #333;
+      background: #1a1a1a;
+    }
+
+    .modal-tab {
+      background: transparent;
+      border: none;
+      color: #999;
+      padding: 1rem 1.5rem;
+      cursor: pointer;
+      font-weight: 500;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+
+    .modal-tab:hover {
+      color: #fff;
+    }
+
+    .modal-tab.active {
+      color: #00d4ff;
+      border-bottom-color: #00d4ff;
+    }
+
+    .modal-body-scrollable {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem;
+      background: #0a0a0a;
+    }
+
+    .modal-footer-sticky {
+      padding: 1rem 1.5rem;
+      border-top: 1px solid #333;
+      background: #1a1a1a;
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+    }
+
+    .config-tab-content,
+    .preview-tab-content {
+      animation: fadeIn 0.2s ease;
+    }
+
+    .interaction-preview-fullscreen {
+      min-height: 400px;
+    }
+
     .modal-content {
       background: #1a1a1a;
       border: 1px solid #333;
@@ -1739,6 +1907,7 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
 
   // Modal
   showingConfigModal = false;
+  configModalTab: 'configure' | 'preview' = 'configure';
 
   // Testing
   testing = false;
@@ -2056,7 +2225,10 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   }
 
   showConfigModal() {
+    this.configModalTab = 'configure';
     this.showingConfigModal = true;
+    this.refreshPreview(); // Ensure preview is fresh
+    console.log('[InteractionBuilder] 👁️ Opening config modal');
   }
 
   closeConfigModal() {
@@ -2165,27 +2337,20 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
             }
           }
 
-          // Validate JS syntax (strict check)
+          // Validate JS syntax (basic syntax check only - don't execute)
           if (this.currentInteraction.jsCode) {
             try {
-              // Use strict mode
-              new Function('"use strict";' + this.currentInteraction.jsCode);
+              // Only check if the code can be parsed, don't execute
+              new Function(this.currentInteraction.jsCode);
               
-              // Check for common breaking patterns
-              if (this.currentInteraction.jsCode.includes('undefined.')) {
-                throw new Error('Code contains potential undefined access');
+              // Warn about common issues but don't fail
+              if (this.currentInteraction.jsCode.includes('document.getElementById') && 
+                  !this.currentInteraction.htmlCode?.includes('id=')) {
+                console.warn('[Test] Warning: Code uses getElementById but HTML may not have ids');
               }
-              if (this.currentInteraction.jsCode.includes('null.')) {
-                throw new Error('Code contains potential null access');
-              }
-              
-              // Try to actually execute in a safe context
-              const testWindow: any = { interactionData: {} };
-              const testFn = new Function('window', '"use strict";' + this.currentInteraction.jsCode);
-              testFn(testWindow);
               
             } catch (jsError: any) {
-              throw new Error(`JavaScript error: ${jsError.message}`);
+              throw new Error(`JavaScript syntax error: ${jsError.message}`);
             }
           }
 
