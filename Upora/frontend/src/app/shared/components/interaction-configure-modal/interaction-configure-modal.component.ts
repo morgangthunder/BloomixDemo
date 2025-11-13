@@ -43,6 +43,7 @@ import { TrueFalseSelectionComponent } from '../../../features/interactions/true
                   <label [for]="'field-' + field.key">
                     {{field.label || field.key}}
                     <span *ngIf="field.required" class="required-indicator">*</span>
+                    <span *ngIf="isBuilderMode && field.builderReadOnly" class="readonly-badge">Read-only</span>
                   </label>
                   <input 
                     [id]="'field-' + field.key"
@@ -51,8 +52,10 @@ import { TrueFalseSelectionComponent } from '../../../features/interactions/true
                     (ngModelChange)="onConfigChange()"
                     [placeholder]="field.placeholder || ''" 
                     [required]="field.required"
+                    [disabled]="isBuilderMode && field.builderReadOnly"
                     class="form-input" />
-                  <p *ngIf="field.hint" class="hint">{{field.hint}}</p>
+                  <p *ngIf="field.hint && !(isBuilderMode && field.builderReadOnly)" class="hint">{{field.hint}}</p>
+                  <p *ngIf="isBuilderMode && field.builderReadOnly && field.builderHint" class="hint builder-hint">{{field.builderHint}}</p>
                 </div>
 
                 <!-- Multiline Text Input -->
@@ -516,6 +519,19 @@ import { TrueFalseSelectionComponent } from '../../../features/interactions/true
       align-items: center;
       flex-wrap: wrap;
     }
+
+    .builder-hint {
+      color: #00d4ff;
+      font-style: italic;
+      font-weight: 500;
+    }
+
+    .form-input:disabled {
+      background: #1a1a1a;
+      color: #666;
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
   `]
 })
 export class InteractionConfigureModalComponent implements OnChanges {
@@ -529,6 +545,7 @@ export class InteractionConfigureModalComponent implements OnChanges {
   @Input() htmlCode: string = '';
   @Input() cssCode: string = '';
   @Input() jsCode: string = '';
+  @Input() isBuilderMode: boolean = false; // true in interaction-builder, false in lesson-editor
 
   @Output() closed = new EventEmitter<void>();
   @Output() saved = new EventEmitter<any>();
@@ -559,6 +576,11 @@ export class InteractionConfigureModalComponent implements OnChanges {
           if (field.default !== undefined && this.config[field.key] === undefined) {
             this.config[field.key] = field.default;
           }
+          
+          // In builder mode, populate builderReadOnly fields from sample data
+          if (this.isBuilderMode && field.builderReadOnly && this.sampleData && this.sampleData[field.key] !== undefined) {
+            this.config[field.key] = this.sampleData[field.key];
+          }
         });
       }
       
@@ -575,6 +597,7 @@ export class InteractionConfigureModalComponent implements OnChanges {
       console.log('[ConfigModal] 📋 Config Schema:', this.configSchema);
       console.log('[ConfigModal] 📊 Sample Data:', this.sampleData);
       console.log('[ConfigModal] ⚙️ Initial Config:', this.config);
+      console.log('[ConfigModal] 🏗️ Builder Mode:', this.isBuilderMode);
     }
   }
 

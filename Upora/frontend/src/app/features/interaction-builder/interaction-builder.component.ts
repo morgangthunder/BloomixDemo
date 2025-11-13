@@ -588,6 +588,7 @@ export class MyPixiInteraction {
         [htmlCode]="currentInteraction?.htmlCode || ''"
         [cssCode]="currentInteraction?.cssCode || ''"
         [jsCode]="currentInteraction?.jsCode || ''"
+        [isBuilderMode]="true"
         (closed)="closeConfigModal()"
         (saved)="saveConfigFromModal($event)">
       </app-interaction-configure-modal>
