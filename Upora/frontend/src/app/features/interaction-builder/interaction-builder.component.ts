@@ -165,7 +165,7 @@ interface ChatMessage {
                 <div class="form-row">
                   <div class="form-group">
                     <label>Interaction ID *</label>
-                    <input type="text" [(ngModel)]="currentInteraction.id" 
+                    <input type="text" [(ngModel)]="currentInteraction!.id" 
                            (ngModelChange)="markChanged()"
                            [disabled]="!isNewInteraction"
                            placeholder="e.g., my-custom-interaction" />
@@ -173,7 +173,7 @@ interface ChatMessage {
                   </div>
                   <div class="form-group">
                     <label>Name *</label>
-                    <input type="text" [(ngModel)]="currentInteraction.name" 
+                    <input type="text" [(ngModel)]="currentInteraction!.name" 
                            (ngModelChange)="markChanged()"
                            placeholder="e.g., Drag and Drop Sorting" />
                   </div>
@@ -181,7 +181,7 @@ interface ChatMessage {
 
                 <div class="form-group">
                   <label>Description *</label>
-                  <textarea [(ngModel)]="currentInteraction.description" 
+                  <textarea [(ngModel)]="currentInteraction!.description" 
                             (ngModelChange)="markChanged()"
                             rows="2"
                             placeholder="Describe what this interaction does"></textarea>
@@ -190,7 +190,7 @@ interface ChatMessage {
                 <div class="form-row">
                   <div class="form-group">
                     <label>Interaction Type *</label>
-                    <select [(ngModel)]="currentInteraction.interactionTypeCategory" 
+                    <select [(ngModel)]="currentInteraction!.interactionTypeCategory" 
                             [disabled]="!isNewInteraction"
                             (ngModelChange)="onTypeChange()">
                       <option value="">Select type...</option>
@@ -202,7 +202,7 @@ interface ChatMessage {
                   </div>
                   <div class="form-group">
                     <label>TEACH Stage Category</label>
-                    <select [(ngModel)]="currentInteraction.category" (ngModelChange)="markChanged()">
+                    <select [(ngModel)]="currentInteraction!.category" (ngModelChange)="markChanged()">
                       <option value="">Optional...</option>
                       <option value="tease-trigger">Tease - Trigger</option>
                       <option value="explore-experiment">Explore - Experiment</option>
@@ -231,7 +231,7 @@ interface ChatMessage {
                 </div>
 
                 <!-- HTML Type Code Editor -->
-                <div *ngIf="currentInteraction.interactionTypeCategory === 'html'" class="html-editor">
+                <div *ngIf="currentInteraction?.interactionTypeCategory === 'html'" class="html-editor">
                   <div class="editor-subtabs">
                     <button [class.active]="activeCodeTab === 'html'" 
                             (click)="activeCodeTab = 'html'">HTML</button>
@@ -243,21 +243,21 @@ interface ChatMessage {
 
                   <div class="code-editor-container">
                     <textarea *ngIf="activeCodeTab === 'html'"
-                              [(ngModel)]="currentInteraction.htmlCode"
+                              [(ngModel)]="currentInteraction!.htmlCode"
                               (ngModelChange)="markChanged()"
                               class="code-textarea"
                               placeholder="<div>Your HTML here</div>"
                               spellcheck="false"></textarea>
 
                     <textarea *ngIf="activeCodeTab === 'css'"
-                              [(ngModel)]="currentInteraction.cssCode"
+                              [(ngModel)]="currentInteraction!.cssCode"
                               (ngModelChange)="markChanged()"
                               class="code-textarea"
                               placeholder=".your-class { color: blue; }"
                               spellcheck="false"></textarea>
 
                     <textarea *ngIf="activeCodeTab === 'js'"
-                              [(ngModel)]="currentInteraction.jsCode"
+                              [(ngModel)]="currentInteraction!.jsCode"
                               (ngModelChange)="markChanged()"
                               class="code-textarea"
                               placeholder="// Your JavaScript code"
@@ -266,12 +266,12 @@ interface ChatMessage {
                 </div>
 
                 <!-- PixiJS Type Code Editor -->
-                <div *ngIf="currentInteraction.interactionTypeCategory === 'pixijs'" class="pixijs-editor">
+                <div *ngIf="currentInteraction?.interactionTypeCategory === 'pixijs'" class="pixijs-editor">
                   <p class="editor-note">
                     💡 For PixiJS interactions, write a single TypeScript/JavaScript file that exports your interaction.
                   </p>
                   <div class="code-editor-container">
-                    <textarea [(ngModel)]="currentInteraction.jsCode"
+                    <textarea [(ngModel)]="currentInteraction!.jsCode"
                               (ngModelChange)="markChanged()"
                               class="code-textarea"
                               placeholder="// PixiJS TypeScript code
@@ -287,11 +287,11 @@ export class MyPixiInteraction {
                 </div>
 
                 <!-- iFrame Type Configuration -->
-                <div *ngIf="currentInteraction.interactionTypeCategory === 'iframe'" class="iframe-config">
+                <div *ngIf="currentInteraction?.interactionTypeCategory === 'iframe'" class="iframe-config">
                   <div class="form-group">
                     <label>iFrame URL *</label>
                     <input type="url" 
-                           [(ngModel)]="currentInteraction.iframeUrl"
+                           [(ngModel)]="currentInteraction!.iframeUrl"
                            (ngModelChange)="markChanged()"
                            placeholder="https://example.com/embed" />
                     <small class="hint">The URL to embed in an iframe</small>
@@ -309,7 +309,7 @@ export class MyPixiInteraction {
                   </div>
                 </div>
 
-                <div *ngIf="!currentInteraction.interactionTypeCategory" class="no-type-selected">
+                <div *ngIf="!currentInteraction?.interactionTypeCategory" class="no-type-selected">
                   <p>⚠️ Please select an interaction type in the Settings tab first.</p>
                 </div>
 
@@ -480,10 +480,10 @@ export class MyPixiInteraction {
                     <div class="placeholder-content">
                       <span class="placeholder-icon">👁️</span>
                       <h4>No Preview Available</h4>
-                      <p *ngIf="!currentInteraction.sampleData">Add sample data in the "Sample Data" tab to see a preview.</p>
-                      <p *ngIf="!currentInteraction.interactionTypeCategory">Select an interaction type in Settings.</p>
-                      <p *ngIf="currentInteraction.interactionTypeCategory === 'html' && !currentInteraction.htmlCode">Add HTML code in the Code tab.</p>
-                      <p *ngIf="currentInteraction.interactionTypeCategory === 'iframe' && !currentInteraction.iframeUrl">Add an iframe URL in the Code tab.</p>
+                      <p *ngIf="!currentInteraction?.sampleData">Add sample data in the "Sample Data" tab to see a preview.</p>
+                      <p *ngIf="!currentInteraction?.interactionTypeCategory">Select an interaction type in Settings.</p>
+                      <p *ngIf="currentInteraction?.interactionTypeCategory === 'html' && !currentInteraction?.htmlCode">Add HTML code in the Code tab.</p>
+                      <p *ngIf="currentInteraction?.interactionTypeCategory === 'iframe' && !currentInteraction?.iframeUrl">Add an iframe URL in the Code tab.</p>
                     </div>
                   </div>
                 </div>
