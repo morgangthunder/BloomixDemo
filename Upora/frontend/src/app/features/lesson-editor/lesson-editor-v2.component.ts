@@ -62,8 +62,8 @@ interface ProcessedContentOutput {
   workflowName: string;
 }
 
-        // VERSION CHECK: This component should show "VERSION 5.0.1" in console logs
-        const LESSON_EDITOR_VERSION = '5.0.1';
+        // VERSION CHECK: This component should show "VERSION 5.0.2" in console logs
+        const LESSON_EDITOR_VERSION = '5.0.2';
         const LESSON_EDITOR_VERSION_CHECK_MESSAGE = `🚀 LESSON EDITOR COMPONENT VERSION ${LESSON_EDITOR_VERSION} LOADED - ${new Date().toISOString()} - CACHE BUST ID: ${Math.random().toString(36).substr(2, 9)}`;
 
 @Component({
@@ -455,9 +455,6 @@ interface ProcessedContentOutput {
                             <button *ngIf="getSelectedSubStage()?.interaction" (click)="configureInteraction()" class="btn-small btn-primary">⚙️ Configure</button>
                             <button (click)="changeInteractionType()" class="btn-small">Change</button>
                           </div>
-                        </div>
-                        <div *ngIf="block.metadata?.interactionConfig" class="interaction-preview">
-                          <small>Fragments: {{block.metadata.interactionConfig.fragments?.length || 0}}</small>
                         </div>
                       </div>
                     </div>
