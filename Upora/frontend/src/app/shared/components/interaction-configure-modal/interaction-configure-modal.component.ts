@@ -530,18 +530,34 @@ export class InteractionConfigureModalComponent implements OnChanges {
   }
 
   hidePageElements() {
-    const header = document.querySelector('.builder-header, .editor-header');
+    // Hide the main app header (navigation)
+    const header = document.querySelector('app-header');
     if (header) {
       (header as HTMLElement).style.display = 'none';
     }
+    
+    // Also hide any page-specific headers
+    const builderHeader = document.querySelector('.builder-header, .editor-header');
+    if (builderHeader) {
+      (builderHeader as HTMLElement).style.display = 'none';
+    }
+    
     document.body.style.overflow = 'hidden';
   }
 
   restorePageElements() {
-    const header = document.querySelector('.builder-header, .editor-header');
+    // Show the main app header (navigation)
+    const header = document.querySelector('app-header');
     if (header) {
-      (header as HTMLElement).style.display = 'flex';
+      (header as HTMLElement).style.display = '';
     }
+    
+    // Restore page-specific headers
+    const builderHeader = document.querySelector('.builder-header, .editor-header');
+    if (builderHeader) {
+      (builderHeader as HTMLElement).style.display = 'flex';
+    }
+    
     document.body.style.overflow = 'auto';
   }
 
