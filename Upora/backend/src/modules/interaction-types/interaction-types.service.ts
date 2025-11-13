@@ -128,7 +128,9 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this structure:
 
   async create(dto: any): Promise<InteractionType> {
     const interactionType = this.interactionTypeRepository.create(dto);
-    return this.interactionTypeRepository.save(interactionType);
+    const saved = await this.interactionTypeRepository.save(interactionType);
+    // TypeORM save can return array or single entity, ensure we return single
+    return Array.isArray(saved) ? saved[0] : saved;
   }
 
   async update(id: string, dto: any): Promise<InteractionType> {
