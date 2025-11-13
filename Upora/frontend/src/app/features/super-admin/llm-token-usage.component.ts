@@ -153,12 +153,29 @@ interface LlmProvider {
             (saved)="onProviderSaved($event)"
           ></app-llm-provider-config-modal>
 
-          <!-- Accounts Table -->
-          <div class="accounts-section">
-            <div class="section-header">
-              <h2>Account Usage Breakdown</h2>
-              <div class="account-count">{{ data.accounts.length }} accounts</div>
+          <!-- Breakdown Tabs -->
+          <div class="breakdown-section">
+            <div class="breakdown-tabs">
+              <button 
+                class="breakdown-tab"
+                [class.active]="activeTab === 'accounts'"
+                (click)="activeTab = 'accounts'">
+                👤 Account Usage Breakdown
+              </button>
+              <button 
+                class="breakdown-tab"
+                [class.active]="activeTab === 'assistants'"
+                (click)="activeTab = 'assistants'">
+                🤖 AI Assistant Breakdown
+              </button>
             </div>
+
+            <!-- Account Usage Tab -->
+            <div *ngIf="activeTab === 'accounts'" class="tab-content-breakdown">
+              <div class="section-header">
+                <h2>Account Usage Breakdown</h2>
+                <div class="account-count">{{ data.accounts.length }} accounts</div>
+              </div>
 
             <div class="table-container">
               <table class="usage-table">
@@ -251,6 +268,65 @@ interface LlmProvider {
                   </tr>
                 </tbody>
               </table>
+            </div>
+            </div>
+
+            <!-- AI Assistant Breakdown Tab -->
+            <div *ngIf="activeTab === 'assistants'" class="tab-content-breakdown">
+              <div class="section-header">
+                <h2>AI Assistant Breakdown</h2>
+                <p class="subtitle">Token usage by AI assistant type</p>
+              </div>
+
+              <div class="assistant-cards">
+                <div class="assistant-card">
+                  <div class="assistant-icon">🔧</div>
+                  <div class="assistant-info">
+                    <h3>Inventor</h3>
+                    <p>Interaction Builder Assistant</p>
+                  </div>
+                  <div class="assistant-stats">
+                    <div class="stat-value">Coming Soon</div>
+                    <div class="stat-label">Total Tokens</div>
+                  </div>
+                </div>
+
+                <div class="assistant-card">
+                  <div class="assistant-icon">🤖</div>
+                  <div class="assistant-info">
+                    <h3>AI Teacher</h3>
+                    <p>Lesson Runtime Assistant</p>
+                  </div>
+                  <div class="assistant-stats">
+                    <div class="stat-value">Coming Soon</div>
+                    <div class="stat-label">Total Tokens</div>
+                  </div>
+                </div>
+
+                <div class="assistant-card">
+                  <div class="assistant-icon">📊</div>
+                  <div class="assistant-info">
+                    <h3>Content Analyzer</h3>
+                    <p>Content Processing Assistant</p>
+                  </div>
+                  <div class="assistant-stats">
+                    <div class="stat-value">Coming Soon</div>
+                    <div class="stat-label">Total Tokens</div>
+                  </div>
+                </div>
+
+                <div class="assistant-card">
+                  <div class="assistant-icon">✨</div>
+                  <div class="assistant-info">
+                    <h3>Auto-Populator</h3>
+                    <p>Auto-fill Assistant</p>
+                  </div>
+                  <div class="assistant-stats">
+                    <div class="stat-value">Coming Soon</div>
+                    <div class="stat-label">Total Tokens</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -780,6 +856,117 @@ interface LlmProvider {
       background: rgba(255, 152, 0, 0.1);
     }
 
+    /* Breakdown Tabs */
+    .breakdown-section {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 0;
+      margin-top: 2rem;
+      overflow: hidden;
+    }
+
+    .breakdown-tabs {
+      display: flex;
+      gap: 0;
+      background: rgba(0, 0, 0, 0.3);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .breakdown-tab {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: rgba(255, 255, 255, 0.6);
+      padding: 1rem 1.5rem;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 1rem;
+      border-bottom: 3px solid transparent;
+      transition: all 0.2s;
+    }
+
+    .breakdown-tab:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: rgba(255, 255, 255, 0.9);
+    }
+
+    .breakdown-tab.active {
+      color: #00d4ff;
+      border-bottom-color: #00d4ff;
+      background: rgba(0, 212, 255, 0.05);
+    }
+
+    .tab-content-breakdown {
+      padding: 2rem;
+    }
+
+    /* Assistant Cards */
+    .assistant-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+      margin-top: 1.5rem;
+    }
+
+    .assistant-card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      transition: all 0.2s;
+    }
+
+    .assistant-card:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(0, 212, 255, 0.3);
+      transform: translateY(-2px);
+    }
+
+    .assistant-icon {
+      font-size: 2.5rem;
+      text-align: center;
+    }
+
+    .assistant-info {
+      text-align: center;
+    }
+
+    .assistant-info h3 {
+      margin: 0 0 0.5rem 0;
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #ffffff;
+    }
+
+    .assistant-info p {
+      margin: 0;
+      font-size: 0.875rem;
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .assistant-stats {
+      text-align: center;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #00d4ff;
+      margin-bottom: 0.25rem;
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.5);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
     /* Category Section */
     .category-section {
       background: rgba(255, 255, 255, 0.03);
@@ -864,6 +1051,13 @@ export class LlmTokenUsageComponent implements OnInit {
   editingProvider: LlmProvider | null = null;
   refreshing = false;
   lastUpdated: Date | null = null;
+  
+  // Tab state
+  activeTab: 'accounts' | 'assistants' = 'accounts';
+  
+  // Assistant breakdown expandable rows
+  expandedAccountId: string | null = null;
+  assistantBreakdownData: Map<string, any[]> = new Map();
 
   constructor(
     private http: HttpClient,

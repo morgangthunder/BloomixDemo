@@ -539,7 +539,8 @@ export class MyPixiInteraction {
 
           <div class="chat-history" #aiChatHistory>
             <div *ngIf="aiMessages.length === 0" class="no-messages">
-              <span class="muted-text">Ask me anything about building interactions!</span>
+              <span *ngIf="!currentInteraction" class="muted-text warning-text">⚠️ An interaction must be selected to use this assistant</span>
+              <span *ngIf="currentInteraction" class="muted-text">Ask me anything about building {{getTypeLabel(currentInteraction?.interactionTypeCategory)}} interactions!</span>
             </div>
             <div *ngFor="let msg of aiMessages" 
                  [class.user-message]="msg.role === 'user'"
@@ -564,9 +565,10 @@ export class MyPixiInteraction {
             <textarea 
               [(ngModel)]="aiInput"
               (keydown.enter)="onAiEnter($any($event))"
-              placeholder="Ask about HTML, PixiJS, config schemas..."
+              [placeholder]="currentInteraction ? 'Ask about ' + getTypeLabel(currentInteraction?.interactionTypeCategory) + ' interactions...' : 'Select an interaction first...'"
+              [disabled]="!currentInteraction"
               rows="2"></textarea>
-            <button (click)="sendAiMessage()" [disabled]="!aiInput.trim() || aiTyping" class="send-btn">
+            <button (click)="sendAiMessage()" [disabled]="!currentInteraction || !aiInput.trim() || aiTyping" class="send-btn">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
                 <path d="M2 10l16-8-8 16-2-8-6-0z"/>
               </svg>
@@ -1422,6 +1424,11 @@ export class MyPixiInteraction {
       padding: 2rem 1rem;
       color: #666;
       font-size: 0.875rem;
+    }
+
+    .warning-text {
+      color: #ffc107 !important;
+      font-weight: 500;
     }
 
     .message {
@@ -2437,9 +2444,21 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     }
   }
 
+  getAssistantPromptKey(): string {
+    if (!this.currentInteraction) return 'general';
+    
+    const category = this.currentInteraction.interactionTypeCategory;
+    switch (category) {
+      case 'html': return 'html-interaction';
+      case 'pixijs': return 'pixijs-interaction';
+      case 'iframe': return 'iframe-interaction';
+      default: return 'general';
+    }
+  }
+
   sendAiMessage() {
     const message = this.aiInput.trim();
-    if (!message || this.aiTyping) return;
+    if (!message || this.aiTyping || !this.currentInteraction) return;
 
     this.aiMessages.push({
       role: 'user',
@@ -2457,8 +2476,12 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
       }
     }, 100);
 
-    // TODO: Call actual AI API (Grok)
-    // For now, placeholder response
+    // Get the appropriate prompt for this interaction type
+    const promptKey = this.getAssistantPromptKey();
+    console.log('[AI] 🤖 Using prompt key:', promptKey);
+
+    // TODO: Call actual AI API (Grok) with the appropriate prompt
+    // For now, use improved placeholder response based on interaction type
     setTimeout(() => {
       this.aiMessages.push({
         role: 'assistant',
