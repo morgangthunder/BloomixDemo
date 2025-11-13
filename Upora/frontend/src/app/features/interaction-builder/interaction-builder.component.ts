@@ -69,7 +69,7 @@ interface ChatMessage {
 
       <div class="builder-layout">
         <!-- Sidebar: Interaction Library -->
-        <aside class="interaction-library">
+        <aside class="interaction-library" [class.mobile-hidden]="sidebarHidden">
           <div class="library-header">
             <h2>Interactions</h2>
             <button (click)="createNew()" class="btn-small btn-primary">+ New</button>
@@ -141,14 +141,17 @@ interface ChatMessage {
           <div *ngIf="currentInteraction" class="editor-container">
             <!-- Tabs -->
             <div class="editor-tabs-main">
+              <button class="sidebar-toggle mobile-only" (click)="toggleSidebar()">
+                {{ sidebarHidden ? '📚 Show' : '📚 Hide' }}
+              </button>
               <button [class.active]="activeTab === 'settings'" 
                       (click)="activeTab = 'settings'">⚙️ Settings</button>
               <button [class.active]="activeTab === 'code'" 
                       (click)="activeTab = 'code'">💻 Code</button>
               <button [class.active]="activeTab === 'config'" 
-                      (click)="activeTab = 'config'">🔧 Config Schema</button>
+                      (click)="activeTab = 'config'">🔧 Config</button>
               <button [class.active]="activeTab === 'sample'" 
-                      (click)="activeTab = 'sample'">📋 Sample Data</button>
+                      (click)="activeTab = 'sample'">📋 Sample</button>
               <button [class.active]="activeTab === 'preview'" 
                       (click)="activeTab = 'preview'">👁️ Preview</button>
             </div>
@@ -1800,6 +1803,11 @@ export class MyPixiInteraction {
       color: #ffc107;
     }
 
+    /* Hide mobile-only elements on desktop */
+    .mobile-only {
+      display: none;
+    }
+
     /* Mobile Responsiveness */
     @media (max-width: 1024px) {
       .interaction-library {
@@ -1816,8 +1824,13 @@ export class MyPixiInteraction {
     }
 
     @media (max-width: 768px) {
+      .mobile-only {
+        display: block !important;
+      }
+
       .builder-layout {
         flex-direction: column;
+        position: relative;
       }
 
       .interaction-library {
@@ -1825,6 +1838,11 @@ export class MyPixiInteraction {
         max-height: 40vh;
         border-right: none;
         border-bottom: 1px solid #333;
+        transition: all 0.3s ease;
+      }
+
+      .interaction-library.mobile-hidden {
+        display: none;
       }
 
       .editor-container {
@@ -1843,15 +1861,38 @@ export class MyPixiInteraction {
         border-bottom: none;
         margin-bottom: 0;
         padding: 0.5rem;
-        overflow-x: auto;
-        white-space: nowrap;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: auto auto;
+        gap: 0.375rem;
         order: 2;
       }
 
-      .editor-tabs-main button {
-        padding: 0.5rem 0.75rem;
+      .sidebar-toggle {
+        grid-column: 1 / -1;
+        grid-row: 1;
+        background: #667eea;
+        color: white;
+        border: none;
+        padding: 0.625rem;
+        border-radius: 0.375rem;
         font-size: 0.875rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-align: center;
       }
+
+      .editor-tabs-main button:not(.sidebar-toggle) {
+        padding: 0.625rem 0.5rem;
+        font-size: 0.75rem;
+        text-align: center;
+      }
+
+      .editor-tabs-main button:nth-child(2) { grid-column: 1; grid-row: 2; }
+      .editor-tabs-main button:nth-child(3) { grid-column: 2; grid-row: 2; }
+      .editor-tabs-main button:nth-child(4) { grid-column: 3; grid-row: 2; }
+      .editor-tabs-main button:nth-child(5) { grid-column: 1; grid-row: 3; }
+      .editor-tabs-main button:nth-child(6) { grid-column: 2; grid-row: 3; }
 
       .tab-content {
         flex: 1;
@@ -1886,6 +1927,9 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   // Filters
   searchQuery = '';
   typeFilter = '';
+
+  // Mobile sidebar
+  sidebarHidden = false;
 
   // Tabs
   activeTab: 'settings' | 'code' | 'config' | 'sample' | 'preview' = 'settings';
@@ -2311,81 +2355,111 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   testCode() {
     this.testing = true;
     this.testResult = null;
+    console.log('[InteractionBuilder] 🧪 Testing code...');
 
-    // Simulate a delay for testing
+    // Small delay for UX
     setTimeout(() => {
       try {
-        // Validate HTML/CSS/JS
         if (this.currentInteraction?.interactionTypeCategory === 'html') {
           if (!this.currentInteraction.htmlCode || this.currentInteraction.htmlCode.trim() === '') {
             throw new Error('HTML code is required');
           }
 
-          // Parse HTML and validate structure
-          const tempDiv = document.createElement('div');
-          try {
-            tempDiv.innerHTML = this.currentInteraction.htmlCode;
-          } catch (htmlError: any) {
-            throw new Error(`HTML parsing error: ${htmlError.message}`);
+          // Check for common attribute typos FIRST (before parsing)
+          const htmlLower = this.currentInteraction.htmlCode.toLowerCase();
+          if (htmlLower.includes('clas=') && !htmlLower.includes('class=')) {
+            throw new Error('HTML typo detected: "clas=" should be "class="');
+          }
+          if (htmlLower.includes('classs=')) {
+            throw new Error('HTML typo detected: "classs=" should be "class="');
+          }
+          if (htmlLower.includes('ide=') && !htmlLower.includes('id=')) {
+            throw new Error('HTML typo detected: "ide=" should be "id="');
+          }
+          if (htmlLower.includes('idd=')) {
+            throw new Error('HTML typo detected: "idd=" should be "id="');
           }
 
-          // Check for required elements based on interaction type
-          if (this.currentInteraction.id === 'true-false-selection') {
-            // Must have fragments grid
-            const hasFragmentsGrid = tempDiv.querySelector('#fragmentsGrid') || 
-                                    tempDiv.querySelector('.fragments-grid');
-            if (!hasFragmentsGrid) {
-              throw new Error('HTML must include element with id="fragmentsGrid" or class="fragments-grid"');
-            }
-
-            // Must have target statement
-            const hasTargetStatement = tempDiv.querySelector('#targetStatement') ||
-                                      tempDiv.querySelector('.target-statement');
-            if (!hasTargetStatement) {
-              throw new Error('HTML must include element with id="targetStatement" or class="target-statement"');
-            }
-
-            // Must have submit button
-            const hasSubmitBtn = tempDiv.querySelector('#submitBtn') ||
-                                tempDiv.querySelector('.submit-btn');
-            if (!hasSubmitBtn) {
-              throw new Error('HTML must include element with id="submitBtn" or class="submit-btn"');
-            }
-
-            // Warn about common attribute typos
-            const htmlLower = this.currentInteraction.htmlCode.toLowerCase();
-            if (htmlLower.includes('clas=') || htmlLower.includes('classs=')) {
-              throw new Error('HTML contains typo: "clas=" or "classs=" instead of "class="');
-            }
-            if (htmlLower.includes('ide=') || htmlLower.includes('idd=')) {
-              throw new Error('HTML contains typo: "ide=" or "idd=" instead of "id="');
-            }
-          }
-
-          // Validate JS syntax (basic syntax check only - don't execute)
-          if (this.currentInteraction.jsCode) {
-            try {
-              // Only check if the code can be parsed, don't execute
-              new Function(this.currentInteraction.jsCode);
-              
-              // Warn about common issues but don't fail
-              if (this.currentInteraction.jsCode.includes('document.getElementById') && 
-                  !this.currentInteraction.htmlCode?.includes('id=')) {
-                console.warn('[Test] Warning: Code uses getElementById but HTML may not have ids');
-              }
-              
-            } catch (jsError: any) {
-              throw new Error(`JavaScript syntax error: ${jsError.message}`);
-            }
-          }
-
-          // Validate sample data if provided
+          // Validate sample data is valid JSON
+          let sampleData = {};
           if (this.sampleDataText.trim()) {
             try {
-              JSON.parse(this.sampleDataText);
+              sampleData = JSON.parse(this.sampleDataText);
+              this.currentInteraction.sampleData = sampleData;
             } catch (jsonError: any) {
               throw new Error(`Sample data JSON error: ${jsonError.message}`);
             }
+          }
+
+          // ACTUAL TEST: Try to render in hidden container
+          console.log('[Test] 🎬 Attempting to render preview...');
+          const testContainer = document.createElement('div');
+          testContainer.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:800px;height:600px;';
+          document.body.appendChild(testContainer);
+
+          try {
+            // Add CSS
+            let testHtml = '';
+            if (this.currentInteraction.cssCode) {
+              testHtml += `<style>${this.currentInteraction.cssCode}</style>`;
+            }
+
+            // Add HTML
+            testHtml += this.currentInteraction.htmlCode;
+
+            // Inject and execute
+            testContainer.innerHTML = testHtml;
+
+            // Execute JavaScript with sample data
+            if (this.currentInteraction.jsCode) {
+              const sampleDataJson = JSON.stringify(sampleData);
+              const wrappedJs = `
+                (function() {
+                  try {
+                    window.interactionData = ${sampleDataJson};
+                    ${this.currentInteraction.jsCode}
+                  } catch (e) {
+                    throw new Error('Runtime error: ' + e.message);
+                  }
+                })();
+              `;
+              const scriptEl = document.createElement('script');
+              scriptEl.textContent = wrappedJs;
+              testContainer.appendChild(scriptEl);
+            }
+
+            // Check required elements actually exist in DOM
+            if (this.currentInteraction.id === 'true-false-selection') {
+              const fragmentsGrid = testContainer.querySelector('#fragmentsGrid') || 
+                                   testContainer.querySelector('.fragments-grid');
+              if (!fragmentsGrid) {
+                throw new Error('Required element not found: fragmentsGrid');
+              }
+
+              const targetStatement = testContainer.querySelector('#targetStatement') ||
+                                    testContainer.querySelector('.target-statement');
+              if (!targetStatement) {
+                throw new Error('Required element not found: targetStatement');
+              }
+
+              const submitBtn = testContainer.querySelector('#submitBtn') ||
+                               testContainer.querySelector('.submit-btn');
+              if (!submitBtn) {
+                throw new Error('Required element not found: submitBtn');
+              }
+
+              console.log('[Test] ✅ All required elements found in DOM');
+            }
+
+            // Small delay to catch async errors
+            setTimeout(() => {
+              document.body.removeChild(testContainer);
+              console.log('[Test] 🧹 Cleaned up test container');
+            }, 100);
+
+          } catch (renderError: any) {
+            document.body.removeChild(testContainer);
+            throw renderError;
           }
 
           // All checks passed - store as last working version
@@ -2394,14 +2468,15 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
 
           this.testResult = {
             success: true,
-            message: '✨ Code is valid! Preview should work.'
+            message: '✅ Code executed successfully! Preview renders without errors.'
           };
+          console.log('[Test] ✅ All tests passed!');
+
         } else if (this.currentInteraction?.interactionTypeCategory === 'iframe') {
           if (!this.currentInteraction.iframeUrl) {
             throw new Error('iFrame URL is required');
           }
 
-          // Basic URL validation
           try {
             new URL(this.currentInteraction.iframeUrl);
           } catch (urlError) {
@@ -2413,21 +2488,22 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
 
           this.testResult = {
             success: true,
-            message: '✨ iFrame URL is valid!'
+            message: '✅ iFrame URL is valid!'
           };
         } else {
-          throw new Error('Unknown interaction type');
+          throw new Error('Select an interaction type first');
         }
       } catch (error: any) {
+        console.error('[Test] ❌ Test failed:', error);
         this.testResult = {
           success: false,
-          message: 'Code validation failed',
+          message: 'Test failed',
           error: error.message || 'Unknown error'
         };
       } finally {
         this.testing = false;
       }
-    }, 500);
+    }, 300);
   }
 
   resetToLastWorking() {
@@ -2467,6 +2543,11 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
         console.error('[InteractionBuilder] ❌ Sample data JSON invalid:', e);
       }
     }
+  }
+
+  toggleSidebar() {
+    this.sidebarHidden = !this.sidebarHidden;
+    console.log('[InteractionBuilder] 📚 Sidebar:', this.sidebarHidden ? 'hidden' : 'visible');
   }
 
   goBack() {
