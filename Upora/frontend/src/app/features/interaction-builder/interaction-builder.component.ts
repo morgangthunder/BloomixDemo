@@ -137,7 +137,7 @@ interface ChatMessage {
             <!-- Tabs -->
             <div class="editor-tabs-main">
               <button class="sidebar-toggle mobile-only" (click)="toggleSidebar()">
-                {{ sidebarHidden ? '📚 Show' : '📚 Hide' }}
+                {{ sidebarHidden ? '📚 Interactions' : '📚 Hide' }}
               </button>
               <button [class.active]="activeTab === 'settings'" 
                       (click)="switchTab('settings')">⚙️ Settings</button>
