@@ -1829,26 +1829,40 @@ export class MyPixiInteraction {
       }
 
       .builder-layout {
-        flex-direction: column;
         position: relative;
+        flex-direction: row;
       }
 
       .interaction-library {
-        width: 100%;
-        max-height: 40vh;
-        border-right: none;
-        border-bottom: 1px solid #333;
-        transition: all 0.3s ease;
+        position: fixed;
+        left: 0;
+        top: 64px;
+        bottom: 0;
+        width: 80%;
+        max-width: 320px;
+        height: auto;
+        max-height: none;
+        border-right: 1px solid #333;
+        border-bottom: none;
+        z-index: 200;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+        box-shadow: 2px 0 8px rgba(0, 0, 0, 0.3);
       }
 
-      .interaction-library.mobile-hidden {
-        display: none;
+      .interaction-library:not(.mobile-hidden) {
+        transform: translateX(0);
+      }
+
+      .builder-main {
+        width: 100%;
+        margin-left: 0;
       }
 
       .editor-container {
         display: flex;
         flex-direction: column;
-        height: calc(100vh - 60px - 40vh);
+        height: calc(100vh - 64px);
         padding: 0;
       }
 
@@ -1862,37 +1876,39 @@ export class MyPixiInteraction {
         margin-bottom: 0;
         padding: 0.5rem;
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: 1fr 1fr 1fr auto;
         grid-template-rows: auto auto;
         gap: 0.375rem;
         order: 2;
       }
 
       .sidebar-toggle {
-        grid-column: 1 / -1;
-        grid-row: 1;
+        grid-column: 4;
+        grid-row: 1 / 3;
         background: #667eea;
         color: white;
         border: none;
-        padding: 0.625rem;
+        padding: 0.5rem;
         border-radius: 0.375rem;
-        font-size: 0.875rem;
+        font-size: 0.75rem;
         font-weight: 600;
         cursor: pointer;
-        text-align: center;
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+        min-width: 40px;
       }
 
       .editor-tabs-main button:not(.sidebar-toggle) {
-        padding: 0.625rem 0.5rem;
-        font-size: 0.75rem;
+        padding: 0.625rem 0.25rem;
+        font-size: 0.7rem;
         text-align: center;
       }
 
-      .editor-tabs-main button:nth-child(2) { grid-column: 1; grid-row: 2; }
-      .editor-tabs-main button:nth-child(3) { grid-column: 2; grid-row: 2; }
-      .editor-tabs-main button:nth-child(4) { grid-column: 3; grid-row: 2; }
-      .editor-tabs-main button:nth-child(5) { grid-column: 1; grid-row: 3; }
-      .editor-tabs-main button:nth-child(6) { grid-column: 2; grid-row: 3; }
+      .editor-tabs-main button:nth-child(2) { grid-column: 1; grid-row: 1; }
+      .editor-tabs-main button:nth-child(3) { grid-column: 2; grid-row: 1; }
+      .editor-tabs-main button:nth-child(4) { grid-column: 3; grid-row: 1; }
+      .editor-tabs-main button:nth-child(5) { grid-column: 1; grid-row: 2; }
+      .editor-tabs-main button:nth-child(6) { grid-column: 2; grid-row: 2; }
 
       .tab-content {
         flex: 1;
@@ -1974,6 +1990,11 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.loadInteractions();
+    
+    // Start with sidebar hidden on mobile
+    if (window.innerWidth <= 768) {
+      this.sidebarHidden = true;
+    }
   }
 
   ngOnDestroy() {
@@ -2227,7 +2248,16 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   }
 
   getHtmlPreview(): SafeHtml {
-    if (!this.currentInteraction) return '';
+    if (!this.currentInteraction) {
+      console.log('[Preview] ⚠️ No current interaction');
+      return '';
+    }
+    
+    console.log('[Preview] 🎬 Generating HTML preview...');
+    console.log('[Preview] Has HTML:', !!this.currentInteraction.htmlCode);
+    console.log('[Preview] Has CSS:', !!this.currentInteraction.cssCode);
+    console.log('[Preview] Has JS:', !!this.currentInteraction.jsCode);
+    console.log('[Preview] Has Sample Data:', !!this.currentInteraction.sampleData);
     
     let html = '';
     
@@ -2243,12 +2273,17 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     if (this.currentInteraction.jsCode) {
       const sampleDataJson = this.currentInteraction.sampleData ? 
         JSON.stringify(this.currentInteraction.sampleData) : '{}';
+      console.log('[Preview] 📋 Sample data being injected:', sampleDataJson.substring(0, 100) + '...');
       html += `<script>
+        console.log('[Interaction Preview] 🎯 Loading with data:', window.interactionData);
         window.interactionData = ${sampleDataJson};
+        console.log('[Interaction Preview] 📋 Sample data set:', window.interactionData);
         ${this.currentInteraction.jsCode}
+        console.log('[Interaction Preview] ✅ JavaScript executed');
       </script>`;
     }
     
+    console.log('[Preview] ✅ HTML preview generated, length:', html.length);
     return this.sanitizer.bypassSecurityTrustHtml(html);
   }
 
@@ -2272,11 +2307,26 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     this.configModalTab = 'configure';
     this.showingConfigModal = true;
     this.refreshPreview(); // Ensure preview is fresh
+    
+    // Hide header like in lesson-editor
+    const header = document.querySelector('.builder-header');
+    if (header) {
+      (header as HTMLElement).style.display = 'none';
+    }
+    document.body.style.overflow = 'hidden';
+    
     console.log('[InteractionBuilder] 👁️ Opening config modal');
   }
 
   closeConfigModal() {
     this.showingConfigModal = false;
+    
+    // Restore header
+    const header = document.querySelector('.builder-header');
+    if (header) {
+      (header as HTMLElement).style.display = 'flex';
+    }
+    document.body.style.overflow = 'auto';
   }
 
   // AI Assistant methods
@@ -2366,18 +2416,21 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
           }
 
           // Check for common attribute typos FIRST (before parsing)
-          const htmlLower = this.currentInteraction.htmlCode.toLowerCase();
-          if (htmlLower.includes('clas=') && !htmlLower.includes('class=')) {
-            throw new Error('HTML typo detected: "clas=" should be "class="');
-          }
-          if (htmlLower.includes('classs=')) {
-            throw new Error('HTML typo detected: "classs=" should be "class="');
-          }
-          if (htmlLower.includes('ide=') && !htmlLower.includes('id=')) {
-            throw new Error('HTML typo detected: "ide=" should be "id="');
-          }
-          if (htmlLower.includes('idd=')) {
-            throw new Error('HTML typo detected: "idd=" should be "id="');
+          const htmlCode = this.currentInteraction.htmlCode;
+          const typoPatterns = [
+            { pattern: /\bclas=/gi, error: 'HTML typo: "clas=" should be "class="' },
+            { pattern: /\bclasss=/gi, error: 'HTML typo: "classs=" should be "class="' },
+            { pattern: /\bcladss=/gi, error: 'HTML typo: "cladss=" should be "class="' },
+            { pattern: /\bclss=/gi, error: 'HTML typo: "clss=" should be "class="' },
+            { pattern: /\bide=/gi, error: 'HTML typo: "ide=" should be "id="' },
+            { pattern: /\bidd=/gi, error: 'HTML typo: "idd=" should be "id="' },
+            { pattern: /\bdiv\s+[^>]*[^c]lass=/gi, error: 'Possible spacing issue in "class=" attribute' }
+          ];
+
+          for (const {pattern, error} of typoPatterns) {
+            if (pattern.test(htmlCode)) {
+              throw new Error(error);
+            }
           }
 
           // Validate sample data is valid JSON
