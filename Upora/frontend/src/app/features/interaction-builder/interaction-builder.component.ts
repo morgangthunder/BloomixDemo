@@ -461,12 +461,20 @@ export class MyPixiInteraction {
                             frameborder="0"></iframe>
                   </div>
 
-                  <!-- PixiJS Preview Placeholder -->
-                  <div *ngIf="currentInteraction?.interactionTypeCategory === 'pixijs'" class="pixijs-preview-placeholder">
+                  <!-- PixiJS Preview (uses same iframe approach as HTML) -->
+                  <div *ngIf="currentInteraction?.interactionTypeCategory === 'pixijs' && currentInteraction?.htmlCode" class="html-preview">
+                    <iframe #previewIframe 
+                            [src]="getHtmlPreviewBlobUrl()" 
+                            style="width: 100%; height: 600px; border: 1px solid #333; border-radius: 0.5rem; background: #1a1a2e;"
+                            frameborder="0"></iframe>
+                  </div>
+
+                  <!-- PixiJS Preview Placeholder (if no code yet) -->
+                  <div *ngIf="currentInteraction?.interactionTypeCategory === 'pixijs' && !currentInteraction?.htmlCode" class="pixijs-preview-placeholder">
                     <div class="placeholder-content">
                       <span class="placeholder-icon">🎮</span>
                       <h4>PixiJS Preview</h4>
-                      <p>Live PixiJS preview coming soon. For now, test in a lesson.</p>
+                      <p>Add HTML/CSS/JS code in the Code tab to see a preview.</p>
                     </div>
                   </div>
 
