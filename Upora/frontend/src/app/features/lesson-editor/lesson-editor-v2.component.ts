@@ -2956,6 +2956,14 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   selectItem(item: {type: 'lesson' | 'stage' | 'substage', id: string, stageId?: string}) {
     this.selectedItem = item;
     console.log('[LessonEditor] 📍 Selected:', item);
+    
+    // Debug: Show the full substage data when selected
+    if (item.type === 'substage') {
+      const substage = this.getSelectedSubStage();
+      console.log('[LessonEditor] 📍 Selected substage data:', substage);
+      console.log('[LessonEditor] 📍 Substage has interaction?', !!substage?.interaction);
+      console.log('[LessonEditor] 📍 Interaction details:', substage?.interaction);
+    }
   }
 
   // Stage Management
