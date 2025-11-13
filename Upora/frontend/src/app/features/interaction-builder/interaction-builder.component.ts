@@ -1825,46 +1825,45 @@ export class MyPixiInteraction {
       .editor-tabs-main {
         position: sticky;
         bottom: 0;
-        z-index: 50;
+        z-index: 500;
         background: #0a0a0a;
         border-top: 1px solid #333;
         border-bottom: none;
         margin-bottom: 0;
         padding: 0.5rem;
         display: grid;
-        grid-template-columns: auto 1fr 1fr 1fr;
+        grid-template-columns: 1fr 1fr 1fr;
         grid-template-rows: auto auto;
         gap: 0.375rem;
         order: 2;
       }
 
       .sidebar-toggle {
-        grid-column: 1;
-        grid-row: 1 / 3;
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
         background: #667eea;
         color: white;
         border: none;
-        padding: 0.5rem;
+        padding: 0.5rem 0.75rem;
         border-radius: 0.375rem;
         font-size: 0.7rem;
         font-weight: 600;
         cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        z-index: 10;
       }
 
       .editor-tabs-main button:not(.sidebar-toggle) {
-        padding: 0.5rem 0.375rem;
+        padding: 0.625rem 0.375rem;
         font-size: 0.7rem;
         text-align: center;
       }
 
-      .editor-tabs-main button:nth-child(2) { grid-column: 2; grid-row: 1; }
-      .editor-tabs-main button:nth-child(3) { grid-column: 3; grid-row: 1; }
-      .editor-tabs-main button:nth-child(4) { grid-column: 4; grid-row: 1; }
-      .editor-tabs-main button:nth-child(5) { grid-column: 2; grid-row: 2; }
-      .editor-tabs-main button:nth-child(6) { grid-column: 3; grid-row: 2; }
+      .editor-tabs-main button:nth-child(2) { grid-column: 1; grid-row: 1; }
+      .editor-tabs-main button:nth-child(3) { grid-column: 2; grid-row: 1; }
+      .editor-tabs-main button:nth-child(4) { grid-column: 3; grid-row: 1; }
+      .editor-tabs-main button:nth-child(5) { grid-column: 1; grid-row: 2; }
+      .editor-tabs-main button:nth-child(6) { grid-column: 2; grid-row: 2; }
 
       .tab-content {
         flex: 1;
