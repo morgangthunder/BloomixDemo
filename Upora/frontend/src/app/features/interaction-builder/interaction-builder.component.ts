@@ -450,7 +450,7 @@ export class MyPixiInteraction {
                     <iframe #previewIframe 
                             [attr.srcdoc]="getHtmlPreviewSrcDoc()" 
                             style="width: 100%; height: 600px; border: 1px solid #333; border-radius: 0.5rem; background: #0f0f23;"
-                            sandbox="allow-scripts allow-same-origin"
+                            sandbox="allow-scripts"
                             frameborder="0"></iframe>
                   </div>
 
@@ -1822,8 +1822,10 @@ export class MyPixiInteraction {
       .editor-container {
         display: flex;
         flex-direction: column;
-        height: calc(100vh - 64px);
+        min-height: calc(100vh - 64px);
+        max-height: calc(100vh - 64px);
         padding: 0;
+        overflow: hidden;
       }
 
       .editor-tabs-main {
@@ -2326,6 +2328,10 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     `;
     
     console.log('[Preview] ✅ Complete HTML document generated for iframe');
+    console.log('[Preview] 📄 HTML Document Length:', htmlDoc.length);
+    console.log('[Preview] 📄 First 800 chars:', htmlDoc.substring(0, 800));
+    console.log('[Preview] 📄 Contains <script>:', htmlDoc.includes('<script>'));
+    console.log('[Preview] 📄 Contains window.interactionData:', htmlDoc.includes('window.interactionData'));
     return htmlDoc;
   }
 
