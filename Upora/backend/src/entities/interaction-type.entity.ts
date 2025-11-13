@@ -23,6 +23,24 @@ export class InteractionType {
   @Column('varchar', { name: 'pixi_renderer', nullable: true })
   pixiRenderer: string; // Component name (e.g., 'FragmentBuilderComponent')
 
+  @Column('varchar', { name: 'interaction_type_category', nullable: true })
+  interactionTypeCategory: string; // 'html' | 'pixijs' | 'iframe'
+
+  @Column('text', { name: 'html_code', nullable: true })
+  htmlCode: string; // HTML code for HTML interactions
+
+  @Column('text', { name: 'css_code', nullable: true })
+  cssCode: string; // CSS code for HTML interactions
+
+  @Column('text', { name: 'js_code', nullable: true })
+  jsCode: string; // JavaScript/TypeScript code for HTML/PixiJS interactions
+
+  @Column('varchar', { name: 'iframe_url', nullable: true })
+  iframeUrl: string; // URL for iFrame interactions
+
+  @Column('jsonb', { name: 'iframe_config', nullable: true })
+  iframeConfig: any; // Config for iFrame (width, height, permissions)
+
   @Column('decimal', { name: 'min_confidence', precision: 3, scale: 2, default: 0.7 })
   minConfidence: number; // Minimum confidence threshold for auto-generation
 

@@ -126,6 +126,20 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this structure:
     return this.interactionTypeRepository.findOne({ where: { id } });
   }
 
+  async create(dto: any): Promise<InteractionType> {
+    const interactionType = this.interactionTypeRepository.create(dto);
+    return this.interactionTypeRepository.save(interactionType);
+  }
+
+  async update(id: string, dto: any): Promise<InteractionType> {
+    await this.interactionTypeRepository.update(id, dto);
+    const updated = await this.findOne(id);
+    if (!updated) {
+      throw new Error(`Interaction type ${id} not found`);
+    }
+    return updated;
+  }
+
   async validateOutput(typeId: string, output: any): Promise<boolean> {
     const type = await this.findOne(typeId);
     if (!type) return false;
