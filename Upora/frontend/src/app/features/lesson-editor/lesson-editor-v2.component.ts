@@ -61,8 +61,8 @@ interface ProcessedContentOutput {
   workflowName: string;
 }
 
-        // VERSION CHECK: This component should show "VERSION 4.3.0" in console logs
-        const LESSON_EDITOR_VERSION = '4.3.0';
+        // VERSION CHECK: This component should show "VERSION 4.4.0" in console logs
+        const LESSON_EDITOR_VERSION = '4.4.0';
         const LESSON_EDITOR_VERSION_CHECK_MESSAGE = `🚀 LESSON EDITOR COMPONENT VERSION ${LESSON_EDITOR_VERSION} LOADED - ${new Date().toISOString()} - CACHE BUST ID: ${Math.random().toString(36).substr(2, 9)}`;
 
 @Component({
@@ -2210,7 +2210,7 @@ interface ProcessedContentOutput {
       right: 0;
       bottom: 0;
       background: rgba(0, 0, 0, 0.95);
-      z-index: 9999999;
+      z-index: 99999;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -2490,8 +2490,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   ngOnInit() {
     // VERSION CHECK: This log should always appear when new code is loaded
-    console.log('🔥🔥🔥 LESSON EDITOR VERSION 4.3.0 - INTERACTION OBJECT + API MAPPING 🔥🔥🔥');
-    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 4.3.0');
+    console.log('🔥🔥🔥 LESSON EDITOR VERSION 4.4.0 - MODAL Z-INDEX FIX + DEBUG LOGGING 🔥🔥🔥');
+    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 4.4.0');
     console.log('[LessonEditor] ✅ Parses actual DB JSON with scriptBlocks, scriptBlocksAfterInteraction!');
     console.log('[LessonEditor] ✅ Converts DB format to editor format!');
     console.log('[LessonEditor] ✅ Database-first development - no mock data!');
@@ -2615,10 +2615,12 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       .subscribe({
         next: (lesson: any) => {
           console.log('[LessonEditor] ✅ Lesson loaded:', lesson);
+          console.log('[LessonEditor] 📊 Full lesson.data:', lesson.data);
           this.lesson = lesson;
           
           // Parse the new JSON structure: lesson.data.structure.stages or lesson.data.stages
           const stagesData = lesson.data?.structure?.stages || lesson.data?.stages;
+          console.log('[LessonEditor] 📊 Raw stagesData:', stagesData);
           if (stagesData) {
             console.log('[LessonEditor] 📊 Parsing stages from lesson data');
             this.stages = this.parseStagesFromJSON(stagesData);
