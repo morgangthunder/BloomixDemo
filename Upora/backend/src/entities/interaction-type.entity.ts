@@ -41,6 +41,12 @@ export class InteractionType {
   @Column('jsonb', { name: 'iframe_config', nullable: true })
   iframeConfig: any; // Config for iFrame (width, height, permissions)
 
+  @Column('jsonb', { name: 'config_schema', nullable: true })
+  configSchema: any; // Schema defining what lesson-builders can configure
+
+  @Column('jsonb', { name: 'sample_data', nullable: true })
+  sampleData: any; // Sample data for testing/preview
+
   @Column('decimal', { name: 'min_confidence', precision: 3, scale: 2, default: 0.7 })
   minConfidence: number; // Minimum confidence threshold for auto-generation
 
