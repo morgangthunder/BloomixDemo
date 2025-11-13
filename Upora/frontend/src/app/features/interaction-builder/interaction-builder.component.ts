@@ -337,7 +337,7 @@ export class MyPixiInteraction {
                 </div>
 
                 <div class="config-preview-btn">
-                  <button (click)="showConfigModal()" class="btn-secondary" [disabled]="!currentInteraction.configSchema">
+                  <button (click)="showConfigModal()" class="btn-secondary" [disabled]="!currentInteraction?.configSchema">
                     👁️ Preview Config Modal
                   </button>
                 </div>
@@ -393,21 +393,13 @@ export class MyPixiInteraction {
                 </div>
 
                 <div class="preview-container">
-                  <!-- True/False Selection Preview -->
-                  <div *ngIf="currentInteraction.id === 'true-false-selection' && currentInteraction.sampleData" class="interaction-preview">
-                    <app-true-false-selection 
-                      [data]="currentInteraction.sampleData"
-                      (interactionComplete)="onPreviewComplete($event)">
-                    </app-true-false-selection>
-                  </div>
-
-                  <!-- HTML Preview -->
-                  <div *ngIf="currentInteraction.interactionTypeCategory === 'html' && currentInteraction.htmlCode" class="html-preview">
+                  <!-- HTML Preview (prioritize this for HTML types) -->
+                  <div *ngIf="currentInteraction?.interactionTypeCategory === 'html' && currentInteraction?.htmlCode" class="html-preview">
                     <div [innerHTML]="getHtmlPreview()"></div>
                   </div>
 
                   <!-- iFrame Preview -->
-                  <div *ngIf="currentInteraction.interactionTypeCategory === 'iframe' && currentInteraction.iframeUrl" class="iframe-preview">
+                  <div *ngIf="currentInteraction?.interactionTypeCategory === 'iframe' && currentInteraction?.iframeUrl" class="iframe-preview">
                     <iframe [src]="getSafeIframeUrl()" 
                             [style.width]="getIframeWidth()"
                             [style.height]="getIframeHeight()"
@@ -415,12 +407,20 @@ export class MyPixiInteraction {
                   </div>
 
                   <!-- PixiJS Preview Placeholder -->
-                  <div *ngIf="currentInteraction.interactionTypeCategory === 'pixijs'" class="pixijs-preview-placeholder">
+                  <div *ngIf="currentInteraction?.interactionTypeCategory === 'pixijs'" class="pixijs-preview-placeholder">
                     <div class="placeholder-content">
                       <span class="placeholder-icon">🎮</span>
                       <h4>PixiJS Preview</h4>
                       <p>Live PixiJS preview coming soon. For now, test in a lesson.</p>
                     </div>
+                  </div>
+
+                  <!-- Fallback: Use Angular component for true-false-selection if no HTML code -->
+                  <div *ngIf="currentInteraction?.id === 'true-false-selection' && !currentInteraction?.htmlCode && currentInteraction?.sampleData" class="interaction-preview">
+                    <app-true-false-selection 
+                      [data]="currentInteraction?.sampleData"
+                      (interactionComplete)="onPreviewComplete($event)">
+                    </app-true-false-selection>
                   </div>
 
                   <!-- No Preview Available -->
@@ -529,16 +529,29 @@ export class MyPixiInteraction {
             <div *ngIf="currentInteraction?.sampleData" class="preview-section-modal">
               <h3>Live Preview with Sample Data</h3>
               <div class="modal-preview-container">
-                <!-- True/False Selection Preview -->
-                <div *ngIf="currentInteraction?.id === 'true-false-selection'" class="interaction-preview">
+                <!-- HTML Preview (for HTML types) -->
+                <div *ngIf="currentInteraction?.interactionTypeCategory === 'html' && currentInteraction?.htmlCode" class="html-preview">
+                  <div [innerHTML]="getHtmlPreview()"></div>
+                </div>
+
+                <!-- iFrame Preview -->
+                <div *ngIf="currentInteraction?.interactionTypeCategory === 'iframe' && currentInteraction?.iframeUrl" class="iframe-preview">
+                  <iframe [src]="getSafeIframeUrl()" 
+                          [style.width]="getIframeWidth()"
+                          [style.height]="getIframeHeight()"
+                          frameborder="0"></iframe>
+                </div>
+
+                <!-- Angular Component Fallback (for true-false if no HTML code) -->
+                <div *ngIf="currentInteraction?.id === 'true-false-selection' && !currentInteraction?.htmlCode" class="interaction-preview">
                   <app-true-false-selection 
                     [data]="currentInteraction?.sampleData || {}"
                     (interactionComplete)="onPreviewComplete($event)">
                   </app-true-false-selection>
                 </div>
 
-                <!-- Other interaction types -->
-                <div *ngIf="currentInteraction?.id !== 'true-false-selection'" class="no-preview">
+                <!-- Other/Unknown types -->
+                <div *ngIf="!currentInteraction?.htmlCode && !currentInteraction?.iframeUrl && currentInteraction?.id !== 'true-false-selection'" class="no-preview">
                   <p>Preview not available for this interaction type yet.</p>
                   <div>Sample Data:</div>
                   <pre>{{sampleDataText}}</pre>
@@ -1867,17 +1880,27 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   getHtmlPreview(): SafeHtml {
     if (!this.currentInteraction) return '';
     
-    let html = this.currentInteraction.htmlCode || '';
+    let html = '';
     
+    // Add CSS
     if (this.currentInteraction.cssCode) {
-      html = `<style>${this.currentInteraction.cssCode}</style>` + html;
+      html += `<style>${this.currentInteraction.cssCode}</style>`;
     }
     
+    // Add HTML
+    html += this.currentInteraction.htmlCode || '';
+    
+    // Inject sample data as window variable and add JS
     if (this.currentInteraction.jsCode) {
-      html += `<script>${this.currentInteraction.jsCode}</script>`;
+      const sampleDataJson = this.currentInteraction.sampleData ? 
+        JSON.stringify(this.currentInteraction.sampleData) : '{}';
+      html += `<script>
+        window.interactionData = ${sampleDataJson};
+        ${this.currentInteraction.jsCode}
+      </script>`;
     }
     
-    return this.sanitizer.sanitize(1, html) || ''; // 1 = SecurityContext.HTML
+    return this.sanitizer.bypassSecurityTrustHtml(html);
   }
 
   getSafeIframeUrl(): SafeResourceUrl {
