@@ -1,0 +1,133 @@
+﻿                                                                 js_code                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------
+ // Get config and data\r                                                                                                                +
+ const config = window.interactionConfig || {};\r                                                                                        +
+ const data = window.interactionData || {};\r                                                                                            +
+ \r                                                                                                                                      +
+ console.log("[PixiJS] ?????? Config received:", config);\r                                                                              +
+ console.log("[PixiJS] ???? Data received:", data);\r                                                                                    +
+ \r                                                                                                                                      +
+ // Use config values with fallbacks\r                                                                                                   +
+ const spriteColor = config.spriteColor || 0x00d4ff; // Default cyan\r                                                                   +
+ const spriteSize = config.spriteSize || 50; // Default 50px\r                                                                           +
+ const instructionText = config.instructionText || "Drag the circle!";\r                                                                 +
+ \r                                                                                                                                      +
+ console.log("[PixiJS] ???? Using sprite color:", spriteColor);\r                                                                        +
+ console.log("[PixiJS] ???? Using sprite size:", spriteSize);\r                                                                          +
+ console.log("[PixiJS] ???? Using instruction:", instructionText);\r                                                                     +
+ \r                                                                                                                                      +
+ // Wait for container to be ready\r                                                                                                     +
+ function initPixiWhenReady() {\r                                                                                                        +
+   const container = document.getElementById("pixiContainer");\r                                                                         +
+   if (!container) {\r                                                                                                                   +
+     console.log("[PixiJS] ??? Waiting for container...");\r                                                                             +
+     setTimeout(initPixiWhenReady, 50);\r                                                                                                +
+     return;\r                                                                                                                           +
+   }\r                                                                                                                                   +
+   \r                                                                                                                                    +
+   console.log("[PixiJS] ??? Container ready, initializing...");\r                                                                       +
+   \r                                                                                                                                    +
+   // Load PixiJS from CDN\r                                                                                                             +
+   const script = document.createElement("script");\r                                                                                    +
+   script.src = "https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js";\r                                                    +
+   script.onload = function() {\r                                                                                                        +
+     console.log("[PixiJS] ??? PixiJS library loaded!");\r                                                                               +
+     initPixiApp();\r                                                                                                                    +
+   };\r                                                                                                                                  +
+   script.onerror = function() {\r                                                                                                       +
+     console.error("[PixiJS] ??? Failed to load PixiJS library");\r                                                                      +
+     container.innerHTML = "<p style=\"color: red; padding: 2rem;\">Failed to load PixiJS. Please check your internet connection.</p>";\r+
+   };\r                                                                                                                                  +
+   document.head.appendChild(script);\r                                                                                                  +
+ }\r                                                                                                                                     +
+ \r                                                                                                                                      +
+ function initPixiApp() {\r                                                                                                              +
+   const container = document.getElementById("pixiContainer");\r                                                                         +
+   \r                                                                                                                                    +
+   // Create PixiJS application\r                                                                                                        +
+   const app = new PIXI.Application({\r                                                                                                  +
+     width: 800,\r                                                                                                                       +
+     height: 600,\r                                                                                                                      +
+     backgroundColor: 0x1a1a2e,\r                                                                                                        +
+     antialias: true\r                                                                                                                   +
+   });\r                                                                                                                                 +
+   \r                                                                                                                                    +
+   container.appendChild(app.view);\r                                                                                                    +
+   console.log("[PixiJS] ???? Application created");\r                                                                                   +
+   \r                                                                                                                                    +
+   // Create instruction text\r                                                                                                          +
+   const instruction = new PIXI.Text(instructionText, {\r                                                                                +
+     fontFamily: "Arial",\r                                                                                                              +
+     fontSize: 24,\r                                                                                                                     +
+     fill: 0xffffff,\r                                                                                                                   +
+     align: "center"\r                                                                                                                   +
+   });\r                                                                                                                                 +
+   instruction.anchor.set(0.5);\r                                                                                                        +
+   instruction.x = app.screen.width / 2;\r                                                                                               +
+   instruction.y = 50;\r                                                                                                                 +
+   app.stage.addChild(instruction);\r                                                                                                    +
+   \r                                                                                                                                    +
+   // Create draggable sprite (circle)\r                                                                                                 +
+   const graphics = new PIXI.Graphics();\r                                                                                               +
+   \r                                                                                                                                    +
+   // Convert hex string to number if needed (e.g., "#00d4ff" -> 0x00d4ff)\r                                                             +
+   let colorValue = spriteColor;\r                                                                                                       +
+   if (typeof spriteColor === "string" && spriteColor.startsWith("#")) {\r                                                               +
+     colorValue = parseInt(spriteColor.replace("#", ""), 16);\r                                                                          +
+   }\r                                                                                                                                   +
+   \r                                                                                                                                    +
+   graphics.beginFill(colorValue);\r                                                                                                     +
+   graphics.drawCircle(0, 0, spriteSize);\r                                                                                              +
+   graphics.endFill();\r                                                                                                                 +
+   \r                                                                                                                                    +
+   // Position at center\r                                                                                                               +
+   graphics.x = app.screen.width / 2;\r                                                                                                  +
+   graphics.y = app.screen.height / 2;\r                                                                                                 +
+   \r                                                                                                                                    +
+   // Make interactive\r                                                                                                                 +
+   graphics.eventMode = "static";\r                                                                                                      +
+   graphics.cursor = "pointer";\r                                                                                                        +
+   \r                                                                                                                                    +
+   // Add drag behavior\r                                                                                                                +
+   let dragging = false;\r                                                                                                               +
+   let dragOffset = { x: 0, y: 0 };\r                                                                                                    +
+   \r                                                                                                                                    +
+   graphics.on("pointerdown", (event) => {\r                                                                                             +
+     dragging = true;\r                                                                                                                  +
+     const position = event.data.global;\r                                                                                               +
+     dragOffset.x = position.x - graphics.x;\r                                                                                           +
+     dragOffset.y = position.y - graphics.y;\r                                                                                           +
+     graphics.alpha = 0.8;\r                                                                                                             +
+     console.log("[PixiJS] ??????? Drag started");\r                                                                                     +
+   });\r                                                                                                                                 +
+   \r                                                                                                                                    +
+   app.stage.on("pointermove", (event) => {\r                                                                                            +
+     if (dragging) {\r                                                                                                                   +
+       const position = event.data.global;\r                                                                                             +
+       graphics.x = position.x - dragOffset.x;\r                                                                                         +
+       graphics.y = position.y - dragOffset.y;\r                                                                                         +
+     }\r                                                                                                                                 +
+   });\r                                                                                                                                 +
+   \r                                                                                                                                    +
+   app.stage.on("pointerup", () => {\r                                                                                                   +
+     if (dragging) {\r                                                                                                                   +
+       dragging = false;\r                                                                                                               +
+       graphics.alpha = 1.0;\r                                                                                                           +
+       console.log("[PixiJS] ??????? Drag ended at:", {x: graphics.x, y: graphics.y});\r                                                 +
+     }\r                                                                                                                                 +
+   });\r                                                                                                                                 +
+   \r                                                                                                                                    +
+   app.stage.addChild(graphics);\r                                                                                                       +
+   console.log("[PixiJS] ????????? FULLY INITIALIZED ?????????");\r                                                                      +
+ }\r                                                                                                                                     +
+ \r                                                                                                                                      +
+ // Start initialization\r                                                                                                               +
+ if (document.readyState === "complete" || document.readyState === "interactive") {\r                                                    +
+   console.log("[PixiJS] ?????? Document ready, initializing...");\r                                                                     +
+   initPixiWhenReady();\r                                                                                                                +
+ } else {\r                                                                                                                              +
+   console.log("[PixiJS] ??? Waiting for DOM...");\r                                                                                     +
+   document.addEventListener("DOMContentLoaded", initPixiWhenReady);\r                                                                   +
+ }
+(1 row)
+
