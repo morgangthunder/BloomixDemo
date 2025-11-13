@@ -51,6 +51,14 @@ export class CreateInteractionTypeDto {
   iframeConfig?: any; // For iFrame interactions (width, height, permissions)
 
   @IsOptional()
+  @IsObject()
+  configSchema?: any; // Schema defining what lesson-builders can configure
+
+  @IsOptional()
+  @IsObject()
+  sampleData?: any; // Sample data for preview/testing
+
+  @IsOptional()
   @IsNumber()
   minConfidence?: number;
 
@@ -136,6 +144,14 @@ export class UpdateInteractionTypeDto {
   @IsOptional()
   @IsObject()
   iframeConfig?: any;
+
+  @IsOptional()
+  @IsObject()
+  configSchema?: any;
+
+  @IsOptional()
+  @IsObject()
+  sampleData?: any;
 
   @IsOptional()
   @IsNumber()
