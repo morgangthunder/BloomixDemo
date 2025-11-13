@@ -84,6 +84,13 @@ services:
       - ./docker/postgres/init:/docker-entrypoint-initdb.d
     networks:
       - upora-network
+    command: >
+      postgres
+      -c fsync=on
+      -c synchronous_commit=on
+      -c checkpoint_timeout=1min
+      -c checkpoint_completion_target=0.9
+      -c wal_level=replica
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U upora_user -d upora_dev"]
       interval: 10s
