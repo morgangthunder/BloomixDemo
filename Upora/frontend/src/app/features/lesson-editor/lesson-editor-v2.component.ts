@@ -56,8 +56,8 @@ interface ProcessedContentOutput {
   workflowName: string;
 }
 
-        // VERSION CHECK: This component should show "VERSION 4.1.0" in console logs
-        const LESSON_EDITOR_VERSION = '4.1.0';
+        // VERSION CHECK: This component should show "VERSION 4.2.0" in console logs
+        const LESSON_EDITOR_VERSION = '4.2.0';
         const LESSON_EDITOR_VERSION_CHECK_MESSAGE = `🚀 LESSON EDITOR COMPONENT VERSION ${LESSON_EDITOR_VERSION} LOADED - ${new Date().toISOString()} - CACHE BUST ID: ${Math.random().toString(36).substr(2, 9)}`;
 
 @Component({
@@ -317,11 +317,11 @@ interface ProcessedContentOutput {
                 <div class="form-group">
                   <label for="stage-type">Stage Type</label>
                   <select id="stage-type" [(ngModel)]="getSelectedStage()!.type">
-                    <option value="trigger">Trigger (T) - Hook & Ignite</option>
-                    <option value="explore">Explore (E) - Discover & Understand</option>
+                    <option value="tease">Tease (T) - Hook & Spark Curiosity</option>
+                    <option value="explore">Explore (E) - Discover & Investigate</option>
                     <option value="absorb">Absorb (A) - Learn & Internalize</option>
                     <option value="cultivate">Cultivate (C) - Practice & Apply</option>
-                    <option value="hone">Hone (H) - Master & Refine</option>
+                    <option value="hone">Hone (H) - Master & Assess</option>
                   </select>
                 </div>
                 <p class="hint">{{getStageTypeDescription(getSelectedStage()?.type || '')}}</p>
@@ -352,8 +352,11 @@ interface ProcessedContentOutput {
                 <div class="interaction-config">
                   <label>Interaction Type</label>
                   <div class="config-value">
-                    <span class="value">{{getSelectedSubStage()?.interactionType || 'None'}}</span>
-                    <button (click)="changeInteractionType()" class="btn-small">Change</button>
+                    <span class="value">{{getSelectedSubStage()?.interaction?.type || 'None'}}</span>
+                    <div class="interaction-actions">
+                      <button (click)="changeInteractionType()" class="btn-small">Change</button>
+                      <button *ngIf="getSelectedSubStage()?.interaction" (click)="configureInteraction()" class="btn-small btn-primary">⚙️ Configure</button>
+                    </div>
                   </div>
                 </div>
 
@@ -459,51 +462,77 @@ interface ProcessedContentOutput {
 
             <!-- Content Panel -->
             <div *ngIf="activeTab === 'content'" class="panel content-panel">
-              <h2 class="panel-title">Content Processing</h2>
-              <p class="panel-description">Add source content, apply N8N workflows, and manage processed outputs for this lesson.</p>
+              <h2 class="panel-title">Lesson Content</h2>
+              <p class="panel-description">Source content and processed outputs used in this lesson.</p>
               
-              <div class="content-workflow">
-                <h3>Add & Process Content</h3>
-                <div class="workflow-section">
-                  <h4 class="section-label">Add Source Content</h4>
-                  <button (click)="openContentProcessor()" class="btn-secondary">🔗 Paste URL</button>
-                  <button (click)="openPdfModal()" class="btn-secondary">📄 Upload PDF</button>
-                  <button (click)="openTextModal()" class="btn-secondary">📝 Add Text Content</button>
-                  <button (click)="openImageModal()" class="btn-secondary">🖼️ Upload Image</button>
+              <!-- Content Sources Section -->
+              <div class="content-section">
+                <div class="section-header">
+                  <h3>📚 Content Sources ({{getSourceContentForLesson().length}})</h3>
+                  <button (click)="searchContentLibrary()" class="btn-secondary btn-sm">+ Add Content</button>
                 </div>
-                <div class="workflow-section separator">
-                  <h4 class="section-label">Browse Existing</h4>
-                  <button (click)="searchContentLibrary()" class="btn-secondary">📚 Search Library</button>
-                  <button (click)="openApprovalQueue()" class="btn-secondary">⏳ Approval Queue</button>
-                </div>
-              </div>
-
-              <div class="processed-outputs" *ngIf="processedContentItems.length > 0">
-                <h3>Processed Content ({{processedContentItems.length}})</h3>
-                <div class="output-list">
-                  <div *ngFor="let content of processedContentItems" class="output-card-compact">
-                    <div class="output-header-compact">
-                      <div class="output-title-section">
-                        <span class="output-name-compact">{{content.title}}</span>
-                        <span class="output-type-compact">{{content.type}}</span>
-                      </div>
-                      <div class="source-link" *ngIf="content.contentSource">
-                        <svg class="link-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" width="12" height="12">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.102m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
-                        </svg>
-                        <small>from: {{content.contentSource.title}}</small>
+                
+                <div class="content-list" *ngIf="getSourceContentForLesson().length > 0">
+                  <div *ngFor="let source of getSourceContentForLesson()" class="content-card">
+                    <div class="content-icon">
+                      <span *ngIf="source.type === 'text'">📝</span>
+                      <span *ngIf="source.type === 'pdf'">📄</span>
+                      <span *ngIf="source.type === 'url'">🔗</span>
+                      <span *ngIf="source.type === 'image'">🖼️</span>
+                    </div>
+                    <div class="content-info">
+                      <h4>{{source.title}}</h4>
+                      <p class="content-summary">{{source.summary}}</p>
+                      <div class="content-meta">
+                        <span class="type-badge">{{source.type}}</span>
+                        <span class="auto-gen-badge" *ngIf="source.metadata?.autoGenerated">🤖 Auto-generated</span>
                       </div>
                     </div>
-                    <div class="output-actions-compact">
-                      <button (click)="viewProcessedContent(content)" class="btn-small">View</button>
+                    <div class="content-actions">
+                      <button (click)="viewSourceContent(source)" class="btn-small">View</button>
+                      <button (click)="editSourceContent(source)" class="btn-small">Edit</button>
+                    </div>
+                  </div>
+                </div>
+                <p *ngIf="getSourceContentForLesson().length === 0" class="empty-state-small">
+                  No source content yet. Click "+ Add Content" to browse the library.
+                </p>
+              </div>
+
+              <!-- Processed Content Section -->
+              <div class="content-section">
+                <div class="section-header">
+                  <h3>🎬 Processed Content ({{processedContentItems.length}})</h3>
+                </div>
+                
+                <div class="content-list" *ngIf="processedContentItems.length > 0">
+                  <div *ngFor="let content of processedContentItems" class="content-card">
+                    <div class="content-icon">
+                      <span>🎯</span>
+                    </div>
+                    <div class="content-info">
+                      <h4>{{content.title}}</h4>
+                      <p class="content-summary">{{content.workflowName || 'Processed interaction data'}}</p>
+                      <div class="content-meta">
+                        <span class="type-badge">{{content.type}}</span>
+                        <div class="source-link-inline" *ngIf="content.contentSource">
+                          <svg class="link-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" width="12" height="12">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.102m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+                          </svg>
+                          <small>from: {{content.contentSource.title}}</small>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="content-actions">
+                      <button (click)="viewProcessedContent(content)" class="btn-small">View JSON</button>
                       <button (click)="deleteProcessedContent(content)" class="btn-small btn-danger">Delete</button>
                     </div>
                   </div>
                 </div>
+                <p *ngIf="processedContentItems.length === 0" class="empty-state-small">
+                  No processed content yet. Interactions added to substages will appear here.
+                </p>
               </div>
-              <p *ngIf="processedContentItems.length === 0" class="empty-state">
-                No processed content outputs yet. Add and process source content to create outputs.
-              </p>
             </div>
 
             <!-- Preview Panel -->
@@ -709,6 +738,49 @@ interface ProcessedContentOutput {
                 <img [src]="selectedProcessedContent.thumbnail" [alt]="selectedProcessedContent.title" class="thumbnail">
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Interaction Configuration Modal -->
+      <div class="modal-overlay-fullscreen" *ngIf="showInteractionConfigModal" (click)="closeInteractionConfigModal()">
+        <div class="modal-container-fullscreen" (click)="$event.stopPropagation()">
+          <div class="modal-header-sticky">
+            <h2>⚙️ Configure Interaction</h2>
+            <button (click)="closeInteractionConfigModal()" class="close-btn">✕</button>
+          </div>
+
+          <div class="modal-body-scrollable">
+            <div class="config-section">
+              <h3>{{getSelectedSubStage()?.interaction?.type}} Configuration</h3>
+              
+              <!-- Dynamic config fields based on interaction type -->
+              <div *ngIf="getSelectedSubStage()?.interaction?.type === 'true-false-selection'">
+                <div class="form-group">
+                  <label for="interaction-title">Title</label>
+                  <input id="interaction-title" type="text" [(ngModel)]="interactionConfig.title" placeholder="e.g., Test Your Understanding" />
+                </div>
+                <div class="form-group">
+                  <label for="interaction-instructions">Instructions</label>
+                  <textarea id="interaction-instructions" [(ngModel)]="interactionConfig.instructions" rows="2" placeholder="e.g., Select all the TRUE statements"></textarea>
+                </div>
+              </div>
+
+              <!-- Preview Section -->
+              <div class="preview-section">
+                <h4>Preview</h4>
+                <div class="interaction-preview-box">
+                  <p><strong>Title:</strong> {{interactionConfig?.title || 'Not set'}}</p>
+                  <p><strong>Instructions:</strong> {{interactionConfig?.instructions || 'Not set'}}</p>
+                  <p class="preview-note">Full interaction preview will render here</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer-sticky">
+            <button (click)="closeInteractionConfigModal()" class="btn-secondary">Cancel</button>
+            <button (click)="saveInteractionConfig()" class="btn-primary">Save Configuration</button>
           </div>
         </div>
       </div>
@@ -1330,6 +1402,139 @@ interface ProcessedContentOutput {
       padding: 3rem 1rem;
       color: #777;
       font-style: italic;
+    }
+
+    .empty-state-small {
+      text-align: center;
+      padding: 1.5rem 1rem;
+      color: #777;
+      font-style: italic;
+      font-size: 14px;
+    }
+
+    .content-section {
+      margin-bottom: 2rem;
+      background: #1a1a1a;
+      border-radius: 8px;
+      padding: 1.5rem;
+      border: 1px solid #333;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .section-header h3 {
+      color: white;
+      font-size: 18px;
+      font-weight: 600;
+      margin: 0;
+    }
+
+    .content-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .content-card {
+      display: flex;
+      gap: 1rem;
+      padding: 1rem;
+      background: #0f0f0f;
+      border: 1px solid #333;
+      border-radius: 6px;
+      transition: all 0.2s;
+    }
+
+    .content-card:hover {
+      border-color: #dc2626;
+      background: #151515;
+    }
+
+    .content-icon {
+      font-size: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 40px;
+    }
+
+    .content-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .content-info h4 {
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      margin: 0 0 0.25rem 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .content-summary {
+      color: #999;
+      font-size: 12px;
+      margin: 0 0 0.5rem 0;
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .content-meta {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .type-badge {
+      background: #333;
+      color: #aaa;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      text-transform: uppercase;
+      font-weight: 500;
+    }
+
+    .auto-gen-badge {
+      background: #1e3a8a;
+      color: #93c5fd;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .source-link-inline {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: #999;
+    }
+
+    .source-link-inline small {
+      font-size: 11px;
+    }
+
+    .content-actions {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .btn-sm {
+      padding: 0.4rem 0.8rem;
+      font-size: 13px;
     }
 
     /* MOBILE */
@@ -1971,6 +2176,116 @@ interface ProcessedContentOutput {
       height: auto;
       border-radius: 8px;
     }
+
+    /* Fullscreen Modal Styles */
+    .modal-overlay-fullscreen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.95);
+      z-index: 9999999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px;
+    }
+
+    .modal-container-fullscreen {
+      background: #1f2937;
+      border-radius: 12px;
+      width: calc(100% - 16px);
+      max-width: 900px;
+      height: calc(100vh - 16px);
+      max-height: 900px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .modal-header-sticky {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 24px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      background: #1f2937;
+    }
+
+    .modal-header-sticky h2 {
+      color: white;
+      font-size: 20px;
+      font-weight: 600;
+      margin: 0;
+    }
+
+    .modal-body-scrollable {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    .modal-footer-sticky {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      padding: 16px 24px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      background: #1f2937;
+    }
+
+    .config-section {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .config-section h3 {
+      color: white;
+      font-size: 18px;
+      font-weight: 600;
+      margin: 0;
+    }
+
+    .preview-section {
+      margin-top: 2rem;
+      padding: 1.5rem;
+      background: #111827;
+      border-radius: 8px;
+      border: 1px solid #374151;
+    }
+
+    .preview-section h4 {
+      color: white;
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0 0 1rem 0;
+    }
+
+    .interaction-preview-box {
+      background: #0f0f0f;
+      padding: 1.5rem;
+      border-radius: 6px;
+      border: 1px solid #333;
+    }
+
+    .interaction-preview-box p {
+      color: #d1d5db;
+      margin: 0.5rem 0;
+      font-size: 14px;
+    }
+
+    .preview-note {
+      color: #999 !important;
+      font-style: italic;
+      margin-top: 1rem !important;
+    }
+
+    .interaction-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
   `]
 })
 export class LessonEditorV2Component implements OnInit, OnDestroy {
@@ -2030,10 +2345,13 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   showPdfModal: boolean = false;
   contentProcessorVideoId?: string;
   contentProcessorResumeProcessing: boolean = false;
+  showInteractionConfigModal: boolean = false;
+  interactionConfig: any = null;
   
   // Processed Content
   processedContentItems: ProcessedContentItem[] = [];
   selectedProcessedContent: ProcessedContentItem | null = null;
+  sourceContentItems: any[] = []; // Content sources used in this lesson
   aiMessage: string = '';
   
   // Tab Configuration
@@ -2048,7 +2366,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   
   // TEACH Stage-SubStage Mapping
   stageSubStageMap: Record<string, string[]> = {
-    'trigger': ['trigger', 'ignite', 'evoke'], // TIE
+    'tease': ['trigger', 'ignite', 'evoke'], // TIE
     'explore': ['handle', 'uncover', 'noodle', 'track'], // HUNT
     'absorb': ['show', 'interpret', 'parallel'], // SIP
     'cultivate': ['grip', 'repurpose', 'originate', 'work'], // GROW
@@ -2056,7 +2374,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   };
   
   substageTypeLabels: Record<string, string> = {
-    // TIE (Trigger)
+    // TIE (Tease)
     'trigger': 'Trigger - Provocative question/teaser',
     'ignite': 'Ignite - Surprising visual/demo',
     'evoke': 'Evoke - Personal connection',
@@ -2091,8 +2409,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   ngOnInit() {
     // VERSION CHECK: This log should always appear when new code is loaded
-    console.log('🔥🔥🔥 LESSON EDITOR VERSION 4.1.0 - SUBMISSION STATUS RESET ON CHANGES 🔥🔥🔥');
-    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 4.1.0');
+    console.log('🔥🔥🔥 LESSON EDITOR VERSION 4.2.0 - CONTENT TAB + TEACH + CONFIGURE 🔥🔥🔥');
+    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 4.2.0');
     console.log('[LessonEditor] ✅ Parses actual DB JSON with scriptBlocks, scriptBlocksAfterInteraction!');
     console.log('[LessonEditor] ✅ Converts DB format to editor format!');
     console.log('[LessonEditor] ✅ Database-first development - no mock data!');
@@ -2815,34 +3133,104 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   getStageTypeDescription(type: string): string {
     const descriptions: Record<string, string> = {
-      trigger: 'Hook students interest',
-      explore: 'Discover and investigate',
-      absorb: 'Learn core concepts',
-      cultivate: 'Practice and apply',
-      hone: 'Master and refine'
+      tease: 'Spark curiosity and activate schemas (TIE)',
+      explore: 'Foster inquiry and pattern recognition (HUNT)',
+      absorb: 'Deliver and internalize core content (SIP)',
+      cultivate: 'Apply, extend, and iterate (GROW)',
+      hone: 'Assess mastery and reflect (VET)'
     };
     return descriptions[type] || type;
   }
 
   getAvailableSubStageTypes(stageType: string): string[] {
-    // Return available substage types based on stage type
-    return ['intro', 'content', 'practice', 'quiz', 'reflection'];
+    // Return TEACH-aligned substage types based on stage type
+    return this.stageSubStageMap[stageType] || [];
   }
 
   getSubStageTypeLabel(type: string): string {
-    const labels: Record<string, string> = {
-      intro: 'Introduction',
-      content: 'Content',
-      practice: 'Practice',
-      quiz: 'Quiz',
-      reflection: 'Reflection'
-    };
-    return labels[type] || type;
+    // Return the label from substageTypeLabels
+    return this.substageTypeLabels[type] || type;
   }
 
   getContentOutputName(outputId: string): string {
     const output = this.processedContentItems.find(item => item.id === outputId);
     return output?.title || 'Unknown Content';
+  }
+
+  /**
+   * Get source content items used in this lesson
+   */
+  getSourceContentForLesson(): any[] {
+    // Get unique source content IDs from processed content
+    const sourceIds = new Set<string>();
+    this.processedContentItems.forEach(item => {
+      if (item.contentSource?.id) {
+        sourceIds.add(item.contentSource.id);
+      }
+    });
+    
+    // Return unique source content items
+    return this.processedContentItems
+      .filter(item => item.contentSource)
+      .map(item => item.contentSource)
+      .filter((source, index, self) => 
+        index === self.findIndex(s => s.id === source.id)
+      );
+  }
+
+  viewSourceContent(source: any) {
+    // Show modal with source content details
+    const modalContent = `
+      <div class="content-view-modal">
+        <h3>${source.title}</h3>
+        <p><strong>Type:</strong> ${source.type}</p>
+        <p><strong>Summary:</strong> ${source.summary}</p>
+        ${source.metadata?.autoGenerated ? '<p class="auto-gen-note">🤖 This content was auto-generated from interaction JSON</p>' : ''}
+        <hr>
+        <h4>Full Text:</h4>
+        <pre style="white-space: pre-wrap; max-height: 400px; overflow-y: auto;">${source.fullText || 'No text available'}</pre>
+      </div>
+    `;
+    
+    // TODO: Use proper modal component
+    console.log('[LessonEditor] View source content:', source);
+    this.showSnackbar(`Viewing: ${source.title}`, 'info');
+  }
+
+  editSourceContent(source: any) {
+    // Navigate to content editor or show inline editor
+    console.log('[LessonEditor] Edit source content:', source);
+    this.showSnackbar(`Editing source content will be implemented soon`, 'info');
+    // TODO: Implement inline editing or navigate to content-sources page
+  }
+
+  configureInteraction() {
+    const substage = this.getSelectedSubStage();
+    if (!substage?.interaction) {
+      this.showSnackbar('No interaction to configure', 'error');
+      return;
+    }
+    
+    // Load interaction config (or create default if doesn't exist)
+    this.interactionConfig = { ...substage.interaction.config } || {};
+    this.showInteractionConfigModal = true;
+    console.log('[LessonEditor] Opening interaction config modal:', this.interactionConfig);
+  }
+
+  saveInteractionConfig() {
+    const substage = this.getSelectedSubStage();
+    if (!substage?.interaction) return;
+    
+    // Update the interaction config
+    substage.interaction.config = { ...this.interactionConfig };
+    this.markAsChanged();
+    this.showInteractionConfigModal = false;
+    this.showSnackbar('Interaction configuration saved', 'success');
+  }
+
+  closeInteractionConfigModal() {
+    this.showInteractionConfigModal = false;
+    this.interactionConfig = null;
   }
 
   formatDuration(minutes: number): string {
