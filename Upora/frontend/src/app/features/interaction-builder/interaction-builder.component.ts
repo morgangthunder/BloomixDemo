@@ -447,7 +447,10 @@ export class MyPixiInteraction {
                 <div class="preview-container" [attr.data-preview-key]="previewKey">
                   <!-- HTML Preview (prioritize this for HTML types) -->
                   <div *ngIf="currentInteraction?.interactionTypeCategory === 'html' && currentInteraction?.htmlCode" class="html-preview">
-                    <div [innerHTML]="getHtmlPreview()"></div>
+                    <iframe #previewIframe 
+                            [srcdoc]="getHtmlPreviewSrcDoc()" 
+                            style="width: 100%; height: 600px; border: 1px solid #333; border-radius: 0.5rem; background: #0f0f23;"
+                            frameborder="0"></iframe>
                   </div>
 
                   <!-- iFrame Preview -->
@@ -1831,6 +1834,7 @@ export class MyPixiInteraction {
         border-bottom: none;
         margin-bottom: 0;
         padding: 0.5rem;
+        padding-bottom: 0.5rem;
         display: grid;
         grid-template-columns: 1fr 1fr 1fr;
         grid-template-rows: auto auto;
@@ -1839,9 +1843,8 @@ export class MyPixiInteraction {
       }
 
       .sidebar-toggle {
-        position: absolute;
-        top: 0.5rem;
-        right: 0.5rem;
+        grid-column: 1;
+        grid-row: 1;
         background: #667eea;
         color: white;
         border: none;
@@ -1850,20 +1853,19 @@ export class MyPixiInteraction {
         font-size: 0.7rem;
         font-weight: 600;
         cursor: pointer;
-        z-index: 10;
       }
 
       .editor-tabs-main button:not(.sidebar-toggle) {
-        padding: 0.625rem 0.375rem;
+        padding: 0.625rem 0.25rem;
         font-size: 0.7rem;
         text-align: center;
       }
 
-      .editor-tabs-main button:nth-child(2) { grid-column: 1; grid-row: 1; }
-      .editor-tabs-main button:nth-child(3) { grid-column: 2; grid-row: 1; }
-      .editor-tabs-main button:nth-child(4) { grid-column: 3; grid-row: 1; }
-      .editor-tabs-main button:nth-child(5) { grid-column: 1; grid-row: 2; }
-      .editor-tabs-main button:nth-child(6) { grid-column: 2; grid-row: 2; }
+      .editor-tabs-main button:nth-child(2) { grid-column: 2; grid-row: 1; }
+      .editor-tabs-main button:nth-child(3) { grid-column: 3; grid-row: 1; }
+      .editor-tabs-main button:nth-child(4) { grid-column: 1; grid-row: 2; }
+      .editor-tabs-main button:nth-child(5) { grid-column: 2; grid-row: 2; }
+      .editor-tabs-main button:nth-child(6) { grid-column: 3; grid-row: 2; }
 
       .tab-content {
         flex: 1;
@@ -2276,43 +2278,55 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   }
 
   getHtmlPreview(): SafeHtml {
+    // Deprecated - use getHtmlPreviewSrcDoc() for iframe instead
+    return '';
+  }
+
+  getHtmlPreviewSrcDoc(): string {
     if (!this.currentInteraction) {
       console.log('[Preview] ⚠️ No current interaction');
       return '';
     }
     
-    console.log('[Preview] 🎬 Generating HTML preview...');
+    console.log('[Preview] 🎬 Generating HTML preview for iframe...');
     console.log('[Preview] Has HTML:', !!this.currentInteraction.htmlCode);
     console.log('[Preview] Has CSS:', !!this.currentInteraction.cssCode);
     console.log('[Preview] Has JS:', !!this.currentInteraction.jsCode);
     console.log('[Preview] Has Sample Data:', !!this.currentInteraction.sampleData);
     
-    let html = '';
+    // Create a complete HTML document for the iframe
+    const sampleDataJson = this.currentInteraction.sampleData ? 
+      JSON.stringify(this.currentInteraction.sampleData) : '{}';
     
-    // Add CSS
-    if (this.currentInteraction.cssCode) {
-      html += `<style>${this.currentInteraction.cssCode}</style>`;
-    }
+    console.log('[Preview] 📋 Sample data for injection:', sampleDataJson.substring(0, 100) + '...');
     
-    // Add HTML
-    html += this.currentInteraction.htmlCode || '';
+    const htmlDoc = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { margin: 0; padding: 0; }
+    ${this.currentInteraction.cssCode || ''}
+  </style>
+</head>
+<body>
+  ${this.currentInteraction.htmlCode || ''}
+  <script>
+    // Set interaction data FIRST
+    window.interactionData = ${sampleDataJson};
+    console.log('[Interaction] 🎯 Data injected:', window.interactionData);
     
-    // Inject sample data as window variable and add JS
-    if (this.currentInteraction.jsCode) {
-      const sampleDataJson = this.currentInteraction.sampleData ? 
-        JSON.stringify(this.currentInteraction.sampleData) : '{}';
-      console.log('[Preview] 📋 Sample data being injected:', sampleDataJson.substring(0, 100) + '...');
-      html += `<script>
-        console.log('[Interaction Preview] 🎯 Loading with data:', window.interactionData);
-        window.interactionData = ${sampleDataJson};
-        console.log('[Interaction Preview] 📋 Sample data set:', window.interactionData);
-        ${this.currentInteraction.jsCode}
-        console.log('[Interaction Preview] ✅ JavaScript executed');
-      </script>`;
-    }
+    // Then run the interaction code
+    ${this.currentInteraction.jsCode || ''}
+  </script>
+</body>
+</html>
+    `;
     
-    console.log('[Preview] ✅ HTML preview generated, length:', html.length);
-    return this.sanitizer.bypassSecurityTrustHtml(html);
+    console.log('[Preview] ✅ Complete HTML document generated for iframe');
+    return htmlDoc;
   }
 
   getSafeIframeUrl(): SafeResourceUrl {
