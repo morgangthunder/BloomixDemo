@@ -567,15 +567,20 @@ export class MyPixiInteraction {
       </div>
 
       <!-- Shared Configure Modal Component -->
+      <!-- Config Preview Modal -->
       <app-interaction-configure-modal
         [isOpen]="showingConfigModal"
         [interactionType]="currentInteraction?.id || ''"
-        [interactionName]="currentInteraction?.name || ''"
+        [interactionName]="currentInteraction?.name || 'Interaction'"
         [configSchema]="currentInteraction?.configSchema"
         [sampleData]="currentInteraction?.sampleData"
-        [initialConfig]="{}"
+        [initialConfig]="configModalInitialConfig"
+        [interactionCategory]="currentInteraction?.interactionTypeCategory || ''"
+        [htmlCode]="currentInteraction?.htmlCode || ''"
+        [cssCode]="currentInteraction?.cssCode || ''"
+        [jsCode]="currentInteraction?.jsCode || ''"
         (closed)="closeConfigModal()"
-        (saved)="onConfigModalSaved($event)">
+        (saved)="saveConfigFromModal($event)">
       </app-interaction-configure-modal>
 
       <!-- Success Snackbar -->
@@ -1977,8 +1982,9 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   aiInput = '';
   aiMessages: ChatMessage[] = [];
 
-  // Modal
+  // Config Modal
   showingConfigModal = false;
+  configModalInitialConfig: any = {};
 
   // Testing
   testing = false;
@@ -2679,6 +2685,39 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     this.refreshPreview();
 
     console.log('[InteractionBuilder] ✅ Reset to last working version');
+  }
+
+  showConfigModal() {
+    if (!this.currentInteraction || !this.currentInteraction.configSchema) {
+      console.log('[InteractionBuilder] ⚠️ Cannot show config modal - no interaction or config schema');
+      return;
+    }
+
+    console.log('[InteractionBuilder] 🎬 Opening config modal');
+    
+    // Initialize config with defaults from schema
+    this.configModalInitialConfig = {};
+    if (this.currentInteraction.configSchema && this.currentInteraction.configSchema.fields) {
+      this.currentInteraction.configSchema.fields.forEach((field: any) => {
+        if (field.default !== undefined) {
+          this.configModalInitialConfig[field.key] = field.default;
+        }
+      });
+    }
+    
+    this.showingConfigModal = true;
+  }
+
+  closeConfigModal() {
+    this.showingConfigModal = false;
+    console.log('[InteractionBuilder] 🔒 Config modal closed');
+  }
+
+  saveConfigFromModal(config: any) {
+    console.log('[InteractionBuilder] 💾 Config saved from modal:', config);
+    // In interaction-builder, this is just for preview - not actually saving anything to the interaction
+    // The config is used by lesson-builders when they use the interaction
+    this.closeConfigModal();
   }
 
   refreshPreview() {
