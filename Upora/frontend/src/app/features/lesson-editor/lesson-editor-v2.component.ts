@@ -672,6 +672,47 @@ interface ProcessedContentOutput {
         (closed)="closeContentLibrary()">
       </app-content-library-modal>
 
+      <!-- Interaction Type Selection Modal -->
+      <div *ngIf="showInteractionTypeModal" class="modal-overlay-fullscreen" (click)="closeInteractionTypeModal()">
+        <div class="modal-container-fullscreen" (click)="$event.stopPropagation()" style="max-width: 900px;">
+          <div class="modal-header-sticky">
+            <h2>🎮 Select Interaction Type</h2>
+            <button (click)="closeInteractionTypeModal()" class="close-btn">✕</button>
+          </div>
+
+          <div class="modal-body-scrollable">
+            <div class="interaction-types-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem; padding: 1rem;">
+              <div 
+                *ngFor="let type of availableInteractionTypes" 
+                class="interaction-type-card"
+                (click)="selectInteractionType(type)"
+                [class.selected]="getSelectedSubStage()?.interaction?.type === type.id"
+                style="background: #1a1a1a; border: 2px solid #333; border-radius: 0.5rem; padding: 1.5rem; cursor: pointer; transition: all 0.2s;">
+                <div class="card-icon" style="font-size: 3rem; text-align: center; margin-bottom: 1rem;">
+                  <span *ngIf="type.interactionTypeCategory === 'html'">🌐</span>
+                  <span *ngIf="type.interactionTypeCategory === 'pixijs'">🎮</span>
+                  <span *ngIf="type.interactionTypeCategory === 'iframe'">🖼️</span>
+                  <span *ngIf="!type.interactionTypeCategory || type.interactionTypeCategory === 'legacy'">📦</span>
+                </div>
+                <div class="card-content">
+                  <h3 style="color: #fff; margin: 0 0 0.5rem 0; font-size: 1.25rem;">{{type.name}}</h3>
+                  <p class="card-category" style="color: #00d4ff; font-size: 0.875rem; margin: 0 0 0.5rem 0; font-weight: 500;">{{getCategoryLabel(type.interactionTypeCategory || 'legacy')}}</p>
+                  <p class="card-description" style="color: #999; font-size: 0.875rem; margin: 0; line-height: 1.4;">{{type.description}}</p>
+                </div>
+              </div>
+            </div>
+            
+            <p *ngIf="availableInteractionTypes.length === 0" class="empty-state">
+              Loading interaction types...
+            </p>
+          </div>
+
+          <div class="modal-footer-sticky">
+            <button (click)="closeInteractionTypeModal()" class="btn-secondary">Cancel</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Add Text Content Modal -->
       <app-add-text-content-modal
         [isOpen]="showTextModal"
@@ -2668,6 +2709,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   contentProcessorVideoId?: string;
   contentProcessorResumeProcessing: boolean = false;
   showInteractionConfigModal: boolean = false;
+  showInteractionTypeModal: boolean = false;
+  availableInteractionTypes: any[] = [];
   interactionConfig: any = null;
   interactionConfigTab: 'configure' | 'preview' = 'configure';
   interactionPreviewData: any = null;
@@ -3357,7 +3400,64 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   }
 
   changeInteractionType() {
-    alert('Change interaction type - To be implemented');
+    console.log('[LessonEditor] 🔄 Change interaction type clicked');
+    
+    // Load available interaction types
+    this.http.get<any[]>(`${environment.apiUrl}/interaction-types`).subscribe({
+      next: (types) => {
+        console.log('[LessonEditor] ✅ Loaded interaction types:', types.length);
+        this.availableInteractionTypes = types;
+        this.showInteractionTypeModal = true;
+        
+        // Hide page header
+        const header = document.querySelector('app-header');
+        if (header) (header as HTMLElement).style.display = 'none';
+        document.body.style.overflow = 'hidden';
+      },
+      error: (error) => {
+        console.error('[LessonEditor] ❌ Failed to load interaction types:', error);
+        this.showSnackbar('Failed to load interaction types', 'error');
+      }
+    });
+  }
+  
+  selectInteractionType(interactionType: any) {
+    console.log('[LessonEditor] ✅ Selected interaction type:', interactionType.id);
+    const substage = this.getSelectedSubStage();
+    if (substage) {
+      // Update the interaction
+      substage.interaction = {
+        id: interactionType.id,
+        type: interactionType.id,
+        name: interactionType.name,
+        category: interactionType.interactionTypeCategory || 'legacy',
+        contentOutputId: undefined,
+        config: {}
+      } as any;
+      this.markAsChanged();
+      this.showSnackbar(`Interaction type set to: ${interactionType.name}`, 'success');
+    }
+    this.closeInteractionTypeModal();
+  }
+  
+  closeInteractionTypeModal() {
+    this.showInteractionTypeModal = false;
+    this.availableInteractionTypes = [];
+    
+    // Restore page header
+    const header = document.querySelector('app-header');
+    if (header) (header as HTMLElement).style.display = '';
+    document.body.style.overflow = '';
+  }
+  
+  getCategoryLabel(category: string): string {
+    const labels: { [key: string]: string } = {
+      'html': 'HTML',
+      'pixijs': 'PixiJS',
+      'iframe': 'iFrame',
+      'legacy': 'Legacy'
+    };
+    return labels[category] || category;
   }
 
   selectContent() {
