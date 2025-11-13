@@ -2312,6 +2312,19 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     
     console.log('[Preview] 📋 Sample data for injection:', sampleDataJson.substring(0, 100) + '...');
     
+    // Create config object with default values from configSchema
+    const configDefaults: any = {};
+    if (this.currentInteraction.configSchema && this.currentInteraction.configSchema.fields) {
+      this.currentInteraction.configSchema.fields.forEach((field: any) => {
+        if (field.default !== undefined) {
+          configDefaults[field.key] = field.default;
+        }
+      });
+    }
+    const configJson = JSON.stringify(configDefaults);
+    
+    console.log('[Preview] 📋 Config defaults for injection:', configJson);
+    
     const htmlDoc = `
 <!DOCTYPE html>
 <html>
@@ -2329,6 +2342,10 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     // Set interaction data FIRST
     window.interactionData = ${sampleDataJson};
     console.log('[Interaction] 🎯 Data injected:', window.interactionData);
+    
+    // Set interaction config (with defaults from configSchema)
+    window.interactionConfig = ${configJson};
+    console.log('[Interaction] ⚙️ Config injected:', window.interactionConfig);
     
     // Then run the interaction code
     ${this.currentInteraction.jsCode || ''}
