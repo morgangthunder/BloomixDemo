@@ -100,7 +100,7 @@ import { environment } from '../../../environments/environment';
               <p>Review lesson drafts, approve or reject changes</p>
               <div class="card-stats">
                 <span class="stat-value">{{pendingDraftsCount}}</span>
-                <span class="stat-label">Pending</span>
+                <span class="stat-label" style="color: white;"> Pending</span>
               </div>
             </div>
           </div>

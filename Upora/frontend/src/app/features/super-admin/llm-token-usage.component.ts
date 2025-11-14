@@ -181,6 +181,7 @@ interface LlmProvider {
               <table class="usage-table">
                 <thead>
                   <tr>
+                    <th style="width: 40px;"></th>
                     <th>Account</th>
                     <th>Subscription</th>
                     <th>Used / Limit</th>
@@ -194,13 +195,25 @@ interface LlmProvider {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr *ngFor="let account of data.accounts" [class.warning]="account.percentUsed > 80">
-                    <td>
-                      <div class="account-cell">
-                        <div class="account-name">{{ account.name }}</div>
-                        <div class="account-email">{{ account.email }}</div>
-                      </div>
-                    </td>
+                  <ng-container *ngFor="let account of data.accounts">
+                    <!-- Main Account Row -->
+                    <tr [class.warning]="account.percentUsed > 80" [class.expanded]="expandedAccountId === account.accountId">
+                      <td>
+                        <button 
+                          class="expand-btn"
+                          (click)="toggleAccountExpand(account.accountId)"
+                          [class.expanded]="expandedAccountId === account.accountId">
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+                            <path d="M3 5 L6 8 L9 5 Z"/>
+                          </svg>
+                        </button>
+                      </td>
+                      <td>
+                        <div class="account-cell">
+                          <div class="account-name">{{ account.name }}</div>
+                          <div class="account-email">{{ account.email }}</div>
+                        </div>
+                      </td>
                     <td>
                       <span class="subscription-badge" [class]="'tier-' + account.subscriptionTier">
                         {{ account.subscriptionTier }}
@@ -266,6 +279,73 @@ interface LlmProvider {
                       </div>
                     </td>
                   </tr>
+
+                  <!-- Assistant Breakdown Sub-Rows (Expanded) -->
+                  <tr *ngIf="expandedAccountId === account.accountId" class="assistant-breakdown-row">
+                    <td colspan="11" class="assistant-breakdown-cell">
+                      <div class="assistant-breakdown-container">
+                        <h4>🤖 AI Assistant Breakdown for {{ account.name }}</h4>
+                        <table class="assistant-breakdown-table">
+                          <thead>
+                            <tr>
+                              <th>AI Assistant</th>
+                              <th>Tokens Used</th>
+                              <th>% of Account</th>
+                              <th>Cost</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <!-- Placeholder data - will be replaced with real data -->
+                            <tr>
+                              <td>
+                                <div class="assistant-name">
+                                  <span class="assistant-icon-small">🔧</span>
+                                  <span>Inventor</span>
+                                </div>
+                              </td>
+                              <td><span class="tokens-value">Coming Soon</span></td>
+                              <td><span class="percent-value">—</span></td>
+                              <td><span class="cost-value">—</span></td>
+                            </tr>
+                            <tr>
+                              <td>
+                                <div class="assistant-name">
+                                  <span class="assistant-icon-small">🤖</span>
+                                  <span>AI Teacher</span>
+                                </div>
+                              </td>
+                              <td><span class="tokens-value">Coming Soon</span></td>
+                              <td><span class="percent-value">—</span></td>
+                              <td><span class="cost-value">—</span></td>
+                            </tr>
+                            <tr>
+                              <td>
+                                <div class="assistant-name">
+                                  <span class="assistant-icon-small">📊</span>
+                                  <span>Content Analyzer</span>
+                                </div>
+                              </td>
+                              <td><span class="tokens-value">Coming Soon</span></td>
+                              <td><span class="percent-value">—</span></td>
+                              <td><span class="cost-value">—</span></td>
+                            </tr>
+                            <tr>
+                              <td>
+                                <div class="assistant-name">
+                                  <span class="assistant-icon-small">✨</span>
+                                  <span>Auto-Populator</span>
+                                </div>
+                              </td>
+                              <td><span class="tokens-value">Coming Soon</span></td>
+                              <td><span class="percent-value">—</span></td>
+                              <td><span class="cost-value">—</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </td>
+                  </tr>
+                  </ng-container>
                 </tbody>
               </table>
             </div>
@@ -663,6 +743,109 @@ interface LlmProvider {
 
     .usage-table tr.warning {
       background: rgba(255, 193, 7, 0.05);
+    }
+
+    .usage-table tr.expanded {
+      background: rgba(0, 212, 255, 0.05);
+      border-left: 3px solid #00d4ff;
+    }
+
+    /* Expand Button */
+    .expand-btn {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: rgba(255, 255, 255, 0.6);
+      padding: 0.25rem;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      width: 24px;
+      height: 24px;
+    }
+
+    .expand-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.4);
+      color: #ffffff;
+    }
+
+    .expand-btn svg {
+      transition: transform 0.2s;
+    }
+
+    .expand-btn.expanded svg {
+      transform: rotate(180deg);
+    }
+
+    /* Assistant Breakdown Sub-Rows */
+    .assistant-breakdown-row {
+      background: rgba(0, 212, 255, 0.02) !important;
+    }
+
+    .assistant-breakdown-row:hover {
+      background: rgba(0, 212, 255, 0.02) !important;
+    }
+
+    .assistant-breakdown-cell {
+      padding: 0 !important;
+    }
+
+    .assistant-breakdown-container {
+      padding: 1.5rem 2rem;
+      background: rgba(0, 0, 0, 0.2);
+      border-top: 1px solid rgba(0, 212, 255, 0.2);
+      border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+    }
+
+    .assistant-breakdown-container h4 {
+      margin: 0 0 1rem 0;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #00d4ff;
+    }
+
+    .assistant-breakdown-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .assistant-breakdown-table th {
+      text-align: left;
+      padding: 0.5rem 1rem;
+      color: rgba(255, 255, 255, 0.5);
+      font-size: 0.75rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .assistant-breakdown-table td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .assistant-breakdown-table tr:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .assistant-name {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .assistant-icon-small {
+      font-size: 1.25rem;
+    }
+
+    .tokens-value, .percent-value, .cost-value {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.8);
     }
 
     .account-cell {
@@ -1111,6 +1294,17 @@ export class LlmTokenUsageComponent implements OnInit {
           console.error('[LLM Usage] Error:', err);
         }
       });
+  }
+
+  toggleAccountExpand(accountId: string) {
+    if (this.expandedAccountId === accountId) {
+      this.expandedAccountId = null;
+    } else {
+      this.expandedAccountId = accountId;
+      // TODO: Load assistant breakdown data for this account
+      // this.loadAssistantBreakdown(accountId);
+    }
+    console.log('[LLM Usage] Toggled account expand:', accountId, 'Expanded:', this.expandedAccountId);
   }
 
   goBack() {
