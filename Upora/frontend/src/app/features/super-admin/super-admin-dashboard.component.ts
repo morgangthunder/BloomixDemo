@@ -99,7 +99,7 @@ import { environment } from '../../../environments/environment';
               <h3>Lesson Approval Queue</h3>
               <p>Review lesson drafts, approve or reject changes</p>
               <div class="card-stats">
-                <span class="stat-value">{{pendingDraftsCount}}</span>
+                <span class="stat-value" style="color: white;">{{pendingDraftsCount}}</span>
                 <span class="stat-label" style="color: white;"> Pending</span>
               </div>
             </div>

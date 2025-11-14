@@ -909,6 +909,34 @@ Return ONLY valid JSON.`,
           placeholder: 'Enter the prompt for cultural adaptation...'
         }
       }
+    },
+    {
+      id: 'inventor',
+      name: 'Inventor (Interaction Builder)',
+      icon: '🔧',
+      description: 'Helps interaction-builders create and troubleshoot HTML, PixiJS, and iFrame interactions. Provides guidance for Settings, Code, Config Schema, and Sample Data tabs.',
+      prompts: {
+        'html-interaction': {
+          label: 'HTML Interaction Assistant',
+          content: 'Loading from database...',
+          placeholder: 'Provide guidance for building HTML interactions...'
+        },
+        'pixijs-interaction': {
+          label: 'PixiJS Interaction Assistant',
+          content: 'Loading from database...',
+          placeholder: 'Provide guidance for building PixiJS interactions...'
+        },
+        'iframe-interaction': {
+          label: 'iFrame Interaction Assistant',
+          content: 'Loading from database...',
+          placeholder: 'Provide guidance for configuring iFrame embeds...'
+        },
+        'general': {
+          label: 'General Interaction Assistant',
+          content: 'Loading from database...',
+          placeholder: 'Provide general interaction design guidance...'
+        }
+      }
     }
   ];
 
