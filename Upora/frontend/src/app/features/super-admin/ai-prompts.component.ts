@@ -548,6 +548,11 @@ export class AiPromptsComponent implements OnInit {
           content: 'You are a helpful assistant that summarizes conversation history concisely while preserving important context...',
           placeholder: 'Enter the prompt for summarizing conversation history...'
         },
+        'iframe-screenshot': {
+          label: 'IFrame Screenshot Prompt',
+          content: 'You are analyzing a screenshot of an iframed website that a student is interacting with during a lesson. Your role is to provide very brief, helpful guidance...',
+          placeholder: 'Enter the prompt for analyzing iframe screenshots...'
+        },
         feedbackGeneration: {
           label: 'Student Feedback Prompt',
           content: 'You are an encouraging AI tutor. The student just answered a question incorrectly. Provide helpful, constructive feedback that guides them toward the correct answer without giving it away...',
@@ -877,8 +882,19 @@ Return JSON array of script blocks with timestamps and playback rules.`,
         // Update assistant prompts with database content and store originals
         dbPrompts.forEach(dbPrompt => {
           const assistant = this.assistants.find(a => a.id === dbPrompt.assistantId);
-          if (assistant && assistant.prompts[dbPrompt.promptKey]) {
-            assistant.prompts[dbPrompt.promptKey].content = dbPrompt.content;
+          if (assistant) {
+            // If prompt exists in hardcoded list, update it
+            if (assistant.prompts[dbPrompt.promptKey]) {
+              assistant.prompts[dbPrompt.promptKey].content = dbPrompt.content;
+            } else {
+              // Add new prompt from database that's not in hardcoded list
+              assistant.prompts[dbPrompt.promptKey] = {
+                label: dbPrompt.label || dbPrompt.promptKey,
+                content: dbPrompt.content,
+                placeholder: `Enter the prompt for ${dbPrompt.label || dbPrompt.promptKey}...`
+              };
+              console.log(`[AIPrompts] ➕ Added new prompt from DB: ${dbPrompt.assistantId}.${dbPrompt.promptKey}`);
+            }
             
             // Store original content for reset functionality
             const promptId = `${dbPrompt.assistantId}.${dbPrompt.promptKey}`;

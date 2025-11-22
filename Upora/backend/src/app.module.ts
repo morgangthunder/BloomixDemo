@@ -37,6 +37,7 @@ import { ContentAnalyzerModule } from './services/content-analyzer.module';
 import { AutoPopulatorModule } from './services/auto-populator.module';
 import { WeaviateModule } from './services/weaviate.module';
 import { LessonDraftsModule } from './lesson-drafts/lesson-drafts.module';
+import { TestsModule } from './modules/tests/tests.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { LessonDraftsModule } from './lesson-drafts/lesson-drafts.module';
     AiAssistantModule,
     InteractionResultsModule,
     LessonDraftsModule,
+    TestsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

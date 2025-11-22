@@ -39,7 +39,13 @@ export class InteractionType {
   iframeUrl: string; // URL for iFrame interactions
 
   @Column('jsonb', { name: 'iframe_config', nullable: true })
-  iframeConfig: any; // Config for iFrame (width, height, permissions)
+  iframeConfig: any; // Config for iFrame (width, height, permissions, screenshotTriggers)
+
+  @Column('varchar', { name: 'iframe_document_url', nullable: true })
+  iframeDocumentUrl: string; // URL to uploaded document for iframe interactions
+
+  @Column('varchar', { name: 'iframe_document_file_name', nullable: true })
+  iframeDocumentFileName: string; // Original filename of uploaded document
 
   @Column('jsonb', { name: 'config_schema', nullable: true })
   configSchema: any; // Schema defining what lesson-builders can configure

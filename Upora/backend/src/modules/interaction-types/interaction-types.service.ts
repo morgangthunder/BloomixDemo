@@ -1,13 +1,15 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InteractionType } from '../../entities/interaction-type.entity';
+import { FileStorageService } from '../../services/file-storage.service';
 
 @Injectable()
 export class InteractionTypesService implements OnModuleInit {
   constructor(
     @InjectRepository(InteractionType)
     private interactionTypeRepository: Repository<InteractionType>,
+    private fileStorageService: FileStorageService,
   ) {}
 
   async onModuleInit() {
@@ -149,6 +151,56 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this structure:
     // TODO: Implement Zod validation against type.schema
     // For now, just check basic structure
     return output && typeof output === 'object';
+  }
+
+  async uploadDocument(interactionId: string, file: any): Promise<{ success: boolean; data: { url: string; fileName: string } }> {
+    const interaction = await this.findOne(interactionId);
+    if (!interaction) {
+      throw new NotFoundException(`Interaction type ${interactionId} not found`);
+    }
+
+    // Delete old document if exists
+    if (interaction.iframeDocumentUrl) {
+      try {
+        await this.fileStorageService.deleteFile(interaction.iframeDocumentUrl);
+      } catch (error) {
+        // Log but don't fail if old file doesn't exist
+        console.warn(`Failed to delete old document: ${error}`);
+      }
+    }
+
+    // Save new file
+    const { url, fileName } = await this.fileStorageService.saveFile(file, 'interaction-documents');
+
+    // Update interaction
+    await this.interactionTypeRepository.update(interactionId, {
+      iframeDocumentUrl: url,
+      iframeDocumentFileName: fileName,
+    });
+
+    return {
+      success: true,
+      data: { url, fileName },
+    };
+  }
+
+  async removeDocument(interactionId: string): Promise<{ success: boolean }> {
+    const interaction = await this.findOne(interactionId);
+    if (!interaction) {
+      throw new NotFoundException(`Interaction type ${interactionId} not found`);
+    }
+
+    if (interaction.iframeDocumentUrl) {
+      await this.fileStorageService.deleteFile(interaction.iframeDocumentUrl);
+    }
+
+    // Clear document fields
+    await this.interactionTypeRepository.update(interactionId, {
+      iframeDocumentUrl: undefined,
+      iframeDocumentFileName: undefined,
+    });
+
+    return { success: true };
   }
 }
 

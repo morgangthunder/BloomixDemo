@@ -104,6 +104,17 @@ import { environment } from '../../../environments/environment';
               </div>
             </div>
           </div>
+
+          <!-- Tests -->
+          <div class="dashboard-card" (click)="navigateTo('/super-admin/tests')">
+            <div class="card-icon">🧪</div>
+            <div class="card-content">
+              <h3>Tests</h3>
+              <p>Run and view test results for all test suites</p>
+              <div class="card-status active">Available</div>
+            </div>
+            <div class="card-arrow">→</div>
+          </div>
         </div>
       </div>
     </ion-content>

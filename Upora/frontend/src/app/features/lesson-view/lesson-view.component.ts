@@ -1563,10 +1563,26 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // Get lesson data (full JSON structure)
     const lessonData = this.lesson ? this.lesson.data : null;
     
+    // Get current stage and sub-stage information
+    const currentStageInfo = {
+      stageId: this.activeStageId,
+      subStageId: this.activeSubStageId,
+      stage: this.currentStage ? {
+        id: this.currentStage.id,
+        title: this.currentStage.title,
+        type: this.currentStage.type
+      } : null,
+      subStage: this.activeSubStage ? {
+        id: this.activeSubStage.id,
+        title: this.activeSubStage.title,
+        type: this.activeSubStage.type
+      } : null
+    };
+    
     // If screenshot is provided, this is a response to a screenshot request
     const isScreenshotRequest = !!screenshot;
     
-    this.wsService.sendMessage(message, conversationHistory, lessonData, screenshot, isScreenshotRequest);
+    this.wsService.sendMessage(message, conversationHistory, lessonData, screenshot, isScreenshotRequest, currentStageInfo);
     
     // Reset screenshot request state
     if (isScreenshotRequest) {

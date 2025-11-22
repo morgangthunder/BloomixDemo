@@ -290,6 +290,26 @@ export class AiAssistantService {
 
     // For teacher assistant, include lesson data and Weaviate search results
     if (context.lessonId && context.lessonData) {
+      // Add current stage and sub-stage information (IMPORTANT: Always include this for context)
+      if (context.currentStageInfo) {
+        contextualMessage += `\n\n=== CURRENT STAGE AND SUB-STAGE ===\n`;
+        if (context.currentStageInfo.stage) {
+          contextualMessage += `Stage: ${context.currentStageInfo.stage.title}`;
+          if (context.currentStageInfo.stage.type) {
+            contextualMessage += ` (${context.currentStageInfo.stage.type})`;
+          }
+          contextualMessage += `\n`;
+        }
+        if (context.currentStageInfo.subStage) {
+          contextualMessage += `Sub-Stage: ${context.currentStageInfo.subStage.title}`;
+          if (context.currentStageInfo.subStage.type) {
+            contextualMessage += ` (${context.currentStageInfo.subStage.type})`;
+          }
+          contextualMessage += `\n`;
+        }
+        contextualMessage += `\nThe student is currently viewing this stage/sub-stage in the lesson. Use this context to provide relevant guidance.\n`;
+      }
+
       contextualMessage += `\n\n=== LESSON DATA ===\n`;
       contextualMessage += JSON.stringify(context.lessonData, null, 2);
       contextualMessage += `\n`;
@@ -322,6 +342,23 @@ export class AiAssistantService {
           contextualMessage += `\n`;
         });
       }
+
+      // Add iframe screenshot context if present
+      if (context.screenshot) {
+        contextualMessage += `\n=== SCREENSHOT ===\n`;
+        contextualMessage += `${context.screenshot}\n`;
+      }
+
+      if (context.documentContent) {
+        contextualMessage += `\n=== REFERENCE DOCUMENT ===\n`;
+        contextualMessage += `${context.documentContent}\n`;
+      }
+
+      if (context.triggerEvent) {
+        contextualMessage += `\n=== TRIGGER EVENT ===\n`;
+        contextualMessage += `${context.triggerEvent}\n`;
+      }
+
       return contextualMessage;
     }
 

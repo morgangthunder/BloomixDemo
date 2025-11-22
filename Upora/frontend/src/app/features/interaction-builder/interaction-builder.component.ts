@@ -22,6 +22,8 @@ interface InteractionType {
   jsCode?: string;
   iframeUrl?: string;
   iframeConfig?: any;
+  iframeDocumentUrl?: string; // URL to uploaded document
+  iframeDocumentFileName?: string; // Original filename
   category?: string;
   pixiRenderer?: string;
   isActive?: boolean;
@@ -317,6 +319,87 @@ interface ChatMessage {
                               placeholder="iFrame configuration JSON"
                               spellcheck="false"></textarea>
                     <small class="hint">Optional: width, height, allow permissions, etc.</small>
+                  </div>
+
+                  <!-- Screenshot Trigger Options -->
+                  <div class="form-group">
+                    <label>Screenshot Triggers</label>
+                    <small class="hint">Select when to automatically capture screenshots for AI guidance</small>
+                    <div class="checkbox-group">
+                      <label class="checkbox-label">
+                        <input type="checkbox" 
+                               [checked]="getScreenshotTrigger('iframeLoad')"
+                               (change)="toggleScreenshotTrigger('iframeLoad', $event)"
+                               [disabled]="!currentInteraction?.iframeConfig" />
+                        <span>On iframe load (initial page load)</span>
+                      </label>
+                      <label class="checkbox-label">
+                        <input type="checkbox" 
+                               [checked]="getScreenshotTrigger('iframeUrlChange')"
+                               (change)="toggleScreenshotTrigger('iframeUrlChange', $event)"
+                               [disabled]="!currentInteraction?.iframeConfig" />
+                        <span>On URL change (navigation within iframe)</span>
+                      </label>
+                      <label class="checkbox-label">
+                        <input type="checkbox" 
+                               [checked]="getScreenshotTrigger('postMessage')"
+                               (change)="toggleScreenshotTrigger('postMessage', $event)"
+                               [disabled]="!currentInteraction?.iframeConfig" />
+                        <span>On postMessage (if iframed site sends messages)</span>
+                      </label>
+                      <label class="checkbox-label">
+                        <input type="checkbox" 
+                               [checked]="getScreenshotTrigger('scriptBlockComplete')"
+                               (change)="toggleScreenshotTrigger('scriptBlockComplete', $event)"
+                               [disabled]="!currentInteraction?.iframeConfig" />
+                        <span>On script block completion (after teacher narration)</span>
+                      </label>
+                      <label class="checkbox-label">
+                        <input type="checkbox" 
+                               [checked]="getScreenshotTrigger('periodic')"
+                               (change)="toggleScreenshotTrigger('periodic', $event)"
+                               [disabled]="!currentInteraction?.iframeConfig" />
+                        <span>Periodic screenshots</span>
+                        <input *ngIf="getScreenshotTrigger('periodic')" 
+                               type="number" 
+                               [value]="getPeriodicInterval()"
+                               (change)="setPeriodicInterval($event)"
+                               min="5" 
+                               max="300" 
+                               class="interval-input"
+                               placeholder="30" />
+                        <span class="hint-inline">seconds</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <!-- Document Upload -->
+                  <div class="form-group">
+                    <label>Reference Document (Optional)</label>
+                    <small class="hint">Upload a document (PDF, DOCX, TXT) to provide context for AI guidance. This document will be included in all screenshot-triggered AI queries.</small>
+                    <div class="file-upload-area">
+                      <input type="file" 
+                             #fileInput
+                             (change)="onDocumentUpload($event)"
+                             accept=".pdf,.docx,.txt,.doc"
+                             class="file-input"
+                             [disabled]="uploadingDocument" />
+                      <div *ngIf="!currentInteraction?.iframeDocumentUrl && !uploadingDocument" class="upload-prompt">
+                        <button type="button" (click)="fileInput.click()" class="btn-secondary btn-small">
+                          📄 Choose Document
+                        </button>
+                        <span class="hint">Max 10MB. PDF, DOCX, or TXT</span>
+                      </div>
+                      <div *ngIf="uploadingDocument" class="upload-status">
+                        <span>⏳ Uploading...</span>
+                      </div>
+                      <div *ngIf="currentInteraction?.iframeDocumentUrl && !uploadingDocument" class="uploaded-file">
+                        <span class="file-name">📄 {{ getDocumentFileName() }}</span>
+                        <button type="button" (click)="removeDocument()" class="btn-remove" title="Remove document">
+                          ✕
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -2319,6 +2402,7 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
 
   // JSON text fields (for editing)
   iframeConfigText = '';
+  uploadingDocument = false;
   configSchemaText = '';
   sampleDataText = '';
   configSchemaError = '';
@@ -2515,6 +2599,123 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
       this.currentInteraction!.iframeConfig = JSON.parse(this.iframeConfigText);
     } catch (e: any) {
       // Keep as text for now, will validate on save
+    }
+  }
+
+  getScreenshotTrigger(trigger: string): boolean {
+    if (!this.currentInteraction?.iframeConfig?.screenshotTriggers) {
+      return false;
+    }
+    return this.currentInteraction.iframeConfig.screenshotTriggers[trigger] === true;
+  }
+
+  toggleScreenshotTrigger(trigger: string, event: Event) {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.markChanged();
+    
+    if (!this.currentInteraction!.iframeConfig) {
+      this.currentInteraction!.iframeConfig = {};
+    }
+    if (!this.currentInteraction!.iframeConfig.screenshotTriggers) {
+      this.currentInteraction!.iframeConfig.screenshotTriggers = {};
+    }
+    
+    this.currentInteraction!.iframeConfig.screenshotTriggers[trigger] = checked;
+    this.iframeConfigText = JSON.stringify(this.currentInteraction!.iframeConfig, null, 2);
+  }
+
+  getPeriodicInterval(): number {
+    if (!this.currentInteraction?.iframeConfig?.screenshotTriggers?.periodicInterval) {
+      return 30; // Default 30 seconds
+    }
+    return this.currentInteraction.iframeConfig.screenshotTriggers.periodicInterval;
+  }
+
+  setPeriodicInterval(event: Event) {
+    const value = parseInt((event.target as HTMLInputElement).value, 10);
+    this.markChanged();
+    
+    if (!this.currentInteraction!.iframeConfig) {
+      this.currentInteraction!.iframeConfig = {};
+    }
+    if (!this.currentInteraction!.iframeConfig.screenshotTriggers) {
+      this.currentInteraction!.iframeConfig.screenshotTriggers = {};
+    }
+    
+    this.currentInteraction!.iframeConfig.screenshotTriggers.periodicInterval = value || 30;
+    this.iframeConfigText = JSON.stringify(this.currentInteraction!.iframeConfig, null, 2);
+  }
+
+  async onDocumentUpload(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    
+    if (!file) return;
+    
+    // Validate file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File size must be less than 10MB');
+      return;
+    }
+    
+    // Validate file type
+    const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain', 'application/msword'];
+    if (!allowedTypes.includes(file.type)) {
+      alert('Please upload a PDF, DOCX, or TXT file');
+      return;
+    }
+    
+    this.uploadingDocument = true;
+    this.markChanged();
+    
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('interactionId', this.currentInteraction!.id || '');
+      
+      const response = await this.http.post<{ success: boolean; data: { url: string; fileName: string } }>(
+        `${environment.apiUrl}/interaction-types/upload-document`,
+        formData
+      ).toPromise();
+      
+      if (response?.success && response.data) {
+        this.currentInteraction!.iframeDocumentUrl = response.data.url;
+        this.currentInteraction!.iframeDocumentFileName = response.data.fileName;
+        console.log('[InteractionBuilder] ✅ Document uploaded:', response.data.fileName);
+      } else {
+        throw new Error('Upload failed');
+      }
+    } catch (error: any) {
+      console.error('[InteractionBuilder] ❌ Document upload error:', error);
+      alert(`Failed to upload document: ${error.message || 'Unknown error'}`);
+    } finally {
+      this.uploadingDocument = false;
+      // Reset file input
+      input.value = '';
+    }
+  }
+
+  getDocumentFileName(): string {
+    return this.currentInteraction?.iframeDocumentFileName || 'document';
+  }
+
+  async removeDocument() {
+    if (!confirm('Remove this document?')) return;
+    
+    if (this.currentInteraction?.iframeDocumentUrl) {
+      try {
+        await this.http.delete(
+          `${environment.apiUrl}/interaction-types/document/${this.currentInteraction.id}`
+        ).toPromise();
+        
+        this.currentInteraction.iframeDocumentUrl = undefined;
+        this.currentInteraction.iframeDocumentFileName = undefined;
+        this.markChanged();
+        console.log('[InteractionBuilder] ✅ Document removed');
+      } catch (error: any) {
+        console.error('[InteractionBuilder] ❌ Document removal error:', error);
+        alert(`Failed to remove document: ${error.message || 'Unknown error'}`);
+      }
     }
   }
 

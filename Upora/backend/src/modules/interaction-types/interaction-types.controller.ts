@@ -1,4 +1,5 @@
-import { Controller, Get, Param, Post, Put, Body, Headers } from '@nestjs/common';
+import { Controller, Get, Param, Post, Put, Body, Headers, Delete, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { InteractionTypesService } from './interaction-types.service';
 import { CreateInteractionTypeDto, UpdateInteractionTypeDto } from './dto/interaction-type.dto';
 
@@ -43,6 +44,42 @@ export class InteractionTypesController {
   async seed() {
     await this.interactionTypesService.seedTrueFalseSelection();
     return { message: 'True/False Selection seeded successfully' };
+  }
+
+  @Post('upload-document')
+  @UseInterceptors(FileInterceptor('file', {
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+  }))
+  async uploadDocument(
+    @UploadedFile() file: any,
+    @Body('interactionId') interactionId: string,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file provided');
+    }
+
+    if (!interactionId) {
+      throw new BadRequestException('Interaction ID is required');
+    }
+
+    // Validate file type
+    const allowedMimeTypes = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain',
+      'application/msword',
+    ];
+
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      throw new BadRequestException('Invalid file type. Only PDF, DOCX, and TXT files are allowed.');
+    }
+
+    return this.interactionTypesService.uploadDocument(interactionId, file);
+  }
+
+  @Delete('document/:id')
+  async removeDocument(@Param('id') id: string) {
+    return this.interactionTypesService.removeDocument(id);
   }
 }
 

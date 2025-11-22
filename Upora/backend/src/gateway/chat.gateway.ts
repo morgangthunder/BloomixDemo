@@ -25,6 +25,12 @@ interface ChatMessage {
   lessonData?: any; // Optional lesson JSON (if not provided, will be fetched from DB)
   screenshot?: string; // Optional base64-encoded screenshot image
   isScreenshotRequest?: boolean; // True if this message is a screenshot response to a request
+  currentStageInfo?: { // Current stage and sub-stage the student is viewing
+    stageId?: string | number | null;
+    subStageId?: string | number | null;
+    stage?: { id: string | number; title: string; type?: string } | null;
+    subStage?: { id: string | number; title: string; type?: string } | null;
+  };
 }
 
 interface JoinLessonPayload {
@@ -192,6 +198,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.logger.log(`[Teacher] Calling AI Assistant Service with lessonId: ${lessonId}`);
       this.logger.log(`[Teacher] Conversation history: ${formattedHistory.length} messages`);
       this.logger.log(`[Teacher] Lesson data size: ${JSON.stringify(lessonDataToUse).length} chars`);
+      if (payload.currentStageInfo) {
+        this.logger.log(`[Teacher] Current stage: ${payload.currentStageInfo.stage?.title || 'N/A'}, Sub-stage: ${payload.currentStageInfo.subStage?.title || 'N/A'}`);
+      }
       
       const response = await this.aiAssistantService.chat(
         {
@@ -202,6 +211,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             lessonId: lessonId,
             lessonData: lessonDataToUse,
             screenshot: screenshot, // Pass screenshot to context
+            currentStageInfo: payload.currentStageInfo, // Pass current stage/sub-stage info
           },
           conversationHistory: formattedHistory,
         },

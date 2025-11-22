@@ -119,7 +119,7 @@ export class WebSocketService {
   /**
    * Send a chat message with conversation history and lesson data
    */
-  sendMessage(message: string, conversationHistory?: ChatMessage[], lessonData?: any, screenshot?: string, isScreenshotRequest?: boolean): void {
+  sendMessage(message: string, conversationHistory?: ChatMessage[], lessonData?: any, screenshot?: string, isScreenshotRequest?: boolean, currentStageInfo?: any): void {
     if (!this.socket || !this.currentLessonId) {
       console.error('[WebSocketService] Cannot send message - not connected to lesson');
       return;
@@ -129,6 +129,9 @@ export class WebSocketService {
     console.log(`[WebSocketService] Conversation history: ${conversationHistory?.length || 0} messages`);
     if (screenshot) {
       console.log(`[WebSocketService] Including screenshot (${screenshot.length} chars)`);
+    }
+    if (currentStageInfo) {
+      console.log(`[WebSocketService] Current stage: ${currentStageInfo.stage?.title || 'N/A'}, Sub-stage: ${currentStageInfo.subStage?.title || 'N/A'}`);
     }
 
     // Format conversation history for backend (exclude current message)
@@ -148,6 +151,7 @@ export class WebSocketService {
       lessonData: lessonData, // Optional - backend will fetch if not provided
       screenshot: screenshot, // Optional - base64 screenshot
       isScreenshotRequest: isScreenshotRequest || false, // True if this is a screenshot response
+      currentStageInfo: currentStageInfo, // Current stage and sub-stage the student is viewing
     });
   }
 
