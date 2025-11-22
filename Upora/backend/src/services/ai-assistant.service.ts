@@ -3,14 +3,22 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { GrokService, GrokRequest, GrokResponse } from './grok.service';
 import { AiPromptsService } from '../modules/ai-prompts/ai-prompts.service';
+import { WeaviateService } from './weaviate.service';
 import { LlmGenerationLog } from '../entities/llm-generation-log.entity';
+import { ProcessedContentOutput } from '../entities/processed-content-output.entity';
 import { User } from '../entities/user.entity';
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
 
 export interface AssistantChatRequest {
   assistantId: string; // 'inventor' | 'ai-teacher' | 'lesson-builder' | etc.
   promptKey: string; // 'html-interaction' | 'general' | etc.
   userMessage: string;
   context?: any; // Additional context (e.g., current interaction data)
+  conversationHistory?: ChatMessage[]; // Previous messages in the conversation
 }
 
 export interface AssistantChatResponse {
@@ -39,12 +47,24 @@ export interface AssistantChatResponse {
 @Injectable()
 export class AiAssistantService {
   private readonly logger = new Logger(AiAssistantService.name);
+  
+  // Threshold for conversation history length (characters)
+  // When exceeded, we summarize the history to keep context manageable
+  private readonly CONVERSATION_HISTORY_THRESHOLD = 6000;
+  
+  // Maximum estimated tokens for a request (conservative estimate: ~4 chars per token)
+  // Grok typically allows 32k tokens, but we set a lower limit to be safe
+  private readonly MAX_ESTIMATED_TOKENS = 28000; // Leave room for response
+  private readonly CHARS_PER_TOKEN = 4; // Conservative estimate
 
   constructor(
     private grokService: GrokService,
     private aiPromptsService: AiPromptsService,
+    private weaviateService: WeaviateService,
     @InjectRepository(LlmGenerationLog)
     private llmLogRepository: Repository<LlmGenerationLog>,
+    @InjectRepository(ProcessedContentOutput)
+    private processedOutputRepository: Repository<ProcessedContentOutput>,
   ) {}
 
   /**
@@ -73,18 +93,139 @@ export class AiAssistantService {
         `[${request.assistantId}] Using prompt: ${request.promptKey}`,
       );
 
-      // 2. Build Grok request with system prompt + user message
+      // 2. Process conversation history (summarize if needed)
+      let processedHistory = request.conversationHistory || [];
+      const historyLength = this.calculateHistoryLength(processedHistory);
+      
+      if (historyLength > this.CONVERSATION_HISTORY_THRESHOLD) {
+        this.logger.log(
+          `[${request.assistantId}] Conversation history exceeds threshold (${historyLength} chars), summarizing...`,
+        );
+        const summary = await this.summarizeConversationHistory(
+          processedHistory,
+          request.assistantId,
+          user,
+        );
+        // Replace history with summary
+        processedHistory = [
+          {
+            role: 'user' as const,
+            content: `[Previous conversation summary]: ${summary}`,
+          },
+        ];
+        this.logger.log(
+          `[${request.assistantId}] History summarized to ${summary.length} characters`,
+        );
+      }
+
+      // 2.5. For teacher assistant, perform Weaviate search to find relevant content chunks
+      let relevantContentChunks: any[] = [];
+      if (request.assistantId === 'teacher' && request.context?.lessonId) {
+        try {
+          relevantContentChunks = await this.searchRelevantContentForLesson(
+            request.userMessage,
+            request.context.lessonId,
+            user.tenantId,
+          );
+          this.logger.log(
+            `[teacher] Found ${relevantContentChunks.length} relevant content chunks from Weaviate`,
+          );
+        } catch (error) {
+          this.logger.error(
+            `[teacher] Failed to search Weaviate: ${error.message}`,
+          );
+          // Continue without Weaviate results
+        }
+      }
+
+      // 3. Build Grok request with system prompt + conversation history + current user message
+      // Replace placeholders in prompt content for teacher assistant
+      let systemPromptContent = prompt.content;
+      if (request.assistantId === 'teacher' && request.context?.lessonId) {
+        // Replace placeholders in the prompt
+        systemPromptContent = systemPromptContent
+          .replace('{lesson_data}', 'See user message below')
+          .replace('{relevant_content_chunks}', 'See user message below')
+          .replace('{conversation_history}', 'See user message below')
+          .replace('{student_question}', 'See user message below');
+
+        // Load and include screenshot criteria prompt for teacher assistant
+        try {
+          const screenshotCriteriaPrompt = await this.aiPromptsService.findByKey(
+            'teacher',
+            'screenshot-criteria',
+          );
+          if (screenshotCriteriaPrompt) {
+            systemPromptContent += `\n\n=== SCREENSHOT REQUEST CRITERIA ===\n${screenshotCriteriaPrompt.content}`;
+            this.logger.log('[teacher] Included screenshot criteria in prompt');
+          }
+        } catch (error) {
+          this.logger.warn(
+            `[teacher] Failed to load screenshot criteria prompt: ${error.message}`,
+          );
+          // Continue without screenshot criteria
+        }
+      }
+
+      const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+        {
+          role: 'system',
+          content: systemPromptContent,
+        },
+      ];
+
+      // Add conversation history
+      for (const msg of processedHistory) {
+        messages.push({
+          role: msg.role === 'user' ? 'user' : 'assistant',
+          content: msg.content,
+        });
+      }
+
+      // Build user message with context
+      const userMessageContent = this.buildUserMessage(
+        request.userMessage,
+        request.context,
+        relevantContentChunks,
+      );
+
+      // 3.5. Check total message size and summarize if needed to avoid token limits
+      const totalChars = this.estimateTotalChars(messages, userMessageContent, systemPromptContent);
+      const estimatedTokens = Math.ceil(totalChars / this.CHARS_PER_TOKEN);
+      
+      if (estimatedTokens > this.MAX_ESTIMATED_TOKENS) {
+        this.logger.warn(
+          `[${request.assistantId}] Estimated tokens (${estimatedTokens}) exceed limit (${this.MAX_ESTIMATED_TOKENS}), summarizing system prompt...`,
+        );
+        
+        // Summarize the system prompt to reduce size
+        try {
+          const summarizedPrompt = await this.summarizePrompt(
+            systemPromptContent,
+            request.assistantId,
+            user,
+          );
+          systemPromptContent = summarizedPrompt;
+          messages[0].content = summarizedPrompt;
+          this.logger.log(
+            `[${request.assistantId}] System prompt summarized from ${systemPromptContent.length} to ${summarizedPrompt.length} chars`,
+          );
+        } catch (error) {
+          this.logger.error(
+            `[${request.assistantId}] Failed to summarize prompt: ${error.message}`,
+          );
+          // Continue with original prompt - might hit token limit but better than failing
+        }
+      }
+
+      // Add current user message with context
+      messages.push({
+        role: 'user',
+        content: userMessageContent,
+      });
+
       const grokRequest: GrokRequest = {
-        messages: [
-          {
-            role: 'system',
-            content: prompt.content,
-          },
-          {
-            role: 'user',
-            content: this.buildUserMessage(request.userMessage, request.context),
-          },
-        ],
+        messages,
         temperature: 0.7,
         maxTokens: 2000,
         lessonContext: request.context,
@@ -95,13 +236,13 @@ export class AiAssistantService {
         grokRequest,
       );
 
-      // 4. Parse response for suggested changes (if applicable)
+      // 5. Parse response for suggested changes (if applicable)
       const suggestedChanges = this.parseSuggestedChanges(
         grokResponse.content,
         request.assistantId,
       );
 
-      // 5. Log usage to database
+      // 6. Log usage to database
       const processingTime = Date.now() - startTime;
       await this.logUsage({
         userId: user.id,
@@ -115,7 +256,7 @@ export class AiAssistantService {
         processingTimeMs: processingTime,
       });
 
-      // 6. Return response
+      // 7. Return response
       return {
         content: grokResponse.content,
         suggestedChanges,
@@ -135,13 +276,54 @@ export class AiAssistantService {
   /**
    * Build user message with context
    */
-  private buildUserMessage(userMessage: string, context?: any): string {
+  private buildUserMessage(
+    userMessage: string,
+    context?: any,
+    relevantContentChunks?: any[],
+  ): string {
     if (!context) {
       return userMessage;
     }
 
     // Add context information to the user message
     let contextualMessage = userMessage;
+
+    // For teacher assistant, include lesson data and Weaviate search results
+    if (context.lessonId && context.lessonData) {
+      contextualMessage += `\n\n=== LESSON DATA ===\n`;
+      contextualMessage += JSON.stringify(context.lessonData, null, 2);
+      contextualMessage += `\n`;
+
+      // Add relevant content chunks from Weaviate
+      if (relevantContentChunks && relevantContentChunks.length > 0) {
+        contextualMessage += `\n=== RELEVANT CONTENT CHUNKS ===\n`;
+        relevantContentChunks.forEach((chunk, idx) => {
+          contextualMessage += `\n[Content Chunk ${idx + 1}]\n`;
+          if (chunk.title) {
+            contextualMessage += `Title: ${chunk.title}\n`;
+          }
+          if (chunk.summary) {
+            contextualMessage += `Summary: ${chunk.summary}\n`;
+          }
+          if (chunk.fullText) {
+            // Truncate fullText to first 500 chars to avoid token bloat
+            const truncatedText =
+              chunk.fullText.length > 500
+                ? chunk.fullText.substring(0, 500) + '...'
+                : chunk.fullText;
+            contextualMessage += `Content: ${truncatedText}\n`;
+          }
+          if (chunk.topics && chunk.topics.length > 0) {
+            contextualMessage += `Topics: ${chunk.topics.join(', ')}\n`;
+          }
+          if (chunk.sourceUrl) {
+            contextualMessage += `Source: ${chunk.sourceUrl}\n`;
+          }
+          contextualMessage += `\n`;
+        });
+      }
+      return contextualMessage;
+    }
 
     // For inventor assistant, include current interaction state
     // Support both old format (context.interaction) and new format (context.settings, context.code, etc.)
@@ -393,6 +575,230 @@ export class AiAssistantService {
     } catch (error) {
       this.logger.error(`Failed to log LLM usage: ${error.message}`, error.stack);
       // Don't throw - logging failure shouldn't break the request
+    }
+  }
+
+  /**
+   * Calculate total character length of conversation history
+   */
+  private calculateHistoryLength(history: ChatMessage[]): number {
+    return history.reduce((total, msg) => total + msg.content.length, 0);
+  }
+
+  /**
+   * Summarize conversation history when it exceeds threshold
+   * Makes a separate call to Grok to create a concise summary
+   */
+  private async summarizeConversationHistory(
+    history: ChatMessage[],
+    assistantId: string,
+    user: User,
+  ): Promise<string> {
+    this.logger.log(
+      `[${assistantId}] Summarizing ${history.length} messages from conversation history`,
+    );
+
+    // Load the conversation summary prompt from database
+    const summaryPrompt = await this.aiPromptsService.findByKey(
+      assistantId,
+      'conversation-summary',
+    );
+
+    if (!summaryPrompt) {
+      this.logger.warn(
+        `[${assistantId}] Conversation summary prompt not found, using fallback`,
+      );
+      // Fallback to simple truncation if prompt not found
+      return `[Conversation summary unavailable. Previous ${history.length} messages were discussed.]`;
+    }
+
+    // Build conversation history text
+    const historyText = history
+      .map((msg, idx) => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
+      .join('\n\n');
+
+    // Replace placeholder in prompt template with actual conversation history
+    const promptContent = summaryPrompt.content.replace(
+      '{conversation_history}',
+      historyText,
+    );
+
+    try {
+      // Use the prompt content as the user message
+      // The prompt template should contain all necessary instructions
+      const summaryRequest: GrokRequest = {
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a helpful assistant that summarizes conversation history concisely while preserving important context.',
+          },
+          {
+            role: 'user',
+            content: promptContent,
+          },
+        ],
+        temperature: 0.3, // Lower temperature for more consistent summaries
+        maxTokens: 1000, // Limit summary length
+      };
+
+      const summaryResponse = await this.grokService.chatCompletion(summaryRequest);
+
+      // Log the summarization usage
+      await this.logUsage({
+        userId: user.id,
+        tenantId: user.tenantId,
+        assistantId: assistantId,
+        promptKey: 'conversation-summary',
+        promptText: summaryPrompt.content,
+        userMessage: 'Summarize conversation history',
+        response: summaryResponse.content,
+        tokensUsed: summaryResponse.tokensUsed,
+        processingTimeMs: 0, // Not tracking time for summary
+      });
+
+      return summaryResponse.content;
+    } catch (error) {
+      this.logger.error(
+        `[${assistantId}] Failed to summarize conversation history: ${error.message}`,
+      );
+      // Fallback: return a simple truncation
+      return `[Conversation summary unavailable. Previous ${history.length} messages were discussed.]`;
+    }
+  }
+
+  /**
+   * Search Weaviate for relevant content chunks based on student's question
+   * Returns content from sources used in the lesson
+   */
+  private async searchRelevantContentForLesson(
+    studentQuery: string,
+    lessonId: string,
+    tenantId: string,
+  ): Promise<any[]> {
+    try {
+      // 1. Get all content source IDs for this lesson from ProcessedContentOutput
+      const processedOutputs = await this.processedOutputRepository.find({
+        where: { lessonId },
+        select: ['contentSourceId'],
+      });
+
+      const contentSourceIds = processedOutputs
+        .map((output) => output.contentSourceId)
+        .filter((id): id is string => id !== null);
+
+      if (contentSourceIds.length === 0) {
+        this.logger.log(
+          `[teacher] No content sources found for lesson ${lessonId}`,
+        );
+        return [];
+      }
+
+      // 2. Search Weaviate for relevant content chunks
+      const searchResults = await this.weaviateService.searchByContentSourceIds(
+        studentQuery,
+        contentSourceIds,
+        tenantId,
+        5, // Limit to top 5 most relevant chunks
+      );
+
+      // 3. Format results for inclusion in prompt
+      return searchResults.map((result) => ({
+        title: result.title,
+        summary: result.summary,
+        fullText: result.fullText,
+        topics: result.topics,
+        keywords: result.keywords,
+        sourceUrl: result.sourceUrl,
+        contentCategory: result.contentCategory,
+        videoId: result.videoId,
+        channel: result.channel,
+        transcript: result.transcript,
+        relevanceScore: result.relevanceScore,
+      }));
+    } catch (error) {
+      this.logger.error(
+        `[teacher] Error searching relevant content: ${error.message}`,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Estimate total character count of all messages
+   */
+  private estimateTotalChars(
+    messages: Array<{ role: string; content: string }>,
+    userMessage: string,
+    systemPrompt: string,
+  ): number {
+    let total = 0;
+    // Count all existing messages (excluding system which we'll recalculate)
+    for (const msg of messages) {
+      if (msg.role !== 'system') {
+        total += msg.content.length;
+      }
+    }
+    // Add system prompt (updated/current version)
+    total += systemPrompt.length;
+    // Add user message
+    total += userMessage.length;
+    return total;
+  }
+
+  /**
+   * Summarize a prompt to reduce its size while preserving key information
+   */
+  private async summarizePrompt(
+    promptContent: string,
+    assistantId: string,
+    user: User,
+  ): Promise<string> {
+    try {
+      this.logger.log(
+        `[${assistantId}] Summarizing prompt (${promptContent.length} chars) to reduce token usage`,
+      );
+
+      // Create a summarization request
+      const summaryRequest: GrokRequest = {
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are a helpful assistant that summarizes prompts concisely while preserving all critical instructions and guidelines.',
+          },
+          {
+            role: 'user',
+            content: `Please summarize the following prompt, keeping all essential instructions, guidelines, and requirements intact. Make it more concise but don't remove any important information:
+
+${promptContent}`,
+          },
+        ],
+        temperature: 0.3, // Lower temperature for more consistent summaries
+        maxTokens: 2000, // Limit summary length
+      };
+
+      const summaryResponse = await this.grokService.chatCompletion(summaryRequest);
+
+      // Log the summarization usage
+      await this.logUsage({
+        userId: user.id,
+        tenantId: user.tenantId,
+        assistantId: assistantId,
+        promptKey: 'prompt-summary',
+        promptText: 'Summarize prompt to reduce token usage',
+        userMessage: 'Summarize prompt',
+        response: summaryResponse.content,
+        tokensUsed: summaryResponse.tokensUsed,
+        processingTimeMs: 0,
+      });
+
+      return summaryResponse.content || promptContent;
+    } catch (error) {
+      this.logger.error(
+        `[${assistantId}] Failed to summarize prompt: ${error.message}`,
+      );
+      // Return original prompt if summarization fails
+      return promptContent;
     }
   }
 }

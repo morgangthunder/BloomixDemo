@@ -34,6 +34,7 @@
     "@angular/router": "^20.3.0",
     "@google/genai": "^1.25.0",
     "@ionic/angular": "^8.7.7",
+    "html2canvas": "^1.4.1",
     "rxjs": "~7.8.0",
     "socket.io-client": "^4.8.1",
     "tslib": "^2.3.0",

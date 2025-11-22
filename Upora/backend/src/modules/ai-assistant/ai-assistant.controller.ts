@@ -8,11 +8,17 @@ import {
 import { AiAssistantService, AssistantChatRequest } from '../../services/ai-assistant.service';
 import { User } from '../../entities/user.entity';
 
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 interface ChatRequestDto {
   assistantId: string;
   promptKey: string;
   userMessage: string;
   context?: any;
+  conversationHistory?: ChatMessage[];
   userId?: string; // TODO: Get from JWT token when auth is implemented
   tenantId?: string; // TODO: Get from JWT token when auth is implemented
 }
@@ -29,6 +35,7 @@ export class AiAssistantController {
         promptKey: body.promptKey,
         userMessage: body.userMessage,
         context: body.context,
+        conversationHistory: body.conversationHistory || [],
       };
 
       // TODO: Get user from JWT token when auth is implemented

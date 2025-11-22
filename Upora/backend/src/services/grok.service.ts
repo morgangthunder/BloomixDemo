@@ -44,17 +44,45 @@ export class GrokService {
       where: { isDefault: true, isActive: true },
     });
 
-    // Check if we should use mock mode
+    // Check if we should use mock mode (only if explicitly set AND no provider)
+    // If a provider exists, always try to use it (even if API key might be invalid, let it fail naturally)
     const mockMode = process.env.GROK_MOCK_MODE === 'true';
     const hasApiKey = provider?.apiKey && provider.apiKey !== 'mock-grok-key';
 
-    if (mockMode || !provider || !hasApiKey) {
-      this.logger.warn('Using mock Grok response (mockMode=true or no provider/API key)');
-      return this.getMockResponse(request);
+    // Only use mock if explicitly set to mock mode
+    // Otherwise, always try to use real API if provider exists
+    if (mockMode) {
+      this.logger.warn(`⚠️ Using mock Grok response - GROK_MOCK_MODE=true (explicitly set)`);
+      const mockResponse = this.getMockResponse(request);
+      this.logger.warn(`⚠️ Mock response: ${mockResponse.content.substring(0, 100)}...`);
+      return mockResponse;
+    }
+
+    // If no provider at all, use mock
+    if (!provider) {
+      this.logger.warn(`⚠️ Using mock Grok response - No provider found in database`);
+      this.logger.warn(`⚠️ Check llm_providers table for a provider with is_default=true and is_active=true`);
+      const mockResponse = this.getMockResponse(request);
+      this.logger.warn(`⚠️ Mock response: ${mockResponse.content.substring(0, 100)}...`);
+      return mockResponse;
+    }
+    
+    this.logger.log(`✅ Provider found: ${provider.name} (ID: ${provider.id})`);
+
+    // If provider exists but no valid API key, log warning but still try (will fail and fallback)
+    if (!hasApiKey) {
+      this.logger.warn(`⚠️ Provider found but no valid API key - attempting API call anyway (will fallback to mock on error)`);
+      this.logger.warn(`⚠️ Provider API key status: ${provider.apiKey ? 'exists but invalid' : 'missing'}`);
+    } else {
+      this.logger.log(`✅ Using real Grok API - Provider: ${provider.name}, Endpoint: ${provider.apiEndpoint}`);
     }
 
     try {
       const startTime = Date.now();
+      
+      this.logger.log(`📞 Calling Grok API: ${provider.apiEndpoint} with model ${provider.modelName || 'grok-beta'}`);
+      this.logger.log(`📞 Request messages count: ${request.messages.length}`);
+      this.logger.log(`📞 Total request size: ~${JSON.stringify(request.messages).length} chars`);
       
       const response = await fetch(provider.apiEndpoint, {
         method: 'POST',
@@ -72,7 +100,8 @@ export class GrokService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        this.logger.error(`Grok API error: ${response.status} ${errorText}`);
+        this.logger.error(`Grok API HTTP error: ${response.status} ${response.statusText}`);
+        this.logger.error(`Grok API error response: ${errorText}`);
         throw new Error(`Grok API error: ${response.status} ${errorText}`);
       }
 
@@ -84,7 +113,9 @@ export class GrokService {
       const tokensUsed = data.usage?.total_tokens || 0;
       const finishReason = data.choices?.[0]?.finish_reason || 'stop';
 
-      this.logger.log(`Grok API success: ${tokensUsed} tokens in ${processingTime}ms`);
+      this.logger.log(`✅ Grok API success: ${tokensUsed} tokens in ${processingTime}ms`);
+      this.logger.log(`✅ Response content length: ${content.length} chars`);
+      this.logger.log(`✅ Response preview: ${content.substring(0, 150)}...`);
 
       return {
         content,
@@ -94,9 +125,15 @@ export class GrokService {
       };
     } catch (error: any) {
       this.logger.error(`Grok API call failed: ${error.message}`, error.stack);
-      // Fallback to mock on error
-      this.logger.warn('Falling back to mock response');
-      return this.getMockResponse(request);
+      // Only fallback to mock if we have no API key - otherwise throw error so user knows
+      if (!hasApiKey) {
+        this.logger.warn('Falling back to mock response (no valid API key)');
+        return this.getMockResponse(request);
+      } else {
+        // If we have an API key but the call failed, throw the error so it's visible
+        this.logger.error(`Grok API call failed with valid API key configured. Error: ${error.message}`);
+        throw error;
+      }
     }
   }
 
@@ -133,6 +170,10 @@ export class GrokService {
     
     // If we have a system prompt, try to generate a more contextual response
     if (systemPrompt) {
+      // Check if this is a teacher assistant prompt
+      if (systemPrompt.includes('AI Teacher') || systemPrompt.includes('teacher') || systemPrompt.includes('student')) {
+        return this.getTeacherResponse(message, systemPrompt, context);
+      }
       // Check if this is an interaction builder prompt
       if (systemPrompt.includes('Interaction Builder') || systemPrompt.includes('interaction')) {
         return this.getInteractionBuilderResponse(message, systemPrompt, context);
@@ -154,6 +195,40 @@ export class GrokService {
     
     // Default encouraging response
     return this.getDefaultResponse(message, context);
+  }
+
+  /**
+   * Generate response for teacher assistant
+   * NOTE: This is a MOCK response. Real Grok API calls require a valid API key in the llm_providers table.
+   * To use real AI responses, ensure:
+   * 1. A provider exists in llm_providers with is_default=true and is_active=true
+   * 2. The provider has a valid API key (not 'mock-grok-key')
+   * 3. GROK_MOCK_MODE is not set to 'true' in environment variables
+   */
+  private getTeacherResponse(message: string, systemPrompt: string, context?: any): string {
+    const messageLower = message.toLowerCase();
+    
+    // Add warning that this is a mock response
+    const mockWarning = `⚠️ NOTE: This is a MOCK response. To get real AI responses, configure a valid Grok API key in the database.\n\n`;
+    
+    // Check if lesson data is available in context
+    const hasLessonData = context?.lessonData || context?.lessonId;
+    
+    // Try to provide context-aware responses based on lesson content
+    if (hasLessonData && (messageLower.includes('explain') || messageLower.includes('what is'))) {
+      return `${mockWarning}Based on the lesson content, I can help explain this concept. The lesson covers important topics that relate to your question. Let me break this down for you in a way that connects to what you're learning.`;
+    }
+    
+    if (messageLower.includes('help') || messageLower.includes('stuck') || messageLower.includes('confused')) {
+      return `${mockWarning}I'm here to help! It looks like you might need some guidance. Let me think about how to best explain this based on the lesson material. Can you tell me which part is confusing?`;
+    }
+    
+    if (messageLower.includes('how') || messageLower.includes('do i')) {
+      return `${mockWarning}Great question! Based on the lesson, here's how you can approach this. The key steps are: 1) Understand the concept, 2) Apply it to your situation, 3) Practice with examples. Would you like me to elaborate?`;
+    }
+    
+    // Default teacher response
+    return `${mockWarning}I understand your question. Based on the lesson content, I can help you understand this better. The lesson covers relevant material that should help answer your question. Would you like me to explain a specific part in more detail?`;
   }
 
   /**

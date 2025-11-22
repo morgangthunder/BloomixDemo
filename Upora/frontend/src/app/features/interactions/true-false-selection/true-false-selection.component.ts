@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, inject } from '@angular/core';
+import { Component, Input, Output, EventEmitter, inject, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../../environments/environment';
@@ -553,7 +553,7 @@ interface TrueFalseSelectionData {
     }
   `]
 })
-export class TrueFalseSelectionComponent {
+export class TrueFalseSelectionComponent implements OnChanges {
   private http = inject(HttpClient);
   private apiService = inject(ApiService);
 
@@ -569,6 +569,19 @@ export class TrueFalseSelectionComponent {
   classAverage: number | null = null;
   totalAttempts: number = 0;
   percentile: number = 0;
+
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['data']) {
+      console.log('[TrueFalseSelection] Data input changed:', {
+        hasData: !!this.data,
+        hasTargetStatement: !!this.data?.targetStatement,
+        targetStatement: this.data?.targetStatement,
+        hasFragments: !!this.data?.fragments,
+        fragmentsCount: this.data?.fragments?.length || 0,
+        fragments: this.data?.fragments
+      });
+    }
+  }
 
   isSelected(index: number): boolean {
     return this.selectedFragments.has(index);

@@ -8,7 +8,12 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger } from '@nestjs/common';
+import { Logger, Inject } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Lesson } from '../entities/lesson.entity';
+import { AiAssistantService, ChatMessage as AssistantChatMessage } from '../services/ai-assistant.service';
+import { User } from '../entities/user.entity';
 
 interface ChatMessage {
   lessonId: string;
@@ -16,6 +21,10 @@ interface ChatMessage {
   tenantId: string;
   message: string;
   timestamp: Date;
+  conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>; // Optional conversation history
+  lessonData?: any; // Optional lesson JSON (if not provided, will be fetched from DB)
+  screenshot?: string; // Optional base64-encoded screenshot image
+  isScreenshotRequest?: boolean; // True if this message is a screenshot response to a request
 }
 
 interface JoinLessonPayload {
@@ -35,6 +44,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   server: Server;
 
   private logger = new Logger('ChatGateway');
+
+  constructor(
+    private aiAssistantService: AiAssistantService,
+    @InjectRepository(Lesson)
+    private lessonRepository: Repository<Lesson>,
+  ) {}
 
   /**
    * Handle new client connections
@@ -112,14 +127,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   /**
-   * Handle chat messages (will be processed by Grok service)
+   * Handle chat messages - processed by AI Assistant Service (Teacher)
    */
   @SubscribeMessage('send-message')
   async handleMessage(
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: ChatMessage,
   ) {
-    const { lessonId, userId, tenantId, message } = payload;
+    const { lessonId, userId, tenantId, message, conversationHistory, lessonData, screenshot, isScreenshotRequest } = payload;
     const roomName = `tenant-${tenantId}-lesson-${lessonId}`;
     
     this.logger.log(
@@ -127,67 +142,133 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     );
     
     // Echo user's message to the room (for chat history)
-    this.server.to(roomName).emit('message', {
-      role: 'user',
-      content: message,
-      userId,
-      timestamp: new Date(),
-    });
+    // If it's a screenshot response, don't echo it as a regular message
+    if (!isScreenshotRequest) {
+      this.server.to(roomName).emit('message', {
+        role: 'user',
+        content: message,
+        userId,
+        timestamp: new Date(),
+      });
+    }
     
     // Show typing indicator
     this.server.to(roomName).emit('ai-typing', { typing: true });
     
-    // This will be replaced with actual Grok service call
-    // For now, return a mock response after a delay
-    setTimeout(() => {
+    try {
+      // Get lesson data if not provided
+      let lessonDataToUse = lessonData;
+      if (!lessonDataToUse) {
+        const lesson = await this.lessonRepository.findOne({
+          where: { id: lessonId },
+        });
+        if (lesson) {
+          lessonDataToUse = lesson.data;
+        } else {
+          throw new Error(`Lesson ${lessonId} not found`);
+        }
+      }
+
+      // Create user object for AI assistant service
+      const user: User = {
+        id: userId,
+        tenantId: tenantId,
+      } as User;
+
+      // Format conversation history for AI assistant
+      const formattedHistory: AssistantChatMessage[] = (conversationHistory || []).map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+      }));
+
+      // Build user message - include screenshot if provided
+      let userMessageToSend = message;
+      if (screenshot && isScreenshotRequest) {
+        // If screenshot is provided, add it to the message context
+        userMessageToSend = `${message}\n\n[Screenshot provided - please analyze the visual content to better understand the student's question or the current state of the lesson interface]`;
+      }
+
+      // Call AI Assistant Service with teacher assistant
+      this.logger.log(`[Teacher] Calling AI Assistant Service with lessonId: ${lessonId}`);
+      this.logger.log(`[Teacher] Conversation history: ${formattedHistory.length} messages`);
+      this.logger.log(`[Teacher] Lesson data size: ${JSON.stringify(lessonDataToUse).length} chars`);
+      
+      const response = await this.aiAssistantService.chat(
+        {
+          assistantId: 'teacher',
+          promptKey: 'general',
+          userMessage: userMessageToSend,
+          context: {
+            lessonId: lessonId,
+            lessonData: lessonDataToUse,
+            screenshot: screenshot, // Pass screenshot to context
+          },
+          conversationHistory: formattedHistory,
+        },
+        user,
+      );
+      
+      this.logger.log(`[Teacher] AI Assistant response received: ${response.content.substring(0, 100)}...`);
+      this.logger.log(`[Teacher] Tokens used: ${response.tokensUsed}`);
+
+      // Check if response contains screenshot request
+      const screenshotRequestPattern = /\[SCREENSHOT_REQUEST\]/i;
+      const hasScreenshotRequest = screenshotRequestPattern.test(response.content);
+
+      if (hasScreenshotRequest) {
+        // Remove the screenshot request marker from the response
+        const cleanedContent = response.content.replace(screenshotRequestPattern, '').trim();
+        
+        // Emit a special event requesting a screenshot
+        this.server.to(roomName).emit('ai-typing', { typing: false });
+        this.server.to(roomName).emit('screenshot-request', {
+          message: cleanedContent || 'I would like to see a screenshot of the lesson to better help you.',
+          timestamp: new Date(),
+        });
+
+        this.logger.log(`Screenshot requested by AI for lesson ${lessonId}`);
+        return { success: true, screenshotRequested: true };
+      }
+
+      // Emit AI response
       const aiResponse = {
         role: 'assistant',
-        content: this.getMockAIResponse(message),
+        content: response.content,
         timestamp: new Date(),
-        tokensUsed: Math.floor(Math.random() * 100) + 50,
+        tokensUsed: response.tokensUsed,
       };
-      
+
       this.server.to(roomName).emit('ai-typing', { typing: false });
       this.server.to(roomName).emit('message', aiResponse);
-      
+
       // Emit token usage update
       this.server.to(roomName).emit('token-usage', {
         userId,
-        tokensUsed: aiResponse.tokensUsed,
+        tokensUsed: response.tokensUsed,
         timestamp: new Date(),
       });
+
+      this.logger.log(
+        `AI response sent to room ${roomName} (${response.tokensUsed} tokens)`,
+      );
+
+      return { success: true, received: true };
+    } catch (error: any) {
+      this.logger.error(`Error processing AI teacher message: ${error.message}`);
       
-      this.logger.log(`AI response sent to room ${roomName}`);
-    }, 1500); // Simulate AI thinking time
-    
-    return { success: true, received: true };
+      // Emit error to client
+      this.server.to(roomName).emit('ai-typing', { typing: false });
+      this.server.to(roomName).emit('message', {
+        role: 'assistant',
+        content: `Sorry, I encountered an error: ${error.message || 'Unknown error'}. Please try again.`,
+        timestamp: new Date(),
+        tokensUsed: 0,
+      });
+
+      return { success: false, error: error.message };
+    }
   }
 
-  /**
-   * Mock AI responses (will be replaced with Grok API)
-   */
-  private getMockAIResponse(userMessage: string): string {
-    const responses = [
-      "That's a great question! Let me explain...",
-      "I can help you with that. Here's what you need to know:",
-      "Excellent observation! To understand this better, consider:",
-      "Let me break this down for you step by step:",
-      "That's an important concept. Here's how it works:",
-    ];
-    
-    const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-    
-    // Add context based on message keywords
-    if (userMessage.toLowerCase().includes('how')) {
-      return `${randomResponse} The process involves several key steps that work together to achieve the desired result.`;
-    } else if (userMessage.toLowerCase().includes('why')) {
-      return `${randomResponse} The reasoning behind this is based on fundamental principles that make the system more efficient and reliable.`;
-    } else if (userMessage.toLowerCase().includes('what')) {
-      return `${randomResponse} This is a core concept that refers to a specific technique used in modern development practices.`;
-    }
-    
-    return `${randomResponse} I'm here to help you learn. Feel free to ask follow-up questions!`;
-  }
 
   /**
    * Broadcast to a specific lesson room

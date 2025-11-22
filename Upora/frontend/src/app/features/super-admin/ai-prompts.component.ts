@@ -533,6 +533,21 @@ export class AiPromptsComponent implements OnInit {
       icon: '👨‍🏫',
       description: 'Provides real-time feedback during lessons, recognizes student struggles, and stores feedback for lesson improvements',
       prompts: {
+        general: {
+          label: 'AI Teacher General Prompt',
+          content: 'You are an AI Teacher assistant helping students learn through interactive lessons. Your role is to answer questions, provide context, encourage learning, clarify concepts, and guide discovery...',
+          placeholder: 'Enter the general prompt for the AI Teacher assistant...'
+        },
+        'screenshot-criteria': {
+          label: 'Screenshot Request Criteria',
+          content: 'You should request a screenshot of the lesson-view area when visual context is needed, interaction issues occur, layout/display questions arise, progress/state questions are asked, or context is unclear...',
+          placeholder: 'Enter the criteria for when to request screenshots...'
+        },
+        'conversation-summary': {
+          label: 'Conversation History Summary',
+          content: 'You are a helpful assistant that summarizes conversation history concisely while preserving important context...',
+          placeholder: 'Enter the prompt for summarizing conversation history...'
+        },
         feedbackGeneration: {
           label: 'Student Feedback Prompt',
           content: 'You are an encouraging AI tutor. The student just answered a question incorrectly. Provide helpful, constructive feedback that guides them toward the correct answer without giving it away...',

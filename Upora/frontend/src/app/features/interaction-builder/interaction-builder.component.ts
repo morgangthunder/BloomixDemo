@@ -571,7 +571,8 @@ interface ChatMessage {
             <div *ngFor="let msg of aiMessages; let i = index" 
                  [class.user-message]="msg.role === 'user'"
                  [class.ai-message]="msg.role === 'assistant'"
-                 class="message">
+                 class="message"
+                 [attr.data-message-index]="i">
               <div class="message-content">
                 <div class="message-icon">{{ msg.role === 'user' ? '👤' : '🔧' }}</div>
                 <div class="message-text">
@@ -617,7 +618,11 @@ interface ChatMessage {
               (keydown.enter)="onAiEnter($any($event))"
               [placeholder]="currentInteraction ? 'Ask about ' + getTypeLabel(currentInteraction?.interactionTypeCategory) + ' interactions...' : 'Select an interaction first...'"
               [disabled]="!currentInteraction"
+              [maxlength]="2000"
               rows="2"></textarea>
+            <div *ngIf="aiInput.length >= 1900" class="char-count-warning">
+              {{ aiInput.length }}/2000
+            </div>
             <button (click)="sendAiMessage()" [disabled]="!currentInteraction || !aiInput.trim() || aiTyping" class="send-btn">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
                 <path d="M2 10l16-8-8 16-2-8-6-0z"/>
@@ -1829,6 +1834,17 @@ interface ChatMessage {
       display: flex;
       gap: 0.5rem;
       align-items: flex-end;
+      position: relative;
+    }
+
+    .char-count-warning {
+      position: absolute;
+      bottom: 4px;
+      right: 50px;
+      font-size: 11px;
+      color: #ff9800;
+      font-weight: 500;
+      z-index: 10;
     }
 
     .chat-input-container textarea {
@@ -2994,7 +3010,8 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   }
 
   async sendAiMessage() {
-    const message = this.aiInput.trim();
+    // Enforce character limit (2000 chars)
+    const message = this.aiInput.trim().substring(0, 2000);
     if (!message || this.aiTyping || !this.currentInteraction) return;
 
     this.aiMessages.push({
@@ -3005,13 +3022,6 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
 
     this.aiInput = '';
     this.aiTyping = true;
-
-    // Scroll to bottom
-    setTimeout(() => {
-      if (this.aiChatHistory) {
-        this.aiChatHistory.nativeElement.scrollTop = this.aiChatHistory.nativeElement.scrollHeight;
-      }
-    }, 100);
 
     // Get the appropriate prompt for this interaction type
     const promptKey = this.getAssistantPromptKey();
@@ -3049,6 +3059,14 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
         };
       }
 
+      // Prepare conversation history (exclude current message, format for API)
+      const conversationHistory = this.aiMessages
+        .slice(0, -1) // Exclude the current message we just added
+        .map(msg => ({
+          role: msg.role,
+          content: msg.content
+        }));
+
       // Call AI Assistant API
       const response = await this.http.post<{
         success: boolean;
@@ -3063,7 +3081,8 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
         assistantId: 'inventor',
         promptKey: promptKey,
         userMessage: message,
-        context: context
+        context: context,
+        conversationHistory: conversationHistory
       }).toPromise();
 
       if (response?.success && response.data) {
@@ -3083,6 +3102,11 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
           tokensUsed: response.data.tokensUsed,
           hasChanges: !!response.data.suggestedChanges
         });
+        
+        // Scroll to show the start of the new AI response
+        setTimeout(() => {
+          this.scrollToMessageStart(this.aiMessages.length - 1);
+        }, 100);
       } else {
         throw new Error('Invalid response from AI assistant');
       }
@@ -3093,15 +3117,32 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
         content: `Sorry, I encountered an error: ${error.message || 'Unknown error'}. Please try again.`,
         timestamp: new Date()
       });
+      
+      // Scroll to show the start of the error message
+      setTimeout(() => {
+        this.scrollToMessageStart(this.aiMessages.length - 1);
+      }, 100);
     } finally {
       this.aiTyping = false;
+    }
+  }
 
-      // Scroll to bottom
-      setTimeout(() => {
-        if (this.aiChatHistory) {
-          this.aiChatHistory.nativeElement.scrollTop = this.aiChatHistory.nativeElement.scrollHeight;
-        }
-      }, 100);
+  /**
+   * Scroll to show the start of a message at the top of the chat window
+   */
+  private scrollToMessageStart(messageIndex: number) {
+    if (!this.aiChatHistory) return;
+    
+    const chatElement = this.aiChatHistory.nativeElement;
+    const messageElement = chatElement.querySelector(`[data-message-index="${messageIndex}"]`) as HTMLElement;
+    
+    if (messageElement) {
+      // Scroll to show the start of the message at the top of the visible area
+      const chatRect = chatElement.getBoundingClientRect();
+      const messageRect = messageElement.getBoundingClientRect();
+      const relativeTop = messageRect.top - chatRect.top + chatElement.scrollTop;
+      
+      chatElement.scrollTop = relativeTop - 10; // 10px padding from top
     }
   }
 

@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
+// html2canvas will be dynamically imported in captureLessonScreenshot()
 import { CommonModule } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -165,7 +166,10 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
             <!-- True/False Selection Interaction -->
             <div *ngIf="!isLoadingInteraction && interactionData?.interactionTypeId === 'true-false-selection'">
               <app-true-false-selection
-                [data]="interactionData"
+                [data]="normalizedInteractionData"
+                [lessonId]="lesson?.id || null"
+                [stageId]="activeStageId?.toString() || null"
+                [substageId]="activeSubStageId?.toString() || null"
                 (completed)="onInteractionCompleted($event)">
               </app-true-false-selection>
             </div>
@@ -188,9 +192,19 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
 
             <!-- Embedded Interaction (from JSON) -->
             <div *ngIf="!isLoadingInteraction && !interactionData && getEmbeddedInteraction()">
+              <!-- Error message if config is empty -->
+              <div *ngIf="getEmbeddedInteraction()?.type === 'true-false-selection' && !hasValidInteractionConfig(getEmbeddedInteraction()?.config)" 
+                   class="bg-red-900/20 border-2 border-red-500 rounded-lg p-8 text-center">
+                <div class="text-red-400 text-2xl mb-4">⚠️</div>
+                <h3 class="text-red-400 text-xl font-bold mb-2">Interaction Not Configured</h3>
+                <p class="text-red-300">This interaction has not been configured correctly by the lesson-builder.</p>
+                <p class="text-red-200 text-sm mt-2">Please contact the lesson creator to fix this issue.</p>
+              </div>
+              
+              <!-- Show interaction if config is valid -->
               <app-true-false-selection
-                *ngIf="getEmbeddedInteraction()?.type === 'true-false-selection'"
-                [data]="getEmbeddedInteraction()?.config"
+                *ngIf="getEmbeddedInteraction()?.type === 'true-false-selection' && hasValidInteractionConfig(getEmbeddedInteraction()?.config)"
+                [data]="normalizedEmbeddedInteractionData"
                 [lessonId]="lesson?.id || null"
                 [stageId]="activeStageId?.toString() || null"
                 [substageId]="activeSubStageId?.toString() || null"
@@ -855,6 +869,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   isAITyping = false;
   isConnected = false;
   isChatExpanded = false;
+  screenshotRequested = false;
+  pendingScreenshotMessage = '';
   
   // Teacher Script
   currentTeacherScript: ScriptBlock | null = null;
@@ -882,6 +898,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   // Interaction data
   interactionData: any = null;
   interactionScore: number | null = null;
+  normalizedInteractionData: any = null;
+  normalizedEmbeddedInteractionData: any = null;
   isLoadingInteraction = false;
   
   private destroy$ = new Subject<void>();
@@ -1110,8 +1128,13 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     this.currentStage = stage || null;
     this.activeSubStage = stage?.subStages.find(ss => ss.id === this.activeSubStageId) || null;
     
-    console.log('[LessonView] Active substage updated:', this.activeSubStage?.title);
-    console.log('[LessonView] Embedded interaction:', this.getEmbeddedInteraction());
+    // Update normalized embedded interaction data
+    const embeddedInteraction = this.getEmbeddedInteraction();
+    if (embeddedInteraction?.config) {
+      this.normalizedEmbeddedInteractionData = this.normalizeInteractionData(embeddedInteraction.config);
+    } else {
+      this.normalizedEmbeddedInteractionData = null;
+    }
     
     // Clear any existing auto-advance timeout
     if (this.autoAdvanceTimeout) {
@@ -1122,10 +1145,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // If no interaction, auto-advance after script duration
     if (!this.getEmbeddedInteraction() && this.activeSubStage) {
       const scriptDuration = this.calculateSubStageScriptDuration();
-      console.log('[LessonView] No interaction - auto-advancing after', scriptDuration, 'seconds');
       
       this.autoAdvanceTimeout = setTimeout(() => {
-        console.log('[LessonView] ⏭️ Auto-advancing to next substage (no interaction)');
         this.moveToNextSubStage();
       }, scriptDuration * 1000);
     }
@@ -1153,6 +1174,20 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // Check if activeSubStage has an embedded interaction (from JSON)
     const interaction = (this.activeSubStage as any)?.interaction || null;
     return interaction;
+  }
+
+  /**
+   * Check if interaction config has valid data (fragments and targetStatement)
+   */
+  hasValidInteractionConfig(config: any): boolean {
+    if (!config) return false;
+    const normalized = this.normalizeInteractionData(config);
+    return normalized && 
+           normalized.fragments && 
+           Array.isArray(normalized.fragments) && 
+           normalized.fragments.length > 0 && 
+           normalized.targetStatement && 
+           normalized.targetStatement !== 'Loading...';
   }
 
   togglePassStatus() {
@@ -1256,12 +1291,53 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Normalize interaction data to match component expectations
+   */
+  normalizeInteractionData(rawData: any): any {
+    if (!rawData) {
+      return null;
+    }
+    
+    // If it's already in the correct format with required fields, return as-is
+    if (rawData.fragments && Array.isArray(rawData.fragments) && rawData.fragments.length > 0 && rawData.targetStatement) {
+      return rawData;
+    }
+    
+    // Try to extract from nested structures
+    const fragments = rawData.fragments || rawData.data?.fragments || rawData.config?.fragments || rawData.sampleData?.fragments || [];
+    const targetStatement = rawData.targetStatement || rawData.data?.targetStatement || rawData.config?.targetStatement || rawData.sampleData?.targetStatement || '';
+    
+    const normalized: any = {
+      fragments: Array.isArray(fragments) ? fragments : [],
+      targetStatement: targetStatement || 'Loading...',
+      maxFragments: rawData.maxFragments || rawData.data?.maxFragments || rawData.config?.maxFragments || 10,
+      showHints: rawData.showHints !== undefined ? rawData.showHints : (rawData.data?.showHints !== undefined ? rawData.data.showHints : (rawData.config?.showHints !== undefined ? rawData.config.showHints : false))
+    };
+    
+    // Preserve interactionTypeId if present
+    if (rawData.interactionTypeId) {
+      normalized.interactionTypeId = rawData.interactionTypeId;
+    }
+    
+    console.log('[LessonView] Normalized interaction data:', {
+      fragmentsCount: normalized.fragments.length,
+      targetStatement: normalized.targetStatement,
+      maxFragments: normalized.maxFragments,
+      showHints: normalized.showHints
+    });
+    
+    return normalized;
+  }
+
+  /**
    * Load interaction data for the active sub-stage
    */
   private loadInteractionData() {
     // Reset state
     this.interactionData = null;
     this.interactionScore = null;
+    this.normalizedInteractionData = null;
+    this.normalizedEmbeddedInteractionData = null;
     
     if (!this.activeSubStage?.contentOutputId) {
       console.log('[LessonView] No contentOutputId for this sub-stage');
@@ -1278,15 +1354,17 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (output: any) => {
-          console.log('[LessonView] Loaded interaction data:', output);
+          console.log('[LessonView] Loaded interaction data (raw):', output);
           
           // Extract interaction data from the output
           if (output.outputData && output.outputData.interactionTypeId) {
-            this.interactionData = {
+            const rawData = {
               ...output.outputData,
               interactionTypeId: output.outputData.interactionTypeId
             };
-            console.log('[LessonView] Interaction ready:', this.interactionData.interactionTypeId);
+            // Normalize the data structure
+            this.interactionData = rawData;
+            this.normalizedInteractionData = this.normalizeInteractionData(rawData);
           } else {
             console.warn('[LessonView] No interaction data in output');
           }
@@ -1468,13 +1546,111 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   /**
    * Chat Methods (delegated to widget)
    */
-  sendChatMessage(message: string) {
+  sendChatMessage(message: string, screenshot?: string) {
     console.log('[LessonView] Sending chat message:', message);
     if (!this.isConnected) {
       console.warn('[LessonView] Cannot send - not connected to WebSocket');
       return;
     }
-    this.wsService.sendMessage(message);
+    
+    // Get conversation history from chatMessages (exclude the current message we're about to send)
+    const conversationHistory = this.chatMessages.map(msg => ({
+      role: msg.role,
+      content: msg.content,
+      timestamp: msg.timestamp
+    }));
+    
+    // Get lesson data (full JSON structure)
+    const lessonData = this.lesson ? this.lesson.data : null;
+    
+    // If screenshot is provided, this is a response to a screenshot request
+    const isScreenshotRequest = !!screenshot;
+    
+    this.wsService.sendMessage(message, conversationHistory, lessonData, screenshot, isScreenshotRequest);
+    
+    // Reset screenshot request state
+    if (isScreenshotRequest) {
+      this.screenshotRequested = false;
+      this.pendingScreenshotMessage = '';
+    }
+  }
+
+  /**
+   * Capture screenshot of the lesson view area
+   */
+  async captureLessonScreenshot(): Promise<string | null> {
+    try {
+      // Use html2canvas to capture the lesson view area
+      // First, check if html2canvas is available
+      const html2canvas = (window as any).html2canvas;
+      if (!html2canvas) {
+        console.error('[LessonView] html2canvas not available');
+        return null;
+      }
+
+      // Find the main lesson content area (excluding sidebar and chat)
+      const lessonContentElement = document.querySelector('.lesson-content') || 
+                                   document.querySelector('.main-content') ||
+                                   document.querySelector('ion-content') ||
+                                   document.body;
+
+      if (!lessonContentElement) {
+        console.error('[LessonView] Could not find lesson content element');
+        return null;
+      }
+
+      console.log('[LessonView] Capturing screenshot of lesson view...');
+      
+      const canvas = await html2canvas(lessonContentElement as HTMLElement, {
+        backgroundColor: '#ffffff',
+        logging: false,
+        useCORS: true,
+        scale: 0.5, // Reduce size for faster processing
+      });
+
+      // Convert canvas to base64
+      const base64Image = canvas.toDataURL('image/png');
+      console.log('[LessonView] Screenshot captured:', base64Image.length, 'chars');
+      
+      return base64Image;
+    } catch (error) {
+      console.error('[LessonView] Failed to capture screenshot:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Handle screenshot request from AI - capture and send
+   */
+  async handleScreenshotRequest() {
+    console.log('[LessonView] Handling screenshot request...');
+    
+    // Show loading indicator
+    this.isAITyping = true;
+    
+    try {
+      const screenshot = await this.captureLessonScreenshot();
+      
+      if (screenshot) {
+        // Send screenshot with the pending message
+        this.sendChatMessage(
+          this.pendingScreenshotMessage || 'Here is the screenshot you requested.',
+          screenshot
+        );
+      } else {
+        // If screenshot capture failed, send message without screenshot
+        this.sendChatMessage(
+          this.pendingScreenshotMessage || 'I tried to capture a screenshot but it failed. Please try again.',
+        );
+        this.screenshotRequested = false;
+        this.pendingScreenshotMessage = '';
+      }
+    } catch (error) {
+      console.error('[LessonView] Error handling screenshot request:', error);
+      this.isAITyping = false;
+      this.screenshotRequested = false;
+      this.pendingScreenshotMessage = '';
+    }
   }
 
   raiseHand() {

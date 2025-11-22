@@ -33,6 +33,8 @@ export class WebSocketService {
   private currentLessonId: string | null = null;
   private currentUserId: string | null = null;
   private currentTenantId: string | null = null;
+  private screenshotRequestSubject = new BehaviorSubject<{ message: string; timestamp: Date } | null>(null);
+  screenshotRequest$ = this.screenshotRequestSubject.asObservable();
 
   constructor() {
     console.log('[WebSocketService] Service initialized');
@@ -115,15 +117,25 @@ export class WebSocketService {
   }
 
   /**
-   * Send a chat message
+   * Send a chat message with conversation history and lesson data
    */
-  sendMessage(message: string): void {
+  sendMessage(message: string, conversationHistory?: ChatMessage[], lessonData?: any, screenshot?: string, isScreenshotRequest?: boolean): void {
     if (!this.socket || !this.currentLessonId) {
       console.error('[WebSocketService] Cannot send message - not connected to lesson');
       return;
     }
 
     console.log(`[WebSocketService] Sending message: ${message.substring(0, 50)}...`);
+    console.log(`[WebSocketService] Conversation history: ${conversationHistory?.length || 0} messages`);
+    if (screenshot) {
+      console.log(`[WebSocketService] Including screenshot (${screenshot.length} chars)`);
+    }
+
+    // Format conversation history for backend (exclude current message)
+    const formattedHistory = (conversationHistory || []).map(msg => ({
+      role: msg.role,
+      content: msg.content
+    }));
 
     // Send to server (server will echo back the user message)
     this.socket.emit('send-message', {
@@ -132,7 +144,25 @@ export class WebSocketService {
       tenantId: this.currentTenantId,
       message,
       timestamp: new Date(),
+      conversationHistory: formattedHistory,
+      lessonData: lessonData, // Optional - backend will fetch if not provided
+      screenshot: screenshot, // Optional - base64 screenshot
+      isScreenshotRequest: isScreenshotRequest || false, // True if this is a screenshot response
     });
+  }
+
+  /**
+   * Capture screenshot of a specific element and return as base64
+   */
+  async captureScreenshot(elementSelector?: string): Promise<string | null> {
+    try {
+      // Use html2canvas if available, or fallback to browser screenshot API
+      // For now, we'll use a simple approach - the component will handle this
+      return null;
+    } catch (error) {
+      console.error('[WebSocketService] Failed to capture screenshot:', error);
+      return null;
+    }
   }
 
   /**
@@ -160,6 +190,12 @@ export class WebSocketService {
     // Lesson room events
     this.socket.on('joined-lesson', (data: any) => {
       console.log('[WebSocketService] ✅ Joined lesson room:', data);
+    });
+
+    // Listen for screenshot requests from AI
+    this.socket.on('screenshot-request', (data: { message: string; timestamp: Date }) => {
+      console.log('[WebSocketService] 📸 Screenshot requested by AI:', data.message);
+      this.screenshotRequestSubject.next(data);
     });
 
     // Chat message events

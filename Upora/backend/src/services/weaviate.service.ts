@@ -1,5 +1,8 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import weaviate, { WeaviateClient, ApiKey } from 'weaviate-ts-client';
+import { ProcessedContentOutput } from '../entities/processed-content-output.entity';
 
 export interface ContentSummaryData {
   contentSourceId: string;
@@ -57,7 +60,10 @@ export class WeaviateService implements OnModuleInit {
   private readonly className = 'ContentSummary';
   private isInitialized = false;
 
-  constructor() {
+  constructor(
+    @InjectRepository(ProcessedContentOutput)
+    private processedOutputRepository: Repository<ProcessedContentOutput>,
+  ) {
     // Initialize Weaviate client
     const host = process.env.WEAVIATE_HOST || 'localhost';
     const port = process.env.WEAVIATE_PORT || '8080';
@@ -360,11 +366,207 @@ export class WeaviateService implements OnModuleInit {
 
   /**
    * Get content linked to a specific lesson
+   * Fetches all content sources associated with a lesson via ProcessedContentOutput
+   * and retrieves their summaries from Weaviate
    */
   async getLinkedContent(lessonId: string, tenantId: string): Promise<SemanticSearchResult[]> {
-    // This will be implemented when we have lesson-content links
-    // For now, return empty array
-    return [];
+    if (!this.isInitialized) {
+      this.logger.warn('Weaviate not initialized, returning empty results');
+      return [];
+    }
+
+    try {
+      this.logger.log(`Getting linked content for lesson ${lessonId}`);
+
+      // 1. Get all ProcessedContentOutput records for this lesson
+      const processedOutputs = await this.processedOutputRepository.find({
+        where: { lessonId },
+        select: ['contentSourceId'],
+      });
+
+      const contentSourceIds = processedOutputs
+        .map((output) => output.contentSourceId)
+        .filter((id): id is string => id !== null);
+
+      if (contentSourceIds.length === 0) {
+        this.logger.log(`No content sources found for lesson ${lessonId}`);
+        return [];
+      }
+
+      this.logger.log(
+        `Found ${contentSourceIds.length} content sources for lesson ${lessonId}`,
+      );
+
+      // 2. Query Weaviate for all content summaries with these contentSourceIds
+      const contentSourceFilters = contentSourceIds.map((id) => ({
+        path: ['contentSourceId'],
+        operator: 'Equal',
+        valueText: id,
+      }));
+
+      const whereFilters: any[] = [
+        {
+          path: ['tenantId'],
+          operator: 'Equal',
+          valueText: tenantId,
+        },
+        {
+          path: ['status'],
+          operator: 'Equal',
+          valueText: 'approved',
+        },
+        {
+          operator: 'Or',
+          operands: contentSourceFilters,
+        },
+      ];
+
+      // Get all linked content (no search query, just filter by contentSourceIds)
+      const result = await this.client.graphql
+        .get()
+        .withClassName(this.className)
+        .withFields(
+          'contentSourceId tenantId summary fullText topics keywords type status title sourceUrl contentCategory videoId channel transcript _additional { id }',
+        )
+        .withWhere({
+          operator: 'And',
+          operands: whereFilters,
+        })
+        .withLimit(100) // Get all linked content (reasonable limit)
+        .withOffset(0)
+        .do();
+
+      const items = result.data?.Get?.[this.className] || [];
+
+      const searchResults: SemanticSearchResult[] = items.map((item: any) => ({
+        id: item.contentSourceId,
+        contentSourceId: item.contentSourceId,
+        summary: item.summary,
+        fullText: item.fullText,
+        topics: item.topics || [],
+        keywords: item.keywords || [],
+        title: item.title,
+        sourceUrl: item.sourceUrl,
+        contentCategory: item.contentCategory || 'source_content',
+        videoId: item.videoId,
+        channel: item.channel,
+        transcript: item.transcript,
+        distance: 0,
+        relevanceScore: 1.0, // All linked content has equal relevance
+      }));
+
+      this.logger.log(
+        `✅ Retrieved ${searchResults.length} linked content items from Weaviate`,
+      );
+      return searchResults;
+    } catch (error) {
+      this.logger.error(`Failed to get linked content: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Search Weaviate for content by specific content source IDs
+   * Used to find relevant content chunks from a lesson's source materials
+   */
+  async searchByContentSourceIds(
+    query: string,
+    contentSourceIds: string[],
+    tenantId: string,
+    limit: number = 5,
+  ): Promise<SemanticSearchResult[]> {
+    if (!this.isInitialized) {
+      this.logger.warn('Weaviate not initialized, returning empty results');
+      return [];
+    }
+
+    if (!contentSourceIds || contentSourceIds.length === 0) {
+      this.logger.log('No content source IDs provided, returning empty results');
+      return [];
+    }
+
+    try {
+      this.logger.log(
+        `Searching Weaviate for "${query}" in ${contentSourceIds.length} content sources`,
+      );
+
+      // Build where filters
+      // For multiple content source IDs, use Or operator with multiple Equal conditions
+      const contentSourceFilters = contentSourceIds.map((id) => ({
+        path: ['contentSourceId'],
+        operator: 'Equal',
+        valueText: id,
+      }));
+
+      const whereFilters: any[] = [
+        {
+          path: ['tenantId'],
+          operator: 'Equal',
+          valueText: tenantId,
+        },
+        {
+          path: ['status'],
+          operator: 'Equal',
+          valueText: 'approved',
+        },
+        {
+          operator: 'Or',
+          operands: contentSourceFilters,
+        },
+      ];
+
+      // Use BM25 keyword search
+      const result = await this.client.graphql
+        .get()
+        .withClassName(this.className)
+        .withFields(
+          'contentSourceId tenantId summary fullText topics keywords type status title sourceUrl contentCategory videoId channel transcript _additional { score }',
+        )
+        .withBm25({
+          query: query,
+          properties: [
+            'summary',
+            'fullText',
+            'title',
+            'keywords',
+            'topics',
+            'transcript',
+            'channel',
+          ],
+        })
+        .withWhere({
+          operator: 'And',
+          operands: whereFilters,
+        })
+        .withLimit(limit)
+        .withOffset(0)
+        .do();
+
+      const items = result.data?.Get?.[this.className] || [];
+
+      const searchResults: SemanticSearchResult[] = items.map((item: any) => ({
+        id: item.contentSourceId,
+        contentSourceId: item.contentSourceId,
+        summary: item.summary,
+        fullText: item.fullText,
+        topics: item.topics || [],
+        keywords: item.keywords || [],
+        title: item.title,
+        sourceUrl: item.sourceUrl,
+        contentCategory: item.contentCategory || 'source_content',
+        videoId: item.videoId,
+        channel: item.channel,
+        transcript: item.transcript,
+        distance: 0,
+        relevanceScore: item._additional?.score || 0,
+      }));
+
+      this.logger.log(`✅ Found ${searchResults.length} relevant content chunks`);
+      return searchResults;
+    } catch (error) {
+      this.logger.error(`Search by content source IDs failed: ${error.message}`);
+      return [];
+    }
   }
 
   /**

@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnChanges, OnDestroy, SimpleChanges } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnChanges, OnDestroy, SimpleChanges, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
@@ -73,10 +73,11 @@ export interface ChatMessage {
           <div *ngIf="chatMessages.length === 0" class="no-messages">
             <span class="muted-text">Ask me anything about this lesson!</span>
           </div>
-          <div *ngFor="let msg of chatMessages" 
+          <div *ngFor="let msg of chatMessages; let i = index" 
                [class.user-message]="msg.role === 'user'"
                [class.ai-message]="msg.role === 'assistant'"
-               class="message">
+               class="message"
+               [attr.data-message-index]="i">
             <div class="message-content">
               <div class="message-icon">{{ msg.role === 'user' ? '👤' : '👨‍🏫' }}</div>
               <div class="message-text">{{ msg.content }}</div>
@@ -106,7 +107,12 @@ export interface ChatMessage {
             (keydown.enter)="sendMessage()"
             placeholder="Ask the AI teacher..."
             class="chat-input"
-            [disabled]="!isConnected">
+            [disabled]="!isConnected"
+            [maxlength]="2000"
+            [title]="chatInput.length >= 1900 ? 'Character limit: ' + chatInput.length + '/2000' : ''">
+          <div *ngIf="chatInput.length >= 1900" class="char-count-warning">
+            {{ chatInput.length }}/2000
+          </div>
           <button 
             class="send-btn"
             (click)="sendMessage()"
@@ -433,6 +439,17 @@ export interface ChatMessage {
       padding: 1rem;
       border-top: 1px solid #333333;
       background: #0a0a0a;
+      position: relative;
+    }
+
+    .char-count-warning {
+      position: absolute;
+      bottom: 4px;
+      right: 50px;
+      font-size: 11px;
+      color: #ff9800;
+      font-weight: 500;
+      z-index: 10;
     }
 
     .raise-hand-btn {
@@ -566,7 +583,7 @@ export interface ChatMessage {
     }
   `]
 })
-export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy {
+export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy, AfterViewChecked {
   @Input() currentScript: ScriptBlock | null = null;
   @Input() autoPlay: boolean = true;
   @Input() chatMessages: ChatMessage[] = [];
@@ -582,6 +599,8 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy {
   @Output() raiseHandClicked = new EventEmitter<void>();
   @Output() scriptClosed = new EventEmitter<void>();
 
+  @ViewChild('chatHistory') chatHistory?: ElementRef<HTMLDivElement>;
+
   isPlaying = false;
   isMinimized = false;
   isHidden = false;
@@ -593,9 +612,54 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy {
   private dragStartY = 0;
   widgetLeft = 0; // Public for template binding
   widgetTop = 0;  // Public for template binding
+  
+  // Track previous message count for auto-scroll
+  private previousMessageCount = 0;
+
+  ngAfterViewChecked() {
+    // Auto-scroll to show the start of new AI responses
+    if (this.chatMessages.length > this.previousMessageCount) {
+      const newMessages = this.chatMessages.slice(this.previousMessageCount);
+      const lastNewMessage = newMessages[newMessages.length - 1];
+      
+      // Only auto-scroll if the last new message is from the assistant
+      if (lastNewMessage && lastNewMessage.role === 'assistant' && this.chatHistory) {
+        setTimeout(() => {
+          this.scrollToMessageStart(this.chatMessages.length - 1);
+        }, 100);
+      }
+      
+      this.previousMessageCount = this.chatMessages.length;
+    }
+  }
+
+  private scrollToMessageStart(messageIndex: number) {
+    if (!this.chatHistory) return;
+    
+    const chatElement = this.chatHistory.nativeElement;
+    const messageElement = chatElement.querySelector(`[data-message-index="${messageIndex}"]`) as HTMLElement;
+    
+    if (messageElement) {
+      // Scroll to show the start of the message at the top of the visible area
+      const chatRect = chatElement.getBoundingClientRect();
+      const messageRect = messageElement.getBoundingClientRect();
+      const relativeTop = messageRect.top - chatRect.top + chatElement.scrollTop;
+      
+      chatElement.scrollTop = relativeTop - 10; // 10px padding from top
+    }
+  }
 
   ngOnChanges(changes: SimpleChanges) {
     console.log('[TeacherWidget] ngOnChanges:', Object.keys(changes));
+    
+    // Track message count changes
+    if (changes['chatMessages']) {
+      const oldCount = changes['chatMessages'].previousValue?.length || 0;
+      const newCount = changes['chatMessages'].currentValue?.length || 0;
+      if (newCount > oldCount) {
+        this.previousMessageCount = oldCount;
+      }
+    }
     
     if (changes['currentScript']) {
       const newScript = changes['currentScript'].currentValue;
@@ -674,7 +738,9 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy {
   sendMessage() {
     if (!this.chatInput.trim() || !this.isConnected) return;
     
-    this.sendChat.emit(this.chatInput.trim());
+    // Enforce character limit (2000 chars)
+    const message = this.chatInput.trim().substring(0, 2000);
+    this.sendChat.emit(message);
     this.chatInput = '';
   }
 
