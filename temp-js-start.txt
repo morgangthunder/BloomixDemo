@@ -1,0 +1,13 @@
+﻿ // Get interaction data and config from window (always access directly)\r+
+ const getData = () => window.interactionData || {};\r                    +
+ const getConfig = () => window.interactionConfig || {};\r                +
+ \r                                                                       +
+ console.log("[Interaction] ???? Initial data check:", getData());\r      +
+ console.log("[Interaction] ?????? Initial config check:", getConfig());\r+
+ \r                                                                       +
+ // Get config values with fallbacks\r                                    +
+ const getTargetStatement = () => {\r                                     +
+     const cfg = getConfig();\r                                           +
+     const dat = getData();\r                                             +
+     return cfg.targetStatement || dat.targ
+

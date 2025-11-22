@@ -31,6 +31,7 @@ import { InteractionTypesModule } from './modules/interaction-types/interaction-
 import { SuperAdminModule } from './modules/super-admin/super-admin.module';
 import { LlmProvidersModule } from './modules/llm-providers/llm-providers.module';
 import { AiPromptsModule } from './modules/ai-prompts/ai-prompts.module';
+import { AiAssistantModule } from './modules/ai-assistant/ai-assistant.module';
 import { InteractionResultsModule } from './modules/interaction-results/interaction-results.module';
 import { ContentAnalyzerModule } from './services/content-analyzer.module';
 import { AutoPopulatorModule } from './services/auto-populator.module';
@@ -70,6 +71,7 @@ import { LessonDraftsModule } from './lesson-drafts/lesson-drafts.module';
     SuperAdminModule,
     LlmProvidersModule,
     AiPromptsModule,
+    AiAssistantModule,
     InteractionResultsModule,
     LessonDraftsModule,
   ],

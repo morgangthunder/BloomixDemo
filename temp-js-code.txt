@@ -1,0 +1,167 @@
+﻿ \r                                                                                                                                                                       +
+ // Get interaction data and config from parent\r                                                                                                                         +
+ // Access window.interactionData directly (don't store in const to avoid timing issues)\r                                                                                +
+ const getData = () => window.interactionData || {};\r                                                                                                                    +
+ const data = getData(); // Get initial value, but functions will use getData() for fresh access\r                                                                        +
+ const config = window.interactionConfig || {};\r                                                                                                                         +
+ \r                                                                                                                                                                       +
+ console.log("[Interaction] ???? Data received:", data);\r                                                                                                                +
+ console.log("[Interaction] ?????? Config received:", config);\r                                                                                                          +
+ \r                                                                                                                                                                       +
+ // Use config values with fallbacks\r                                                                                                                                    +
+ const targetStatement = config.targetStatement || data.targetStatement || "Loading...";\r                                                                                +
+ const showHints = config.showHints !== undefined ? config.showHints : false;\r                                                                                           +
+ const maxSelections = config.maxSelections || null;\r                                                                                                                    +
+ \r                                                                                                                                                                       +
+ console.log("[Interaction] ???? Using target statement:", targetStatement);\r                                                                                            +
+ console.log("[Interaction] ???? Show hints:", showHints);\r                                                                                                              +
+ console.log("[Interaction] ???? Max selections:", maxSelections);\r                                                                                                      +
+ \r                                                                                                                                                                       +
+ const selectedFragments = new Set();\r                                                                                                                                   +
+ let score = 0;\r                                                                                                                                                         +
+ let totalAttempts = 0;\r                                                                                                                                                 +
+ let classAverage = null; // Placeholder for actual class average\r                                                                                                       +
+ \r                                                                                                                                                                       +
+ function initializeWhenReady() {\r                                                                                                                                       +
+     console.log("[Interaction] ???? Script starting...");\r                                                                                                              +
+     console.log("[Interaction] ???? Fragments count:", data.fragments ? data.fragments.length : 0);\r                                                                    +
+ \r                                                                                                                                                                       +
+     const targetStatementEl = document.getElementById("targetStatement");\r                                                                                              +
+     const fragmentsGridEl = document.getElementById("fragmentsGrid");\r                                                                                                  +
+     const submitBtn = document.getElementById("submitBtn");\r                                                                                                            +
+     const scoreModalOverlay = document.getElementById("scoreModalOverlay");\r                                                                                            +
+     const scoreModal = document.getElementById("scoreModal");\r                                                                                                          +
+     const scoreValueEl = document.getElementById("scoreValue");\r                                                                                                        +
+     const scoreBreakdownEl = document.getElementById("scoreBreakdown");\r                                                                                                +
+     const playAgainBtn = document.getElementById("playAgainBtn");\r                                                                                                      +
+     const nextBtn = document.getElementById("nextBtn");\r                                                                                                                +
+ \r                                                                                                                                                                       +
+     if (!targetStatementEl || !fragmentsGridEl || !submitBtn || !scoreModalOverlay || !scoreModal || !scoreValueEl || !scoreBreakdownEl || !playAgainBtn || !nextBtn) {\r+
+         console.log("[Interaction] ??? Waiting for DOM elements...");\r                                                                                                  +
+         setTimeout(initializeWhenReady, 50); // Retry after 50ms\r                                                                                                       +
+         return;\r                                                                                                                                                        +
+     }\r                                                                                                                                                                  +
+ \r                                                                                                                                                                       +
+     console.log("[Interaction] ??? DOM ready, initializing...");\r                                                                                                       +
+ \r                                                                                                                                                                       +
+     // Set target statement from config or data\r                                                                                                                        +
+     targetStatementEl.textContent = targetStatement;\r                                                                                                                   +
+     console.log("[Interaction] ???? Set target statement to:", targetStatement);\r                                                                                       +
+ \r                                                                                                                                                                       +
+     // Render fragments\r                                                                                                                                                +
+     function renderFragments() {\r                                                                                                                                       +
+         console.log("[Interaction] ???? Cleared grid");\r                                                                                                                +
+         fragmentsGridEl.innerHTML = ""; // Clear existing fragments\r                                                                                                    +
+         if (!data.fragments || data.fragments.length === 0) {\r                                                                                                          +
+             fragmentsGridEl.innerHTML = "<p>No fragments to display.</p>";\r                                                                                             +
+             return;\r                                                                                                                                                    +
+         }\r                                                                                                                                                              +
+         console.log("[Interaction] ???? Rendering " + data.fragments.length + " fragments...");\r                                                                        +
+         data.fragments.forEach((fragment, index) => {\r                                                                                                                  +
+             const fragmentTile = document.createElement("div");\r                                                                                                        +
+             fragmentTile.className = "fragment-tile";\r                                                                                                                  +
+             \r                                                                                                                                                           +
+             // Add hint as title attribute if showHints is enabled\r                                                                                                     +
+             const hintAttr = showHints && fragment.explanation ? \r                                                                                                      +
+                 ` title="${fragment.explanation}"` : "";\r                                                                                                               +
+             \r                                                                                                                                                           +
+             fragmentTile.innerHTML = `<div class="fragment-text"${hintAttr}>${fragment.text}</div>`;\r                                                                   +
+             fragmentTile.addEventListener("click", () => toggleFragment(index));\r                                                                                       +
+             fragmentsGridEl.appendChild(fragmentTile);\r                                                                                                                 +
+             console.log("[Interaction] ??? Added fragment #" + index + ": " + fragment.text.substring(0, 30) + "...");\r                                                 +
+         });\r                                                                                                                                                            +
+         console.log("[Interaction] ??? All fragments rendered!");\r                                                                                                      +
+         console.log("[Interaction] ???? Grid children count:", fragmentsGridEl.children.length);\r                                                                       +
+     }\r                                                                                                                                                                  +
+ \r                                                                                                                                                                       +
+     function toggleFragment(index) {\r                                                                                                                                   +
+         // Check if we've reached maxSelections\r                                                                                                                        +
+         if (maxSelections && !selectedFragments.has(index) && selectedFragments.size >= maxSelections) {\r                                                               +
+             console.log("[Interaction] ?????? Max selections reached:", maxSelections);\r                                                                                +
+             return; // Don't allow more selections\r                                                                                                                     +
+         }\r                                                                                                                                                              +
+         \r                                                                                                                                                               +
+         if (selectedFragments.has(index)) {\r                                                                                                                            +
+             selectedFragments.delete(index);\r                                                                                                                           +
+         } else {\r                                                                                                                                                       +
+             selectedFragments.add(index);\r                                                                                                                              +
+         }\r                                                                                                                                                              +
+         updateFragmentStyles();\r                                                                                                                                        +
+         submitBtn.disabled = selectedFragments.size === 0;\r                                                                                                             +
+     }\r                                                                                                                                                                  +
+ \r                                                                                                                                                                       +
+     function updateFragmentStyles() {\r                                                                                                                                  +
+         const tiles = fragmentsGridEl.children;\r                                                                                                                        +
+         for (let i = 0; i < tiles.length; i++) {\r                                                                                                                       +
+             if (selectedFragments.has(i)) {\r                                                                                                                            +
+                 tiles[i].classList.add("selected");\r                                                                                                                    +
+             } else {\r                                                                                                                                                   +
+                 tiles[i].classList.remove("selected");\r                                                                                                                 +
+             }\r                                                                                                                                                          +
+         }\r                                                                                                                                                              +
+     }\r                                                                                                                                                                  +
+ \r                                                                                                                                                                       +
+     function checkAnswers() {\r                                                                                                                                          +
+         let correctCount = 0;\r                                                                                                                                          +
+         let totalTrue = 0;\r                                                                                                                                             +
+         data.fragments.forEach((fragment, index) => {\r                                                                                                                  +
+             if (fragment.isTrueInContext) totalTrue++;\r                                                                                                                 +
+             if (selectedFragments.has(index) && fragment.isTrueInContext) {\r                                                                                            +
+                 correctCount++;\r                                                                                                                                        +
+             } else if (selectedFragments.has(index) && !fragment.isTrueInContext) {\r                                                                                    +
+                 // Incorrectly selected a false statement\r                                                                                                              +
+             } else if (!selectedFragments.has(index) && fragment.isTrueInContext) {\r                                                                                    +
+                 // Missed a true statement\r                                                                                                                             +
+             }\r                                                                                                                                                          +
+         });\r                                                                                                                                                            +
+ \r                                                                                                                                                                       +
+         // Calculate score (simple: percentage of correctly identified true statements)\r                                                                                +
+         score = totalTrue > 0 ? Math.round((correctCount / totalTrue) * 100) : 0;\r                                                                                      +
+ \r                                                                                                                                                                       +
+         scoreValueEl.textContent = score + "%";\r                                                                                                                        +
+         scoreBreakdownEl.textContent = `${correctCount} out of ${totalTrue} true statements identified.`;\r                                                              +
+ \r                                                                                                                                                                       +
+         // Show score modal\r                                                                                                                                            +
+         scoreModalOverlay.style.display = "flex";\r                                                                                                                      +
+         scoreModal.style.display = "block";\r                                                                                                                            +
+     }\r                                                                                                                                                                  +
+ \r                                                                                                                                                                       +
+     function closeScoreModal() {\r                                                                                                                                       +
+         scoreModalOverlay.style.display = "none";\r                                                                                                                      +
+         scoreModal.style.display = "none";\r                                                                                                                             +
+     }\r                                                                                                                                                                  +
+ \r                                                                                                                                                                       +
+     function playAgain() {\r                                                                                                                                             +
+         selectedFragments.clear();\r                                                                                                                                     +
+         score = 0;\r                                                                                                                                                     +
+         submitBtn.disabled = true;\r                                                                                                                                     +
+         closeScoreModal();\r                                                                                                                                             +
+         renderFragments(); // Re-render to clear feedback styles\r                                                                                                       +
+     }\r                                                                                                                                                                  +
+ \r                                                                                                                                                                       +
+     // Event Listeners\r                                                                                                                                                 +
+     submitBtn.addEventListener("click", checkAnswers);\r                                                                                                                 +
+     playAgainBtn.addEventListener("click", playAgain);\r                                                                                                                 +
+     nextBtn.addEventListener("click", () => {\r                                                                                                                          +
+         alert("Interaction Completed! (Next button clicked)");\r                                                                                                         +
+         closeScoreModal();\r                                                                                                                                             +
+     });\r                                                                                                                                                                +
+     scoreModalOverlay.addEventListener("click", closeScoreModal);\r                                                                                                      +
+ \r                                                                                                                                                                       +
+     // Initial render\r                                                                                                                                                  +
+     renderFragments();\r                                                                                                                                                 +
+     submitBtn.disabled = true; // Initially disabled\r                                                                                                                   +
+ \r                                                                                                                                                                       +
+     console.log("[Interaction] ????????? FULLY INITIALIZED ?????????");\r                                                                                                +
+ }\r                                                                                                                                                                      +
+ \r                                                                                                                                                                       +
+ // Wait for the DOM to be fully loaded before initializing\r                                                                                                             +
+ if (document.readyState === "complete" || document.readyState === "interactive") {\r                                                                                     +
+     console.log("[Interaction] ?????? Document already ready, initializing now...");\r                                                                                   +
+     initializeWhenReady();\r                                                                                                                                             +
+ } else {\r                                                                                                                                                               +
+     console.log("[Interaction] ??? Document not ready, adding DOMContentLoaded listener...");\r                                                                          +
+     document.addEventListener("DOMContentLoaded", initializeWhenReady);\r                                                                                                +
+ }\r                                                                                                                                                                      +
+ 
+

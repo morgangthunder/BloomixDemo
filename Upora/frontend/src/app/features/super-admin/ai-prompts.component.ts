@@ -803,6 +803,19 @@ Return JSON array of script blocks with timestamps and playback rules.`,
           placeholder: 'Provide general interaction design guidance...'
         }
       }
+    },
+    {
+      id: 'image-generator',
+      name: 'Image Generator',
+      icon: '🎨',
+      description: 'Generates high-quality educational images based on text descriptions for use in lessons and interactions',
+      prompts: {
+        'default': {
+          label: 'Image Generation Prompt',
+          content: 'Loading from database...',
+          placeholder: 'Enter the prompt for generating educational images...'
+        }
+      }
     }
   ];
 

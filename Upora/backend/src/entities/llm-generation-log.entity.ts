@@ -53,6 +53,9 @@ export class LlmGenerationLog {
   @Column('varchar', { name: 'tenant_id' })
   tenantId: string;
 
+  @Column('varchar', { name: 'assistant_id', nullable: true })
+  assistantId: string | null; // 'inventor' | 'ai-teacher' | 'auto-populator' | 'content-analyzer' | etc.
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

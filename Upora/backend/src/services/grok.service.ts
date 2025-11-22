@@ -1,4 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { LlmProvider } from '../entities/llm-provider.entity';
 
 export interface GrokRequest {
   messages: Array<{
@@ -18,7 +21,7 @@ export interface GrokResponse {
 }
 
 /**
- * Grok API Service - Mock implementation for MVP
+ * Grok API Service - Uses API key from LlmProvider database table (same as Content Analyzer)
  * 
  * In production, this will call the real xAI Grok API:
  * https://api.x.ai/v1/chat/completions
@@ -26,35 +29,75 @@ export interface GrokResponse {
 @Injectable()
 export class GrokService {
   private logger = new Logger('GrokService');
-  private readonly mockMode = process.env.GROK_MOCK_MODE !== 'false';
-  private readonly apiKey = process.env.GROK_API_KEY;
-  private readonly apiUrl = process.env.GROK_API_URL || 'https://api.x.ai/v1';
+
+  constructor(
+    @InjectRepository(LlmProvider)
+    private llmProviderRepository: Repository<LlmProvider>,
+  ) {}
 
   /**
    * Send chat completion request to Grok API
-   * Currently mocked for MVP
    */
   async chatCompletion(request: GrokRequest): Promise<GrokResponse> {
-    if (this.mockMode) {
+    // Get default LLM provider (same approach as Content Analyzer)
+    const provider = await this.llmProviderRepository.findOne({
+      where: { isDefault: true, isActive: true },
+    });
+
+    // Check if we should use mock mode
+    const mockMode = process.env.GROK_MOCK_MODE === 'true';
+    const hasApiKey = provider?.apiKey && provider.apiKey !== 'mock-grok-key';
+
+    if (mockMode || !provider || !hasApiKey) {
+      this.logger.warn('Using mock Grok response (mockMode=true or no provider/API key)');
       return this.getMockResponse(request);
     }
 
-    // TODO: Implement real Grok API call for production
-    // const response = await fetch(`${this.apiUrl}/chat/completions`, {
-    //   method: 'POST',
-    //   headers: {
-    //     'Authorization': `Bearer ${this.apiKey}`,
-    //     'Content-Type': 'application/json',
-    //   },
-    //   body: JSON.stringify({
-    //     model: 'grok-beta',
-    //     messages: request.messages,
-    //     temperature: request.temperature || 0.7,
-    //     max_tokens: request.maxTokens || 1000,
-    //   }),
-    // });
+    try {
+      const startTime = Date.now();
+      
+      const response = await fetch(provider.apiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${provider.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: provider.modelName || 'grok-beta',
+          messages: request.messages,
+          temperature: request.temperature || parseFloat(provider.temperature as any) || 0.7,
+          max_tokens: request.maxTokens || provider.maxTokens || 2000,
+        }),
+      });
 
-    return this.getMockResponse(request);
+      if (!response.ok) {
+        const errorText = await response.text();
+        this.logger.error(`Grok API error: ${response.status} ${errorText}`);
+        throw new Error(`Grok API error: ${response.status} ${errorText}`);
+      }
+
+      const data = await response.json();
+      const processingTime = Date.now() - startTime;
+
+      // Extract response content
+      const content = data.choices?.[0]?.message?.content || '';
+      const tokensUsed = data.usage?.total_tokens || 0;
+      const finishReason = data.choices?.[0]?.finish_reason || 'stop';
+
+      this.logger.log(`Grok API success: ${tokensUsed} tokens in ${processingTime}ms`);
+
+      return {
+        content,
+        tokensUsed,
+        model: data.model || 'grok-beta',
+        finishReason,
+      };
+    } catch (error: any) {
+      this.logger.error(`Grok API call failed: ${error.message}`, error.stack);
+      // Fallback to mock on error
+      this.logger.warn('Falling back to mock response');
+      return this.getMockResponse(request);
+    }
   }
 
   /**
@@ -62,10 +105,14 @@ export class GrokService {
    */
   private getMockResponse(request: GrokRequest): GrokResponse {
     const userMessage = request.messages[request.messages.length - 1]?.content || '';
+    const systemPrompt = request.messages.find(m => m.role === 'system')?.content || '';
     
     this.logger.log(`Mock Grok request: "${userMessage.substring(0, 50)}..."`);
     
-    const responses = this.generateContextualResponse(userMessage, request.lessonContext);
+    // Extract context from lessonContext (which contains settings, code, configSchema, sampleData, testErrors)
+    const context = request.lessonContext || {};
+    
+    const responses = this.generateContextualResponse(userMessage, context, systemPrompt);
     
     // Simulate token usage (between 50-300 tokens)
     const tokensUsed = Math.floor(Math.random() * 250) + 50;
@@ -79,10 +126,18 @@ export class GrokService {
   }
 
   /**
-   * Generate contextual response based on user message
+   * Generate contextual response based on user message and system prompt
    */
-  private generateContextualResponse(message: string, context?: any): string {
+  private generateContextualResponse(message: string, context?: any, systemPrompt?: string): string {
     const messageLower = message.toLowerCase();
+    
+    // If we have a system prompt, try to generate a more contextual response
+    if (systemPrompt) {
+      // Check if this is an interaction builder prompt
+      if (systemPrompt.includes('Interaction Builder') || systemPrompt.includes('interaction')) {
+        return this.getInteractionBuilderResponse(message, systemPrompt, context);
+      }
+    }
     
     // Question patterns
     if (messageLower.includes('how')) {
@@ -99,6 +154,53 @@ export class GrokService {
     
     // Default encouraging response
     return this.getDefaultResponse(message, context);
+  }
+
+  /**
+   * Generate response for interaction builder assistant
+   * BRIEF responses only - 2-4 sentences max
+   */
+  private getInteractionBuilderResponse(message: string, systemPrompt: string, context?: any): string {
+    const messageLower = message.toLowerCase();
+    
+    // Check for test errors first - prioritize fixing them - BRIEF
+    if (context?.testErrors) {
+      const error = context.testErrors.error || '';
+      if (error.includes('typo') || error.includes('class=') || error.includes('id=')) {
+        return `Fixing HTML typo in attributes.`;
+      }
+      if (error.includes('element not found')) {
+        return `Adding missing element.`;
+      }
+      if (error.includes('JSON')) {
+        return `Fixing JSON syntax.`;
+      }
+      return `Fixing error.`;
+    }
+    
+    // Check what the user is asking about - BRIEF responses (1-2 sentences max, no code)
+    if (messageLower.includes('config') || messageLower.includes('configurable') || messageLower.includes('field')) {
+      return `Adding configurable field to Config Schema.`;
+    }
+    
+    if (messageLower.includes('html') || messageLower.includes('css') || messageLower.includes('javascript')) {
+      return `Updating code to use interactionData and interactionConfig.`;
+    }
+    
+    if (messageLower.includes('pixijs') || messageLower.includes('pixi')) {
+      return `Updating PixiJS code.`;
+    }
+    
+    if (messageLower.includes('iframe') || messageLower.includes('embed')) {
+      return `Configuring iFrame URL field.`;
+    }
+    
+    if (messageLower.includes('sample') || messageLower.includes('preview') || messageLower.includes('test data')) {
+      return `Updating sample data format.`;
+    }
+    
+    // Generic brief response
+    return `I can help with Settings, Code, Config Schema, or Sample Data. What do you need?`;
   }
 
   private getHowResponse(message: string, context?: any): string {

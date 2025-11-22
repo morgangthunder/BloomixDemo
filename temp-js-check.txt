@@ -1,0 +1,23 @@
+﻿ \r                                                                                               +
+ // Get interaction data and config from parent\r                                                 +
+ // Access window.interactionData directly (don't store in const to avoid timing issues)\r        +
+ const getData = () => window.interactionData || {};\r                                            +
+ const data = getData(); // Get initial value, but functions will use getData() for fresh access\r+
+ const config = window.interactionConfig || {};\r                                                 +
+ \r                                                                                               +
+ console.log("[Interaction] ???? Data received:", data);\r                                        +
+ console.log("[Interaction] ?????? Config received:", config);\r                                  +
+ \r                                                                                               +
+ // Use config values with fallbacks\r                                                            +
+ const targetStatement = config.targetStatement || data.targetStatement || "Loading...";\r        +
+ const showHints = config.showHints !== undefined ? config.showHints : false;\r                   +
+ const maxSelections = config.maxSelections || null;\r                                            +
+ \r                                                                                               +
+ console.log("[Interaction] ???? Using target statement:", targetStatement);\r                    +
+ console.log("[Interaction] ???? Show hints:", showHints);\r                                      +
+ console.log("[Interaction] ???? Max selections:", maxSelections);\r                              +
+ \r                                                                                               +
+ const selectedFragments = new Set();\r                                                           +
+ let score = 0;\r                                                                                 +
+ let totalAttempts = 0
+

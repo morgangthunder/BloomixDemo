@@ -7,6 +7,15 @@ import { IonContent } from '@ionic/angular/standalone';
 import { environment } from '../../../environments/environment';
 import { LlmProviderConfigModalComponent } from './llm-provider-config-modal.component';
 
+interface AssistantBreakdown {
+  assistantId: string;
+  assistantName: string;
+  tokensUsed: number;
+  cost: number;
+  percentOfAccount: number;
+  callCount: number;
+}
+
 interface TokenUsageAccount {
   accountId: string;
   email: string;
@@ -24,6 +33,18 @@ interface TokenUsageAccount {
   llmProvider: string;
   avgLatencyMs: number;
   costThisPeriod: number;
+  assistantBreakdown?: AssistantBreakdown[];
+}
+
+interface OverallAssistantBreakdown {
+  assistantId: string;
+  assistantName: string;
+  tokensUsed: number; // This period
+  tokensUsedToDate: number; // To date
+  cost: number; // This period
+  costToDate: number; // To date
+  callCount: number;
+  callCountToDate: number;
 }
 
 interface TokenUsageResponse {
@@ -35,6 +56,7 @@ interface TokenUsageResponse {
     currency: string;
   };
   usageByCategory: Record<string, number>;
+  overallAssistantBreakdown?: OverallAssistantBreakdown[]; // Add overall assistant breakdown
   pricing: {
     perMillionTokens: number;
     provider: string;
@@ -284,7 +306,13 @@ interface LlmProvider {
                   <tr *ngIf="expandedAccountId === account.accountId" class="assistant-breakdown-row">
                     <td colspan="11" class="assistant-breakdown-cell">
                       <div class="assistant-breakdown-container">
-                        <h4>🤖 AI Assistant Breakdown for {{ account.name }}</h4>
+                        <div class="breakdown-header">
+                          <h4>🤖 AI Assistant Breakdown for {{ account.name }}</h4>
+                          <label class="hide-empty-toggle">
+                            <input type="checkbox" [(ngModel)]="hideEmptyAssistants" />
+                            <span>Hide empty</span>
+                          </label>
+                        </div>
                         <table class="assistant-breakdown-table">
                           <thead>
                             <tr>
@@ -292,53 +320,27 @@ interface LlmProvider {
                               <th>Tokens Used</th>
                               <th>% of Account</th>
                               <th>Cost</th>
+                              <th>Calls</th>
                             </tr>
                           </thead>
                           <tbody>
-                            <!-- Placeholder data - will be replaced with real data -->
-                            <tr>
+                            <tr *ngFor="let assistant of getFilteredAssistants(account.assistantBreakdown || [])"
+                                [class.empty-assistant]="assistant.tokensUsed === 0">
                               <td>
                                 <div class="assistant-name">
-                                  <span class="assistant-icon-small">🔧</span>
-                                  <span>Inventor</span>
+                                  <span class="assistant-icon-small">{{ getAssistantIcon(assistant.assistantId) }}</span>
+                                  <span>{{ assistant.assistantName }}</span>
                                 </div>
                               </td>
-                              <td><span class="tokens-value">Coming Soon</span></td>
-                              <td><span class="percent-value">—</span></td>
-                              <td><span class="cost-value">—</span></td>
+                              <td><span class="tokens-value">{{ formatNumber(assistant.tokensUsed) }}</span></td>
+                              <td><span class="percent-value">{{ getPercentValue(assistant.percentOfAccount) }}%</span></td>
+                              <td><span class="cost-value">{{ getCostDisplay(assistant.cost) }}</span></td>
+                              <td><span class="call-count">{{ assistant.callCount }}</span></td>
                             </tr>
-                            <tr>
-                              <td>
-                                <div class="assistant-name">
-                                  <span class="assistant-icon-small">🤖</span>
-                                  <span>AI Teacher</span>
-                                </div>
+                            <tr *ngIf="getFilteredAssistants(account.assistantBreakdown || []).length === 0">
+                              <td colspan="5" class="no-assistants">
+                                <span class="muted-text">No assistant usage data available</span>
                               </td>
-                              <td><span class="tokens-value">Coming Soon</span></td>
-                              <td><span class="percent-value">—</span></td>
-                              <td><span class="cost-value">—</span></td>
-                            </tr>
-                            <tr>
-                              <td>
-                                <div class="assistant-name">
-                                  <span class="assistant-icon-small">📊</span>
-                                  <span>Content Analyzer</span>
-                                </div>
-                              </td>
-                              <td><span class="tokens-value">Coming Soon</span></td>
-                              <td><span class="percent-value">—</span></td>
-                              <td><span class="cost-value">—</span></td>
-                            </tr>
-                            <tr>
-                              <td>
-                                <div class="assistant-name">
-                                  <span class="assistant-icon-small">✨</span>
-                                  <span>Auto-Populator</span>
-                                </div>
-                              </td>
-                              <td><span class="tokens-value">Coming Soon</span></td>
-                              <td><span class="percent-value">—</span></td>
-                              <td><span class="cost-value">—</span></td>
                             </tr>
                           </tbody>
                         </table>
@@ -356,54 +358,42 @@ interface LlmProvider {
               <div class="section-header">
                 <h2>AI Assistant Breakdown</h2>
                 <p class="subtitle">Token usage by AI assistant type</p>
+                <div class="period-toggle" style="margin-top: 1rem;">
+                  <button 
+                    [class.active]="assistantPeriodToggle === 'thisPeriod'"
+                    (click)="assistantPeriodToggle = 'thisPeriod'"
+                    class="toggle-btn">
+                    This Period
+                  </button>
+                  <button 
+                    [class.active]="assistantPeriodToggle === 'toDate'"
+                    (click)="assistantPeriodToggle = 'toDate'"
+                    class="toggle-btn">
+                    To Date
+                  </button>
+                </div>
               </div>
 
-              <div class="assistant-cards">
-                <div class="assistant-card">
-                  <div class="assistant-icon">🔧</div>
+              <div class="assistant-cards" *ngIf="data?.overallAssistantBreakdown">
+                <div *ngFor="let assistant of getFilteredAssistantBreakdown()" class="assistant-card">
+                  <div class="assistant-icon">{{ getAssistantIcon(assistant.assistantId) }}</div>
                   <div class="assistant-info">
-                    <h3>Inventor</h3>
-                    <p>Interaction Builder Assistant</p>
+                    <h3>{{ assistant.assistantName }}</h3>
+                    <p>{{ getAssistantDescription(assistant.assistantId) }}</p>
                   </div>
                   <div class="assistant-stats">
-                    <div class="stat-value">Coming Soon</div>
-                    <div class="stat-label">Total Tokens</div>
-                  </div>
-                </div>
-
-                <div class="assistant-card">
-                  <div class="assistant-icon">🤖</div>
-                  <div class="assistant-info">
-                    <h3>AI Teacher</h3>
-                    <p>Lesson Runtime Assistant</p>
-                  </div>
-                  <div class="assistant-stats">
-                    <div class="stat-value">Coming Soon</div>
-                    <div class="stat-label">Total Tokens</div>
-                  </div>
-                </div>
-
-                <div class="assistant-card">
-                  <div class="assistant-icon">📊</div>
-                  <div class="assistant-info">
-                    <h3>Content Analyzer</h3>
-                    <p>Content Processing Assistant</p>
-                  </div>
-                  <div class="assistant-stats">
-                    <div class="stat-value">Coming Soon</div>
-                    <div class="stat-label">Total Tokens</div>
-                  </div>
-                </div>
-
-                <div class="assistant-card">
-                  <div class="assistant-icon">✨</div>
-                  <div class="assistant-info">
-                    <h3>Auto-Populator</h3>
-                    <p>Auto-fill Assistant</p>
-                  </div>
-                  <div class="assistant-stats">
-                    <div class="stat-value">Coming Soon</div>
-                    <div class="stat-label">Total Tokens</div>
+                    <div class="stat-row">
+                      <div class="stat-value">{{ formatNumber(assistantPeriodToggle === 'thisPeriod' ? assistant.tokensUsed : assistant.tokensUsedToDate) }}</div>
+                      <div class="stat-label">Tokens</div>
+                    </div>
+                    <div class="stat-row">
+                      <div class="stat-value cost-value">\${{ formatCost(assistantPeriodToggle === 'thisPeriod' ? assistant.cost : assistant.costToDate) }}</div>
+                      <div class="stat-label">Cost</div>
+                    </div>
+                    <div class="stat-row">
+                      <div class="stat-value">{{ assistantPeriodToggle === 'thisPeriod' ? assistant.callCount : assistant.callCountToDate }}</div>
+                      <div class="stat-label">Calls</div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -800,11 +790,35 @@ interface LlmProvider {
       border-bottom: 1px solid rgba(0, 212, 255, 0.2);
     }
 
-    .assistant-breakdown-container h4 {
-      margin: 0 0 1rem 0;
+    .breakdown-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .breakdown-header h4 {
+      margin: 0;
       font-size: 1rem;
       font-weight: 600;
       color: #00d4ff;
+    }
+
+    .hide-empty-toggle {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+      color: rgba(255, 255, 255, 0.7);
+      cursor: pointer;
+    }
+
+    .hide-empty-toggle input[type="checkbox"] {
+      cursor: pointer;
+    }
+
+    .hide-empty-toggle span {
+      user-select: none;
     }
 
     .assistant-breakdown-table {
@@ -842,10 +856,24 @@ interface LlmProvider {
       font-size: 1.25rem;
     }
 
-    .tokens-value, .percent-value, .cost-value {
+    .tokens-value, .percent-value, .cost-value, .call-count {
       font-size: 0.875rem;
       font-weight: 500;
       color: rgba(255, 255, 255, 0.8);
+    }
+
+    .empty-assistant {
+      opacity: 0.5;
+    }
+
+    .no-assistants {
+      text-align: center;
+      padding: 2rem;
+    }
+
+    .no-assistants .muted-text {
+      color: rgba(255, 255, 255, 0.4);
+      font-size: 0.875rem;
     }
 
     .account-cell {
@@ -1241,6 +1269,10 @@ export class LlmTokenUsageComponent implements OnInit {
   // Assistant breakdown expandable rows
   expandedAccountId: string | null = null;
   assistantBreakdownData: Map<string, any[]> = new Map();
+  hideEmptyAssistants = false;
+  
+  // Period toggle for assistant breakdown
+  assistantPeriodToggle: 'thisPeriod' | 'toDate' = 'thisPeriod';
 
   constructor(
     private http: HttpClient,
@@ -1388,6 +1420,60 @@ export class LlmTokenUsageComponent implements OnInit {
     console.log('[LLM Usage] Provider saved:', provider);
     await this.loadProviders();
     this.loadData();
+  }
+
+  getFilteredAssistants(assistants: any[]) {
+    if (!assistants) return [];
+    if (this.hideEmptyAssistants) {
+      return assistants.filter((a: any) => a.tokensUsed > 0);
+    }
+    return assistants;
+  }
+
+  getAssistantIcon(assistantId: any) {
+    if (!assistantId) return '🤖';
+    const iconMap: any = {
+      'inventor': '🔧',
+      'ai-teacher': '🤖',
+      'teacher': '🤖',
+      'content-analyzer': '📊',
+      'auto-populator': '✨',
+      'lesson-builder': '📚',
+      'scaffolder': '🏗️',
+      'optimiser': '⚡',
+      'personaliser': '🎯',
+    };
+    return iconMap[assistantId] || '🤖';
+  }
+
+  getPercentValue(percent: number) {
+    if (percent === undefined || percent === null) return '0.0';
+    return percent.toFixed(1);
+  }
+
+  getCostDisplay(cost: number) {
+    return '$' + this.formatCost(cost);
+  }
+
+  getFilteredAssistantBreakdown(): OverallAssistantBreakdown[] {
+    if (!this.data?.overallAssistantBreakdown) return [];
+    if (!this.hideEmptyAssistants) return this.data.overallAssistantBreakdown;
+    return this.data.overallAssistantBreakdown.filter(a => 
+      (this.assistantPeriodToggle === 'thisPeriod' ? a.tokensUsed : a.tokensUsedToDate) > 0
+    );
+  }
+
+  getAssistantDescription(assistantId: string): string {
+    const descriptions: Record<string, string> = {
+      'inventor': 'Interaction Builder Assistant',
+      'teacher': 'Lesson Runtime Assistant',
+      'content-analyzer': 'Content Processing Assistant',
+      'auto-populator': 'Auto-fill Assistant',
+      'lesson-builder': 'Lesson Building Assistant',
+      'scaffolder': 'Lesson Scaffolding Assistant',
+      'image-generator': 'Image Generation Assistant',
+    };
+    return descriptions[assistantId] || 'AI Assistant';
   }
 }
 

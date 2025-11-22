@@ -231,7 +231,19 @@ GUIDELINES:
 - Add proper event listeners and state management
 - Test for edge cases (missing data, invalid config)
 
-When user asks for help, provide code snippets, explain concepts, or debug issues.`,
+RESPONSE FORMAT:
+- Provide a brief summary in your response text (this will be shown in chat)
+- Include full code/content in structured JSON blocks or markdown code blocks
+- NEVER say things like "Here's the modified code" or "Here's the updated JavaScript"
+- Instead, use action-oriented phrasing like: "Accept changes to update your [HTML/CSS/JavaScript/Config/Sample Data] to [describe the change]"
+- Examples:
+  * "Accept changes to update your JavaScript code to change the shape to a square"
+  * "Accept changes to update your CSS to add a blue background color"
+  * "Accept changes to update your Config Schema to add a new field"
+- Always phrase suggestions as actions the user can take by clicking "Accept Changes"
+- The full code will be available when the user clicks Accept Changes
+
+When user asks for help, provide code snippets, explain concepts, or debug issues. Always phrase your responses as actions the user can take by clicking "Accept Changes".`,
       },
       {
         assistantId: 'inventor',
@@ -268,7 +280,19 @@ COMMON PATTERNS:
 - Collision detection: getBounds() and simple rectangle overlap
 - Config-driven visuals: Use config for colors, sizes, positions
 
-When user asks for help, provide code examples, explain PixiJS concepts, or help debug rendering issues.`,
+RESPONSE FORMAT:
+- Provide a brief summary in your response text (this will be shown in chat)
+- Include full code/content in structured JSON blocks or markdown code blocks
+- NEVER say things like "Here's the modified code" or "Here's the updated PixiJS code"
+- Instead, use action-oriented phrasing like: "Accept changes to update your [JavaScript/Config/Sample Data] to [describe the change]"
+- Examples:
+  * "Accept changes to update your JavaScript code to change the sprite to a square"
+  * "Accept changes to update your Config Schema to add a color picker"
+  * "Accept changes to update your Sample Data to include new test values"
+- Always phrase suggestions as actions the user can take by clicking "Accept Changes"
+- The full code will be available when the user clicks Accept Changes
+
+When user asks for help, provide code examples, explain PixiJS concepts, or help debug rendering issues. Always phrase your responses as actions the user can take by clicking "Accept Changes".`,
       },
       {
         assistantId: 'inventor',
@@ -315,7 +339,19 @@ TROUBLESHOOTING:
 - Content not loading: Check CORS and CSP policies
 - Size issues: Use responsive CSS (width: 100%, height: auto)
 
-When user asks for help, provide embed URLs, explain permissions, or help debug loading issues.`,
+RESPONSE FORMAT:
+- Provide a brief summary in your response text (this will be shown in chat)
+- Include full code/content in structured JSON blocks or markdown code blocks
+- NEVER say things like "Here's the modified iframe URL" or "Here's the updated configuration"
+- Instead, use action-oriented phrasing like: "Accept changes to update your [iFrame URL/Config/Sample Data] to [describe the change]"
+- Examples:
+  * "Accept changes to update your iFrame URL to embed a YouTube video"
+  * "Accept changes to update your Config Schema to add width and height options"
+  * "Accept changes to update your Sample Data to include a test video URL"
+- Always phrase suggestions as actions the user can take by clicking "Accept Changes"
+- The full code will be available when the user clicks Accept Changes
+
+When user asks for help, provide embed URLs, explain permissions, or help debug loading issues. Always phrase your responses as actions the user can take by clicking "Accept Changes".`,
       },
       {
         assistantId: 'inventor',
@@ -354,7 +390,19 @@ TEACH METHODOLOGY:
 - Challenge: Test understanding
 - Habit: Reinforce and reflect
 
-When user asks for help, guide them on interaction design, provide examples, or explain concepts.`,
+RESPONSE FORMAT:
+- Provide a brief summary in your response text (this will be shown in chat)
+- Include full code/content in structured JSON blocks or markdown code blocks
+- NEVER say things like "Here's the modified code" or "Here's the updated configuration"
+- Instead, use action-oriented phrasing like: "Accept changes to update your [Settings/Code/Config/Sample Data] to [describe the change]"
+- Examples:
+  * "Accept changes to update your Settings to change the interaction name"
+  * "Accept changes to update your Config Schema to add new customization options"
+  * "Accept changes to update your Sample Data to include test values"
+- Always phrase suggestions as actions the user can take by clicking "Accept Changes"
+- The full code will be available when the user clicks Accept Changes
+
+When user asks for help, guide them on interaction design, provide examples, or explain concepts. Always phrase your responses as actions the user can take by clicking "Accept Changes".`,
       },
     ];
 
