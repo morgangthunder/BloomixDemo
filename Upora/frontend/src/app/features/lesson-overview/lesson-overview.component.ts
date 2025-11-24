@@ -87,26 +87,14 @@ import { Lesson } from '../../core/models/lesson.model';
               </div>
 
               <!-- What You'll Learn -->
-              <div class="mt-12 p-6 bg-brand-dark rounded-lg border border-gray-800">
+              <div *ngIf="getLearningObjectives(lesson).length > 0" class="mt-12 p-6 bg-brand-dark rounded-lg border border-gray-800">
                 <h2 class="text-2xl font-bold mb-4">What you'll learn</h2>
                 <ul class="space-y-3">
-                  <li class="flex items-start">
+                  <li *ngFor="let objective of getLearningObjectives(lesson)" class="flex items-start">
                     <svg class="w-6 h-6 text-green-500 mr-3 mt-1 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                     </svg>
-                    <span>Master key phrases and cultural nuances to navigate conversations with confidence.</span>
-                  </li>
-                  <li class="flex items-start">
-                    <svg class="w-6 h-6 text-green-500 mr-3 mt-1 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                    <span>Learn how to handle common situations and communicate effectively.</span>
-                  </li>
-                  <li class="flex items-start">
-                    <svg class="w-6 h-6 text-green-500 mr-3 mt-1 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                    <span>Improve your skills through interactive exercises and real-life dialogues.</span>
+                    <span>{{ objective }}</span>
                   </li>
                 </ul>
               </div>
@@ -212,5 +200,27 @@ export class LessonOverviewComponent implements OnInit {
   goBack() {
     this.lessonService.exitOverview();
     this.router.navigate(['/home']);
+  }
+
+  getLearningObjectives(lesson: Lesson): string[] {
+    // Try multiple possible locations for learning objectives
+    if (lesson.learningObjectives && lesson.learningObjectives.length > 0) {
+      return lesson.learningObjectives;
+    }
+    
+    if (lesson.data?.objectives?.learningObjectives && lesson.data.objectives.learningObjectives.length > 0) {
+      return lesson.data.objectives.learningObjectives;
+    }
+    
+    if ((lesson.data as any)?.structure?.learningObjectives && (lesson.data as any).structure.learningObjectives.length > 0) {
+      return (lesson.data as any).structure.learningObjectives;
+    }
+    
+    if ((lesson.data as any)?.aiContext?.contextData?.lessonObjectives && (lesson.data as any).aiContext.contextData.lessonObjectives.length > 0) {
+      return (lesson.data as any).aiContext.contextData.lessonObjectives;
+    }
+    
+    // Fallback: return empty array (section won't show)
+    return [];
   }
 }

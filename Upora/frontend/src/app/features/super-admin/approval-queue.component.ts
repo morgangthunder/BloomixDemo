@@ -6,11 +6,15 @@ import { IonContent } from '@ionic/angular/standalone';
 import { environment } from '../../../environments/environment';
 
 interface DraftChange {
+  category: string;
   type: string;
   field: string;
   from: any;
   to: any;
+  description?: string;
   context?: string;
+  fileUrl?: string;
+  configKey?: string;
 }
 
 interface PendingDraft {
@@ -22,6 +26,7 @@ interface PendingDraft {
   updatedAt: string;
   changesCount: number;
   changeSummary: string;
+  changeCategories?: string[];
 }
 
 interface DraftDiff {
@@ -33,6 +38,14 @@ interface DraftDiff {
   updatedAt: string;
   changes: DraftChange[];
   changesCount: number;
+  changeCategories?: string[];
+}
+
+interface ChangeGroup {
+  category: string;
+  label: string;
+  changes: DraftChange[];
+  expanded: boolean;
 }
 
 @Component({
@@ -76,6 +89,9 @@ interface DraftDiff {
                 <h3>{{draft.lessonTitle}}</h3>
                 <p class="draft-meta">
                   <span>{{draft.changesCount}} change{{draft.changesCount === 1 ? '' : 's'}}</span>
+                  <span *ngIf="draft.changeCategories && draft.changeCategories.length > 0">
+                    • {{draft.changeCategories.length}} type{{draft.changeCategories.length === 1 ? '' : 's'}}
+                  </span>
                   <span>•</span>
                   <span>Updated {{formatDate(draft.updatedAt)}}</span>
                 </p>
@@ -85,10 +101,10 @@ interface DraftDiff {
                   👁️ View Changes
                 </button>
                 <button class="btn-approve" (click)="approveDraft(draft)">
-                  ✅ Approve
+                  ✅ Approve All
                 </button>
                 <button class="btn-reject" (click)="rejectDraft(draft)">
-                  ❌ Reject
+                  ❌ Reject All
                 </button>
               </div>
             </div>
@@ -117,26 +133,57 @@ interface DraftDiff {
               </div>
 
               <div *ngIf="!loadingDiff && selectedDraftDiff.changes.length > 0" class="changes-list">
-                <div *ngFor="let change of selectedDraftDiff.changes" class="change-item">
-                  <div class="change-header">
-                    <span class="change-type-badge" [class]="'badge-' + change.type">
-                      {{getChangeTypeLabel(change.type)}}
-                    </span>
-                    <span class="change-field">{{change.field}}</span>
-                  </div>
-                  <div class="change-content">
-                    <div class="change-from" *ngIf="change.from">
-                      <div class="label">Before:</div>
-                      <div class="value">{{change.from}}</div>
+                <!-- Grouped by category -->
+                <div *ngFor="let group of changeGroups" class="change-group">
+                  <div class="change-group-header" (click)="toggleGroup(group)">
+                    <div class="group-title">
+                      <span class="expand-icon">{{group.expanded ? '▼' : '▶'}}</span>
+                      <span class="group-label">{{group.label}}</span>
+                      <span class="group-count">({{group.changes.length}})</span>
                     </div>
-                    <div class="change-arrow" *ngIf="change.from">→</div>
-                    <div class="change-to">
-                      <div class="label">{{change.from ? 'After' : 'New'}}:</div>
-                      <div class="value">{{change.to}}</div>
+                    <div class="group-actions" (click)="$event.stopPropagation()">
+                      <button class="btn-view-small" (click)="viewGroupChanges(group)">
+                        👁️ View
+                      </button>
+                      <button class="btn-approve-small" (click)="approveGroup(group)">
+                        ✅ Approve
+                      </button>
+                      <button class="btn-reject-small" (click)="rejectGroup(group)">
+                        ❌ Reject
+                      </button>
                     </div>
                   </div>
-                  <div class="change-context" *ngIf="change.context">
-                    <small>{{change.context}}</small>
+                  <div *ngIf="group.expanded" class="change-group-content">
+                    <div *ngFor="let change of group.changes" class="change-item">
+                      <div class="change-header">
+                        <span class="change-type-badge" [class]="'badge-' + change.category">
+                          {{getChangeCategoryLabel(change.category)}}
+                        </span>
+                        <span class="change-field">{{change.field}}</span>
+                      </div>
+                      <div class="change-description" *ngIf="change.description">
+                        {{change.description}}
+                      </div>
+                      <div class="change-content">
+                        <div class="change-from" *ngIf="change.from !== null && change.from !== undefined">
+                          <div class="label">Before:</div>
+                          <div class="value">{{formatChangeValue(change.from)}}</div>
+                        </div>
+                        <div class="change-arrow" *ngIf="change.from !== null && change.from !== undefined">→</div>
+                        <div class="change-to">
+                          <div class="label">{{change.from !== null && change.from !== undefined ? 'After' : 'New'}}:</div>
+                          <div class="value">
+                            {{formatChangeValue(change.to)}}
+                            <a *ngIf="change.fileUrl" [href]="change.fileUrl" target="_blank" class="file-link">
+                              📄 View File
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="change-context" *ngIf="change.context">
+                        <small>{{change.context}}</small>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -493,6 +540,166 @@ interface DraftDiff {
       font-size: 0.75rem;
     }
 
+    .change-group {
+      margin-bottom: 20px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .change-group-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px;
+      background: rgba(255, 255, 255, 0.05);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .change-group-header:hover {
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .group-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+    }
+
+    .expand-icon {
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.6);
+      width: 16px;
+    }
+
+    .group-label {
+      font-weight: 600;
+      font-size: 1rem;
+      color: #fff;
+    }
+
+    .group-count {
+      color: rgba(255, 255, 255, 0.5);
+      font-size: 0.875rem;
+    }
+
+    .group-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-view-small,
+    .btn-approve-small,
+    .btn-reject-small {
+      padding: 6px 12px;
+      border-radius: 4px;
+      border: none;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn-view-small {
+      background: rgba(0, 212, 255, 0.1);
+      color: #00d4ff;
+      border: 1px solid rgba(0, 212, 255, 0.3);
+    }
+
+    .btn-view-small:hover {
+      background: rgba(0, 212, 255, 0.2);
+    }
+
+    .btn-approve-small {
+      background: rgba(34, 197, 94, 0.1);
+      color: #22c55e;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+
+    .btn-approve-small:hover {
+      background: rgba(34, 197, 94, 0.2);
+    }
+
+    .btn-reject-small {
+      background: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .btn-reject-small:hover {
+      background: rgba(239, 68, 68, 0.2);
+    }
+
+    .change-group-content {
+      padding: 16px;
+    }
+
+    .change-description {
+      margin-bottom: 12px;
+      padding: 8px 12px;
+      background: rgba(0, 212, 255, 0.05);
+      border-left: 3px solid #00d4ff;
+      border-radius: 4px;
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 0.875rem;
+    }
+
+    .file-link {
+      display: inline-block;
+      margin-left: 8px;
+      color: #00d4ff;
+      text-decoration: none;
+      font-size: 0.875rem;
+    }
+
+    .file-link:hover {
+      text-decoration: underline;
+    }
+
+    .badge-new_lesson {
+      background: rgba(34, 197, 94, 0.2);
+      color: #22c55e;
+    }
+
+    .badge-metadata {
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+    }
+
+    .badge-structure {
+      background: rgba(168, 85, 247, 0.2);
+      color: #a78bfa;
+    }
+
+    .badge-script {
+      background: rgba(139, 92, 246, 0.2);
+      color: #a78bfa;
+    }
+
+    .badge-interaction {
+      background: rgba(34, 197, 94, 0.2);
+      color: #22c55e;
+    }
+
+    .badge-interaction_config {
+      background: rgba(251, 191, 36, 0.2);
+      color: #fbbf24;
+    }
+
+    .badge-content_submission {
+      background: rgba(236, 72, 153, 0.2);
+      color: #ec4899;
+    }
+
+    .badge-other {
+      background: rgba(107, 114, 128, 0.2);
+      color: #9ca3af;
+    }
+
     .modal-footer {
       display: flex;
       justify-content: flex-end;
@@ -541,6 +748,7 @@ export class ApprovalQueueComponent implements OnInit {
   selectedDraft: PendingDraft | null = null;
   selectedDraftDiff: DraftDiff | null = null;
   loadingDiff = false;
+  changeGroups: ChangeGroup[] = [];
 
   constructor(
     private http: HttpClient,
@@ -574,12 +782,14 @@ export class ApprovalQueueComponent implements OnInit {
     this.selectedDraft = draft;
     this.showChangesModal = true;
     this.loadingDiff = true;
+    this.changeGroups = [];
 
     // Load diff
     this.http.get<DraftDiff>(`${environment.apiUrl}/lesson-drafts/${draft.id}/diff`).subscribe({
       next: (diff) => {
         this.selectedDraftDiff = diff;
         this.loadingDiff = false;
+        this.groupChangesByCategory(diff.changes);
         console.log('[ApprovalQueue] Loaded diff:', diff);
       },
       error: (err) => {
@@ -587,6 +797,69 @@ export class ApprovalQueueComponent implements OnInit {
         this.loadingDiff = false;
       }
     });
+  }
+
+  groupChangesByCategory(changes: DraftChange[]) {
+    const groupsMap = new Map<string, DraftChange[]>();
+    
+    changes.forEach(change => {
+      const category = change.category || 'other';
+      if (!groupsMap.has(category)) {
+        groupsMap.set(category, []);
+      }
+      groupsMap.get(category)!.push(change);
+    });
+
+    this.changeGroups = Array.from(groupsMap.entries()).map(([category, changes]) => ({
+      category,
+      label: this.getChangeCategoryLabel(category),
+      changes,
+      expanded: true // Expand all by default
+    }));
+  }
+
+  toggleGroup(group: ChangeGroup) {
+    group.expanded = !group.expanded;
+  }
+
+  viewGroupChanges(group: ChangeGroup) {
+    // Toggle collapse/expand for the group
+    this.toggleGroup(group);
+  }
+
+  approveGroup(group: ChangeGroup) {
+    if (!confirm(`Approve all ${group.changes.length} ${group.label.toLowerCase()} changes?`)) {
+      return;
+    }
+    // For now, approve the entire draft
+    // In the future, we could implement partial approval
+    if (this.selectedDraft) {
+      this.approveDraft(this.selectedDraft);
+    }
+  }
+
+  rejectGroup(group: ChangeGroup) {
+    if (!confirm(`Reject all ${group.changes.length} ${group.label.toLowerCase()} changes?`)) {
+      return;
+    }
+    // For now, reject the entire draft
+    // In the future, we could implement partial rejection
+    if (this.selectedDraft) {
+      this.rejectDraft(this.selectedDraft);
+    }
+  }
+
+  formatChangeValue(value: any): string {
+    if (value === null || value === undefined) {
+      return '(blank)';
+    }
+    if (typeof value === 'string') {
+      return value || '(blank)';
+    }
+    if (typeof value === 'object') {
+      return JSON.stringify(value, null, 2);
+    }
+    return String(value);
   }
 
   closeChangesModal() {
@@ -647,9 +920,38 @@ export class ApprovalQueueComponent implements OnInit {
       'description': 'Description',
       'script_text': 'Script Text',
       'script_added': 'New Script',
-      'interaction_type': 'Interaction'
+      'interaction_type': 'Interaction',
+      'iframe_guide_doc': 'iFrame Guide Doc',
+      'iframe_guide_webpage': 'iFrame Guide Webpage',
+      'config_change': 'Config Change',
+      'stage_type': 'Stage Type',
+      'substage_type': 'Substage Type',
+      'stages_count': 'Stages Count',
+      'substages_count': 'Substages Count',
+      'stage_added': 'New Stage',
+      'stage_removed': 'Stage Removed',
+      'substage_added': 'New Substage',
+      'substage_removed': 'Substage Removed',
+      'new_lesson': 'New Lesson',
+      'content_added': 'Content Added',
+      'content_removed': 'Content Removed',
+      'content_updated': 'Content Updated'
     };
     return labels[type] || type;
+  }
+
+  getChangeCategoryLabel(category: string): string {
+    const labels: Record<string, string> = {
+      'new_lesson': 'New Lesson',
+      'metadata': 'Metadata Changes',
+      'structure': 'Structure Changes',
+      'script': 'Script Changes',
+      'interaction': 'Interaction Changes',
+      'interaction_config': 'Interaction Config Changes',
+      'content_submission': 'Content Submission',
+      'other': 'Other Changes'
+    };
+    return labels[category] || category;
   }
 
   formatDate(dateStr: string): string {

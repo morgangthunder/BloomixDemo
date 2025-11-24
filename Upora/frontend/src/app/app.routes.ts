@@ -79,6 +79,14 @@ export const routes: Routes = [
     loadComponent: () => import('./features/super-admin/tests.component').then(m => m.TestsComponent)
   },
   {
+    path: 'super-admin/view-screenshot',
+    loadComponent: () => import('./features/super-admin/view-screenshot.component').then(m => m.ViewScreenshotComponent)
+  },
+  {
+    path: 'super-admin/view-queries',
+    loadComponent: () => import('./features/super-admin/view-queries.component').then(m => m.ViewQueriesComponent)
+  },
+  {
     path: 'test/true-false-selection',
     loadComponent: () => import('./features/interactions/true-false-selection-test.component').then(m => m.TrueFalseSelectionTestComponent)
   },

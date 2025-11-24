@@ -7,6 +7,7 @@ import { LessonDataLink } from '../../entities/lesson-data-link.entity';
 import { YouTubeService } from '../../services/youtube.service';
 import { ContentAnalyzerModule } from '../../services/content-analyzer.module';
 import { AutoPopulatorModule } from '../../services/auto-populator.module';
+import { FileStorageService } from '../../services/file-storage.service';
 
 @Module({
   imports: [
@@ -15,7 +16,7 @@ import { AutoPopulatorModule } from '../../services/auto-populator.module';
     AutoPopulatorModule,
   ],
   controllers: [ContentSourcesController],
-  providers: [ContentSourcesService, YouTubeService],
+  providers: [ContentSourcesService, YouTubeService, FileStorageService],
   exports: [ContentSourcesService],
 })
 export class ContentSourcesModule {}

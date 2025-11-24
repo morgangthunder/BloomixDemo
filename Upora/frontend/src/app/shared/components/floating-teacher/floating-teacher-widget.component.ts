@@ -13,9 +13,10 @@ export interface ScriptBlock {
 }
 
 export interface ChatMessage {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'error';
   content: string;
   timestamp?: Date;
+  isError?: boolean;
 }
 
 @Component({
@@ -76,10 +77,11 @@ export interface ChatMessage {
           <div *ngFor="let msg of chatMessages; let i = index" 
                [class.user-message]="msg.role === 'user'"
                [class.ai-message]="msg.role === 'assistant'"
+               [class.error-message]="msg.role === 'error' || msg.isError"
                class="message"
                [attr.data-message-index]="i">
             <div class="message-content">
-              <div class="message-icon">{{ msg.role === 'user' ? '👤' : '👨‍🏫' }}</div>
+              <div class="message-icon">{{ msg.role === 'user' ? '👤' : msg.role === 'error' ? '⚠️' : '👨‍🏫' }}</div>
               <div class="message-text">{{ msg.content }}</div>
             </div>
           </div>
@@ -402,6 +404,16 @@ export interface ChatMessage {
       background: #1a1a1a;
       color: #ffffff;
       border: 1px solid #333333;
+    }
+
+    .error-message .message-text {
+      background: rgba(255, 59, 63, 0.1);
+      color: #ff6b6b;
+      border: 1px solid rgba(255, 59, 63, 0.3);
+    }
+
+    .error-message .message-icon {
+      color: #ff6b6b;
     }
 
     /* Typing Indicator */

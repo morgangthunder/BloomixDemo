@@ -31,6 +31,7 @@ interface ChatMessage {
     stage?: { id: string | number; title: string; type?: string } | null;
     subStage?: { id: string | number; title: string; type?: string } | null;
   };
+  isTimeoutFallback?: boolean; // True if this is a timeout fallback resend
 }
 
 interface JoinLessonPayload {
@@ -140,22 +141,56 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: ChatMessage,
   ) {
-    const { lessonId, userId, tenantId, message, conversationHistory, lessonData, screenshot, isScreenshotRequest } = payload;
+    this.logger.log(`[ChatGateway] 🔔 Received 'send-message' event from client ${client.id}`);
+    this.logger.log(`[ChatGateway] Payload keys: ${Object.keys(payload || {})}`);
+    
+    if (!payload) {
+      this.logger.error(`[ChatGateway] ❌ No payload received in send-message`);
+      return { success: false, error: 'No payload received' };
+    }
+    
+    const { lessonId, userId, tenantId, message, conversationHistory, lessonData, screenshot, isScreenshotRequest, currentStageInfo, isTimeoutFallback } = payload;
+    
+    // For timeout fallback, message might be empty (we'll use conversation history)
+    // For screenshot requests, message is empty (we'll use conversation history)
+    // For normal messages, message must be present
+    if (!lessonId || !userId || !tenantId) {
+      this.logger.error(`[ChatGateway] ❌ Missing required fields - lessonId: ${lessonId}, userId: ${userId}, tenantId: ${tenantId}`);
+      return { success: false, error: 'Missing required fields' };
+    }
+    
+    // Message is only required for non-screenshot, non-timeout-fallback requests
+    if (!isScreenshotRequest && !isTimeoutFallback && (!message || message.trim() === '')) {
+      this.logger.error(`[ChatGateway] ❌ Missing message field`);
+      return { success: false, error: 'Missing message field' };
+    }
+    
     const roomName = `tenant-${tenantId}-lesson-${lessonId}`;
     
+    // Log message (handle empty messages for screenshot/timeout fallback)
+    const messagePreview = message ? message.substring(0, 50) : '(empty - screenshot/timeout fallback)';
     this.logger.log(
-      `Message from user ${userId} in lesson ${lessonId}: ${message.substring(0, 50)}...`,
+      `[ChatGateway] 💬 Message from user ${userId} in lesson ${lessonId}: ${messagePreview}...`,
     );
     
     // Echo user's message to the room (for chat history)
-    // If it's a screenshot response, don't echo it as a regular message
+    // If it's a screenshot response, don't echo it as a regular message (screenshot is sent silently)
+    // If it's a timeout fallback, don't echo (message was already shown when first sent)
     if (!isScreenshotRequest) {
-      this.server.to(roomName).emit('message', {
-        role: 'user',
-        content: message,
-        userId,
-        timestamp: new Date(),
-      });
+      // Don't echo timeout fallback messages - they're resends of already-shown messages
+      if (!isTimeoutFallback) {
+        this.server.to(roomName).emit('message', {
+          role: 'user',
+          content: message,
+          userId,
+          timestamp: new Date(),
+        });
+      } else {
+        this.logger.log(`[ChatGateway] ⏰ Timeout fallback - skipping echo (message already in chat)`);
+      }
+    } else {
+      // Screenshot is being sent - don't show the message, just process it silently
+      this.logger.log(`[ChatGateway] 📸 Screenshot received from user ${userId} - processing silently`);
     }
     
     // Show typing indicator
@@ -188,10 +223,28 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }));
 
       // Build user message - include screenshot if provided
+      // If screenshot is provided, use the original question from conversation history
       let userMessageToSend = message;
       if (screenshot && isScreenshotRequest) {
-        // If screenshot is provided, add it to the message context
-        userMessageToSend = `${message}\n\n[Screenshot provided - please analyze the visual content to better understand the student's question or the current state of the lesson interface]`;
+        this.logger.log(`[ChatGateway] 📸 Screenshot received - length: ${screenshot.length} chars`);
+        // Get the last user message from conversation history (the original question)
+        const lastUserMessage = conversationHistory && conversationHistory.length > 0
+          ? conversationHistory.filter((msg: any) => msg.role === 'user').pop()?.content || message
+          : message;
+        
+        // If message is empty (screenshot sent silently), use the last user question
+        if (!message || message.trim() === '') {
+          userMessageToSend = lastUserMessage || 'Please analyze the screenshot and provide guidance.';
+          this.logger.log(`[ChatGateway] 📸 Using last user message from history: ${userMessageToSend.substring(0, 50)}...`);
+        } else {
+          userMessageToSend = message;
+        }
+        
+        // Add screenshot context
+        userMessageToSend = `${userMessageToSend}\n\n[Screenshot provided - please analyze the visual content to better understand the student's question or the current state of the lesson interface]`;
+        this.logger.log(`[ChatGateway] 📸 Screenshot will be included in AI context`);
+      } else if (screenshot) {
+        this.logger.warn(`[ChatGateway] ⚠️ Screenshot provided but isScreenshotRequest is false - screenshot will not be processed`);
       }
 
       // Call AI Assistant Service with teacher assistant
@@ -202,48 +255,78 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         this.logger.log(`[Teacher] Current stage: ${payload.currentStageInfo.stage?.title || 'N/A'}, Sub-stage: ${payload.currentStageInfo.subStage?.title || 'N/A'}`);
       }
       
-      const response = await this.aiAssistantService.chat(
-        {
-          assistantId: 'teacher',
-          promptKey: 'general',
-          userMessage: userMessageToSend,
-          context: {
-            lessonId: lessonId,
-            lessonData: lessonDataToUse,
-            screenshot: screenshot, // Pass screenshot to context
-            currentStageInfo: payload.currentStageInfo, // Pass current stage/sub-stage info
+      let response;
+      try {
+        response = await this.aiAssistantService.chat(
+          {
+            assistantId: 'teacher',
+            promptKey: 'general',
+            userMessage: userMessageToSend,
+            context: {
+              lessonId: lessonId,
+              lessonData: lessonDataToUse,
+              screenshot: screenshot, // Pass screenshot to context
+              currentStageInfo: payload.currentStageInfo, // Pass current stage/sub-stage info
+            },
+            conversationHistory: formattedHistory,
           },
-          conversationHistory: formattedHistory,
-        },
-        user,
-      );
-      
-      this.logger.log(`[Teacher] AI Assistant response received: ${response.content.substring(0, 100)}...`);
-      this.logger.log(`[Teacher] Tokens used: ${response.tokensUsed}`);
+          user,
+        );
+        
+        this.logger.log(`[Teacher] AI Assistant response received: ${response.content.substring(0, 100)}...`);
+        this.logger.log(`[Teacher] Tokens used: ${response.tokensUsed}`);
+      } catch (error: any) {
+        this.logger.error(`[Teacher] ❌ Error calling AI Assistant Service: ${error.message}`, error.stack);
+        // Emit error message to user
+        this.server.to(roomName).emit('ai-typing', { typing: false });
+        this.server.to(roomName).emit('message', {
+          role: 'assistant',
+          content: '⚠️ We\'re experiencing technical issues connecting to the AI Teacher. Please try again in a moment.',
+          timestamp: new Date(),
+          tokensUsed: 0,
+        });
+        return { success: false, error: error.message };
+      }
 
       // Check if response contains screenshot request
       const screenshotRequestPattern = /\[SCREENSHOT_REQUEST\]/i;
       const hasScreenshotRequest = screenshotRequestPattern.test(response.content);
 
       if (hasScreenshotRequest) {
-        // Remove the screenshot request marker from the response
-        const cleanedContent = response.content.replace(screenshotRequestPattern, '').trim();
-        
-        // Emit a special event requesting a screenshot
+        // AI requested a screenshot - show NO response to user
+        // Wait for screenshot to be captured and sent, then show the proper response
         this.server.to(roomName).emit('ai-typing', { typing: false });
         this.server.to(roomName).emit('screenshot-request', {
-          message: cleanedContent || 'I would like to see a screenshot of the lesson to better help you.',
+          message: '', // Empty - no message shown to user
           timestamp: new Date(),
         });
-
-        this.logger.log(`Screenshot requested by AI for lesson ${lessonId}`);
+        
+        // Do NOT emit any message - wait for screenshot to be captured and sent
+        // The next AI response (after screenshot is processed) will be shown
+        this.logger.log(`Screenshot requested by AI for lesson ${lessonId} - waiting for screenshot before showing response`);
         return { success: true, screenshotRequested: true };
       }
 
       // Emit AI response
+      // Add camera emoji if this response was based on a screenshot
+      // Add clock emoji if this was a timeout fallback response
+      let responseContent = response.content || '';
+      
+      // Add emojis using Unicode escape sequences to ensure proper encoding
+      if (screenshot && isScreenshotRequest) {
+        // Camera emoji: U+1F4F7
+        responseContent = responseContent + ' \u{1F4F7}';
+      }
+      // Check if this is a timeout fallback (when message is resent without screenshot after timeout)
+      const isTimeoutFallback = payload.isTimeoutFallback || false;
+      if (isTimeoutFallback) {
+        // Clock emoji: U+23F0
+        responseContent = responseContent + ' \u{23F0}';
+      }
+      
       const aiResponse = {
         role: 'assistant',
-        content: response.content,
+        content: responseContent,
         timestamp: new Date(),
         tokensUsed: response.tokensUsed,
       };
@@ -265,14 +348,29 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return { success: true, received: true };
     } catch (error: any) {
       this.logger.error(`Error processing AI teacher message: ${error.message}`);
+      this.logger.error(`Error stack: ${error.stack}`);
       
-      // Emit error to client
+      // Emit error to client with proper error flag
       this.server.to(roomName).emit('ai-typing', { typing: false });
+      
+      // Determine error message based on error type
+      let errorMessage = '⚠️ Connection to AI Teacher lost. ';
+      if (error.message?.includes('timeout') || error.message?.includes('ETIMEDOUT')) {
+        errorMessage += 'The request timed out. Please try again.';
+      } else if (error.message?.includes('ECONNREFUSED') || error.message?.includes('network')) {
+        errorMessage += 'Network error. Please check your connection.';
+      } else if (error.message?.includes('API key') || error.message?.includes('authentication')) {
+        errorMessage += 'Authentication error. Please contact support.';
+      } else {
+        errorMessage += `An error occurred: ${error.message || 'Unknown error'}. Please try again.`;
+      }
+      
       this.server.to(roomName).emit('message', {
-        role: 'assistant',
-        content: `Sorry, I encountered an error: ${error.message || 'Unknown error'}. Please try again.`,
+        role: 'error',
+        content: errorMessage,
         timestamp: new Date(),
         tokensUsed: 0,
+        isError: true,
       });
 
       return { success: false, error: error.message };
@@ -288,4 +386,5 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to(roomName).emit(event, data);
   }
 }
+
 

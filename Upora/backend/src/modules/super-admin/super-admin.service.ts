@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { LlmGenerationLog } from '../../entities/llm-generation-log.entity';
@@ -201,6 +201,59 @@ export class SuperAdminService {
         perMillionTokens: pricePerMillionTokens,
         provider: defaultProvider?.name || 'No provider configured',
       },
+    };
+  }
+
+  async getRecentLlmQueries(assistantId = 'teacher', limit = 5) {
+    const safeAssistant = assistantId || 'teacher';
+    const safeLimit = Math.min(Math.max(Number(limit) || 5, 1), 25);
+
+    const [pinned, recent] = await Promise.all([
+      this.llmLogRepository.find({
+        where: { assistantId: safeAssistant, isPinned: true },
+        order: { createdAt: 'DESC' },
+      }),
+      this.llmLogRepository.find({
+        where: { assistantId: safeAssistant },
+        order: { createdAt: 'DESC' },
+        take: safeLimit,
+      }),
+    ]);
+
+    const pinnedIds = new Set(pinned.map((log) => log.id));
+    const combined = [...pinned, ...recent.filter((log) => !pinnedIds.has(log.id))];
+
+    return {
+      assistantId: safeAssistant,
+      total: combined.length,
+      logs: combined.map((log) => this.formatLlmLog(log)),
+    };
+  }
+
+  async setLlmQueryPinned(id: string, isPinned: boolean) {
+    const log = await this.llmLogRepository.findOne({ where: { id } });
+    if (!log) {
+      throw new NotFoundException(`LLM query ${id} not found`);
+    }
+
+    log.isPinned = isPinned;
+    await this.llmLogRepository.save(log);
+
+    return this.formatLlmLog(log);
+  }
+
+  private formatLlmLog(log: LlmGenerationLog) {
+    return {
+      id: log.id,
+      assistantId: log.assistantId,
+      userId: log.userId,
+      tenantId: log.tenantId,
+      promptText: log.promptText,
+      tokensUsed: log.tokensUsed,
+      createdAt: log.createdAt,
+      requestPayload: log.requestPayload,
+      responsePayload: log.response,
+      isPinned: log.isPinned || false,
     };
   }
 

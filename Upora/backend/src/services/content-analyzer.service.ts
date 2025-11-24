@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { HttpService } from '@nestjs/axios';
+import { AxiosResponse } from 'axios';
 import { firstValueFrom } from 'rxjs';
 import { InteractionType } from '../entities/interaction-type.entity';
 import { ContentSource } from '../entities/content-source.entity';
@@ -168,7 +169,7 @@ export class ContentAnalyzerService {
       // Call LLM API using active provider settings
       this.logger.log(`[ContentAnalyzer] Using provider: ${provider.name} (${provider.modelName})`);
       
-      const response = await firstValueFrom(
+      const response = (await firstValueFrom(
         this.httpService.post(
           provider.apiEndpoint,
           {
@@ -194,7 +195,7 @@ export class ContentAnalyzerService {
             },
           },
         ),
-      );
+      )) as AxiosResponse<any>;
 
       const grokResponse = response.data as any;
       const tokensUsed = grokResponse.usage?.total_tokens || 0;

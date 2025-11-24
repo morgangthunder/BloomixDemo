@@ -2,7 +2,10 @@ import { Component, Input, Output, EventEmitter, OnChanges } from '@angular/core
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
+import { HttpClient } from '@angular/common/http';
 import { TrueFalseSelectionComponent } from '../../../features/interactions/true-false-selection/true-false-selection.component';
+import { ContentSourceService } from '../../../core/services/content-source.service';
+import { environment } from '../../../../environments/environment';
 
 @Component({
   selector: 'app-interaction-configure-modal',
@@ -153,6 +156,85 @@ import { TrueFalseSelectionComponent } from '../../../features/interactions/true
               <h3>No Configuration Schema</h3>
               <p class="hint">This interaction doesn't have a configuration schema defined yet.</p>
               <p class="hint">Add a <code>configSchema</code> to this interaction type to enable dynamic form generation.</p>
+            </div>
+
+            <!-- iFrame Guide Document & Webpage (only for iframe interactions) -->
+            <div *ngIf="interactionCategory === 'iframe'" class="iframe-guide-section">
+              <h3 class="section-title">📄 iFrame Guide Resources</h3>
+              <p class="section-description" *ngIf="!isBuilderMode">
+                Add guide documents or webpages that will be processed and linked to this lesson for AI Teacher context.
+              </p>
+              <p class="section-description" *ngIf="isBuilderMode">
+                Guide documents and webpages are configured per lesson in the lesson editor. These fields show the configured values for preview.
+              </p>
+              
+              <!-- iFrame Guide Document Upload -->
+              <div class="form-group">
+                <label for="iframe-guide-doc">
+                  📄 iFrame Guide Doc
+                  <span class="hint">(PDF, DOCX, or TXT - will be processed and vectorized)</span>
+                  <span *ngIf="isBuilderMode" class="readonly-badge">Read-only</span>
+                </label>
+                <div class="file-upload-container" *ngIf="!isBuilderMode && lessonId">
+                  <input 
+                    type="file" 
+                    id="iframe-guide-doc"
+                    #fileInput
+                    (change)="onDocumentFileSelected($event)"
+                    accept=".pdf,.docx,.doc,.txt"
+                    class="file-input" />
+                  <div class="file-upload-info" *ngIf="iframeGuideDocFile">
+                    <span class="file-name">{{iframeGuideDocFile.name}}</span>
+                    <button type="button" (click)="removeDocumentFile()" class="btn-remove-file">✕</button>
+                  </div>
+                  <div class="file-upload-info" *ngIf="!iframeGuideDocFile && config.iframeGuideDocUrl">
+                    <span class="file-name">Current: {{config.iframeGuideDocFileName || 'Document'}}</span>
+                    <button type="button" (click)="removeDocumentFile()" class="btn-remove-file">✕</button>
+                  </div>
+                  <p *ngIf="uploadingDocument" class="upload-status">⏳ Uploading and processing...</p>
+                </div>
+                <!-- Read-only display in builder mode -->
+                <div *ngIf="isBuilderMode" class="readonly-field">
+                  <div class="file-upload-info" *ngIf="config.iframeGuideDocUrl || config.iframeGuideDocFileName">
+                    <span class="file-name">{{config.iframeGuideDocFileName || 'Document configured'}}</span>
+                  </div>
+                  <p *ngIf="!config.iframeGuideDocUrl && !config.iframeGuideDocFileName" class="empty-field">No document configured</p>
+                  <p *ngIf="isBuilderMode" class="hint builder-hint">Configured per lesson in lesson editor</p>
+                </div>
+              </div>
+
+              <!-- iFrame Guide Webpage URL -->
+              <div class="form-group">
+                <label for="iframe-guide-webpage">
+                  🌐 iFrame Guide Webpage
+                  <span class="hint">(URL - will be processed and vectorized)</span>
+                  <span *ngIf="isBuilderMode" class="readonly-badge">Read-only</span>
+                </label>
+                <input 
+                  *ngIf="!isBuilderMode && lessonId"
+                  type="url" 
+                  id="iframe-guide-webpage"
+                  [(ngModel)]="config.iframeGuideWebpageUrl"
+                  (ngModelChange)="onConfigChange()"
+                  placeholder="https://example.com/guide"
+                  class="form-input" />
+                <!-- Read-only display in builder mode -->
+                <div *ngIf="isBuilderMode" class="readonly-field">
+                  <div class="readonly-input">
+                    {{config.iframeGuideWebpageUrl || 'No URL configured'}}
+                  </div>
+                  <p *ngIf="isBuilderMode" class="hint builder-hint">Configured per lesson in lesson editor</p>
+                </div>
+                <p *ngIf="!isBuilderMode" class="hint">Enter a URL to a webpage that serves as a guide for this iframe interaction.</p>
+                <button 
+                  *ngIf="!isBuilderMode && config.iframeGuideWebpageUrl && !processingWebpage && lessonId"
+                  type="button"
+                  (click)="processWebpageUrl()"
+                  class="btn-process-url">
+                  🔄 Process & Link to Lesson
+                </button>
+                <p *ngIf="processingWebpage" class="upload-status">⏳ Processing webpage...</p>
+              </div>
             </div>
           </div>
 
@@ -532,6 +614,132 @@ import { TrueFalseSelectionComponent } from '../../../features/interactions/true
       cursor: not-allowed;
       opacity: 0.7;
     }
+
+    .iframe-guide-section {
+      margin-top: 2rem;
+      padding: 1.5rem;
+      background: rgba(0, 212, 255, 0.05);
+      border: 1px solid rgba(0, 212, 255, 0.2);
+      border-radius: 0.5rem;
+    }
+
+    .section-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #00d4ff;
+      margin: 0 0 0.5rem 0;
+    }
+
+    .section-description {
+      font-size: 0.875rem;
+      color: rgba(255, 255, 255, 0.6);
+      margin: 0 0 1.5rem 0;
+    }
+
+    .file-upload-container {
+      margin-top: 0.5rem;
+    }
+
+    .file-input {
+      width: 100%;
+      padding: 0.75rem;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 0.5rem;
+      color: #fff;
+      font-family: inherit;
+      font-size: 0.9375rem;
+      cursor: pointer;
+    }
+
+    .file-input:focus {
+      outline: none;
+      border-color: #00d4ff;
+      box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.1);
+    }
+
+    .file-upload-info {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 0.5rem;
+      padding: 0.75rem;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 0.5rem;
+    }
+
+    .file-name {
+      color: #fff;
+      font-size: 0.875rem;
+      flex: 1;
+    }
+
+    .btn-remove-file {
+      background: transparent;
+      border: none;
+      color: #ff4444;
+      cursor: pointer;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.25rem;
+      font-size: 1rem;
+      transition: all 0.2s;
+    }
+
+    .btn-remove-file:hover {
+      background: rgba(255, 68, 68, 0.1);
+    }
+
+    .upload-status {
+      margin-top: 0.5rem;
+      color: #00d4ff;
+      font-size: 0.875rem;
+      font-style: italic;
+    }
+
+    .btn-process-url {
+      margin-top: 0.5rem;
+      padding: 0.5rem 1rem;
+      background: #00d4ff;
+      color: #0f0f23;
+      border: none;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-process-url:hover {
+      background: #00bce6;
+      transform: translateY(-1px);
+    }
+
+    .readonly-field {
+      margin-top: 0.5rem;
+    }
+
+    .readonly-input {
+      padding: 0.75rem;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 0.5rem;
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 0.9375rem;
+      min-height: 2.5rem;
+      display: flex;
+      align-items: center;
+    }
+
+    .empty-field {
+      padding: 0.75rem;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 0.5rem;
+      color: rgba(255, 255, 255, 0.4);
+      font-size: 0.9375rem;
+      font-style: italic;
+      margin: 0;
+    }
   `]
 })
 export class InteractionConfigureModalComponent implements OnChanges {
@@ -546,6 +754,7 @@ export class InteractionConfigureModalComponent implements OnChanges {
   @Input() cssCode: string = '';
   @Input() jsCode: string = '';
   @Input() isBuilderMode: boolean = false; // true in interaction-builder, false in lesson-editor
+  @Input() lessonId?: string; // Lesson ID for linking content sources
 
   @Output() closed = new EventEmitter<void>();
   @Output() saved = new EventEmitter<any>();
@@ -555,7 +764,15 @@ export class InteractionConfigureModalComponent implements OnChanges {
   previewData: any = null;
   currentBlobUrl: SafeResourceUrl | null = null;
 
-  constructor(private domSanitizer: DomSanitizer) {}
+  iframeGuideDocFile: File | null = null;
+  uploadingDocument = false;
+  processingWebpage = false;
+
+  constructor(
+    private domSanitizer: DomSanitizer,
+    private http: HttpClient,
+    private contentSourceService: ContentSourceService
+  ) {}
 
   get configSchemaJson(): string {
     return this.configSchema ? JSON.stringify(this.configSchema, null, 2) : 'No config schema defined';
@@ -728,7 +945,152 @@ export class InteractionConfigureModalComponent implements OnChanges {
     this.closed.emit();
   }
 
-  save() {
+  onDocumentFileSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+      this.iframeGuideDocFile = input.files[0];
+      console.log('[ConfigModal] 📄 Document selected:', this.iframeGuideDocFile.name);
+    }
+  }
+
+  removeDocumentFile() {
+    this.iframeGuideDocFile = null;
+    if (this.config.iframeGuideDocUrl) {
+      delete this.config.iframeGuideDocUrl;
+      delete this.config.iframeGuideDocFileName;
+    }
+    // Reset file input
+    const fileInput = document.getElementById('iframe-guide-doc') as HTMLInputElement;
+    if (fileInput) {
+      fileInput.value = '';
+    }
+    this.onConfigChange();
+  }
+
+  async processWebpageUrl() {
+    if (!this.config.iframeGuideWebpageUrl || !this.lessonId) {
+      console.warn('[ConfigModal] ⚠️ Cannot process webpage: missing URL or lessonId');
+      return;
+    }
+
+    this.processingWebpage = true;
+    try {
+      console.log('[ConfigModal] 🌐 Processing webpage URL:', this.config.iframeGuideWebpageUrl);
+      
+      // Create content source
+      const contentSource = await this.contentSourceService.createContentSource({
+        type: 'url',
+        sourceUrl: this.config.iframeGuideWebpageUrl,
+        title: `iFrame Guide: ${this.config.iframeGuideWebpageUrl}`,
+        metadata: {
+          source: 'iframe-guide',
+          interactionType: this.interactionType,
+        }
+      });
+
+      console.log('[ConfigModal] ✅ Content source created:', contentSource.id);
+
+      // Link to lesson
+      await this.contentSourceService.linkToLesson(this.lessonId, contentSource.id);
+      console.log('[ConfigModal] ✅ Linked to lesson:', this.lessonId);
+
+      // Submit for approval (which triggers processing)
+      await this.contentSourceService.submitForApproval(contentSource.id);
+      console.log('[ConfigModal] ✅ Submitted for approval and processing');
+
+      alert('✅ Webpage added and submitted for processing. It will be vectorized and available for AI Teacher once approved.');
+    } catch (error: any) {
+      console.error('[ConfigModal] ❌ Failed to process webpage:', error);
+      alert(`❌ Failed to process webpage: ${error?.message || 'Unknown error'}`);
+    } finally {
+      this.processingWebpage = false;
+    }
+  }
+
+  async save() {
+    // If there's a document file, upload it first
+    if (this.iframeGuideDocFile && this.lessonId) {
+      this.uploadingDocument = true;
+      try {
+        console.log('[ConfigModal] 📤 Uploading document:', this.iframeGuideDocFile.name);
+        
+        // Determine file type
+        const fileName = this.iframeGuideDocFile.name.toLowerCase();
+        let fileType: 'pdf' | 'text' = 'text';
+        if (fileName.endsWith('.pdf')) {
+          fileType = 'pdf';
+        } else if (fileName.endsWith('.txt')) {
+          fileType = 'text';
+        } else if (fileName.endsWith('.docx') || fileName.endsWith('.doc')) {
+          // For DOCX, we'll treat as text for now (backend will handle conversion)
+          fileType = 'text';
+        }
+
+        // Upload file using FileStorageService endpoint (if available) or direct to content-sources
+        const formData = new FormData();
+        formData.append('file', this.iframeGuideDocFile);
+        
+        // Try uploading to a file storage endpoint first, or create content source directly with file
+        // For now, we'll create the content source and let the backend handle file upload
+        // This is a simplified approach - in production, you'd upload to S3/MinIO first
+        
+        // Create content source with file data
+        // Note: The backend may need to be updated to accept file uploads directly
+        // For now, we'll use a workaround: create content source with metadata, then upload file separately
+        
+        // Create FormData for content source creation with file
+        const contentFormData = new FormData();
+        contentFormData.append('file', this.iframeGuideDocFile);
+        contentFormData.append('type', fileType);
+        contentFormData.append('title', `iFrame Guide: ${this.iframeGuideDocFile.name}`);
+        contentFormData.append('metadata', JSON.stringify({
+          source: 'iframe-guide',
+          interactionType: this.interactionType,
+          fileName: this.iframeGuideDocFile.name,
+        }));
+
+        // Upload file and create content source in one request
+        // We'll need to check if backend supports this, otherwise use two-step process
+        const uploadResponse = await this.http.post<any>(`${environment.apiUrl}/content-sources/upload-file`, contentFormData).toPromise();
+        console.log('[ConfigModal] ✅ File uploaded and content source created:', uploadResponse);
+
+        const contentSourceId = uploadResponse.id || uploadResponse.contentSourceId;
+        
+        if (!contentSourceId) {
+          throw new Error('Failed to create content source from file upload');
+        }
+
+        // Link to lesson
+        await this.contentSourceService.linkToLesson(this.lessonId, contentSourceId);
+        console.log('[ConfigModal] ✅ Linked to lesson:', this.lessonId);
+
+        // Submit for approval (which triggers processing)
+        await this.contentSourceService.submitForApproval(contentSourceId);
+        console.log('[ConfigModal] ✅ Submitted for approval and processing');
+
+        // Store the content source ID in config for reference
+        this.config.iframeGuideDocUrl = contentSourceId;
+        this.config.iframeGuideDocFileName = this.iframeGuideDocFile.name;
+
+        alert('✅ Document uploaded and submitted for processing. It will be vectorized and available for AI Teacher once approved.');
+      } catch (error: any) {
+        console.error('[ConfigModal] ❌ Failed to upload document:', error);
+        // If upload endpoint doesn't exist, try alternative approach
+        if (error?.status === 404 || error?.error?.message?.includes('not found')) {
+          console.log('[ConfigModal] ⚠️ Upload endpoint not found, trying alternative approach...');
+          // Fallback: Create content source with URL placeholder, then update with file
+          // For now, just show error and let user know
+          alert(`⚠️ File upload endpoint not available. Please use the Content Library to upload documents first, then link them to this lesson.`);
+        } else {
+          alert(`❌ Failed to upload document: ${error?.message || 'Unknown error'}`);
+        }
+        this.uploadingDocument = false;
+        return; // Don't save config if upload failed
+      } finally {
+        this.uploadingDocument = false;
+      }
+    }
+
     this.restorePageElements();
     this.saved.emit(this.config);
   }

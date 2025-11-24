@@ -1,0 +1,4 @@
+---
+alwaysApply: true
+---
+Always iterate the front-end and back-end versions and output them to console and inform me of the version numbers when tasks are done and I need to test.

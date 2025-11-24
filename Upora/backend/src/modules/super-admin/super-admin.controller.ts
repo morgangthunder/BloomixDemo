@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Query } from '@nestjs/common';
 import { SuperAdminService } from './super-admin.service';
 
 // TODO: Add SuperAdminGuard to protect this route
@@ -11,6 +11,22 @@ export class SuperAdminController {
   @Get('token-usage')
   async getTokenUsage() {
     return this.superAdminService.getTokenUsageDashboard();
+  }
+
+  @Get('llm-queries')
+  async getRecentLlmQueries(
+    @Query('assistant') assistant?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.superAdminService.getRecentLlmQueries(assistant, limit ? parseInt(limit, 10) : 5);
+  }
+
+  @Patch('llm-queries/:id/pin')
+  async setLlmQueryPinned(
+    @Param('id') id: string,
+    @Body('isPinned') isPinned: boolean,
+  ) {
+    return this.superAdminService.setLlmQueryPinned(id, !!isPinned);
   }
 }
 

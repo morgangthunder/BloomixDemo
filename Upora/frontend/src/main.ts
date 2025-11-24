@@ -4,10 +4,10 @@ import { AppComponent } from './app/app.component';
 import { environment } from './environments/environment';
 
 // ========================================
-// 🔥 FRONTEND VERSION 0.5.0 🔥
+// 🔥 FRONTEND VERSION 0.7.5 🔥
 // ========================================
-const FRONTEND_VERSION = '0.5.0';
-const CACHE_BUST_ID = Math.random().toString(36).substr(2, 9);
+const FRONTEND_VERSION = '0.7.5';
+const CACHE_BUST_ID = `v0.6.9-${Math.random().toString(36).substr(2, 9)}`;
 console.log('');
 console.log('═══════════════════════════════════════════════════════════');
 console.log(`🔥🔥🔥 FRONTEND VERSION ${FRONTEND_VERSION} LOADED 🔥🔥🔥`);
@@ -46,6 +46,19 @@ if ('caches' in window) {
       console.log(`🗑️ Deleted cache: ${name}`);
     });
   });
+}
+
+// Force reload if version mismatch detected
+const STORED_VERSION_KEY = 'upora_frontend_version';
+const storedVersion = localStorage.getItem(STORED_VERSION_KEY);
+if (storedVersion && storedVersion !== FRONTEND_VERSION) {
+  console.log(`🔄 Version mismatch detected: stored=${storedVersion}, current=${FRONTEND_VERSION}`);
+  console.log(`🔄 Clearing localStorage and reloading...`);
+  localStorage.clear();
+  sessionStorage.clear();
+  location.reload();
+} else {
+  localStorage.setItem(STORED_VERSION_KEY, FRONTEND_VERSION);
 }
 
 // Add unique timestamp to prevent any caching

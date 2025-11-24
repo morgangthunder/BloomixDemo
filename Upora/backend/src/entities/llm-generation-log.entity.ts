@@ -31,8 +31,14 @@ export class LlmGenerationLog {
   @Column('jsonb', { nullable: true })
   response: any;
 
+  @Column('jsonb', { name: 'request_payload', nullable: true })
+  requestPayload: any;
+
   @Column('integer', { name: 'tokens_used' })
   tokensUsed: number;
+
+  @Column('boolean', { name: 'is_pinned', default: false })
+  isPinned: boolean;
 
   @Column('integer', { name: 'processing_time_ms', nullable: true })
   processingTimeMs: number;

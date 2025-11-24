@@ -23,6 +23,10 @@ interface BackendLesson {
   views: number; // NestJS returns views not view_count
   completionRate: number; // NestJS returns camelCase
   tags: string[];
+  objectives?: {
+    learningObjectives?: string[];
+    lessonOutcomes?: Array<{ title: string; content: string }>;
+  };
 }
 
 @Injectable({
@@ -151,6 +155,14 @@ export class LessonService {
     console.log('[LessonService] Transforming lessons from backend:', backendLessons.length);
     
     const transformed = backendLessons.map((bl, index) => {
+      // Extract learning objectives from various possible locations
+      const learningObjectives = 
+        bl.objectives?.learningObjectives ||
+        (bl.data as any)?.objectives?.learningObjectives ||
+        (bl.data as any)?.structure?.learningObjectives ||
+        (bl.data as any)?.aiContext?.contextData?.lessonObjectives ||
+        [];
+      
       const lesson = {
         id: bl.id, // Keep the full UUID instead of converting to number
         title: bl.title,
@@ -164,9 +176,11 @@ export class LessonService {
         tags: bl.tags || [],
         views: bl.views || 0, // Fixed: use views not view_count
         stages: (bl.data as any)?.structure?.stages || bl.data?.stages || [],
+        learningObjectives: learningObjectives,
+        data: bl.data, // Keep full data object for access to nested structures
       };
       
-      console.log(`[LessonService] Transformed: ${lesson.title} (ID: ${lesson.id}, image: ${lesson.image?.substring(0, 50)}...)`);
+      console.log(`[LessonService] Transformed: ${lesson.title} (ID: ${lesson.id}, objectives: ${learningObjectives.length})`);
       return lesson;
     });
     

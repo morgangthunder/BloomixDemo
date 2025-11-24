@@ -1,0 +1,5 @@
+ALTER TABLE llm_generation_logs
+ADD COLUMN IF NOT EXISTS request_payload JSONB,
+ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE;
+
+

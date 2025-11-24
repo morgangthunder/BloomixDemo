@@ -1,12 +1,13 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-// html2canvas will be dynamically imported in captureLessonScreenshot()
 import { CommonModule } from '@angular/common';
+// html2canvas will be dynamically imported
 import { Router, ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { IonContent } from '@ionic/angular/standalone';
 import { HttpClient } from '@angular/common/http';
 import { LessonService } from '../../core/services/lesson.service';
 import { WebSocketService, ChatMessage } from '../../core/services/websocket.service';
+import { ScreenshotStorageService } from '../../core/services/screenshot-storage.service';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { Lesson, Stage, SubStage } from '../../core/models/lesson.model';
@@ -871,6 +872,12 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   isChatExpanded = false;
   screenshotRequested = false;
   pendingScreenshotMessage = '';
+  screenshotTimeout: any = null; // Timeout for screenshot fallback
+  lastUserMessageBeforeScreenshot = ''; // Store the original user message
+  screenshotFallbackTriggered = false; // Prevent duplicate fallback sends
+  isTimeoutFallback = false; // Track if current message is a timeout fallback
+  generalResponseTimeout: any = null; // Timeout for general "no reply" fallback (20 seconds)
+  isSendingMessage = false; // Prevent duplicate message sends
   
   // Teacher Script
   currentTeacherScript: ScriptBlock | null = null;
@@ -909,7 +916,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     public router: Router,
     private route: ActivatedRoute,
     private wsService: WebSocketService,
-    private http: HttpClient
+    private http: HttpClient,
+    private screenshotStorage: ScreenshotStorageService
   ) {}
 
   ngOnInit() {
@@ -954,10 +962,81 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     this.wsService.messages$.pipe(takeUntil(this.destroy$)).subscribe(messages => {
       this.chatMessages = messages;
       console.log('[LessonView] Chat messages updated:', messages.length);
+      
+      // Clear screenshot timeout if we received an assistant response
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage && lastMessage.role === 'assistant') {
+        if (this.screenshotTimeout) {
+          console.log('[LessonView] Received assistant response - clearing screenshot timeout');
+          clearTimeout(this.screenshotTimeout);
+          this.screenshotTimeout = null;
+        }
+        // Clear general response timeout
+        if (this.generalResponseTimeout) {
+          clearTimeout(this.generalResponseTimeout);
+          this.generalResponseTimeout = null;
+        }
+        this.lastUserMessageBeforeScreenshot = ''; // Clear stored message
+        this.screenshotFallbackTriggered = false; // Reset fallback flag
+        
+        // Clock emoji is already added by backend for timeout fallback responses
+        // Just reset the flag
+        this.isTimeoutFallback = false;
+        // Reset sending flag
+        this.isSendingMessage = false;
+      }
     });
 
     this.wsService.typing$.pipe(takeUntil(this.destroy$)).subscribe(typing => {
       this.isAITyping = typing;
+    });
+
+    // Subscribe to screenshot requests
+    this.wsService.screenshotRequest$.pipe(takeUntil(this.destroy$)).subscribe(request => {
+      if (request && !this.screenshotRequested && !this.screenshotFallbackTriggered) {
+        console.log('[LessonView] Screenshot requested by AI (silently)');
+        // Store the last user message for timeout fallback
+        const lastUserMsg = this.chatMessages.filter(m => m.role === 'user').pop();
+        this.lastUserMessageBeforeScreenshot = lastUserMsg?.content || '';
+        this.screenshotFallbackTriggered = false; // Reset fallback flag
+        
+        // Set timeout fallback: if no response in 10 seconds, resend without screenshot
+        // Clear any existing timeout first to prevent duplicates
+        if (this.screenshotTimeout) {
+          clearTimeout(this.screenshotTimeout);
+        }
+        
+        this.screenshotTimeout = setTimeout(() => {
+          // Only trigger if we haven't already triggered fallback and still have the message
+          if (!this.screenshotFallbackTriggered && this.lastUserMessageBeforeScreenshot) {
+            // Check if this message was already sent recently (prevent duplicates)
+            const recentMessages = this.chatMessages
+              .filter(m => m.role === 'user')
+              .slice(-3); // Check last 3 user messages
+            const alreadySent = recentMessages.some(m => 
+              m.content === this.lastUserMessageBeforeScreenshot
+            );
+            
+            if (!alreadySent) {
+              console.warn('[LessonView] Screenshot timeout - resending message without screenshot');
+              this.screenshotFallbackTriggered = true; // Mark as triggered to prevent duplicates
+              this.isTimeoutFallback = true; // Mark as timeout fallback
+              // Clear screenshot state
+              this.screenshotRequested = false;
+              this.isAITyping = false;
+              // Resend the original message without screenshot
+              this.sendChatMessage(this.lastUserMessageBeforeScreenshot);
+              this.lastUserMessageBeforeScreenshot = '';
+            } else {
+              console.warn('[LessonView] Screenshot timeout - message already sent, skipping');
+            }
+            this.screenshotTimeout = null;
+          }
+        }, 10000); // 10 seconds
+        
+        // Automatically handle the screenshot request
+        this.handleScreenshotRequest();
+      }
     });
 
     // Setup mouse listeners for resize
@@ -1065,6 +1144,32 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    console.log('[LessonView] 🧹 Cleaning up lesson view resources...');
+    
+    // Clear screenshot timeout if it exists
+    if (this.screenshotTimeout) {
+      clearTimeout(this.screenshotTimeout);
+      this.screenshotTimeout = null;
+    }
+    // Clear general response timeout if it exists
+    if (this.generalResponseTimeout) {
+      clearTimeout(this.generalResponseTimeout);
+      this.generalResponseTimeout = null;
+    }
+    
+    // Clear screenshot-related state
+    // Note: Screenshots are sent as base64 in WebSocket messages, not stored as files
+    // So we just clear the state variables
+    this.screenshotRequested = false;
+    this.pendingScreenshotMessage = '';
+    this.lastUserMessageBeforeScreenshot = '';
+    this.screenshotFallbackTriggered = false;
+    this.isTimeoutFallback = false;
+    this.isSendingMessage = false;
+    // Note: Screenshot is stored in ScreenshotStorageService and persists across components
+    // It will be cleared when needed or replaced by the next screenshot
+    
+    console.log('[LessonView] ✅ Screenshot state cleared');
     // Clean up fullscreen class
     document.body.classList.remove('fullscreen-active');
     
@@ -1547,10 +1652,63 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    * Chat Methods (delegated to widget)
    */
   sendChatMessage(message: string, screenshot?: string) {
-    console.log('[LessonView] Sending chat message:', message);
+    // Prevent sending empty messages (except for screenshot requests)
+    if (!screenshot && (!message || message.trim() === '')) {
+      console.warn('[LessonView] Cannot send empty message');
+      return;
+    }
+    
+    // Prevent duplicate sends (unless it's a screenshot or timeout fallback)
+    if (this.isSendingMessage && !screenshot && !this.isTimeoutFallback) {
+      console.warn('[LessonView] Message already sending, skipping duplicate');
+      return;
+    }
+    
+    console.log('[LessonView] Sending chat message:', message || '(screenshot only)');
     if (!this.isConnected) {
       console.warn('[LessonView] Cannot send - not connected to WebSocket');
       return;
+    }
+    
+    // Mark as sending (only for non-screenshot, non-timeout messages)
+    if (!screenshot && !this.isTimeoutFallback) {
+      this.isSendingMessage = true;
+      // Reset flag after a short delay to allow message to be sent
+      setTimeout(() => {
+        this.isSendingMessage = false;
+      }, 1000);
+    }
+    
+    // Clear any existing general response timeout
+    if (this.generalResponseTimeout) {
+      clearTimeout(this.generalResponseTimeout);
+      this.generalResponseTimeout = null;
+    }
+    
+    // Set 20-second timeout for general "no reply" fallback (only for non-screenshot messages)
+    if (!screenshot) {
+      this.generalResponseTimeout = setTimeout(() => {
+        // Check if we've received a response
+        const lastMessage = this.chatMessages[this.chatMessages.length - 1];
+        const hasRecentResponse = lastMessage && 
+          lastMessage.role === 'assistant' && 
+          (new Date().getTime() - new Date(lastMessage.timestamp).getTime()) < 5000; // Response within last 5 seconds
+        
+        if (!hasRecentResponse && !this.isAITyping) {
+          console.warn('[LessonView] No reply after 20 seconds - showing technical issues message');
+          const errorMessage = {
+            role: 'assistant' as const,
+            content: '⚠️ We\'re experiencing technical issues connecting to the AI Teacher. Please try again in a moment.',
+            timestamp: new Date(),
+            isError: true,
+          };
+          // Add error message to chat via WebSocket service to ensure it's properly added
+          const currentMessages = this.chatMessages;
+          this.chatMessages = [...currentMessages, errorMessage];
+          this.isAITyping = false;
+        }
+        this.generalResponseTimeout = null;
+      }, 20000); // 20 seconds
     }
     
     // Get conversation history from chatMessages (exclude the current message we're about to send)
@@ -1582,7 +1740,11 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // If screenshot is provided, this is a response to a screenshot request
     const isScreenshotRequest = !!screenshot;
     
-    this.wsService.sendMessage(message, conversationHistory, lessonData, screenshot, isScreenshotRequest, currentStageInfo);
+    // If sending a screenshot, use empty message (screenshot is sent silently)
+    // The backend will use the last user message from conversation history
+    const messageToSend = isScreenshotRequest ? '' : message;
+    
+    this.wsService.sendMessage(messageToSend, conversationHistory, lessonData, screenshot, isScreenshotRequest, currentStageInfo, this.isTimeoutFallback);
     
     // Reset screenshot request state
     if (isScreenshotRequest) {
@@ -1596,37 +1758,93 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    */
   async captureLessonScreenshot(): Promise<string | null> {
     try {
-      // Use html2canvas to capture the lesson view area
-      // First, check if html2canvas is available
-      const html2canvas = (window as any).html2canvas;
-      if (!html2canvas) {
-        console.error('[LessonView] html2canvas not available');
-        return null;
-      }
+      // Dynamically import html2canvas
+      const html2canvas = (await import('html2canvas')).default;
 
-      // Find the main lesson content area (excluding sidebar and chat)
-      const lessonContentElement = document.querySelector('.lesson-content') || 
-                                   document.querySelector('.main-content') ||
-                                   document.querySelector('ion-content') ||
-                                   document.body;
+      // Wait a bit for the page to be fully rendered
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Find the main lesson content area - try multiple selectors
+      let lessonContentElement: HTMLElement | null = null;
+      
+      // Try to find the lesson view wrapper or content area
+      const selectors = [
+        '.lesson-view-wrapper',
+        '.lesson-content',
+        '.main-content',
+        'ion-content',
+        '.lesson-view',
+        'app-lesson-view',
+      ];
+      
+      for (const selector of selectors) {
+        const element = document.querySelector(selector);
+        if (element) {
+          lessonContentElement = element as HTMLElement;
+          console.log(`[LessonView] 📸 Found element with selector: ${selector}`);
+          break;
+        }
+      }
+      
+      // Fallback to body if nothing found
+      if (!lessonContentElement) {
+        console.warn('[LessonView] ⚠️ No specific content element found, using body');
+        lessonContentElement = document.body;
+      }
 
       if (!lessonContentElement) {
-        console.error('[LessonView] Could not find lesson content element');
+        console.error('[LessonView] ❌ Cannot capture screenshot - no element found');
         return null;
       }
 
-      console.log('[LessonView] Capturing screenshot of lesson view...');
+      console.log('[LessonView] 📸 Capturing screenshot of element:', lessonContentElement.tagName, lessonContentElement.className);
+      console.log('[LessonView] 📸 Element dimensions:', {
+        width: lessonContentElement.offsetWidth,
+        height: lessonContentElement.offsetHeight,
+        scrollWidth: lessonContentElement.scrollWidth,
+        scrollHeight: lessonContentElement.scrollHeight,
+      });
       
-      const canvas = await html2canvas(lessonContentElement as HTMLElement, {
+      // Check if element has dimensions
+      if (lessonContentElement.offsetWidth === 0 || lessonContentElement.offsetHeight === 0) {
+        console.warn('[LessonView] ⚠️ Element has zero dimensions, trying body instead');
+        lessonContentElement = document.body;
+      }
+      
+      const canvas = await html2canvas(lessonContentElement, {
         backgroundColor: '#ffffff',
-        logging: false,
+        logging: false, // Disable verbose logging
         useCORS: true,
         scale: 0.5, // Reduce size for faster processing
+        allowTaint: false,
+        width: lessonContentElement.scrollWidth || lessonContentElement.offsetWidth,
+        height: lessonContentElement.scrollHeight || lessonContentElement.offsetHeight,
+        windowWidth: window.innerWidth,
+        windowHeight: window.innerHeight,
       });
 
+      // Check if canvas is valid
+      if (!canvas || canvas.width === 0 || canvas.height === 0) {
+        console.error('[LessonView] ❌ Canvas is invalid (zero dimensions)');
+        return null;
+      }
+
       // Convert canvas to base64
-      const base64Image = canvas.toDataURL('image/png');
-      console.log('[LessonView] Screenshot captured:', base64Image.length, 'chars');
+      const base64Image = canvas.toDataURL('image/png', 0.8); // Use 0.8 quality
+      console.log('[LessonView] ✅ Screenshot captured successfully:', base64Image.length, 'chars');
+      console.log('[LessonView] 📸 Canvas dimensions:', canvas.width, 'x', canvas.height);
+      console.log('[LessonView] 📸 Screenshot preview (first 100 chars):', base64Image.substring(0, 100));
+      
+      // Check if data URL is valid (should start with "data:image/png;base64,")
+      if (!base64Image.startsWith('data:image/png;base64,')) {
+        console.error('[LessonView] ❌ Invalid data URL format:', base64Image.substring(0, 50));
+        return null;
+      }
+      
+      if (base64Image.length < 100) {
+        console.error('[LessonView] ❌ Screenshot seems too small, might be invalid');
+        return null;
+      }
       
       return base64Image;
     } catch (error) {
@@ -1639,33 +1857,71 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    * Handle screenshot request from AI - capture and send
    */
   async handleScreenshotRequest() {
-    console.log('[LessonView] Handling screenshot request...');
+    console.log('[LessonView] 📸 Handling screenshot request...');
+    
+    // Prevent infinite loops - check if we're already processing a screenshot
+    if (this.screenshotRequested) {
+      console.log('[LessonView] ⚠️ Screenshot request already in progress, skipping...');
+      return;
+    }
+    
+    this.screenshotRequested = true;
     
     // Show loading indicator
     this.isAITyping = true;
     
     try {
+      console.log('[LessonView] 📸 Starting screenshot capture...');
       const screenshot = await this.captureLessonScreenshot();
       
       if (screenshot) {
-        // Send screenshot with the pending message
+        console.log('[LessonView] ✅ Screenshot captured successfully, length:', screenshot.length);
+        
+        // Store screenshot in service (replaces any previous screenshot - only 1 stored at a time)
+        this.screenshotStorage.storeScreenshot(screenshot);
+        
+        // Send screenshot silently - use empty message or minimal message
+        // The AI will respond based on the screenshot, and we'll show the camera emoji then
+        console.log('[LessonView] 📤 Sending screenshot to backend...');
         this.sendChatMessage(
-          this.pendingScreenshotMessage || 'Here is the screenshot you requested.',
+          '', // Empty message - screenshot is sent silently
           screenshot
         );
+        console.log('[LessonView] ✅ Screenshot sent to backend');
       } else {
-        // If screenshot capture failed, send message without screenshot
-        this.sendChatMessage(
-          this.pendingScreenshotMessage || 'I tried to capture a screenshot but it failed. Please try again.',
-        );
+        // If screenshot capture failed, clear timeout and resend without screenshot
+        console.warn('[LessonView] Screenshot capture failed - resending without screenshot');
+        if (this.screenshotTimeout) {
+          clearTimeout(this.screenshotTimeout);
+          this.screenshotTimeout = null;
+        }
         this.screenshotRequested = false;
         this.pendingScreenshotMessage = '';
+        this.isAITyping = false;
+        
+        // Resend the original message without screenshot (only if fallback not already triggered)
+        if (this.lastUserMessageBeforeScreenshot && !this.screenshotFallbackTriggered) {
+          this.screenshotFallbackTriggered = true; // Mark as triggered to prevent duplicates
+          this.sendChatMessage(this.lastUserMessageBeforeScreenshot);
+          this.lastUserMessageBeforeScreenshot = '';
+        }
       }
     } catch (error) {
       console.error('[LessonView] Error handling screenshot request:', error);
+      // Clear timeout on error
+      if (this.screenshotTimeout) {
+        clearTimeout(this.screenshotTimeout);
+        this.screenshotTimeout = null;
+      }
       this.isAITyping = false;
       this.screenshotRequested = false;
       this.pendingScreenshotMessage = '';
+      
+      // Resend the original message without screenshot
+      if (this.lastUserMessageBeforeScreenshot) {
+        this.sendChatMessage(this.lastUserMessageBeforeScreenshot);
+        this.lastUserMessageBeforeScreenshot = '';
+      }
     }
   }
 

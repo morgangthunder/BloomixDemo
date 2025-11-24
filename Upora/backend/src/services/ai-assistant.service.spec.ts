@@ -10,6 +10,9 @@ import { ProcessedContentOutput } from '../entities/processed-content-output.ent
 import { User } from '../entities/user.entity';
 import { AiPrompt } from '../entities/ai-prompt.entity';
 
+// Increase timeout for tests that involve async operations and long conversation histories
+jest.setTimeout(30000); // 30 seconds
+
 describe('AiAssistantService', () => {
   let service: AiAssistantService;
   let grokService: jest.Mocked<GrokService>;

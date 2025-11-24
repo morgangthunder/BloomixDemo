@@ -41,7 +41,8 @@ export interface Lesson {
   views?: number; // View count
   stages?: Stage[]; // Optional for listing views
   status?: 'pending' | 'approved' | 'rejected'; // Approval status from backend
-  data?: { stages?: any[] }; // Lesson content data (JSONB from backend)
+  data?: { stages?: any[]; objectives?: { learningObjectives?: string[] } }; // Lesson content data (JSONB from backend)
+  learningObjectives?: string[]; // Learning objectives from objectives.learningObjectives
   completionRate?: string | number; // From backend
   completions?: number; // From backend
   durationMinutes?: number; // From backend

@@ -1,7 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { AppService } from './app.service';
 
-const BACKEND_VERSION = '0.2.0';
+const BACKEND_VERSION = '0.4.5';
 
 @Controller()
 export class AppController {

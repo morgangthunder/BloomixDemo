@@ -1,5 +1,5 @@
 // CACHE BUST v2.3.0 - LESSON EDITOR COMPONENT - FORCE CACHE CLEAR - ID: abc123def
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -111,6 +111,14 @@ interface ProcessedContentOutput {
           <span class="desktop-only save-status" *ngIf="lastSaved && !saving && !hasUnsavedChanges">
             <small style="color: #999;">Saved {{lastSaved | date:'short'}}</small>
           </span>
+          <button *ngIf="hasPendingDraft" 
+                  (click)="togglePendingChanges()" 
+                  class="btn-secondary desktop-full mobile-icon"
+                  [class.active]="showingPendingChanges"
+                  title="{{showingPendingChanges ? 'Show Current State' : 'Show Pending Changes'}}">
+            <span class="desktop-only">{{showingPendingChanges ? '📋 Show Current State' : '📝 Show Pending Changes'}}</span>
+            <span class="mobile-only">{{showingPendingChanges ? '📋' : '📝'}}</span>
+          </button>
           <button (click)="submitForApproval()" 
                   class="btn-primary desktop-full mobile-icon" 
                   [disabled]="hasBeenSubmitted || saving || !canSubmit()" 
@@ -290,6 +298,74 @@ interface ProcessedContentOutput {
                   <input id="tags" type="text" [(ngModel)]="tagsString" placeholder="javascript, programming, web-development" />
                 </div>
               </div>
+
+              <!-- Learning Objectives Section -->
+              <div class="form-section">
+                <h3 class="section-title">Learning Objectives</h3>
+                <p class="section-description">What will appear in the lesson preview letting students know briefly what the lesson covers</p>
+                <div class="objectives-list">
+                  <div *ngFor="let objective of learningObjectives; let i = index; trackBy: trackByObjectiveIndex" class="objective-item">
+                    <input 
+                      type="text" 
+                      [(ngModel)]="learningObjectives[i]" 
+                      (blur)="markAsChanged()"
+                      placeholder="e.g., Understand JavaScript variables and functions"
+                      class="objective-input" />
+                    <button 
+                      (click)="removeLearningObjective(i)" 
+                      class="btn-icon-small"
+                      title="Remove objective">
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                      </svg>
+                    </button>
+                  </div>
+                  <button (click)="addLearningObjective()" class="btn-secondary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                    Add Learning Objective
+                  </button>
+                </div>
+              </div>
+
+              <!-- Lesson Outcomes Section -->
+              <div class="form-section">
+                <h3 class="section-title">Lesson Outcomes</h3>
+                <p class="section-description">What students will know or be able to do at the end of this lesson. Details are important here and this content should align closely with any attempts at evaluation at the end of the lesson.</p>
+                <div class="outcomes-list">
+                  <div *ngFor="let outcome of lessonOutcomes; let i = index; trackBy: trackByOutcomeIndex" class="outcome-item">
+                    <div class="outcome-header">
+                      <input 
+                        type="text" 
+                        [(ngModel)]="outcome.title" 
+                        (blur)="markAsChanged()"
+                        placeholder="Outcome title"
+                        class="outcome-title-input" />
+                      <button 
+                        (click)="removeLessonOutcome(i)" 
+                        class="btn-icon-small"
+                        title="Remove outcome">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                      </button>
+                    </div>
+                    <textarea 
+                      [(ngModel)]="outcome.content" 
+                      (blur)="markAsChanged()"
+                      placeholder="At the end of this lesson student will know..."
+                      rows="3"
+                      class="outcome-content-input"></textarea>
+                  </div>
+                  <button (click)="addLessonOutcome()" class="btn-secondary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                    Add Lesson Outcome
+                  </button>
+                </div>
+              </div>
             </div>
 
             <!-- Structure Panel -->
@@ -345,13 +421,24 @@ interface ProcessedContentOutput {
                 </div>
                 <div class="form-group">
                   <label for="substage-type">Substage Type (TEACH)</label>
-                  <select id="substage-type" [(ngModel)]="getSelectedSubStage()!.type">
-                    <option value="">Select type...</option>
-                    <option *ngFor="let type of getAvailableSubStageTypes(getSelectedStage()?.type || 'trigger')" [value]="type">
+                  <select 
+                    id="substage-type" 
+                    [(ngModel)]="getSelectedSubStage()!.type"
+                    [disabled]="!getSelectedStage()?.type">
+                    <option value="" *ngIf="!getSelectedStage()?.type">
+                      Stage has no type - select a stage type first
+                    </option>
+                    <option value="" *ngIf="getSelectedStage()?.type">Select type...</option>
+                    <option *ngFor="let type of getAvailableSubStageTypes(getSelectedStage()?.type || '')" [value]="type">
                       {{getSubStageTypeLabel(type)}}
                     </option>
                   </select>
-                  <small class="hint">Based on parent stage type: {{getSelectedStage()?.type | uppercase}}</small>
+                  <small class="hint" *ngIf="getSelectedStage()?.type">
+                    Based on parent stage type: {{getSelectedStage()?.type | uppercase}}
+                  </small>
+                  <small class="hint error-hint" *ngIf="!getSelectedStage()?.type">
+                    ⚠️ Please select a stage type first to choose a sub-stage type
+                  </small>
                 </div>
                 <div class="form-group">
                   <label for="substage-duration">Duration (minutes)</label>
@@ -645,6 +732,27 @@ interface ProcessedContentOutput {
         {{snackbarMessage}}
       </div>
 
+      <!-- Pending Changes Warning Modal -->
+      <div *ngIf="showPendingChangesWarning" class="modal-overlay" (click)="closePendingWarning()">
+        <div class="modal-content warning-modal" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h2>⚠️ Overwrite Pending Changes?</h2>
+            <button (click)="closePendingWarning()" class="close-button">✕</button>
+          </div>
+          <div class="modal-body">
+            <p>This lesson has pending changes that are awaiting approval.</p>
+            <p><strong>If you {{pendingWarningAction === 'save' ? 'save' : 'submit'}} now, your current changes will overwrite the existing pending changes.</strong></p>
+            <p>The existing pending changes will be lost and replaced with your new changes.</p>
+            <div class="warning-actions">
+              <button class="btn-secondary" (click)="closePendingWarning()">Cancel</button>
+              <button class="btn-primary" (click)="confirmPendingWarning()">
+                {{pendingWarningAction === 'save' ? 'Save Anyway' : 'Submit Anyway'}}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Content Processor Modal -->
       <app-content-processor-modal 
         [isOpen]="showContentProcessor"
@@ -824,6 +932,7 @@ interface ProcessedContentOutput {
         [htmlCode]="currentInteractionType?.htmlCode || ''"
         [cssCode]="currentInteractionType?.cssCode || ''"
         [jsCode]="currentInteractionType?.jsCode || ''"
+        [lessonId]="lesson?.id"
         (closed)="closeInteractionConfigModal()"
         (saved)="saveInteractionConfig($event)">
       </app-interaction-configure-modal>
@@ -1169,6 +1278,116 @@ interface ProcessedContentOutput {
     .hint {
       font-size: 0.75rem;
       color: #777;
+    }
+    .error-hint {
+      font-size: 0.75rem;
+      color: #ff6b6b;
+    }
+
+    /* LEARNING OBJECTIVES & OUTCOMES */
+    .form-section {
+      margin-top: 2rem;
+      padding-top: 2rem;
+      border-top: 1px solid #333;
+    }
+    .section-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #fff;
+      margin: 0 0 0.5rem;
+    }
+    .section-description {
+      font-size: 0.875rem;
+      color: #999;
+      margin: 0 0 1rem;
+    }
+    .objectives-list,
+    .outcomes-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .objective-item {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+    .objective-input {
+      flex: 1;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 0.75rem;
+      color: white;
+      font-size: 0.875rem;
+      transition: border-color 0.2s;
+    }
+    .objective-input:focus {
+      outline: none;
+      border-color: #cc0000;
+    }
+    .outcome-item {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .outcome-header {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+    .outcome-title-input {
+      flex: 1;
+      background: #0a0a0a;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 0.75rem;
+      color: white;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: border-color 0.2s;
+    }
+    .outcome-title-input:focus {
+      outline: none;
+      border-color: #cc0000;
+    }
+    .outcome-content-input {
+      width: 100%;
+      background: #0a0a0a;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 0.75rem;
+      color: white;
+      font-size: 0.875rem;
+      resize: vertical;
+      min-height: 80px;
+      transition: border-color 0.2s;
+    }
+    .outcome-content-input:focus {
+      outline: none;
+      border-color: #cc0000;
+    }
+    .btn-icon-small {
+      background: transparent;
+      border: 1px solid #444;
+      border-radius: 6px;
+      padding: 0.5rem;
+      color: #999;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+    .btn-icon-small:hover {
+      background: #1a1a1a;
+      border-color: #cc0000;
+      color: #fff;
     }
 
     /* CARDS */
@@ -2372,6 +2591,31 @@ interface ProcessedContentOutput {
     }
 
     /* Fullscreen Modal Styles */
+    .warning-modal {
+      max-width: 500px;
+    }
+
+    .warning-modal .modal-header h2 {
+      color: #ff6b6b;
+      margin: 0;
+    }
+
+    .warning-modal .modal-body {
+      padding: 24px;
+    }
+
+    .warning-modal .modal-body p {
+      margin: 12px 0;
+      line-height: 1.6;
+    }
+
+    .warning-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      margin-top: 24px;
+    }
+
     .modal-overlay-fullscreen {
       position: fixed;
       top: 0;
@@ -2664,7 +2908,13 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   hasUnsavedChanges: boolean = false;
   hasBeenSubmitted: boolean = false;
   hasDraft: boolean = false;
+  hasPendingDraft: boolean = false;
+  showingPendingChanges: boolean = false;
+  pendingDraftData: any = null;
+  liveLessonData: any = null;
   lastSaved: Date | null = null;
+  showPendingChangesWarning: boolean = false;
+  pendingWarningAction: 'save' | 'submit' | null = null;
   
   // Snackbar state
   snackbarMessage: string = '';
@@ -2699,6 +2949,12 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   
   // Tags
   tagsString: string = '';
+  
+  // Learning Objectives
+  learningObjectives: string[] = [];
+  
+  // Lesson Outcomes
+  lessonOutcomes: Array<{ title: string; content: string }> = [];
   
   // AI Chat
   aiChatInput: string = '';
@@ -2780,7 +3036,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     private router: Router,
     private lessonService: LessonService,
     private contentSourceService: ContentSourceService,
-    private processedContentService: ProcessedContentService
+    private processedContentService: ProcessedContentService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit() {
@@ -2863,6 +3120,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       }
     };
     this.stages = [];
+    this.learningObjectives = [];
+    this.lessonOutcomes = [];
     this.selectedItem = { type: 'lesson', id: '' };
     console.log('[LessonEditor] ✅ New lesson initialized');
   }
@@ -2882,34 +3141,42 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     })
       .pipe(
         switchMap((draft: any) => {
-          if (draft) {
-            console.log('[LessonEditor] 📝 Found pending draft, loading draft data');
-            console.log('[LessonEditor] 🔍 Draft data preview:', draft.draftData);
-            this.hasDraft = true;
-            this.lastSaved = draft.createdAt ? new Date(draft.createdAt) : null;
-            console.log('[LessonEditor] Draft lastSaved:', this.lastSaved);
-            // Return the draft data merged with lesson metadata
-            return this.http.get<any>(`${environment.apiUrl}/lessons/${id}`, {
-              headers: { 'x-tenant-id': environment.tenantId }
-            }).pipe(
-              map(lesson => {
-                console.log('[LessonEditor] 🔍 Live lesson data:', lesson.data);
-                const merged = {
-                  ...lesson,
-                  ...draft.draftData,
-                  id: lesson.id // Ensure we keep the lesson ID
-                };
-                console.log('[LessonEditor] 🔍 Merged lesson data:', merged.data || merged.structure);
-                return merged;
-              })
-            );
-          } else {
-            console.log('[LessonEditor] 📖 No draft found, loading published lesson');
-            // Load the published lesson
-            return this.http.get<any>(`${environment.apiUrl}/lessons/${id}`, {
-              headers: { 'x-tenant-id': environment.tenantId }
-            });
-          }
+          // Always load the live lesson first
+          return this.http.get<any>(`${environment.apiUrl}/lessons/${id}`, {
+            headers: { 'x-tenant-id': environment.tenantId }
+          }).pipe(
+            map(lesson => {
+              if (draft && draft.status === 'pending') {
+                console.log('[LessonEditor] 📝 Found pending draft, storing both live and draft data');
+                this.hasDraft = true;
+                this.hasPendingDraft = true;
+                this.pendingDraftData = draft.draftData;
+                // Deep clone the live lesson to preserve its structure - CRITICAL!
+                this.liveLessonData = JSON.parse(JSON.stringify(lesson));
+                // Ensure objectives are included in live lesson data
+                if (!this.liveLessonData.objectives && (lesson.objectives || lesson.data?.objectives)) {
+                  this.liveLessonData.objectives = lesson.objectives || lesson.data?.objectives || {};
+                }
+                this.lastSaved = draft.createdAt ? new Date(draft.createdAt) : null;
+                this.showingPendingChanges = false; // Start with live lesson
+                console.log('[LessonEditor] 🔍 Live lesson data stored (deep cloned):', this.liveLessonData);
+                console.log('[LessonEditor] 🔍 Live lesson objectives:', this.liveLessonData.objectives);
+                console.log('[LessonEditor] 🔍 Live lesson stages path:', {
+                  'data.structure.stages': this.liveLessonData.data?.structure?.stages?.length || 0,
+                  'data.stages': this.liveLessonData.data?.stages?.length || 0,
+                  'structure.stages': this.liveLessonData.structure?.stages?.length || 0
+                });
+                return lesson; // Return live lesson initially
+              } else {
+                console.log('[LessonEditor] 📖 No pending draft found');
+                this.hasPendingDraft = false;
+                this.pendingDraftData = null;
+                this.liveLessonData = null;
+                this.showingPendingChanges = false;
+                return lesson;
+              }
+            })
+          );
         }),
         takeUntil(this.destroy$)
       )
@@ -2930,6 +3197,31 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
             console.warn('[LessonEditor] ⚠️ No stages found in lesson data');
             this.stages = [];
           }
+          
+          // Load learning objectives from various possible locations
+          this.learningObjectives = 
+            lesson.objectives?.learningObjectives ||
+            lesson.data?.objectives?.learningObjectives ||
+            lesson.data?.structure?.learningObjectives ||
+            lesson.data?.aiContext?.contextData?.lessonObjectives ||
+            [];
+          
+          // Load lesson outcomes
+          this.lessonOutcomes = 
+            lesson.objectives?.lessonOutcomes ||
+            lesson.data?.objectives?.lessonOutcomes ||
+            [];
+          
+          // Ensure we have at least empty arrays if nothing was found
+          if (!this.learningObjectives || this.learningObjectives.length === 0) {
+            this.learningObjectives = [];
+          }
+          if (!this.lessonOutcomes || this.lessonOutcomes.length === 0) {
+            this.lessonOutcomes = [];
+          }
+          
+          console.log('[LessonEditor] 📚 Loaded learning objectives:', this.learningObjectives);
+          console.log('[LessonEditor] 🎯 Loaded lesson outcomes:', this.lessonOutcomes);
           
           // Set default selection to lesson
           this.selectedItem = { type: 'lesson', id: lesson.id };
@@ -3094,13 +3386,28 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       return;
     }
 
-    if (!this.lesson.id || this.lesson.id === '' || this.lesson.id === 'new') {
+    if (!this.lesson?.id || this.lesson?.id === '' || this.lesson?.id === 'new') {
       this.showSnackbar('Cannot save draft for a new lesson. Please create the lesson first.', 'error');
-      console.error('[LessonEditor] ❌ Cannot save draft - invalid lesson ID:', this.lesson.id);
+      console.error('[LessonEditor] ❌ Cannot save draft - invalid lesson ID:', this.lesson?.id);
       return;
     }
 
-    console.log('[LessonEditor] 💾 Saving draft for lesson:', this.lesson.id);
+    // Check for pending changes
+    if (this.hasPendingDraft) {
+      this.pendingWarningAction = 'save';
+      this.showPendingChangesWarning = true;
+      return;
+    }
+
+    this.executeSaveDraft();
+  }
+
+  executeSaveDraft() {
+    if (!this.lesson?.id) {
+      this.showSnackbar('No lesson to save', 'error');
+      return;
+    }
+    console.log('[LessonEditor] 💾 Saving draft for lesson:', this.lesson?.id);
     this.saving = true;
 
     // Build the draft data from current state
@@ -3112,6 +3419,10 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       durationMinutes: this.calculateTotalDuration(),
       thumbnailUrl: this.lesson.thumbnailUrl,
       tags: this.lesson.tags,
+      objectives: {
+        learningObjectives: this.learningObjectives.filter(obj => obj && obj.trim() !== ''),
+        lessonOutcomes: this.lessonOutcomes.filter(outcome => outcome.title && outcome.title.trim() !== '')
+      },
       structure: {
         stages: this.stages.map(stage => ({
           id: stage.id,
@@ -3133,14 +3444,14 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     };
 
     const payload = {
-      lessonId: String(this.lesson.id), // Ensure it's a string
+      lessonId: String(this.lesson?.id || ''), // Ensure it's a string
       draftData: draftData,
       changeSummary: this.generateChangeSummary(),
       changesCount: this.countChanges()
     };
 
     console.log('[LessonEditor] 📤 Draft payload:', JSON.stringify(payload, null, 2));
-    console.log('[LessonEditor] 📤 Lesson ID:', this.lesson.id, 'Type:', typeof this.lesson.id);
+    console.log('[LessonEditor] 📤 Lesson ID:', this.lesson?.id, 'Type:', typeof this.lesson?.id);
     console.log('[LessonEditor] 📤 API URL:', `${environment.apiUrl}/lesson-drafts`);
     console.log('[LessonEditor] 📤 Headers:', { 'x-tenant-id': environment.tenantId, 'x-user-id': environment.defaultUserId });
 
@@ -3155,7 +3466,10 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
           this.saving = false;
           this.hasUnsavedChanges = false;
           this.hasDraft = true;
+          this.hasPendingDraft = true; // After saving, there's now a pending draft
           this.lastSaved = new Date();
+          // Update pending draft data to current state
+          this.pendingDraftData = draftData;
           console.log('[LessonEditor] ✅ Draft saved:', response);
           this.showSnackbar('Draft saved successfully', 'success');
         },
@@ -3184,6 +3498,13 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       this.showSnackbar('No lesson to submit', 'error');
       return;
     }
+
+    // Check for pending changes
+    if (this.hasPendingDraft) {
+      this.pendingWarningAction = 'submit';
+      this.showPendingChangesWarning = true;
+      return;
+    }
     
     console.log('[LessonEditor] 📤 Submitting draft for approval...');
     
@@ -3191,6 +3512,252 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     // and set to 'pending' status. We just need to mark it locally as submitted.
     this.hasBeenSubmitted = true;
     this.showSnackbar('Draft submitted for approval! Check the Approval Queue.', 'success');
+  }
+
+  togglePendingChanges() {
+    if (!this.hasPendingDraft || !this.pendingDraftData || !this.liveLessonData) {
+      return;
+    }
+
+    this.showingPendingChanges = !this.showingPendingChanges;
+
+    if (this.showingPendingChanges) {
+      // Apply pending changes
+      console.log('[LessonEditor] 📝 Applying pending changes');
+      console.log('[LessonEditor] 📝 Live lesson data (immutable copy preserved):', this.liveLessonData);
+      console.log('[LessonEditor] 📝 Pending draft data:', this.pendingDraftData);
+      
+      // Always work from deep clones so the stored live lesson never mutates
+      const liveClone = JSON.parse(JSON.stringify(this.liveLessonData));
+      const draftClone = JSON.parse(JSON.stringify(this.pendingDraftData));
+      
+      // Build merged object without sharing references with live data
+      const merged: any = {
+        ...liveClone,
+        ...draftClone,
+        id: this.lesson?.id || liveClone?.id || ''
+      };
+      
+      // Merge objectives (draft takes precedence)
+      if (draftClone?.objectives) {
+        merged.objectives = JSON.parse(JSON.stringify(draftClone.objectives));
+      } else if (liveClone?.objectives) {
+        merged.objectives = JSON.parse(JSON.stringify(liveClone.objectives));
+      }
+      
+      const mergedData = {
+        ...(liveClone?.data || {}),
+        ...(draftClone?.data || {})
+      };
+      
+      // Merge objectives in data if present
+      if (draftClone?.data?.objectives) {
+        mergedData.objectives = JSON.parse(JSON.stringify(draftClone.data.objectives));
+      } else if (liveClone?.data?.objectives && !mergedData.objectives) {
+        mergedData.objectives = JSON.parse(JSON.stringify(liveClone.data.objectives));
+      }
+      
+      if (draftClone?.structure) {
+        mergedData.structure = draftClone.structure;
+      } else if (draftClone?.data?.structure) {
+        mergedData.structure = draftClone.data.structure;
+      } else if (draftClone?.data?.stages) {
+        mergedData.structure = { stages: draftClone.data.stages };
+      } else if ((draftClone as any)?.stages) {
+        mergedData.structure = { stages: (draftClone as any).stages };
+      } else if (!mergedData.structure && liveClone?.data?.structure) {
+        mergedData.structure = JSON.parse(JSON.stringify(liveClone.data.structure));
+      }
+      
+      merged.data = mergedData;
+      
+      console.log('[LessonEditor] 📝 Merged data built from clones:', merged);
+      this.loadLessonDataIntoEditor(merged);
+    } else {
+      // Show current state (live lesson)
+      console.log('[LessonEditor] 📋 Showing current state - REVERTING');
+      console.log('[LessonEditor] 📋 Live lesson data exists:', !!this.liveLessonData);
+      
+      if (!this.liveLessonData) {
+        console.error('[LessonEditor] ❌ No live lesson data available to revert to');
+        this.showSnackbar('No live lesson data available', 'error');
+        return;
+      }
+      
+      // Deep clone to avoid reference issues - CRITICAL!
+      const liveData = JSON.parse(JSON.stringify(this.liveLessonData));
+      
+      console.log('[LessonEditor] 📋 Deep cloned live data');
+      console.log('[LessonEditor] 📋 Original liveLessonData stages:', {
+        'data.structure.stages': this.liveLessonData.data?.structure?.stages?.length || 0,
+        'data.stages': this.liveLessonData.data?.stages?.length || 0,
+        'structure.stages': this.liveLessonData.structure?.stages?.length || 0
+      });
+      
+      // Ensure live lesson data is properly structured
+      // Live lesson should have data.structure.stages format
+      if (!liveData.data && liveData.structure) {
+        // If structure is at root, move it to data.structure
+        liveData.data = { structure: liveData.structure };
+        console.log('[LessonEditor] 📋 Moved structure to data.structure');
+      }
+      
+      // Also ensure data.structure exists if we have stages
+      if (!liveData.data) {
+        liveData.data = {};
+      }
+      if (!liveData.data.structure && (liveData.data.stages || liveData.structure?.stages)) {
+        liveData.data.structure = { stages: liveData.data.stages || liveData.structure?.stages || [] };
+        console.log('[LessonEditor] 📋 Created data.structure from stages');
+      }
+      
+      console.log('[LessonEditor] 📋 Processed live data structure:', {
+        hasData: !!liveData.data,
+        hasStructure: !!liveData.structure,
+        hasDataStructure: !!liveData.data?.structure,
+        stagesPath: liveData.data?.structure?.stages ? 'data.structure.stages' : 
+                    liveData.data?.stages ? 'data.stages' : 
+                    liveData.structure?.stages ? 'structure.stages' : 'none',
+        stagesCount: liveData.data?.structure?.stages?.length || 
+                     liveData.data?.stages?.length || 
+                     liveData.structure?.stages?.length || 0,
+        firstStageTitle: liveData.data?.structure?.stages?.[0]?.title || 
+                         liveData.data?.stages?.[0]?.title || 
+                         liveData.structure?.stages?.[0]?.title || 'none'
+      });
+      
+      console.log('[LessonEditor] 📋 About to load live data into editor');
+      this.loadLessonDataIntoEditor(liveData);
+      console.log('[LessonEditor] 📋 Live data loaded into editor');
+    }
+  }
+
+  loadLessonDataIntoEditor(lessonData: any) {
+    if (!lessonData) {
+      console.warn('[LessonEditor] ⚠️ loadLessonDataIntoEditor called with null/undefined data');
+      return;
+    }
+    
+    console.log('[LessonEditor] 🔄 Loading lesson data into editor');
+    console.log('[LessonEditor] 🔄 Full lessonData:', JSON.stringify(lessonData, null, 2).substring(0, 500));
+    
+    // Completely replace lesson metadata (don't merge)
+    this.lesson = {
+      ...lessonData,
+      id: lessonData.id || this.lesson?.id
+    };
+    
+    // Try multiple paths for stages data - draft data has structure.stages, live has data.structure.stages
+    const stagesData = lessonData.data?.structure?.stages 
+      || lessonData.data?.stages 
+      || lessonData.structure?.stages
+      || (lessonData.data && lessonData.data.stages);
+    
+    console.log('[LessonEditor] 🔄 Stages data found:', stagesData);
+    console.log('[LessonEditor] 🔄 Stages data path check:', {
+      'data.structure.stages': lessonData.data?.structure?.stages,
+      'data.stages': lessonData.data?.stages,
+      'structure.stages': lessonData.structure?.stages,
+      'hasData': !!lessonData.data,
+      'hasStructure': !!lessonData.structure
+    });
+    
+    if (stagesData && Array.isArray(stagesData)) {
+      console.log('[LessonEditor] 🔄 Parsing stages, count:', stagesData.length);
+      console.log('[LessonEditor] 🔄 Raw stages data preview:', JSON.stringify(stagesData, null, 2).substring(0, 500));
+      
+      // Clear existing stages first - create new empty array reference
+      this.stages.length = 0;
+      
+      // Parse and assign new stages (create completely new array reference)
+      const parsedStages = this.parseStagesFromJSON(stagesData);
+      
+      // Completely replace the array
+      this.stages.splice(0, this.stages.length, ...parsedStages);
+      
+      console.log('[LessonEditor] 🔄 Parsed stages count:', this.stages.length);
+      console.log('[LessonEditor] 🔄 Stages array reference changed:', this.stages);
+      if (this.stages.length > 0) {
+        console.log('[LessonEditor] 🔄 First stage:', this.stages[0]);
+        console.log('[LessonEditor] 🔄 First stage subStages count:', this.stages[0]?.subStages?.length || 0);
+      }
+    } else {
+      console.warn('[LessonEditor] ⚠️ No stages data found, clearing stages');
+      // Create new empty array reference
+      this.stages = [];
+    }
+    
+    // Load learning objectives from various possible locations
+    this.learningObjectives = 
+      lessonData.objectives?.learningObjectives ||
+      lessonData.data?.objectives?.learningObjectives ||
+      lessonData.data?.structure?.learningObjectives ||
+      lessonData.data?.aiContext?.contextData?.lessonObjectives ||
+      [];
+    
+    // Load lesson outcomes
+    this.lessonOutcomes = 
+      lessonData.objectives?.lessonOutcomes ||
+      lessonData.data?.objectives?.lessonOutcomes ||
+      [];
+    
+    // Ensure we have at least empty arrays if nothing was found
+    if (!this.learningObjectives || this.learningObjectives.length === 0) {
+      this.learningObjectives = [];
+    }
+    if (!this.lessonOutcomes || this.lessonOutcomes.length === 0) {
+      this.lessonOutcomes = [];
+    }
+    
+    console.log('[LessonEditor] 🔄 Loaded learning objectives:', this.learningObjectives);
+    console.log('[LessonEditor] 🔄 Loaded lesson outcomes:', this.lessonOutcomes);
+    
+    // Reset selection to lesson
+    this.selectedItem = { type: 'lesson', id: this.lesson?.id || lessonData.id || '' };
+    
+    // Force change detection immediately
+    this.cdr.detectChanges();
+    
+    // Also mark as changed to trigger UI update
+    this.hasUnsavedChanges = true;
+    
+    // Use setTimeout to ensure Angular processes the changes
+    setTimeout(() => {
+      this.hasUnsavedChanges = false;
+      this.cdr.detectChanges(); // Force change detection again
+      console.log('[LessonEditor] 🔄 Change detection triggered');
+    }, 50);
+    
+    // Also trigger after a longer delay to catch any async updates
+    setTimeout(() => {
+      this.cdr.detectChanges();
+      console.log('[LessonEditor] 🔄 Final check - stages count:', this.stages.length);
+    }, 200);
+    
+    console.log('[LessonEditor] 🔄 Load complete - stages count:', this.stages.length);
+  }
+
+  closePendingWarning() {
+    this.showPendingChangesWarning = false;
+    this.pendingWarningAction = null;
+  }
+
+  confirmPendingWarning() {
+    this.showPendingChangesWarning = false;
+    const action = this.pendingWarningAction;
+    this.pendingWarningAction = null;
+
+    if (action === 'save') {
+      this.executeSaveDraft();
+    } else if (action === 'submit') {
+      // Save first, then submit
+      this.executeSaveDraft();
+      // After save completes, submit will be handled
+      setTimeout(() => {
+        this.hasBeenSubmitted = true;
+        this.showSnackbar('Draft submitted for approval! Check the Approval Queue.', 'success');
+      }, 500);
+    }
   }
 
   // Helper methods for draft
@@ -3596,6 +4163,40 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     this.hasBeenSubmitted = false; // Reset submission status when changes are made
   }
 
+  // Learning Objectives Management
+  addLearningObjective() {
+    this.learningObjectives.push('');
+    this.markAsChanged();
+  }
+
+  removeLearningObjective(index: number) {
+    if (this.learningObjectives.length > 0) {
+      this.learningObjectives.splice(index, 1);
+      this.markAsChanged();
+    }
+  }
+
+  trackByObjectiveIndex(index: number, item: string): number {
+    return index;
+  }
+
+  // Lesson Outcomes Management
+  addLessonOutcome() {
+    this.lessonOutcomes.push({ title: '', content: 'At the end of this lesson student will know...' });
+    this.markAsChanged();
+  }
+
+  removeLessonOutcome(index: number) {
+    if (this.lessonOutcomes.length > 0) {
+      this.lessonOutcomes.splice(index, 1);
+      this.markAsChanged();
+    }
+  }
+
+  trackByOutcomeIndex(index: number, item: { title: string; content: string }): number {
+    return index;
+  }
+
   // Sidebar Resizing
   onResizeMouseDown(event: MouseEvent) {
     // Sidebar resize functionality - to be implemented
@@ -3632,8 +4233,11 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     return descriptions[type] || type;
   }
 
-  getAvailableSubStageTypes(stageType: string): string[] {
+  getAvailableSubStageTypes(stageType: string | undefined | null): string[] {
     // Return TEACH-aligned substage types based on stage type
+    if (!stageType) {
+      return [];
+    }
     return this.stageSubStageMap[stageType] || [];
   }
 

@@ -4,11 +4,12 @@ import { io, Socket } from 'socket.io-client';
 import { environment } from '../../../environments/environment';
 
 export interface ChatMessage {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'error';
   content: string;
   timestamp: Date;
   userId?: string;
   tokensUsed?: number;
+  isError?: boolean;
 }
 
 /**
@@ -35,6 +36,10 @@ export class WebSocketService {
   private currentTenantId: string | null = null;
   private screenshotRequestSubject = new BehaviorSubject<{ message: string; timestamp: Date } | null>(null);
   screenshotRequest$ = this.screenshotRequestSubject.asObservable();
+  
+  // Timeout tracking for AI responses
+  private responseTimeout: any = null;
+  private readonly RESPONSE_TIMEOUT_MS = 30000; // 30 seconds
 
   constructor() {
     console.log('[WebSocketService] Service initialized');
@@ -119,19 +124,67 @@ export class WebSocketService {
   /**
    * Send a chat message with conversation history and lesson data
    */
-  sendMessage(message: string, conversationHistory?: ChatMessage[], lessonData?: any, screenshot?: string, isScreenshotRequest?: boolean, currentStageInfo?: any): void {
-    if (!this.socket || !this.currentLessonId) {
-      console.error('[WebSocketService] Cannot send message - not connected to lesson');
+  sendMessage(
+    message: string,
+    conversationHistory?: ChatMessage[],
+    lessonData?: any,
+    screenshot?: string,
+    isScreenshotRequest?: boolean,
+    currentStageInfo?: any,
+    isTimeoutFallback?: boolean,
+  ): void {
+    if (!this.socket) {
+      console.error('[WebSocketService] ❌ Cannot send message - socket not initialized');
+      const errorMessage: ChatMessage = {
+        role: 'error',
+        content: '⚠️ Not connected to server. Please refresh the page and try again.',
+        timestamp: new Date(),
+        isError: true,
+      };
+      const currentMessages = this.messagesSubject.value;
+      this.messagesSubject.next([...currentMessages, errorMessage]);
+      return;
+    }
+    
+    if (!this.currentLessonId) {
+      console.error('[WebSocketService] ❌ Cannot send message - not joined to a lesson');
+      const errorMessage: ChatMessage = {
+        role: 'error',
+        content: '⚠️ Not connected to lesson. Please refresh the page and try again.',
+        timestamp: new Date(),
+        isError: true,
+      };
+      const currentMessages = this.messagesSubject.value;
+      this.messagesSubject.next([...currentMessages, errorMessage]);
+      return;
+    }
+    
+    if (!this.socket.connected) {
+      console.error('[WebSocketService] ❌ Cannot send message - socket not connected');
+      const errorMessage: ChatMessage = {
+        role: 'error',
+        content: '⚠️ Connection lost. Attempting to reconnect...',
+        timestamp: new Date(),
+        isError: true,
+      };
+      const currentMessages = this.messagesSubject.value;
+      this.messagesSubject.next([...currentMessages, errorMessage]);
+      // Try to reconnect
+      this.connect();
       return;
     }
 
-    console.log(`[WebSocketService] Sending message: ${message.substring(0, 50)}...`);
-    console.log(`[WebSocketService] Conversation history: ${conversationHistory?.length || 0} messages`);
+    console.log(`[WebSocketService] 📤 Sending message: ${message.substring(0, 50)}...`);
+    console.log(`[WebSocketService] 📤 Socket connected: ${this.socket.connected}`);
+    console.log(`[WebSocketService] 📤 Lesson ID: ${this.currentLessonId}`);
+    console.log(`[WebSocketService] 📤 User ID: ${this.currentUserId}`);
+    console.log(`[WebSocketService] 📤 Tenant ID: ${this.currentTenantId}`);
+    console.log(`[WebSocketService] 📤 Conversation history: ${conversationHistory?.length || 0} messages`);
     if (screenshot) {
-      console.log(`[WebSocketService] Including screenshot (${screenshot.length} chars)`);
+      console.log(`[WebSocketService] 📤 Including screenshot (${screenshot.length} chars)`);
     }
     if (currentStageInfo) {
-      console.log(`[WebSocketService] Current stage: ${currentStageInfo.stage?.title || 'N/A'}, Sub-stage: ${currentStageInfo.subStage?.title || 'N/A'}`);
+      console.log(`[WebSocketService] 📤 Current stage: ${currentStageInfo.stage?.title || 'N/A'}, Sub-stage: ${currentStageInfo.subStage?.title || 'N/A'}`);
     }
 
     // Format conversation history for backend (exclude current message)
@@ -140,8 +193,29 @@ export class WebSocketService {
       content: msg.content
     }));
 
+    // Clear any existing timeout
+    if (this.responseTimeout) {
+      clearTimeout(this.responseTimeout);
+      this.responseTimeout = null;
+    }
+
+    // Set timeout for AI response
+    this.responseTimeout = setTimeout(() => {
+      console.warn('[WebSocketService] ⏱️ AI response timeout - no response received within 30 seconds');
+      const errorMessage: ChatMessage = {
+        role: 'error',
+        content: '⚠️ Connection to AI Teacher lost. The AI did not respond within 30 seconds. Please check your connection and try again.',
+        timestamp: new Date(),
+        isError: true,
+      };
+      const currentMessages = this.messagesSubject.value;
+      this.messagesSubject.next([...currentMessages, errorMessage]);
+      this.typingSubject.next(false);
+      this.responseTimeout = null;
+    }, this.RESPONSE_TIMEOUT_MS);
+
     // Send to server (server will echo back the user message)
-    this.socket.emit('send-message', {
+    const payload = {
       lessonId: this.currentLessonId,
       userId: this.currentUserId,
       tenantId: this.currentTenantId,
@@ -149,9 +223,29 @@ export class WebSocketService {
       timestamp: new Date(),
       conversationHistory: formattedHistory,
       lessonData: lessonData, // Optional - backend will fetch if not provided
-      screenshot: screenshot, // Optional - base64 screenshot
+      screenshot: screenshot || null, // Optional - base64 screenshot
       isScreenshotRequest: isScreenshotRequest || false, // True if this is a screenshot response
       currentStageInfo: currentStageInfo, // Current stage and sub-stage the student is viewing
+      isTimeoutFallback: isTimeoutFallback || false, // True if this is a timeout fallback resend
+    };
+    
+    console.log(`[WebSocketService] 📤 Emitting 'send-message' with payload:`, {
+      lessonId: payload.lessonId,
+      userId: payload.userId,
+      tenantId: payload.tenantId,
+      messageLength: payload.message?.length || 0,
+      hasConversationHistory: !!payload.conversationHistory,
+      hasLessonData: !!payload.lessonData,
+      hasScreenshot: !!payload.screenshot,
+      screenshotLength: payload.screenshot?.length || 0,
+      isScreenshotRequest: payload.isScreenshotRequest,
+      hasCurrentStageInfo: !!payload.currentStageInfo,
+    });
+    
+    this.socket.emit('send-message', payload, (ack: any) => {
+      if (ack) {
+        console.log(`[WebSocketService] ✅ Server acknowledged message:`, ack);
+      }
     });
   }
 
@@ -181,10 +275,6 @@ export class WebSocketService {
       this.connectedSubject.next(true);
     });
 
-    this.socket.on('disconnect', (reason: string) => {
-      console.log(`[WebSocketService] ❌ Disconnected: ${reason}`);
-      this.connectedSubject.next(false);
-    });
 
     this.socket.on('connect_error', (error: any) => {
       console.error('[WebSocketService] Connection error:', error);
@@ -198,7 +288,8 @@ export class WebSocketService {
 
     // Listen for screenshot requests from AI
     this.socket.on('screenshot-request', (data: { message: string; timestamp: Date }) => {
-      console.log('[WebSocketService] 📸 Screenshot requested by AI:', data.message);
+      // Screenshot requested silently - don't log the message content
+      console.log('[WebSocketService] 📸 Screenshot requested by AI (silently)');
       this.screenshotRequestSubject.next(data);
     });
 
@@ -206,7 +297,24 @@ export class WebSocketService {
     this.socket.on('message', (message: ChatMessage) => {
       console.log('[WebSocketService] 💬 Received message:', message.role, message.content.substring(0, 50));
       
+      // Clear timeout since we received a response
+      if (this.responseTimeout) {
+        clearTimeout(this.responseTimeout);
+        this.responseTimeout = null;
+      }
+      
       const currentMessages = this.messagesSubject.value;
+      const lastMessage = currentMessages[currentMessages.length - 1];
+      const isDuplicate =
+        lastMessage &&
+        lastMessage.role === message.role &&
+        lastMessage.content === message.content;
+
+      if (isDuplicate) {
+        console.warn('[WebSocketService] ⚠️ Duplicate message suppressed');
+        return;
+      }
+
       this.messagesSubject.next([...currentMessages, message]);
     });
 
@@ -226,6 +334,48 @@ export class WebSocketService {
     // Error events
     this.socket.on('error', (error: any) => {
       console.error('[WebSocketService] ❌ Error:', error);
+      
+      // Clear timeout
+      if (this.responseTimeout) {
+        clearTimeout(this.responseTimeout);
+        this.responseTimeout = null;
+      }
+      
+      // Add error message to chat
+      const errorMessage: ChatMessage = {
+        role: 'error',
+        content: '⚠️ Connection error: Unable to communicate with AI Teacher. Please check your connection and try again.',
+        timestamp: new Date(),
+        isError: true,
+      };
+      const currentMessages = this.messagesSubject.value;
+      this.messagesSubject.next([...currentMessages, errorMessage]);
+      this.typingSubject.next(false);
+    });
+
+    // Handle disconnection errors
+    this.socket.on('disconnect', (reason: string) => {
+      console.log(`[WebSocketService] ❌ Disconnected: ${reason}`);
+      this.connectedSubject.next(false);
+      
+      // Clear timeout
+      if (this.responseTimeout) {
+        clearTimeout(this.responseTimeout);
+        this.responseTimeout = null;
+      }
+      
+      // Add error message if we were waiting for a response
+      if (this.typingSubject.value) {
+        const errorMessage: ChatMessage = {
+          role: 'error',
+          content: '⚠️ Connection to AI Teacher lost. Please try reconnecting.',
+          timestamp: new Date(),
+          isError: true,
+        };
+        const currentMessages = this.messagesSubject.value;
+        this.messagesSubject.next([...currentMessages, errorMessage]);
+        this.typingSubject.next(false);
+      }
     });
   }
 

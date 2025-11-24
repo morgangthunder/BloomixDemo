@@ -254,6 +254,8 @@ export class AiAssistantService {
         response: grokResponse.content,
         tokensUsed: grokResponse.tokensUsed,
         processingTimeMs: processingTime,
+        requestPayload: grokRequest,
+        responsePayload: grokResponse,
       });
 
       // 7. Return response
@@ -592,6 +594,8 @@ export class AiAssistantService {
     response: string;
     tokensUsed: number;
     processingTimeMs: number;
+    requestPayload: GrokRequest;
+    responsePayload: GrokResponse;
   }): Promise<void> {
     try {
       const log = this.llmLogRepository.create({
@@ -600,7 +604,8 @@ export class AiAssistantService {
         assistantId: data.assistantId,
         useCase: `ai-assistant-${data.assistantId}`,
         promptText: `${data.promptKey}: ${data.userMessage}`,
-        response: { content: data.response },
+        requestPayload: data.requestPayload,
+        response: data.responsePayload,
         tokensUsed: data.tokensUsed,
         processingTimeMs: data.processingTimeMs,
       });
@@ -691,6 +696,8 @@ export class AiAssistantService {
         response: summaryResponse.content,
         tokensUsed: summaryResponse.tokensUsed,
         processingTimeMs: 0, // Not tracking time for summary
+        requestPayload: summaryRequest,
+        responsePayload: summaryResponse,
       });
 
       return summaryResponse.content;
@@ -827,6 +834,8 @@ ${promptContent}`,
         response: summaryResponse.content,
         tokensUsed: summaryResponse.tokensUsed,
         processingTimeMs: 0,
+        requestPayload: summaryRequest,
+        responsePayload: summaryResponse,
       });
 
       return summaryResponse.content || promptContent;

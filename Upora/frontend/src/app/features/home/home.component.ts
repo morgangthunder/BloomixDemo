@@ -14,7 +14,7 @@ import { Category, Lesson } from '../../core/models/lesson.model';
       <div class="bg-brand-black min-h-screen text-brand-light-gray font-sans page-with-header">
         <main class="overflow-x-hidden">
           <!-- Hero Section -->
-          <div *ngIf="featuredLesson" class="relative h-[500px] md:h-[600px] lg:h-[700px]">
+          <div *ngIf="featuredLesson" class="relative h-[350px] md:h-[420px] lg:h-[490px]">
             <div class="absolute inset-0 bg-gradient-to-r from-black/70 to-transparent z-10"></div>
             <img 
               [src]="featuredLesson.thumbnailUrl" 

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
+import { AxiosResponse } from 'axios';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { firstValueFrom } from 'rxjs';
@@ -135,7 +136,7 @@ Return ONLY valid JSON:
 
     const prompt = `${promptTemplate}\n\nText Content:\n${truncatedText}`;
 
-    const response = await firstValueFrom(
+    const response = (await firstValueFrom(
       this.httpService.post(
         provider.apiEndpoint,
         {
@@ -160,7 +161,7 @@ Return ONLY valid JSON:
           },
         },
       ),
-    );
+    )) as AxiosResponse<any>;
 
     const llmResponse = response.data as any;
     const tokensUsed = llmResponse.usage?.total_tokens || 0;
