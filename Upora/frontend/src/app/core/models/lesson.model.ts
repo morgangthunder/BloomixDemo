@@ -10,10 +10,18 @@ export interface SubStage {
   id: number;
   title: string;
   type: SubStageType;
-  interactionType: string;
+  interactionType?: string;
   duration: number; // in minutes
   script: ScriptBlock[];
-  contentOutputId?: number;
+  contentOutputId?: string | number;
+  interaction?: {
+    id?: string;
+    type?: string;
+    contentOutputId?: string | number;
+    config?: any;
+    name?: string;
+    category?: string;
+  };
   content?: { type: 'video' | 'text' | 'interactive'; url?: string; text?: string };
   completed?: boolean;
 }

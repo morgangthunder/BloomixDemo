@@ -1,9 +1,10 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router, RouterModule } from '@angular/router';
+import { Router, RouterModule, NavigationEnd } from '@angular/router';
 import { IonContent } from '@ionic/angular/standalone';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
+import { filter, Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-super-admin-dashboard',
@@ -260,7 +261,7 @@ import { environment } from '../../../environments/environment';
     }
   `]
 })
-export class SuperAdminDashboardComponent implements OnInit {
+export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
   constructor(
     private router: Router,
     private http: HttpClient
@@ -271,9 +272,28 @@ export class SuperAdminDashboardComponent implements OnInit {
   }
 
   pendingDraftsCount = 0;
+  private routerSubscription?: Subscription;
 
   ngOnInit() {
     this.loadPendingDraftsCount();
+    
+    // Refresh count when navigating back to this page
+    this.routerSubscription = this.router.events
+      .pipe(filter(event => event instanceof NavigationEnd))
+      .subscribe((event: any) => {
+        if (event.url === '/super-admin' || event.urlAfterRedirects === '/super-admin') {
+          // Small delay to ensure any pending drafts are saved
+          setTimeout(() => {
+            this.loadPendingDraftsCount();
+          }, 300);
+        }
+      });
+  }
+
+  ngOnDestroy() {
+    if (this.routerSubscription) {
+      this.routerSubscription.unsubscribe();
+    }
   }
 
   loadPendingDraftsCount() {
@@ -283,7 +303,13 @@ export class SuperAdminDashboardComponent implements OnInit {
       }
     }).subscribe({
       next: (drafts) => {
-        this.pendingDraftsCount = drafts.length;
+        // Only count drafts that have changes (changesCount > 0)
+        // This filters out drafts that were just saved but not yet submitted
+        // A draft with changesCount > 0 means it has been processed and has actual changes to review
+        const submittedDrafts = (drafts || []).filter((d: any) => 
+          d.changesCount && d.changesCount > 0
+        );
+        this.pendingDraftsCount = submittedDrafts.length;
       },
       error: (err) => {
         console.error('Failed to load pending drafts count:', err);

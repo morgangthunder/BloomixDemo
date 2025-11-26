@@ -131,6 +131,22 @@ export class LessonDraftsController {
   }
 
   /**
+   * Delete all pending drafts for a tenant (admin utility)
+   * Must be before @Delete(':id') to avoid route conflict
+   */
+  @Delete('all-pending')
+  async deleteAllPendingDrafts(
+    @Headers('x-tenant-id') tenantId: string,
+  ) {
+    const deleted = await this.lessonDraftsService.deleteAllPendingDrafts(tenantId);
+    
+    return {
+      message: `Deleted ${deleted} pending draft(s)`,
+      deletedCount: deleted
+    };
+  }
+
+  /**
    * Delete a draft
    */
   @Delete(':id')

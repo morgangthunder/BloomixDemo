@@ -4,9 +4,9 @@ import { AppComponent } from './app/app.component';
 import { environment } from './environments/environment';
 
 // ========================================
-// 🔥 FRONTEND VERSION 0.7.5 🔥
+// 🔥 FRONTEND VERSION 0.1.1 🔥
 // ========================================
-const FRONTEND_VERSION = '0.7.5';
+const FRONTEND_VERSION = '0.1.1';
 const CACHE_BUST_ID = `v0.6.9-${Math.random().toString(36).substr(2, 9)}`;
 console.log('');
 console.log('═══════════════════════════════════════════════════════════');

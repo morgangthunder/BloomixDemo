@@ -3,13 +3,14 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ActivatedRoute, Router } from '@angular/router';
 import { LessonService } from '../../core/services/lesson.service';
 import { ContentSourceService } from '../../core/services/content-source.service';
 import { Lesson } from '../../core/models/lesson.model';
 import { ContentSource } from '../../core/models/content-source.model';
-import { Subject } from 'rxjs';
-import { takeUntil, switchMap, map } from 'rxjs/operators';
+import { Subject, firstValueFrom, of } from 'rxjs';
+import { takeUntil, switchMap, map, catchError } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { ContentProcessorModalComponent } from '../../shared/components/content-processor-modal/content-processor-modal.component';
 import { ApprovalQueueModalComponent } from '../../shared/components/approval-queue-modal/approval-queue-modal.component';
@@ -40,6 +41,9 @@ interface SubStage {
   contentOutputId?: string;
   scriptBlocks?: ScriptBlock[];
   interaction?: {
+    id?: string;
+    name?: string;
+    category?: string;
     type: string;
     contentOutputId: string;
     config?: any;
@@ -63,8 +67,8 @@ interface ProcessedContentOutput {
   workflowName: string;
 }
 
-        // VERSION CHECK: This component should show "VERSION 5.0.2" in console logs
-        const LESSON_EDITOR_VERSION = '5.0.2';
+        // VERSION CHECK: This component should show "VERSION 0.0.4" in console logs
+        const LESSON_EDITOR_VERSION = '0.0.4';
         const LESSON_EDITOR_VERSION_CHECK_MESSAGE = `🚀 LESSON EDITOR COMPONENT VERSION ${LESSON_EDITOR_VERSION} LOADED - ${new Date().toISOString()} - CACHE BUST ID: ${Math.random().toString(36).substr(2, 9)}`;
 
 @Component({
@@ -108,10 +112,17 @@ interface ProcessedContentOutput {
             <span class="desktop-only" *ngIf="saving">💾 Saving...</span>
             <span class="mobile-only">💾</span>
           </button>
-          <span class="desktop-only save-status" *ngIf="lastSaved && !saving && !hasUnsavedChanges">
+          <span class="desktop-only save-status" *ngIf="lastSaved && !saving && !hasUnsavedChanges" style="display: flex; align-items: center; gap: 0.5rem;">
             <small style="color: #999;">Saved {{lastSaved | date:'short'}}</small>
+            <button *ngIf="hasPendingDraftOnServer()" 
+                    (click)="viewPendingChanges()" 
+                    class="btn-view-changes"
+                    style="padding: 0.25rem 0.75rem; background: #2a2a2a; border: 1px solid #444; border-radius: 4px; color: white; cursor: pointer; font-size: 12px;"
+                    title="View pending changes">
+              👁️ View Changes
+            </button>
           </span>
-          <button *ngIf="hasPendingDraft" 
+          <button *ngIf="hasPendingDraftOnServer()" 
                   (click)="togglePendingChanges()" 
                   class="btn-secondary desktop-full mobile-icon"
                   [class.active]="showingPendingChanges"
@@ -460,7 +471,7 @@ interface ProcessedContentOutput {
                   <label>Processed Content</label>
                   <div class="config-value">
                     <span class="value">{{getSelectedSubStage()?.contentOutputId ? getContentOutputName(getSelectedSubStage()!.contentOutputId!) : 'None'}}</span>
-                    <button (click)="selectContent()" class="btn-small">Select</button>
+                    <button (click)="openProcessedContentPicker('structure')" class="btn-small">Select</button>
                   </div>
                 </div>
 
@@ -500,49 +511,65 @@ interface ProcessedContentOutput {
                          class="script-block" 
                          [class.teacher-talk]="block.type === 'teacher_talk'"
                          [class.load-interaction]="block.type === 'load_interaction'"
-                         [class.pause]="block.type === 'pause'">
-                      <div class="block-header">
+                         [class.pause]="block.type === 'pause'"
+                         [class.drag-over]="dragOverScriptBlockIndex === i"
+                         [class.collapsed]="isScriptBlockCollapsed(block.id)"
+                         draggable="true"
+                         (dragstart)="onScriptBlockDragStart(block, i, $event)"
+                         (dragover)="onScriptBlockDragOver(i, $event)"
+                         (dragleave)="onScriptBlockDragLeave()"
+                         (drop)="onScriptBlockDrop(i, $event)">
+                      <div class="block-header" (click)="toggleScriptBlockCollapse(block.id)">
+                        <span class="drag-handle" title="Drag to reorder" (click)="$event.stopPropagation()">⋮⋮</span>
+                        <button class="collapse-toggle" (click)="$event.stopPropagation(); toggleScriptBlockCollapse(block.id)">
+                          <span *ngIf="isScriptBlockCollapsed(block.id)">▶</span>
+                          <span *ngIf="!isScriptBlockCollapsed(block.id)">▼</span>
+                        </button>
                         <span class="block-type-icon">{{getBlockIcon(block.type)}}</span>
-                        <select [(ngModel)]="block.type" (ngModelChange)="markAsChanged()" class="block-type-select">
-                          <option value="teacher_talk">👨‍🏫 Teacher Talk</option>
-                          <option value="load_interaction">🎯 Interaction</option>
-                          <option value="pause">⏸ Pause for Question</option>
-                        </select>
-                        <button (click)="deleteScriptBlock(i)" class="btn-icon" title="Delete block">
+                        <span class="block-type-label">{{getBlockTypeLabel(block.type)}}</span>
+                        <span class="block-time-display">{{formatTime(block.startTime)}} - {{formatTime(block.endTime)}}</span>
+                        <button (click)="deleteScriptBlock(i); $event.stopPropagation()" class="btn-icon" title="Delete block">
                           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                           </svg>
                         </button>
                       </div>
-                      <div class="block-time">
-                        <input type="text" 
-                               [value]="formatTime(block.startTime)" 
-                               (blur)="updateTimeFromString($event, block, 'startTime')"
-                               (keydown.enter)="updateTimeFromString($event, block, 'startTime')"
-                               placeholder="0:00" 
-                               pattern="[0-9]{1,2}:[0-5][0-9]"
-                               title="Enter time as MM:SS (e.g., 0:30)" />
-                        <span>-</span>
-                        <input type="text" 
-                               [value]="formatTime(block.endTime)" 
-                               (blur)="updateTimeFromString($event, block, 'endTime')"
-                               (keydown.enter)="updateTimeFromString($event, block, 'endTime')"
-                               placeholder="0:00" 
-                               pattern="[0-9]{1,2}:[0-5][0-9]"
-                               title="Enter time as MM:SS (e.g., 1:30)" />
-                      </div>
-                      <textarea *ngIf="block.type === 'teacher_talk'" 
-                                [(ngModel)]="block.content" 
-                                (ngModelChange)="markAsChanged()"
-                                placeholder="Enter what the AI teacher should say..."
-                                rows="3"></textarea>
-                      <div *ngIf="block.type === 'load_interaction'" class="interaction-selector">
-                        <label>Interaction Type:</label>
-                        <div class="interaction-display">
-                          <span class="interaction-badge">{{block.metadata?.interactionType || getSelectedSubStage()?.interaction?.type || 'None'}}</span>
-                          <div class="interaction-actions">
-                            <button *ngIf="getSelectedSubStage()?.interaction" (click)="configureInteraction()" class="btn-small btn-primary">⚙️ Configure</button>
-                            <button (click)="changeInteractionType()" class="btn-small">Change</button>
+                      <div class="block-content" *ngIf="!isScriptBlockCollapsed(block.id)">
+                        <select [(ngModel)]="block.type" (ngModelChange)="markAsChanged()" class="block-type-select">
+                          <option value="teacher_talk">👨‍🏫 Teacher Talk</option>
+                          <option value="load_interaction">🎯 Interaction</option>
+                          <option value="pause">⏸ Pause for Question</option>
+                        </select>
+                        <div class="block-time">
+                          <input type="text" 
+                                 [value]="formatTime(block.startTime)" 
+                                 (blur)="updateTimeFromString($event, block, 'startTime')"
+                                 (keydown.enter)="updateTimeFromString($event, block, 'startTime')"
+                                 placeholder="0:00" 
+                                 pattern="[0-9]{1,2}:[0-5][0-9]"
+                                 title="Enter time as MM:SS (e.g., 0:30)" />
+                          <span>-</span>
+                          <input type="text" 
+                                 [value]="formatTime(block.endTime)" 
+                                 (blur)="updateTimeFromString($event, block, 'endTime')"
+                                 (keydown.enter)="updateTimeFromString($event, block, 'endTime')"
+                                 placeholder="0:00" 
+                                 pattern="[0-9]{1,2}:[0-5][0-9]"
+                                 title="Enter time as MM:SS (e.g., 1:30)" />
+                        </div>
+                        <textarea *ngIf="block.type === 'teacher_talk'" 
+                                  [(ngModel)]="block.content" 
+                                  (ngModelChange)="markAsChanged()"
+                                  placeholder="Enter what the AI teacher should say..."
+                                  rows="3"></textarea>
+                        <div *ngIf="block.type === 'load_interaction'" class="interaction-selector">
+                          <label>Interaction Type:</label>
+                          <div class="interaction-display">
+                            <span class="interaction-badge">{{block.metadata?.interactionType || getSelectedSubStage()?.interaction?.type || 'None'}}</span>
+                            <div class="interaction-actions">
+                              <button *ngIf="getSelectedSubStage()?.interaction" (click)="configureInteraction()" class="btn-small btn-primary">⚙️ Configure</button>
+                              <button (click)="changeInteractionType()" class="btn-small">Change</button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -639,23 +666,42 @@ interface ProcessedContentOutput {
               </p>
               
               <div *ngIf="selectedItem.type === 'substage'" class="preview-container">
-                <div class="preview-controls">
-                  <button class="btn-icon">▶</button>
-                  <button class="btn-icon">⏸</button>
-                  <button class="btn-icon">⏹</button>
-                  <div class="timeline-scrubber">
-                    <input type="range" min="0" [max]="(getSelectedSubStage()?.duration || 5) * 60" value="0" />
-                  </div>
-                </div>
-                
                 <div class="student-view">
                   <div class="ai-teacher-message">
                     <span class="avatar">👨‍🏫</span>
-                    <p>AI Teacher message will appear here during preview...</p>
+                    <p *ngIf="getFirstScriptBlock()">{{getFirstScriptBlock()}}</p>
+                    <p *ngIf="!getFirstScriptBlock()">AI Teacher message will appear here during preview...</p>
                   </div>
                   
                   <div class="interaction-preview">
-                    <p class="placeholder">Interaction preview will render here</p>
+                    <div *ngIf="isInteractionPreviewLoading" class="preview-loading">
+                      <p>Loading interaction preview…</p>
+                    </div>
+                    <div *ngIf="!isInteractionPreviewLoading">
+                      <div *ngIf="showInteractionNotConfiguredWarning()" class="interaction-warning">
+                        <div class="warning-icon">⚠️</div>
+                        <div>
+                          <h3>Interaction Not Configured</h3>
+                          <p>This interaction has not been configured correctly yet. Select processed content and save the draft to preview it here.</p>
+                        </div>
+                      </div>
+                      <app-true-false-selection
+                        *ngIf="!showInteractionNotConfiguredWarning() && interactionPreviewData && getSelectedSubStage()?.interaction?.type === 'true-false-selection'"
+                        [data]="interactionPreviewData"
+                        [lessonId]="lesson?.id || null"
+                        [stageId]="getSelectedStage()?.id?.toString() || null"
+                        [substageId]="getSelectedSubStage()?.id?.toString() || null"
+                        (completed)="onPreviewCompleted($event)">
+                      </app-true-false-selection>
+                      <!-- HTML/PixiJS/iFrame Preview -->
+                      <div *ngIf="!showInteractionNotConfiguredWarning() && interactionPreviewData && (interactionPreviewData.interactionCategory === 'html' || interactionPreviewData.interactionCategory === 'pixijs' || interactionPreviewData.interactionCategory === 'iframe') && interactionPreviewData.htmlCode" 
+                           class="iframe-preview-container">
+                        <iframe 
+                          [src]="getInteractionPreviewBlobUrl()"
+                          style="width: 100%; height: 600px; border: 1px solid #333; border-radius: 0.5rem; background: #0f0f23;"
+                          frameborder="0"></iframe>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -740,13 +786,13 @@ interface ProcessedContentOutput {
             <button (click)="closePendingWarning()" class="close-button">✕</button>
           </div>
           <div class="modal-body">
-            <p>This lesson has pending changes that are awaiting approval.</p>
-            <p><strong>If you {{pendingWarningAction === 'save' ? 'save' : 'submit'}} now, your current changes will overwrite the existing pending changes.</strong></p>
-            <p>The existing pending changes will be lost and replaced with your new changes.</p>
+            <p>This lesson has multiple pending changes awaiting approval.</p>
+            <p><strong>If you {{pendingWarningAction === 'save' ? 'save' : 'submit'}} now, the older pending draft(s) will be discarded.</strong></p>
+            <p *ngIf="olderDraftIds.length > 0">The {{olderDraftIds.length}} older pending draft(s) will be deleted and replaced with your new changes.</p>
             <div class="warning-actions">
               <button class="btn-secondary" (click)="closePendingWarning()">Cancel</button>
               <button class="btn-primary" (click)="confirmPendingWarning()">
-                {{pendingWarningAction === 'save' ? 'Save Anyway' : 'Submit Anyway'}}
+                {{pendingWarningAction === 'save' ? 'Save & Discard Older' : 'Submit & Discard Older'}}
               </button>
             </div>
           </div>
@@ -920,6 +966,60 @@ interface ProcessedContentOutput {
         </div>
       </div>
 
+      <!-- Processed Content Picker Modal -->
+      <div class="modal-overlay-fullscreen" *ngIf="showProcessedContentPicker" (click)="closeProcessedContentPicker()">
+        <div class="modal-container-fullscreen" (click)="$event.stopPropagation()">
+          <div class="modal-header-sticky">
+            <h2>🎯 Select Processed Content</h2>
+            <button (click)="closeProcessedContentPicker()" class="close-btn">✕</button>
+          </div>
+
+          <div class="modal-body-scrollable">
+            <div class="search-section">
+              <div class="search-bar">
+                <input
+                  type="text"
+                  [(ngModel)]="processedContentSearchQuery"
+                  placeholder="Search processed content..."
+                  class="search-input" />
+                <button class="btn-primary" (click)="searchProcessedContent()">Search</button>
+                <button class="btn-secondary" *ngIf="processedContentSearchActive || processedContentSearchQuery" (click)="clearProcessedContentSearch()">Clear</button>
+              </div>
+              <p class="hint" *ngIf="!processedContentSearchActive">Showing processed content linked to this lesson.</p>
+              <p class="hint" *ngIf="processedContentSearchActive">Showing account-wide processed content results.</p>
+            </div>
+
+            <div *ngIf="isProcessedContentSearching" class="loading-state">
+              <p>Searching processed content...</p>
+            </div>
+
+            <div class="content-list" *ngIf="!isProcessedContentSearching && processedContentPickerList.length > 0">
+              <div *ngFor="let content of processedContentPickerList" class="content-card">
+                <div class="content-info">
+                  <h4>{{content.title || content.workflowName || 'Processed Output'}}</h4>
+                  <p class="content-summary">
+                    {{content.description || content.contentSource?.summary || 'Processed interaction data'}}
+                  </p>
+                  <div class="content-meta">
+                    <span class="type-badge">{{content.type || 'interaction'}}</span>
+                    <span class="source-link-inline" *ngIf="content.contentSource?.title">
+                      Source: {{content.contentSource?.title}}
+                    </span>
+                  </div>
+                </div>
+                <div class="content-actions">
+                  <button class="btn-primary btn-small" (click)="selectProcessedContentItem(content)">Select</button>
+                </div>
+              </div>
+            </div>
+
+            <p class="empty-state" *ngIf="!isProcessedContentSearching && processedContentPickerList.length === 0">
+              No processed content found.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <!-- Interaction Configuration Modal (Reusable Component) -->
       <app-interaction-configure-modal
         [isOpen]="showInteractionConfigModal"
@@ -933,9 +1033,70 @@ interface ProcessedContentOutput {
         [cssCode]="currentInteractionType?.cssCode || ''"
         [jsCode]="currentInteractionType?.jsCode || ''"
         [lessonId]="lesson?.id"
+        [selectedContentOutputName]="getInteractionProcessedContentLabel()"
         (closed)="closeInteractionConfigModal()"
-        (saved)="saveInteractionConfig($event)">
+        (saved)="saveInteractionConfig($event)"
+        (processedContentSelect)="openProcessedContentPicker('interaction')">
       </app-interaction-configure-modal>
+      
+      <!-- View Changes Modal -->
+      <div *ngIf="showViewChangesModal" class="modal-overlay" (click)="closeViewChangesModal()" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 10000; display: flex; align-items: center; justify-content: center;">
+        <div class="modal-content" (click)="$event.stopPropagation()" style="background: #1a1a1a; border-radius: 8px; max-width: 900px; max-height: 90vh; overflow-y: auto; width: 90%; border: 1px solid #333;">
+          <div class="modal-header" style="padding: 1.5rem; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center;">
+            <h2 style="margin: 0; color: white;">Changes for: {{viewChangesDiff?.lessonTitle || lesson?.title}}</h2>
+            <button (click)="closeViewChangesModal()" style="background: none; border: none; color: white; font-size: 24px; cursor: pointer;">✕</button>
+          </div>
+          
+          <div class="modal-body" *ngIf="viewChangesDiff" style="padding: 1.5rem;">
+            <div *ngIf="loadingViewChanges" style="text-align: center; padding: 3rem; color: #999;">
+              <div style="border: 3px solid #333; border-top-color: #00d4ff; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto;"></div>
+              <p>Loading changes...</p>
+            </div>
+
+            <div *ngIf="!loadingViewChanges && viewChangesDiff.changes.length === 0" style="text-align: center; padding: 3rem; color: #999;">
+              <p>No changes detected</p>
+            </div>
+
+            <div *ngIf="!loadingViewChanges && viewChangesDiff.changes.length > 0">
+              <!-- Grouped by category -->
+              <div *ngFor="let group of viewChangeGroups" style="margin-bottom: 1.5rem; border: 1px solid #333; border-radius: 6px; overflow: hidden;">
+                <div (click)="toggleViewChangeGroup(group)" style="padding: 1rem; background: #2a2a2a; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                  <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <span>{{group.expanded ? '▼' : '▶'}}</span>
+                    <span style="color: white; font-weight: 600;">{{group.label}}</span>
+                    <span style="color: #999;">({{group.changes.length}})</span>
+                  </div>
+                </div>
+                <div *ngIf="group.expanded" style="padding: 1rem; background: #0f0f0f;">
+                  <div *ngFor="let change of group.changes" style="margin-bottom: 1rem; padding: 1rem; background: #1a1a1a; border-radius: 4px; border: 1px solid #2a2a2a;">
+                    <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                      <span style="background: #2a2a2a; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 11px; color: #999;">{{getChangeCategoryLabel(change.category)}}</span>
+                      <span style="color: white; font-weight: 500;">{{change.field}}</span>
+                    </div>
+                    <div *ngIf="change.description" style="color: #999; font-size: 13px; margin-bottom: 0.5rem;">
+                      {{change.description}}
+                    </div>
+                    <div style="display: flex; gap: 1rem; align-items: center;">
+                      <div *ngIf="change.from !== null && change.from !== undefined" style="flex: 1;">
+                        <div style="color: #999; font-size: 12px; margin-bottom: 0.25rem;">Before:</div>
+                        <div style="color: #ff6b6b; font-size: 13px; word-break: break-word;">{{formatChangeValue(change.from)}}</div>
+                      </div>
+                      <div *ngIf="change.from !== null && change.from !== undefined" style="color: #666;">→</div>
+                      <div style="flex: 1;">
+                        <div style="color: #999; font-size: 12px; margin-bottom: 0.25rem;">{{change.from !== null && change.from !== undefined ? 'After' : 'New'}}:</div>
+                        <div style="color: #51cf66; font-size: 13px; word-break: break-word;">
+                          {{formatChangeValue(change.to)}}
+                          <a *ngIf="change.fileUrl" [href]="change.fileUrl" target="_blank" style="color: #00d4ff; margin-left: 0.5rem;">📄 View File</a>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   `,
   styles: [`
@@ -1494,6 +1655,49 @@ interface ProcessedContentOutput {
       align-items: center;
       gap: 0.75rem;
       margin-bottom: 0.75rem;
+      cursor: pointer;
+      padding: 0.5rem;
+      border-radius: 4px;
+      transition: background 0.2s;
+    }
+    .block-header:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .collapse-toggle {
+      background: transparent;
+      border: none;
+      color: #999;
+      cursor: pointer;
+      padding: 0.25rem;
+      font-size: 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+    }
+    .collapse-toggle:hover {
+      color: #fff;
+    }
+    .block-type-label {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #ccc;
+      flex: 1;
+    }
+    .block-time-display {
+      font-size: 0.875rem;
+      color: #999;
+      font-family: monospace;
+    }
+    .block-content {
+      margin-top: 0.75rem;
+    }
+    .script-block.collapsed {
+      padding: 0.5rem 1rem;
+    }
+    .script-block.collapsed .block-header {
+      margin-bottom: 0;
     }
     .block-type-select {
       flex: 1;
@@ -1558,6 +1762,29 @@ interface ProcessedContentOutput {
     .interaction-preview small {
       color: #999;
       font-size: 0.75rem;
+    }
+    .interaction-warning {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem;
+      border-radius: 8px;
+      border: 1px solid rgba(220, 38, 38, 0.4);
+      background: rgba(220, 38, 38, 0.08);
+      color: #ffb4b4;
+    }
+    .interaction-warning h3 {
+      margin: 0 0 0.25rem 0;
+      font-size: 1rem;
+      color: #ffe1e1;
+    }
+    .warning-icon {
+      font-size: 1.75rem;
+    }
+    .preview-loading {
+      text-align: center;
+      padding: 2rem 1rem;
+      color: #bbb;
     }
     .interaction-selector select {
       background: #0a0a0a;
@@ -1687,6 +1914,41 @@ interface ProcessedContentOutput {
       border-radius: 8px;
       padding: 1.5rem;
       border: 1px solid #333;
+    }
+
+    .search-section {
+      margin-bottom: 1.5rem;
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 1rem;
+    }
+
+    .search-bar {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .search-input {
+      flex: 1;
+      min-width: 220px;
+      background: #0a0a0a;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 0.6rem 0.85rem;
+      color: white;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: #dc2626;
+    }
+
+    .loading-state {
+      text-align: center;
+      padding: 1rem;
+      color: #bbb;
     }
 
     .section-header {
@@ -2915,6 +3177,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   lastSaved: Date | null = null;
   showPendingChangesWarning: boolean = false;
   pendingWarningAction: 'save' | 'submit' | null = null;
+  currentDraftId: string | number | null = null; // Track the ID of the draft we just saved
+  olderDraftIds: (string | number)[] = []; // Track older draft IDs to discard if needed
   
   // Snackbar state
   snackbarMessage: string = '';
@@ -2923,7 +3187,17 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   private snackbarTimeout: any = null;
   
   // UI State
-  activeTab: EditorTab = 'details';
+  private _activeTab: EditorTab = 'details';
+  get activeTab(): EditorTab {
+    return this._activeTab;
+  }
+  set activeTab(value: EditorTab) {
+    this._activeTab = value;
+    // Load preview data when switching to preview tab
+    if (value === 'preview') {
+      this.ensurePreviewDataLoaded();
+    }
+  }
   sidebarCollapsed: boolean = false;
   mobileSidebarOpen: boolean = false;
   sidebarWidth: number = 320;
@@ -2934,11 +3208,21 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   draggedSubStage: {substage: SubStage, stageId: string} | null = null;
   dragOverStageId: string | null = null;
   dragOverSubStageId: string | null = null;
+  draggedScriptBlockIndex: number | null = null;
+  dragOverScriptBlockIndex: number | null = null;
+  collapsedScriptBlocks: Set<string> = new Set(); // Track which script blocks are collapsed (by block.id)
+  
+  // View Changes Modal
+  showViewChangesModal: boolean = false;
+  viewChangesDiff: any = null;
+  loadingViewChanges: boolean = false;
+  viewChangeGroups: any[] = [];
   
   // Lesson Structure
   stages: Stage[] = [];
   
   // Selection
+  
   selectedItem: {type: 'lesson' | 'stage' | 'substage', id: string, stageId?: string} = {
     type: 'lesson',
     id: ''
@@ -2974,6 +3258,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   interactionConfig: any = null;
   interactionConfigTab: 'configure' | 'preview' = 'configure';
   interactionPreviewData: any = null;
+  isInteractionPreviewLoading: boolean = false;
   currentInteractionType: any = null;
   showSourceContentModal: boolean = false;
   selectedSourceContent: any = null;
@@ -2983,6 +3268,13 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   // Processed Content
   processedContentItems: ProcessedContentItem[] = [];
   selectedProcessedContent: ProcessedContentItem | null = null;
+  showProcessedContentPicker: boolean = false;
+  processedContentSelectionContext: 'structure' | 'interaction' = 'structure';
+  processedContentSearchQuery: string = '';
+  processedContentSearchResults: ProcessedContentItem[] = [];
+  processedContentSearchActive: boolean = false;
+  isProcessedContentSearching: boolean = false;
+  accountProcessedContentItems: ProcessedContentItem[] = [];
   sourceContentItems: any[] = []; // Content sources used in this lesson
   aiMessage: string = '';
   
@@ -3030,6 +3322,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     'target': 'Target - Forward-looking action'
   };
 
+  interactionPreviewBlobUrl: SafeResourceUrl | null = null;
+
   constructor(
     private http: HttpClient,
     private route: ActivatedRoute,
@@ -3037,13 +3331,14 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     private lessonService: LessonService,
     private contentSourceService: ContentSourceService,
     private processedContentService: ProcessedContentService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private domSanitizer: DomSanitizer
   ) {}
 
   ngOnInit() {
     // VERSION CHECK: This log should always appear when new code is loaded
-    console.log('🔥🔥🔥 LESSON EDITOR VERSION 4.5.0 - HIDE HEADER IN MODALS + DRAFT DEBUG 🔥🔥🔥');
-    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 4.5.0');
+    console.log('🔥🔥🔥 LESSON EDITOR VERSION 0.0.4 - FIXED SAVE BUTTON + APPROVAL QUEUE + PREVIEW URL 🔥🔥🔥');
+    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 0.0.4');
     console.log('[LessonEditor] ✅ Parses actual DB JSON with scriptBlocks, scriptBlocksAfterInteraction!');
     console.log('[LessonEditor] ✅ Converts DB format to editor format!');
     console.log('[LessonEditor] ✅ Database-first development - no mock data!');
@@ -3146,6 +3441,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
             headers: { 'x-tenant-id': environment.tenantId }
           }).pipe(
             map(lesson => {
+              // Only treat as pending if status is 'pending' (not 'approved' or 'rejected')
               if (draft && draft.status === 'pending') {
                 console.log('[LessonEditor] 📝 Found pending draft, storing both live and draft data');
                 this.hasDraft = true;
@@ -3159,6 +3455,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
                 }
                 this.lastSaved = draft.createdAt ? new Date(draft.createdAt) : null;
                 this.showingPendingChanges = false; // Start with live lesson
+                this.hasBeenSubmitted = false; // Reset submission status when loading
                 console.log('[LessonEditor] 🔍 Live lesson data stored (deep cloned):', this.liveLessonData);
                 console.log('[LessonEditor] 🔍 Live lesson objectives:', this.liveLessonData.objectives);
                 console.log('[LessonEditor] 🔍 Live lesson stages path:', {
@@ -3168,11 +3465,13 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
                 });
                 return lesson; // Return live lesson initially
               } else {
-                console.log('[LessonEditor] 📖 No pending draft found');
+                console.log('[LessonEditor] 📖 No pending draft found (draft status:', draft?.status || 'none', ')');
                 this.hasPendingDraft = false;
                 this.pendingDraftData = null;
                 this.liveLessonData = null;
                 this.showingPendingChanges = false;
+                this.hasBeenSubmitted = false; // Reset submission status when no pending draft
+                this.hasDraft = false; // Reset draft status
                 return lesson;
               }
             })
@@ -3186,13 +3485,41 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
           console.log('[LessonEditor] 📊 Full lesson.data:', lesson.data);
           this.lesson = lesson;
           
+          // If there's a pending draft, use the draft data instead of live lesson data
+          let dataToUse = lesson;
+          if (this.hasPendingDraft && this.pendingDraftData && !this.showingPendingChanges) {
+            console.log('[LessonEditor] 📝 Using pending draft data for initial load');
+            // Merge draft data into lesson structure
+            dataToUse = {
+              ...lesson,
+              ...this.pendingDraftData,
+              data: {
+                ...lesson.data,
+                structure: this.pendingDraftData.structure || lesson.data?.structure
+              }
+            };
+          }
+          
           // Parse the new JSON structure: lesson.data.structure.stages or lesson.data.stages
-          const stagesData = lesson.data?.structure?.stages || lesson.data?.stages;
+          const stagesData = dataToUse.data?.structure?.stages || dataToUse.structure?.stages || dataToUse.data?.stages;
           console.log('[LessonEditor] 📊 Raw stagesData:', stagesData);
           if (stagesData) {
             console.log('[LessonEditor] 📊 Parsing stages from lesson data');
             this.stages = this.parseStagesFromJSON(stagesData);
             console.log('[LessonEditor] ✅ Parsed stages:', this.stages);
+            
+            // Collapse all script blocks by default
+            this.collapsedScriptBlocks.clear();
+            this.stages.forEach(stage => {
+              stage.subStages.forEach(substage => {
+                if (substage.scriptBlocks) {
+                  substage.scriptBlocks.forEach((block, index) => {
+                    this.collapsedScriptBlocks.add(block.id);
+                  });
+                }
+              });
+            });
+            console.log('[LessonEditor] 📦 Collapsed all script blocks by default');
           } else {
             console.warn('[LessonEditor] ⚠️ No stages found in lesson data');
             this.stages = [];
@@ -3377,8 +3704,14 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   }
 
   // Draft Management  
-  saveDraft() {
-    console.log('[LessonEditor] 🔥🔥🔥 VERSION 3.9.0 - saveDraft() called 🔥🔥🔥');
+  async saveDraft() {
+    console.log('[LessonEditor] 🔥🔥🔥 VERSION 0.0.4 - saveDraft() called 🔥🔥🔥');
+    
+    // If there are no unsaved changes, don't save and show a message
+    if (!this.hasUnsavedChanges && this.lastSaved) {
+      this.showSnackbar('No changes to save', 'info');
+      return;
+    }
     console.log('[LessonEditor] Lesson ID:', this.lesson?.id, 'Type:', typeof this.lesson?.id);
     
     if (!this.lesson) {
@@ -3393,7 +3726,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     }
 
     // Check for pending changes
-    if (this.hasPendingDraft) {
+    if (await this.refreshPendingDraftStatus()) {
       this.pendingWarningAction = 'save';
       this.showPendingChangesWarning = true;
       return;
@@ -3428,17 +3761,54 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
           id: stage.id,
           title: stage.title,
           type: stage.type,
-          subStages: stage.subStages.map(substage => ({
-            id: substage.id,
-            title: substage.title,
-            type: substage.type,
-            duration: substage.duration,
-            scriptBlocks: substage.scriptBlocks || [],
-            interaction: substage.interactionType ? {
-              type: substage.interactionType,
-              config: {}
-            } : null
-          }))
+          subStages: stage.subStages.map(substage => {
+            const interactionData = substage.interaction
+              ? {
+                  id: substage.interaction.id,
+                  type: substage.interaction.type,
+                  name: substage.interaction.name,
+                  category: substage.interaction.category,
+                  contentOutputId: substage.interaction.contentOutputId || substage.contentOutputId || null,
+                  config: substage.interaction.config
+                    ? JSON.parse(JSON.stringify(substage.interaction.config))
+                    : {}
+                }
+              : substage.interactionType
+                ? {
+                    type: substage.interactionType,
+                    contentOutputId: substage.contentOutputId || null,
+                    config: {}
+                  }
+                : null;
+
+            // Convert scriptBlocks from editor format to DB format
+            const dbScriptBlocks = (substage.scriptBlocks || [])
+              .filter(block => block.type === 'teacher_talk') // Only save teacher_talk blocks
+              .map(block => ({
+                id: block.id,
+                text: block.content || '',
+                idealTimestamp: block.startTime || 0,
+                estimatedDuration: (block.endTime || block.startTime || 0) - (block.startTime || 0) || 10,
+                playbackRules: block.metadata || {}
+              }));
+            
+            // Separate scriptBlocks and scriptBlocksAfterInteraction based on interaction position
+            const interactionIndex = (substage.scriptBlocks || []).findIndex(b => b.type === 'load_interaction');
+            const preInteractionScripts = dbScriptBlocks.slice(0, interactionIndex >= 0 ? interactionIndex : dbScriptBlocks.length);
+            const postInteractionScripts = interactionIndex >= 0 ? dbScriptBlocks.slice(interactionIndex) : [];
+
+            return {
+              id: substage.id,
+              title: substage.title,
+              type: substage.type,
+              duration: substage.duration,
+              scriptBlocks: preInteractionScripts,
+              scriptBlocksAfterInteraction: postInteractionScripts,
+              contentOutputId: substage.contentOutputId || interactionData?.contentOutputId || null,
+              interactionType: substage.interactionType || interactionData?.type || null,
+              interaction: interactionData
+            };
+          })
         }))
       }
     };
@@ -3468,9 +3838,83 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
           this.hasDraft = true;
           this.hasPendingDraft = true; // After saving, there's now a pending draft
           this.lastSaved = new Date();
-          // Update pending draft data to current state
-          this.pendingDraftData = draftData;
-          console.log('[LessonEditor] ✅ Draft saved:', response);
+          // Store the draft ID so we can compare it later
+          this.currentDraftId = response?.id || response?.draftId || null;
+          // Update pending draft data to current state (include the draft ID for comparison)
+          this.pendingDraftData = {
+            ...draftData,
+            id: this.currentDraftId
+          };
+          console.log('[LessonEditor] ✅ Draft saved:', response, 'Draft ID:', this.currentDraftId);
+          
+          // CRITICAL: Ensure liveLessonData is set if it's not already set
+          // This allows "Show Current State" to work after saving
+          if (!this.liveLessonData && this.lesson?.id) {
+            // Reload the live lesson to get the current approved state
+            this.http.get<any>(`${environment.apiUrl}/lessons/${this.lesson.id}`, {
+              headers: { 'x-tenant-id': environment.tenantId }
+            }).subscribe({
+              next: (lesson) => {
+                this.liveLessonData = JSON.parse(JSON.stringify(lesson));
+                // Ensure objectives are included
+                if (!this.liveLessonData.objectives && (lesson.objectives || lesson.data?.objectives)) {
+                  this.liveLessonData.objectives = lesson.objectives || lesson.data?.objectives || {};
+                }
+                console.log('[LessonEditor] ✅ Live lesson data loaded after save');
+              },
+              error: (err) => {
+                console.error('[LessonEditor] Failed to load live lesson data after save:', err);
+              }
+            });
+          }
+          
+          // Automatically switch to showing pending changes view after saving
+          if (!this.showingPendingChanges && this.liveLessonData) {
+            // Set flag first, then apply pending changes
+            this.showingPendingChanges = true;
+            // Manually apply pending changes (same logic as togglePendingChanges but without toggling)
+            const liveClone = JSON.parse(JSON.stringify(this.liveLessonData));
+            const draftClone = JSON.parse(JSON.stringify(this.pendingDraftData));
+            
+            const merged: any = {
+              ...liveClone,
+              ...draftClone,
+              id: this.lesson?.id || liveClone?.id || ''
+            };
+            
+            if (draftClone?.objectives) {
+              merged.objectives = JSON.parse(JSON.stringify(draftClone.objectives));
+            } else if (liveClone?.objectives) {
+              merged.objectives = JSON.parse(JSON.stringify(liveClone.objectives));
+            }
+            
+            const mergedData = {
+              ...(liveClone?.data || {}),
+              ...(draftClone?.data || {})
+            };
+            
+            if (draftClone?.data?.objectives) {
+              mergedData.objectives = JSON.parse(JSON.stringify(draftClone.data.objectives));
+            } else if (liveClone?.data?.objectives && !mergedData.objectives) {
+              mergedData.objectives = JSON.parse(JSON.stringify(liveClone.data.objectives));
+            }
+            
+            if (draftClone?.structure) {
+              mergedData.structure = draftClone.structure;
+            } else if (draftClone?.data?.structure) {
+              mergedData.structure = draftClone.data.structure;
+            } else if (draftClone?.data?.stages) {
+              mergedData.structure = { stages: draftClone.data.stages };
+            } else if ((draftClone as any)?.stages) {
+              mergedData.structure = { stages: (draftClone as any).stages };
+            } else if (!mergedData.structure && liveClone?.data?.structure) {
+              mergedData.structure = JSON.parse(JSON.stringify(liveClone.data.structure));
+            }
+            
+            merged.data = mergedData;
+            this.loadLessonDataIntoEditor(merged);
+          }
+          
           this.showSnackbar('Draft saved successfully', 'success');
         },
         error: (error: any) => {
@@ -3486,21 +3930,29 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       });
   }
 
-  submitForApproval() {
-    // Check if draft has been saved
-    if (!this.hasDraft) {
-      console.log('[LessonEditor] ❌ Cannot submit - no draft saved');
-      this.showSnackbar('You must make changes and Save Draft first', 'error');
-      return;
-    }
-
+  async submitForApproval() {
     if (!this.lesson) {
       this.showSnackbar('No lesson to submit', 'error');
       return;
     }
 
+    // Automatically save draft if there are unsaved changes
+    if (this.hasUnsavedChanges || !this.hasDraft) {
+      console.log('[LessonEditor] 💾 Auto-saving draft before submission...');
+      await this.saveDraft();
+      // Wait a moment for save to complete
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    // Check if draft was saved successfully
+    if (!this.hasDraft) {
+      console.log('[LessonEditor] ❌ Cannot submit - draft save failed or no changes');
+      this.showSnackbar('Failed to save draft. Please try again.', 'error');
+      return;
+    }
+
     // Check for pending changes
-    if (this.hasPendingDraft) {
+    if (await this.refreshPendingDraftStatus()) {
       this.pendingWarningAction = 'submit';
       this.showPendingChangesWarning = true;
       return;
@@ -3515,7 +3967,43 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   }
 
   togglePendingChanges() {
-    if (!this.hasPendingDraft || !this.pendingDraftData || !this.liveLessonData) {
+    // If we're currently showing pending changes and want to show current state,
+    // we can do that without needing to refresh (we already have liveLessonData)
+    if (this.showingPendingChanges) {
+      // Toggling from pending to current state - we have liveLessonData, so proceed
+      if (!this.liveLessonData) {
+        console.log('[LessonEditor] Cannot toggle - no live lesson data available');
+        this.showSnackbar('No live lesson data available', 'error');
+        return;
+      }
+      this.doTogglePendingChanges();
+      return;
+    }
+
+    // If we're showing current state and want to show pending changes,
+    // refresh status first to ensure we have latest data
+    this.refreshPendingDraftStatus().then(() => {
+      if (!this.hasPendingDraft || !this.pendingDraftData || !this.liveLessonData) {
+        console.log('[LessonEditor] Cannot toggle - no pending draft data available');
+        this.hasPendingDraft = false;
+        this.pendingDraftData = null;
+        this.showSnackbar('No pending changes to show', 'info');
+        return;
+      }
+      this.doTogglePendingChanges();
+    });
+  }
+
+  private doTogglePendingChanges() {
+    // When showing current state, we only need liveLessonData
+    if (this.showingPendingChanges && !this.liveLessonData) {
+      console.log('[LessonEditor] Cannot toggle to current state - no live lesson data');
+      return;
+    }
+
+    // When showing pending changes, we need both pendingDraftData and liveLessonData
+    if (!this.showingPendingChanges && (!this.hasPendingDraft || !this.pendingDraftData || !this.liveLessonData)) {
+      console.log('[LessonEditor] Cannot toggle to pending changes - missing data');
       return;
     }
 
@@ -3572,20 +4060,35 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       merged.data = mergedData;
       
       console.log('[LessonEditor] 📝 Merged data built from clones:', merged);
+      // Preserve current selection before loading
+      const preservedSelection = { ...this.selectedItem };
       this.loadLessonDataIntoEditor(merged);
+      // Restore selection after loading
+      this.restoreSelection(preservedSelection);
     } else {
-      // Show current state (live lesson)
-      console.log('[LessonEditor] 📋 Showing current state - REVERTING');
-      console.log('[LessonEditor] 📋 Live lesson data exists:', !!this.liveLessonData);
+      // Show current state (live lesson) - RELOAD from server to ensure we have the latest approved state
+      console.log('[LessonEditor] 📋 Showing current state - RELOADING from server');
       
-      if (!this.liveLessonData) {
-        console.error('[LessonEditor] ❌ No live lesson data available to revert to');
-        this.showSnackbar('No live lesson data available', 'error');
+      if (!this.lesson?.id) {
+        console.error('[LessonEditor] ❌ No lesson ID available');
+        this.showSnackbar('No lesson loaded', 'error');
         return;
       }
       
-      // Deep clone to avoid reference issues - CRITICAL!
-      const liveData = JSON.parse(JSON.stringify(this.liveLessonData));
+      // Reload the lesson from server to get the latest approved state
+      this.http.get<any>(`${environment.apiUrl}/lessons/${this.lesson.id}`, {
+        headers: { 'x-tenant-id': environment.tenantId }
+      }).subscribe({
+        next: (lesson) => {
+          // Update liveLessonData with the fresh data from server
+          this.liveLessonData = JSON.parse(JSON.stringify(lesson));
+          // Ensure objectives are included
+          if (!this.liveLessonData.objectives && (lesson.objectives || lesson.data?.objectives)) {
+            this.liveLessonData.objectives = lesson.objectives || lesson.data?.objectives || {};
+          }
+          
+          // Deep clone to avoid reference issues - CRITICAL!
+          const liveData = JSON.parse(JSON.stringify(this.liveLessonData));
       
       console.log('[LessonEditor] 📋 Deep cloned live data');
       console.log('[LessonEditor] 📋 Original liveLessonData stages:', {
@@ -3626,9 +4129,29 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
                          liveData.structure?.stages?.[0]?.title || 'none'
       });
       
-      console.log('[LessonEditor] 📋 About to load live data into editor');
-      this.loadLessonDataIntoEditor(liveData);
-      console.log('[LessonEditor] 📋 Live data loaded into editor');
+          console.log('[LessonEditor] 📋 About to load live data into editor');
+          // Preserve current selection before loading
+          const preservedSelection = { ...this.selectedItem };
+          this.loadLessonDataIntoEditor(liveData);
+          // Restore selection after loading
+          this.restoreSelection(preservedSelection);
+          
+          // If interaction config modal is open, reload the config from the live data
+          if (this.showInteractionConfigModal) {
+            const substage = this.getSelectedSubStage();
+            if (substage?.interaction?.config) {
+              this.interactionConfig = JSON.parse(JSON.stringify(substage.interaction.config));
+              console.log('[LessonEditor] 📋 Reloaded interaction config from live data');
+            }
+          }
+          
+          console.log('[LessonEditor] 📋 Live data loaded into editor');
+        },
+        error: (err) => {
+          console.error('[LessonEditor] ❌ Failed to reload live lesson:', err);
+          this.showSnackbar('Failed to reload current state', 'error');
+        }
+      });
     }
   }
 
@@ -3675,6 +4198,19 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       // Completely replace the array
       this.stages.splice(0, this.stages.length, ...parsedStages);
       
+      // Collapse all script blocks by default
+      this.collapsedScriptBlocks.clear();
+      this.stages.forEach(stage => {
+        stage.subStages.forEach(substage => {
+          if (substage.scriptBlocks) {
+            substage.scriptBlocks.forEach((block) => {
+              this.collapsedScriptBlocks.add(block.id);
+            });
+          }
+        });
+      });
+      console.log('[LessonEditor] 📦 Collapsed all script blocks by default');
+      
       console.log('[LessonEditor] 🔄 Parsed stages count:', this.stages.length);
       console.log('[LessonEditor] 🔄 Stages array reference changed:', this.stages);
       if (this.stages.length > 0) {
@@ -3712,8 +4248,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     console.log('[LessonEditor] 🔄 Loaded learning objectives:', this.learningObjectives);
     console.log('[LessonEditor] 🔄 Loaded lesson outcomes:', this.lessonOutcomes);
     
-    // Reset selection to lesson
-    this.selectedItem = { type: 'lesson', id: this.lesson?.id || lessonData.id || '' };
+    // Don't reset selection here - let restoreSelection handle it
     
     // Force change detection immediately
     this.cdr.detectChanges();
@@ -3742,10 +4277,32 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     this.pendingWarningAction = null;
   }
 
-  confirmPendingWarning() {
+  async confirmPendingWarning() {
     this.showPendingChangesWarning = false;
     const action = this.pendingWarningAction;
     this.pendingWarningAction = null;
+
+    // Delete older drafts first
+    if (this.olderDraftIds.length > 0) {
+      console.log('[LessonEditor] Deleting older drafts:', this.olderDraftIds);
+      const deletePromises = this.olderDraftIds.map(draftId =>
+        this.http.delete(`${environment.apiUrl}/lesson-drafts/${draftId}`, {
+          headers: {
+            'x-tenant-id': environment.tenantId,
+            'x-user-id': environment.defaultUserId
+          }
+        }).pipe(
+          catchError(error => {
+            console.error(`[LessonEditor] Failed to delete draft ${draftId}:`, error);
+            return of(null);
+          })
+        ).toPromise()
+      );
+      
+      await Promise.all(deletePromises);
+      console.log('[LessonEditor] Older drafts deleted');
+      this.olderDraftIds = [];
+    }
 
     if (action === 'save') {
       this.executeSaveDraft();
@@ -3784,9 +4341,13 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   // Snackbar helper
   showSnackbar(message: string, type: 'success' | 'error' | 'info' = 'info') {
+    console.log('[LessonEditor] 🍪 Showing snackbar:', message, type);
     this.snackbarMessage = message;
     this.snackbarType = type;
     this.snackbarVisible = true;
+    
+    // Force change detection
+    this.cdr.detectChanges();
     
     // Auto-hide after 3 seconds
     if (this.snackbarTimeout) {
@@ -3794,10 +4355,17 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     }
     this.snackbarTimeout = setTimeout(() => {
       this.snackbarVisible = false;
+      this.cdr.detectChanges();
     }, 3000);
   }
 
   canSubmit(): boolean {
+    // Can't submit if there are no unsaved changes and no draft
+    if (!this.hasUnsavedChanges && !this.hasDraft) {
+      return false;
+    }
+    // Can submit if there are unsaved changes or if there's a draft that hasn't been submitted
+    return this.hasUnsavedChanges || (this.hasDraft && !this.hasBeenSubmitted);
     return !!(this.lesson?.title && this.stages.length > 0);
   }
 
@@ -3817,6 +4385,10 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   // Selection
   selectItem(item: {type: 'lesson' | 'stage' | 'substage', id: string, stageId?: string}) {
     this.selectedItem = item;
+    // Load preview data if we're on preview tab and selected a substage
+    if (this.activeTab === 'preview' && item.type === 'substage') {
+      this.ensurePreviewDataLoaded();
+    }
     console.log('[LessonEditor] 📍 Selected:', item);
     
     // Debug: Show the full substage data when selected
@@ -3901,15 +4473,66 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     if (!substage.scriptBlocks) {
       substage.scriptBlocks = [];
     }
+    
+    // Calculate next available time period (10 seconds after the last block ends)
+    let nextStartTime = 0;
+    if (substage.scriptBlocks.length > 0) {
+      // Find the maximum end time among all blocks
+      const maxEndTime = Math.max(...substage.scriptBlocks.map(block => block.endTime || block.startTime || 0));
+      nextStartTime = maxEndTime;
+    }
+    
     const newBlock: ScriptBlock = {
       id: `block-${Date.now()}`,
       type: 'teacher_talk',
       content: '',
-      startTime: substage.scriptBlocks.length * 10,
-      endTime: (substage.scriptBlocks.length * 10) + 10
+      startTime: nextStartTime,
+      endTime: nextStartTime + 10
     };
     substage.scriptBlocks.push(newBlock);
     this.markAsChanged();
+  }
+
+  /**
+   * Restore selection after loading lesson data
+   */
+  restoreSelection(preservedSelection: {type: 'lesson' | 'stage' | 'substage', id: string, stageId?: string}) {
+    // Wait a tick for Angular to finish rendering
+    setTimeout(() => {
+      if (preservedSelection.type === 'substage' && preservedSelection.stageId) {
+        // Try to find and restore the substage selection
+        const stage = this.stages.find(s => s.id === preservedSelection.stageId);
+        if (stage) {
+          const substage = stage.subStages.find(ss => ss.id === preservedSelection.id);
+          if (substage) {
+            this.selectedItem = {
+              type: 'substage',
+              id: preservedSelection.id,
+              stageId: preservedSelection.stageId
+            };
+            console.log('[LessonEditor] ✅ Restored substage selection:', this.selectedItem);
+            return;
+          }
+        }
+      } else if (preservedSelection.type === 'stage') {
+        // Try to find and restore the stage selection
+        const stage = this.stages.find(s => s.id === preservedSelection.id);
+        if (stage) {
+          this.selectedItem = {
+            type: 'stage',
+            id: preservedSelection.id
+          };
+          console.log('[LessonEditor] ✅ Restored stage selection:', this.selectedItem);
+          return;
+        }
+      }
+      
+      // If we couldn't restore the exact selection, keep current or default to lesson
+      if (this.selectedItem.type === 'lesson' || !this.selectedItem.id) {
+        this.selectedItem = { type: 'lesson', id: this.lesson?.id || '' };
+      }
+      console.log('[LessonEditor] ⚠️ Could not restore exact selection, kept current:', this.selectedItem);
+    }, 0);
   }
 
   deleteScriptBlock(index: number) {
@@ -4031,8 +4654,248 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     return labels[category] || category;
   }
 
-  selectContent() {
-    this.showContentLibrary = true;
+  openProcessedContentPicker(context: 'structure' | 'interaction') {
+    const substage = this.getSelectedSubStage();
+    if (!substage) {
+      this.showSnackbar('Select a substage first', 'error');
+      return;
+    }
+    if (context === 'interaction' && !substage.interaction) {
+      this.showSnackbar('Add an interaction before selecting processed content', 'error');
+      return;
+    }
+
+    this.processedContentSelectionContext = context;
+    this.processedContentSearchQuery = '';
+    this.processedContentSearchResults = [];
+    this.processedContentSearchActive = false;
+    this.showProcessedContentPicker = true;
+
+    document.body.style.overflow = 'hidden';
+    const header = document.querySelector('app-header');
+    if (header) (header as HTMLElement).style.display = 'none';
+  }
+
+  closeProcessedContentPicker() {
+    this.showProcessedContentPicker = false;
+    this.isProcessedContentSearching = false;
+    document.body.style.overflow = '';
+    const header = document.querySelector('app-header');
+    if (header) (header as HTMLElement).style.display = '';
+  }
+
+  async searchProcessedContent() {
+    const query = this.processedContentSearchQuery.trim();
+    if (!query) {
+      this.clearProcessedContentSearch();
+      return;
+    }
+
+    this.processedContentSearchActive = true;
+    this.isProcessedContentSearching = true;
+
+    try {
+      if (this.accountProcessedContentItems.length === 0) {
+        const results = await firstValueFrom(
+          this.http.get<ProcessedContentItem[]>(`${environment.apiUrl}/lesson-editor/processed-outputs/all`)
+        );
+        this.accountProcessedContentItems = results || [];
+      }
+      const queryLower = query.toLowerCase();
+      this.processedContentSearchResults = this.accountProcessedContentItems.filter(item => {
+        const title = (item.title || '').toLowerCase();
+        const workflow = (item.workflowName || '').toLowerCase();
+        const sourceTitle = (item.contentSource?.title || '').toLowerCase();
+        return title.includes(queryLower) || workflow.includes(queryLower) || sourceTitle.includes(queryLower);
+      });
+    } catch (error) {
+      console.error('[LessonEditor] Failed to search processed content:', error);
+      this.showSnackbar('Failed to search processed content', 'error');
+      this.processedContentSearchResults = [];
+    } finally {
+      this.isProcessedContentSearching = false;
+    }
+  }
+
+  clearProcessedContentSearch() {
+    this.processedContentSearchQuery = '';
+    this.processedContentSearchActive = false;
+    this.processedContentSearchResults = [];
+    this.isProcessedContentSearching = false;
+  }
+
+  selectProcessedContentItem(item: ProcessedContentItem) {
+    const substage = this.getSelectedSubStage();
+    if (!substage) {
+      this.showSnackbar('Select a substage first', 'error');
+      return;
+    }
+
+    const normalizedId = item.id;
+    substage.contentOutputId = normalizedId;
+
+    if (this.processedContentSelectionContext === 'interaction') {
+      if (!substage.interaction) {
+        this.showSnackbar('Add an interaction before selecting processed content', 'error');
+        return;
+      }
+      substage.interaction.contentOutputId = normalizedId;
+    }
+
+    if (!this.processedContentItems.find(existing => existing.id === normalizedId)) {
+      this.processedContentItems.push(item);
+    }
+
+    if (this.processedContentSelectionContext === 'interaction' && this.showInteractionConfigModal && substage.interaction) {
+      this.loadProcessedOutputPreview(String(substage.interaction.contentOutputId), substage.interaction.type);
+    }
+
+    this.markAsChanged();
+    this.showSnackbar('Processed content linked to substage', 'success');
+    this.closeProcessedContentPicker();
+  }
+
+  get processedContentPickerList(): ProcessedContentItem[] {
+    if (this.processedContentSearchActive) {
+      return this.processedContentSearchResults;
+    }
+    return this.processedContentItems;
+  }
+
+  /**
+   * Check if there's actually a pending draft on the server (different from current)
+   */
+  hasPendingDraftOnServer(): boolean {
+    // Show button if:
+    // 1. We're currently showing pending changes (so user can toggle back to current state)
+    if (this.showingPendingChanges) {
+      // If we're showing pending changes, always show the button so user can toggle back
+      return true;
+    }
+    
+    // If not showing pending changes, check if we have pending draft data WITH actual changes
+    if (!this.hasPendingDraft || !this.pendingDraftData) {
+      return false;
+    }
+    
+    // Check if there are actual changes - if changesCount is 0 or undefined, don't show button
+    // We need to check the draft status to see if it has changes
+    // For now, if we have pending draft data, assume there are changes
+    // But we should verify this by checking the draft's changesCount if available
+    return true;
+  }
+
+  private async refreshPendingDraftStatus(): Promise<boolean> {
+    if (!this.lesson?.id) {
+      this.hasPendingDraft = false;
+      this.pendingDraftData = null;
+      return false;
+    }
+
+    try {
+      // Get all pending drafts for this lesson to check count
+      // Try the /all endpoint first, fallback to single draft endpoint
+      let allDrafts: any[] = [];
+      try {
+        allDrafts = await firstValueFrom(
+          this.http.get<any[]>(`${environment.apiUrl}/lesson-drafts/lesson/${this.lesson.id}/all`, {
+            headers: {
+              'x-tenant-id': environment.tenantId,
+              'x-user-id': environment.defaultUserId
+            }
+          }).pipe(
+            catchError(() => {
+              // Fallback to single draft endpoint
+              if (!this.lesson?.id) {
+                return of([]);
+              }
+              return this.http.get<any>(`${environment.apiUrl}/lesson-drafts/lesson/${this.lesson.id}`, {
+                headers: {
+                  'x-tenant-id': environment.tenantId,
+                  'x-user-id': environment.defaultUserId
+                }
+              }).pipe(
+                map(draft => draft && draft.status === 'pending' ? [draft] : []),
+                catchError(() => of([]))
+              );
+            })
+          )
+        );
+      } catch (error) {
+        // If /all doesn't exist, try single draft endpoint
+        if (!this.lesson?.id) {
+          allDrafts = [];
+        } else {
+          const singleDraft = await firstValueFrom(
+            this.http.get<any>(`${environment.apiUrl}/lesson-drafts/lesson/${this.lesson.id}`, {
+              headers: {
+                'x-tenant-id': environment.tenantId,
+                'x-user-id': environment.defaultUserId
+              }
+            }).pipe(
+              map(draft => draft && draft.status === 'pending' ? [draft] : []),
+              catchError(() => of([]))
+            )
+          );
+          allDrafts = singleDraft;
+        }
+      }
+
+      const pendingDrafts = (allDrafts || []).filter((d: any) => d.status === 'pending');
+      const pendingCount = pendingDrafts.length;
+
+      console.log('[LessonEditor] Found pending drafts:', pendingCount);
+
+      if (pendingCount === 0) {
+        this.hasPendingDraft = false;
+        this.pendingDraftData = null;
+        return false;
+      }
+
+      // Get the most recent pending draft
+      const latestDraft = pendingDrafts.sort((a: any, b: any) => 
+        new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      )[0];
+
+      // Only set as pending if the draft has actual changes
+      if (latestDraft.changesCount && latestDraft.changesCount > 0) {
+        this.hasPendingDraft = true;
+        this.pendingDraftData = latestDraft.draftData;
+        this.lastSaved = latestDraft.createdAt ? new Date(latestDraft.createdAt) : this.lastSaved;
+      } else {
+        // No actual changes, so no pending draft
+        this.hasPendingDraft = false;
+        this.pendingDraftData = null;
+      }
+
+      // Only show warning if there are 2+ pending drafts (meaning there's an older one to discard)
+      // If there's only 1 pending draft and it's the one we just created, don't warn
+      if (pendingCount === 1 && this.currentDraftId) {
+        const draftId = latestDraft.id || latestDraft.draftId;
+        if (String(draftId) === String(this.currentDraftId)) {
+          console.log('[LessonEditor] Only one pending draft (the current one), no warning needed');
+          return false; // Don't show warning
+        }
+      }
+
+      // 2+ pending drafts exist, show warning
+      if (pendingCount >= 2) {
+        // Store older draft IDs for potential discarding
+        this.olderDraftIds = pendingDrafts
+          .filter((d: any) => {
+            const draftId = d.id || d.draftId;
+            return draftId && String(draftId) !== String(this.currentDraftId);
+          })
+          .map((d: any) => d.id || d.draftId);
+        console.log('[LessonEditor] Multiple pending drafts found, will show warning. Older drafts:', this.olderDraftIds);
+        return true; // Show warning
+      }
+
+      return false;
+    } catch (error) {
+      console.error('[LessonEditor] Failed to refresh pending draft status:', error);
+      return this.hasPendingDraft;
+    }
   }
 
   // AI Assistant
@@ -4086,6 +4949,117 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     const data = JSON.parse(event.dataTransfer!.getData('text/plain'));
     console.log('[LessonEditor] 📍 Drop sub-stage', data, 'on:', targetSubstage.id);
     // TODO: Implement sub-stage reordering
+  }
+
+  // Script Block Drag & Drop
+  onScriptBlockDragStart(block: ScriptBlock, index: number, event: DragEvent) {
+    console.log('[LessonEditor] 🎯 Script block drag start:', index);
+    event.dataTransfer!.effectAllowed = 'move';
+    event.dataTransfer!.setData('text/plain', index.toString());
+    this.draggedScriptBlockIndex = index;
+  }
+
+  onScriptBlockDragOver(targetIndex: number, event: DragEvent) {
+    event.preventDefault();
+    event.dataTransfer!.dropEffect = 'move';
+    this.dragOverScriptBlockIndex = targetIndex;
+  }
+
+  onScriptBlockDragLeave() {
+    this.dragOverScriptBlockIndex = null;
+  }
+
+  onScriptBlockDrop(targetIndex: number, event: DragEvent) {
+    event.preventDefault();
+    const sourceIndex = parseInt(event.dataTransfer!.getData('text/plain'), 10);
+    this.dragOverScriptBlockIndex = null;
+    
+    if (this.draggedScriptBlockIndex === null || sourceIndex === targetIndex) {
+      this.draggedScriptBlockIndex = null;
+      return;
+    }
+
+    const substage = this.getSelectedSubStage();
+    if (!substage || !substage.scriptBlocks) {
+      this.draggedScriptBlockIndex = null;
+      return;
+    }
+
+    console.log('[LessonEditor] 📍 Drop script block', sourceIndex, 'to:', targetIndex);
+    
+    // Reorder script blocks
+    const blocks = substage.scriptBlocks;
+    const [movedBlock] = blocks.splice(sourceIndex, 1);
+    blocks.splice(targetIndex, 0, movedBlock);
+    
+    // Recalculate times to preserve top-to-bottom chronology
+    const timesUpdated = this.recalculateScriptBlockTimes(substage.scriptBlocks);
+    
+    this.draggedScriptBlockIndex = null;
+    this.markAsChanged();
+    
+    if (timesUpdated) {
+      this.showSnackbar('Time period updated to preserve chronology', 'info');
+    } else {
+      this.showSnackbar('Script blocks reordered', 'success');
+    }
+  }
+
+  /**
+   * Recalculate script block times to preserve top-to-bottom chronology
+   * Blocks are updated to maintain sequential order regardless of type
+   */
+  private recalculateScriptBlockTimes(blocks: ScriptBlock[]): boolean {
+    let timesUpdated = false;
+    
+    // Preserve top-to-bottom chronology - each block starts after the previous one ends
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i];
+      const previousBlock = i > 0 ? blocks[i - 1] : null;
+      
+      if (previousBlock) {
+        const previousEndTime = previousBlock.endTime || previousBlock.startTime;
+        const currentDuration = (block.endTime || block.startTime) - (block.startTime || 0) || 10;
+        
+        // If this block starts before the previous one ends, adjust it
+        if (block.startTime < previousEndTime) {
+          block.startTime = previousEndTime;
+          block.endTime = block.startTime + currentDuration;
+          timesUpdated = true;
+        }
+      } else {
+        // First block - ensure it starts at 0
+        if (block.startTime !== 0) {
+          const duration = (block.endTime || block.startTime) - (block.startTime || 0) || 10;
+          block.startTime = 0;
+          block.endTime = duration;
+          timesUpdated = true;
+        }
+      }
+    }
+    
+    return timesUpdated;
+  }
+
+  toggleScriptBlockCollapse(blockId: string) {
+    if (this.collapsedScriptBlocks.has(blockId)) {
+      this.collapsedScriptBlocks.delete(blockId);
+    } else {
+      this.collapsedScriptBlocks.add(blockId);
+    }
+  }
+
+  isScriptBlockCollapsed(blockId: string): boolean {
+    return this.collapsedScriptBlocks.has(blockId);
+  }
+
+  getBlockTypeLabel(type: string): string {
+    const labels: Record<string, string> = {
+      teacher_talk: 'Teacher Talk',
+      load_interaction: 'Interaction',
+      pause: 'Pause'
+    };
+    return labels[type] || 'Block';
   }
 
   // Helpers
@@ -4147,7 +5121,55 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       const seconds = parseInt(match[2], 10);
       const totalSeconds = (minutes * 60) + seconds;
       
-      block[field] = totalSeconds;
+      const substage = this.getSelectedSubStage();
+      if (!substage || !substage.scriptBlocks) {
+        (block as any)[field] = totalSeconds;
+        this.markAsChanged();
+        return;
+      }
+
+      // Check for overlaps if updating startTime
+      if (field === 'startTime') {
+        const adjustedTime = this.adjustStartTimeForOverlap(block, totalSeconds, substage.scriptBlocks);
+        if (adjustedTime !== totalSeconds) {
+          (block as any)[field] = adjustedTime;
+          event.target.value = this.formatTime(adjustedTime);
+          this.markAsChanged();
+          // Show snackbar immediately
+          this.showSnackbar('Script start time updated. Script block periods cannot overlap', 'info');
+        } else {
+          (block as any)[field] = totalSeconds;
+        }
+      } else if (field === 'endTime') {
+        // Check if endTime overlaps with next block of the same type's startTime
+        const blockIndex = substage.scriptBlocks.indexOf(block);
+        if (blockIndex >= 0) {
+          // Find the next block of the same type
+          let nextSameTypeBlock: ScriptBlock | null = null;
+          for (let i = blockIndex + 1; i < substage.scriptBlocks.length; i++) {
+            if (substage.scriptBlocks[i].type === block.type) {
+              nextSameTypeBlock = substage.scriptBlocks[i];
+              break;
+            }
+          }
+          
+          if (nextSameTypeBlock && totalSeconds > nextSameTypeBlock.startTime) {
+            // End time would overlap with next block of same type, adjust to just before it starts
+            (block as any)[field] = nextSameTypeBlock.startTime;
+            event.target.value = this.formatTime(nextSameTypeBlock.startTime);
+            this.markAsChanged();
+            // Show snackbar immediately
+            this.showSnackbar('Script end time updated. Script block periods cannot overlap', 'info');
+          } else {
+            (block as any)[field] = totalSeconds;
+          }
+        } else {
+          (block as any)[field] = totalSeconds;
+        }
+      } else {
+        (block as any)[field] = totalSeconds;
+      }
+      
       this.markAsChanged();
       console.log(`[LessonEditor] ⏱️ Time updated: ${input} = ${totalSeconds}s`);
     } else {
@@ -4156,6 +5178,60 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       event.target.value = this.formatTime(block[field]);
       this.showSnackbar('Invalid time format. Use MM:SS (e.g., 1:30)', 'error');
     }
+  }
+
+  /**
+   * Adjust start time to prevent overlap with other script blocks of the same type
+   */
+  private adjustStartTimeForOverlap(block: ScriptBlock, proposedStartTime: number, allBlocks: ScriptBlock[]): number {
+    const blockIndex = allBlocks.indexOf(block);
+    if (blockIndex < 0) return proposedStartTime;
+
+    // Only check blocks of the same type
+    const sameTypeBlocks = allBlocks.filter(b => b.type === block.type);
+    const sameTypeIndex = sameTypeBlocks.indexOf(block);
+    if (sameTypeIndex < 0) return proposedStartTime;
+
+    // Find the previous block of the same type in the full array
+    let previousSameTypeBlock: ScriptBlock | null = null;
+    for (let i = blockIndex - 1; i >= 0; i--) {
+      if (allBlocks[i].type === block.type) {
+        previousSameTypeBlock = allBlocks[i];
+        break;
+      }
+    }
+
+    // Check overlap with previous block of same type
+    if (previousSameTypeBlock) {
+      const previousEndTime = previousSameTypeBlock.endTime || previousSameTypeBlock.startTime;
+      if (proposedStartTime < previousEndTime) {
+        // Overlap detected, adjust to start right after previous block of same type ends
+        return previousEndTime;
+      }
+    }
+
+    // Find the next block of the same type in the full array
+    let nextSameTypeBlock: ScriptBlock | null = null;
+    for (let i = blockIndex + 1; i < allBlocks.length; i++) {
+      if (allBlocks[i].type === block.type) {
+        nextSameTypeBlock = allBlocks[i];
+        break;
+      }
+    }
+
+    // Check overlap with next block of same type
+    if (nextSameTypeBlock) {
+      if (proposedStartTime >= nextSameTypeBlock.startTime) {
+        // Would overlap with next block of same type
+        // So we keep it at the earliest available time (after previous block of same type)
+        if (previousSameTypeBlock) {
+          return previousSameTypeBlock.endTime || previousSameTypeBlock.startTime;
+        }
+        return 0; // First block of this type, can't go earlier
+      }
+    }
+
+    return proposedStartTime;
   }
 
   markAsChanged() {
@@ -4246,9 +5322,51 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     return this.substageTypeLabels[type] || type;
   }
 
-  getContentOutputName(outputId: string): string {
-    const output = this.processedContentItems.find(item => item.id === outputId);
-    return output?.title || 'Unknown Content';
+  getContentOutputName(outputId?: string | number | null): string {
+    if (outputId === null || outputId === undefined) {
+      return 'None';
+    }
+    const normalizedId = typeof outputId === 'string' ? outputId : String(outputId);
+    const output = this.resolveProcessedContentById(normalizedId);
+    return output?.title || output?.workflowName || 'Unknown Processed Content';
+  }
+
+  getInteractionProcessedContentLabel(): string {
+    const substage = this.getSelectedSubStage();
+    if (!substage) {
+      return 'None';
+    }
+    const id = substage.interaction?.contentOutputId || substage.contentOutputId;
+    return this.getContentOutputName(id);
+  }
+
+  showInteractionNotConfiguredWarning(): boolean {
+    const substage = this.getSelectedSubStage();
+    if (!substage?.interaction) {
+      return true;
+    }
+    const contentId = substage.interaction.contentOutputId || substage.contentOutputId;
+    if (!contentId) {
+      return true;
+    }
+    return !this.hasValidInteractionPreviewData(this.interactionPreviewData);
+  }
+
+  private resolveProcessedContentById(id: string): ProcessedContentItem | undefined {
+    return this.processedContentItems.find(item => item.id === id)
+      || this.accountProcessedContentItems.find(item => item.id === id);
+  }
+
+  private hasValidInteractionPreviewData(data: any): boolean {
+    if (!data) return false;
+    
+    // For code-based interactions (iframe/html/pixijs), check for code
+    if (data.interactionCategory === 'iframe' || data.interactionCategory === 'html' || data.interactionCategory === 'pixijs') {
+      return !!(data.htmlCode || data.jsCode);
+    }
+    
+    // For legacy interactions (like true-false-selection), check for fragments
+    return !!(Array.isArray(data.fragments) && data.fragments.length > 0 && data.targetStatement);
   }
 
   /**
@@ -4333,8 +5451,10 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       return;
     }
     
-    // Load interaction config (or create default if doesn't exist)
-    this.interactionConfig = substage.interaction.config ? { ...substage.interaction.config } : {};
+    // Load interaction config from the CURRENT view (pending or live)
+    // Always use the current substage from the editor (which reflects the current view state)
+    const currentSubstage = this.getSelectedSubStage();
+    this.interactionConfig = currentSubstage?.interaction?.config ? JSON.parse(JSON.stringify(currentSubstage.interaction.config)) : {};
     this.interactionConfigTab = 'configure'; // Reset to configure tab
     
     const interactionTypeId = substage.interaction.type;
@@ -4349,26 +5469,10 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
           // Fetch the processed output data for preview
           const contentOutputId = substage.interaction?.contentOutputId;
           if (contentOutputId) {
-            this.http.get(`${environment.apiUrl}/lesson-editor/processed-outputs/${contentOutputId}`)
-              .subscribe({
-                next: (outputData: any) => {
-                  console.log('[LessonEditor] Loaded processed output for preview:', outputData);
-                  // Merge config with output data for preview
-                  this.interactionPreviewData = {
-                    ...this.interactionConfig,
-                    fragments: outputData.outputData?.statements?.map((stmt: any) => ({
-                      text: stmt.text,
-                      isTrueInContext: stmt.isTrue
-                    })) || [],
-                    interactionTypeId: substage.interaction?.type || 'true-false-selection'
-                  };
-                  console.log('[LessonEditor] Preview data prepared:', this.interactionPreviewData);
-                },
-                error: (err) => {
-                  console.error('[LessonEditor] Failed to load processed output:', err);
-                  this.interactionPreviewData = null;
-                }
-              });
+            this.loadProcessedOutputPreview(String(contentOutputId), interactionTypeId);
+          } else {
+            this.interactionPreviewData = null;
+            this.isInteractionPreviewLoading = false;
           }
           
           this.showInteractionConfigModal = true;
@@ -4381,15 +5485,242 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       });
   }
 
+  /**
+   * Ensure preview data is loaded when viewing preview tab with a substage that has an interaction
+   */
+  ensurePreviewDataLoaded() {
+    if (this.activeTab !== 'preview') {
+      return;
+    }
+    
+    const substage = this.getSelectedSubStage();
+    if (!substage?.interaction) {
+      this.interactionPreviewData = null;
+      this.isInteractionPreviewLoading = false;
+      return;
+    }
+    
+    const interactionTypeId = substage.interaction.type;
+    
+    // For iframe/html/pixijs interactions, we need to load the interaction type first
+    if (!this.currentInteractionType || this.currentInteractionType.id !== interactionTypeId) {
+      // Load interaction type to get htmlCode, cssCode, jsCode
+      this.http.get(`${environment.apiUrl}/interaction-types/${interactionTypeId}`)
+        .subscribe({
+          next: (interactionType: any) => {
+            console.log('[LessonEditor] Loaded interaction type for preview:', interactionType);
+            this.currentInteractionType = interactionType;
+            this.loadPreviewDataForSubstage(substage);
+          },
+          error: (err) => {
+            console.error('[LessonEditor] Failed to load interaction type for preview:', err);
+            this.interactionPreviewData = null;
+            this.isInteractionPreviewLoading = false;
+          }
+        });
+    } else {
+      this.loadPreviewDataForSubstage(substage);
+    }
+  }
+
+  private loadPreviewDataForSubstage(substage: SubStage) {
+    if (!substage?.interaction) {
+      this.interactionPreviewData = null;
+      this.isInteractionPreviewLoading = false;
+      return;
+    }
+    
+    let contentOutputId: string | number | undefined = substage.interaction.contentOutputId || substage.contentOutputId;
+    if (!contentOutputId) {
+      const assignedId = this.tryAssignProcessedContentToSubstage(substage);
+      if (assignedId) {
+        contentOutputId = assignedId;
+      }
+    }
+    if (!contentOutputId) {
+      this.interactionPreviewData = null;
+      this.isInteractionPreviewLoading = false;
+      return;
+    }
+    
+    // Always reload preview data to ensure we have the latest config (especially for URL normalization)
+    // Don't cache - reload every time to get fresh config with normalized URLs
+    console.log('[LessonEditor] Loading preview data for substage:', substage.title, 'contentOutputId:', contentOutputId);
+    this.loadProcessedOutputPreview(String(contentOutputId), substage.interaction.type);
+  }
+
+  private loadProcessedOutputPreview(contentOutputId: string, interactionTypeId: string) {
+    this.isInteractionPreviewLoading = true;
+    
+    // Check if this is an iframe/html/pixijs interaction
+    const interactionCategory = this.currentInteractionType?.interactionTypeCategory || '';
+    const isCodeBasedInteraction = ['iframe', 'html', 'pixijs'].includes(interactionCategory);
+    
+    if (isCodeBasedInteraction) {
+      // For code-based interactions, we need the processed output data AND the interaction type code
+      this.http.get(`${environment.apiUrl}/lesson-editor/processed-outputs/${contentOutputId}`)
+        .subscribe({
+          next: (outputData: any) => {
+            console.log('[LessonEditor] Loaded processed output for code-based preview:', outputData);
+            
+            // Get interaction config from substage (may be more up-to-date than this.interactionConfig)
+            // This should match what's currently in the field
+            const substage = this.getSelectedSubStage();
+            const interactionConfig = substage?.interaction?.config || this.interactionConfig || {};
+            
+            console.log('[LessonEditor] 🔍 Raw interactionConfig.iframeGuideWebpageUrl from substage:', interactionConfig.iframeGuideWebpageUrl);
+            
+            // CRITICAL: Ensure URL is normalized before storing in interactionPreviewData
+            // This is the source of truth for preview
+            // DO NOT add www. - only add https:// protocol
+            let finalUrl = interactionConfig.iframeGuideWebpageUrl;
+            if (finalUrl) {
+              let url = String(finalUrl).trim();
+              // Remove any existing protocol to avoid duplicates
+              url = url.replace(/^https?:\/\//i, '');
+              // DO NOT add www. - just add https:// prefix
+              finalUrl = 'https://' + url;
+              console.log('[LessonEditor] 🔗 Normalized URL in loadProcessedOutputPreview:', finalUrl, '(original:', interactionConfig.iframeGuideWebpageUrl, ')');
+            }
+            
+            // Create normalized config with the normalized URL
+            const normalizedConfig = { 
+              ...interactionConfig,
+              iframeGuideWebpageUrl: finalUrl || interactionConfig.iframeGuideWebpageUrl
+            };
+            
+            // Store the processed output data and interaction type info
+            this.interactionPreviewData = {
+              ...normalizedConfig,
+              iframeGuideWebpageUrl: finalUrl, // Use normalized URL
+              contentOutputId: contentOutputId,
+              interactionTypeId: interactionTypeId,
+              interactionCategory: interactionCategory,
+              outputData: outputData.outputData || outputData,
+              // Include interaction type code for rendering
+              htmlCode: this.currentInteractionType?.htmlCode || '',
+              cssCode: this.currentInteractionType?.cssCode || '',
+              jsCode: this.currentInteractionType?.jsCode || ''
+            };
+            console.log('[LessonEditor] 🔍 Stored interactionPreviewData with URL:', this.interactionPreviewData.iframeGuideWebpageUrl);
+            this.isInteractionPreviewLoading = false;
+          },
+          error: (err) => {
+            console.error('[LessonEditor] Failed to load processed output:', err);
+            this.interactionPreviewData = null;
+            this.isInteractionPreviewLoading = false;
+          }
+        });
+    } else {
+      // For legacy interactions (like true-false-selection), use the existing logic
+      this.http.get(`${environment.apiUrl}/lesson-editor/processed-outputs/${contentOutputId}`)
+        .subscribe({
+          next: (outputData: any) => {
+            console.log('[LessonEditor] Loaded processed output for preview:', outputData);
+            
+            // Handle different data formats (same as lesson-view)
+            let fragments: any[] = [];
+            let targetStatement = 'True or False?';
+            
+            if (outputData.outputData) {
+              if (outputData.outputData.fragments && Array.isArray(outputData.outputData.fragments)) {
+                // New format with fragments
+                fragments = outputData.outputData.fragments;
+                targetStatement = outputData.outputData.targetStatement || outputData.outputName || 'True or False?';
+              } else if (outputData.outputData.statements && Array.isArray(outputData.outputData.statements)) {
+                // Legacy format with statements - convert to fragments
+                fragments = outputData.outputData.statements.map((stmt: any) => ({
+                  text: stmt.text,
+                  isTrueInContext: stmt.isTrue,
+                  explanation: stmt.explanation || ''
+                }));
+                targetStatement = outputData.outputData.targetStatement || outputData.outputName || 'True or False?';
+              }
+            }
+            
+            this.interactionPreviewData = {
+              ...this.interactionConfig,
+              contentOutputId: contentOutputId, // Store the ID to avoid reloading
+              fragments: fragments,
+              targetStatement: targetStatement,
+              interactionTypeId: interactionTypeId || 'true-false-selection'
+            };
+            this.isInteractionPreviewLoading = false;
+          },
+          error: (err) => {
+            console.error('[LessonEditor] Failed to load processed output:', err);
+            this.interactionPreviewData = null;
+            this.isInteractionPreviewLoading = false;
+          }
+        });
+    }
+  }
+
+  private tryAssignProcessedContentToSubstage(substage: SubStage): string | null {
+    const expectedType = substage.interaction?.type || substage.interactionType;
+    const candidates: ProcessedContentItem[] = [
+      ...this.processedContentItems,
+      ...this.accountProcessedContentItems
+    ];
+
+    let match = candidates.find(item => {
+      const itemType = item.type || (item as any).outputType;
+      return expectedType && itemType && itemType === expectedType;
+    });
+
+    if (!match && this.processedContentItems.length === 1) {
+      match = this.processedContentItems[0];
+    }
+
+    if (match) {
+      substage.contentOutputId = match.id;
+      if (substage.interaction) {
+        substage.interaction.contentOutputId = match.id;
+      }
+      console.log('[LessonEditor] 🔗 Auto-linked processed content for preview:', match.title || match.id);
+      return String(match.id);
+    }
+
+    console.warn('[LessonEditor] ⚠️ Could not auto-link processed content for preview');
+    return null;
+  }
+
   saveInteractionConfig(config: any) {
     const substage = this.getSelectedSubStage();
     if (!substage?.interaction) return;
     
     // Update the interaction config
     substage.interaction.config = { ...config };
+    this.interactionConfig = { ...config }; // Update local config too
     this.markAsChanged();
-    this.showInteractionConfigModal = false;
+    
+    // CRITICAL: Clear cached preview data so it reloads with the new config
+    // This ensures the preview uses the updated (potentially normalized) URL
+    this.interactionPreviewData = null;
+    console.log('[LessonEditor] 🔄 Cleared cached preview data to force reload with new config');
+    
+    // Don't close modal - just save and show message
     this.showSnackbar('Interaction configuration saved', 'success');
+    
+    // After saving config, we need to save the draft and refresh pending status
+    // This will update the button state correctly
+    // Note: saveDraft() is async but doesn't return a promise, so we'll trigger save and refresh status
+    this.saveDraft();
+    
+    // Refresh status after a short delay to allow save to complete
+    setTimeout(() => {
+      this.refreshPendingDraftStatus().then(() => {
+        // After saving, we're viewing pending changes, so set showingPendingChanges to true
+        if (this.hasPendingDraft && this.pendingDraftData) {
+          this.showingPendingChanges = true;
+        }
+      });
+    }, 1000);
+    
+    // Reload preview data if we're on preview tab
+    if (this.activeTab === 'preview') {
+      this.ensurePreviewDataLoaded();
+    }
   }
 
   closeInteractionConfigModal() {
@@ -4415,6 +5746,16 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     // Don't do anything - this is just a preview, not recording results
   }
 
+  getFirstScriptBlock(): string | null {
+    const substage = this.getSelectedSubStage();
+    if (!substage?.scriptBlocks || substage.scriptBlocks.length === 0) {
+      return null;
+    }
+    // Find the first teacher_talk block
+    const firstBlock = substage.scriptBlocks.find(block => block.type === 'teacher_talk');
+    return firstBlock?.content || null;
+  }
+
   formatDuration(minutes: number): string {
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
@@ -4422,6 +5763,97 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       return `${hours}h ${mins}m`;
     }
     return `${mins}m`;
+  }
+
+  getInteractionPreviewBlobUrl(): SafeResourceUrl {
+    if (!this.interactionPreviewData) {
+      return this.domSanitizer.bypassSecurityTrustResourceUrl('');
+    }
+
+    // CRITICAL: The iframe uses config.url, NOT iframeGuideWebpageUrl
+    // iframeGuideWebpageUrl is for content processing only, not for iframe display
+    // We need to normalize config.url if it exists (from the config field, not iframeGuideWebpageUrl)
+
+    const htmlCode = this.interactionPreviewData.htmlCode || '';
+    const cssCode = this.interactionPreviewData.cssCode || '';
+    const jsCode = this.interactionPreviewData.jsCode || '';
+    const outputData = this.interactionPreviewData.outputData || {};
+    
+    // Create config - DO NOT overwrite config.url with iframeGuideWebpageUrl
+    // iframeGuideWebpageUrl is for content processing, config.url is for iframe display
+    const config = { 
+      ...this.interactionPreviewData
+    };
+    
+    // Normalize config.url if it exists (this is what the iframe uses)
+    // Keep iframeGuideWebpageUrl separate - it's for content processing, not iframe display
+    if (config.url) {
+      let url = String(config.url).trim();
+      // Remove any existing protocol to avoid duplicates
+      url = url.replace(/^https?:\/\//i, '');
+      // Add https:// prefix
+      config.url = 'https://' + url;
+      console.log('[LessonEditor] 🔗 Normalized config.url for iframe:', config.url);
+    }
+    
+    // Debug: Log what's going into the config
+    console.log('[LessonEditor] 🔍 Preview config.url (for iframe display):', config.url);
+    console.log('[LessonEditor] 🔍 Preview config.iframeGuideWebpageUrl (for content processing, NOT used for iframe):', config.iframeGuideWebpageUrl);
+
+    if (!htmlCode && !jsCode) {
+      return this.domSanitizer.bypassSecurityTrustResourceUrl('');
+    }
+
+    const outputDataJson = JSON.stringify(outputData);
+    const configJson = JSON.stringify(config);
+    
+    // Debug: Log the full config JSON to see what's being injected
+    console.log('[LessonEditor] 🔍 Full config JSON:', configJson);
+    console.log('[LessonEditor] 🔍 Config iframeGuideWebpageUrl in JSON:', JSON.parse(configJson).iframeGuideWebpageUrl);
+
+    const htmlDoc = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { margin: 0; padding: 0; }
+    ${cssCode || ''}
+  </style>
+</head>
+<body>
+  ${htmlCode || ''}
+  <script>
+    // Set interaction data FIRST
+    window.interactionData = ${outputDataJson};
+    console.log('[Interaction] 🎯 Data injected:', window.interactionData);
+
+    // Set interaction config
+    window.interactionConfig = ${configJson};
+    console.log('[Interaction] ⚙️ Config injected:', window.interactionConfig);
+
+    // Then run the interaction code
+    ${jsCode || ''}
+  </script>
+</body>
+</html>
+    `;
+
+    // Revoke previous blob URL to prevent memory leaks
+    if (this.interactionPreviewBlobUrl) {
+      const oldUrl = (this.interactionPreviewBlobUrl as any).changingThisBreaksApplicationSecurity;
+      if (oldUrl && oldUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(oldUrl);
+      }
+    }
+
+    // Create a Blob URL to bypass Angular's sanitization
+    const blob = new Blob([htmlDoc], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    this.interactionPreviewBlobUrl = this.domSanitizer.bypassSecurityTrustResourceUrl(url);
+    
+    return this.interactionPreviewBlobUrl;
   }
 
   // Event Handlers for Modals
@@ -4434,9 +5866,186 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     console.log('[LessonEditor] Content submitted for approval:', submission);
   }
 
+  // View Changes Modal
+  viewPendingChanges() {
+    if (!this.lesson?.id) {
+      console.log('[LessonEditor] Cannot view changes - no lesson ID');
+      this.showSnackbar('No lesson loaded', 'error');
+      return;
+    }
+
+    // Get the draft ID - use currentDraftId if available, otherwise get from pending drafts
+    let draftId: string | number | null = this.currentDraftId;
+    
+    // If we don't have a draft ID, try to get it from the pending draft endpoint
+    if (!draftId) {
+      // First try the single draft endpoint for this lesson
+      this.http.get<any>(`${environment.apiUrl}/lesson-drafts/lesson/${this.lesson.id}`, {
+        headers: {
+          'x-tenant-id': environment.tenantId,
+          'x-user-id': environment.defaultUserId
+        }
+      }).subscribe({
+        next: (draft) => {
+          if (draft && draft.status === 'pending' && draft.id) {
+            this.loadViewChangesDiff(draft.id);
+          } else {
+            // If single draft endpoint doesn't work, try getting from pending drafts list
+            this.http.get<any[]>(`${environment.apiUrl}/lesson-drafts/pending`, {
+              headers: {
+                'x-tenant-id': environment.tenantId
+              }
+            }).subscribe({
+              next: (drafts) => {
+                // Filter drafts for this lesson
+                const lessonDrafts = (drafts || []).filter((d: any) => d.lessonId === this.lesson?.id);
+                if (lessonDrafts.length > 0) {
+                  // Get the most recent pending draft for this lesson
+                  const latestDraft = lessonDrafts.sort((a: any, b: any) => 
+                    new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+                  )[0];
+                  if (latestDraft.id) {
+                    this.loadViewChangesDiff(latestDraft.id);
+                  } else {
+                    this.showSnackbar('No draft ID available', 'error');
+                  }
+                } else {
+                  this.showSnackbar('No pending changes to view', 'info');
+                }
+              },
+              error: (err) => {
+                console.error('[LessonEditor] Failed to get draft from pending list:', err);
+                this.showSnackbar('Failed to load changes', 'error');
+              }
+            });
+          }
+        },
+        error: (err) => {
+          // If single draft endpoint fails, try pending drafts list
+          this.http.get<any[]>(`${environment.apiUrl}/lesson-drafts/pending`, {
+            headers: {
+              'x-tenant-id': environment.tenantId
+            }
+          }).subscribe({
+            next: (drafts) => {
+              // Filter drafts for this lesson
+              const lessonDrafts = (drafts || []).filter((d: any) => d.lessonId === this.lesson?.id);
+              if (lessonDrafts.length > 0) {
+                // Get the most recent pending draft for this lesson
+                const latestDraft = lessonDrafts.sort((a: any, b: any) => 
+                  new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+                )[0];
+                if (latestDraft.id) {
+                  this.loadViewChangesDiff(latestDraft.id);
+                } else {
+                  this.showSnackbar('No draft ID available', 'error');
+                }
+              } else {
+                this.showSnackbar('No pending changes to view', 'info');
+              }
+            },
+            error: (err2) => {
+              console.error('[LessonEditor] Failed to get draft ID:', err2);
+              this.showSnackbar('Failed to load changes', 'error');
+            }
+          });
+        }
+      });
+      return;
+    }
+
+    // If we have a draft ID, use it directly
+    this.loadViewChangesDiff(draftId);
+  }
+
+  private loadViewChangesDiff(draftId: string | number) {
+    this.showViewChangesModal = true;
+    this.loadingViewChanges = true;
+    this.viewChangeGroups = [];
+
+    // Load diff for the draft
+    this.http.get<any>(`${environment.apiUrl}/lesson-drafts/${draftId}/diff`).subscribe({
+      next: (diff) => {
+        this.viewChangesDiff = diff;
+        this.loadingViewChanges = false;
+        this.groupViewChangesByCategory(diff.changes);
+        console.log('[LessonEditor] Loaded changes diff:', diff);
+      },
+      error: (err) => {
+        console.error('[LessonEditor] Failed to load changes diff:', err);
+        this.loadingViewChanges = false;
+        this.showSnackbar('Failed to load changes', 'error');
+      }
+    });
+  }
+
+  closeViewChangesModal() {
+    this.showViewChangesModal = false;
+    this.viewChangesDiff = null;
+    this.viewChangeGroups = [];
+  }
+
+  groupViewChangesByCategory(changes: any[]) {
+    const groupsMap = new Map<string, any[]>();
+    
+    changes.forEach(change => {
+      const category = change.category || 'other';
+      if (!groupsMap.has(category)) {
+        groupsMap.set(category, []);
+      }
+      groupsMap.get(category)!.push(change);
+    });
+
+    this.viewChangeGroups = Array.from(groupsMap.entries()).map(([category, changes]) => ({
+      category,
+      label: this.getChangeCategoryLabel(category),
+      changes,
+      expanded: true // Expand all by default
+    }));
+  }
+
+  toggleViewChangeGroup(group: any) {
+    group.expanded = !group.expanded;
+  }
+
+  getChangeCategoryLabel(category: string): string {
+    const labels: { [key: string]: string } = {
+      'new_lesson': 'New Lesson',
+      'metadata': 'Metadata',
+      'structure': 'Structure',
+      'script': 'Script',
+      'interaction': 'Interaction',
+      'interaction_config': 'Interaction Config',
+      'content_submission': 'Content Submission',
+      'other': 'Other'
+    };
+    return labels[category] || category;
+  }
+
+  formatChangeValue(value: any): string {
+    if (value === null || value === undefined) {
+      return '(blank)';
+    }
+    if (typeof value === 'string') {
+      return value || '(blank)';
+    }
+    if (typeof value === 'object') {
+      return JSON.stringify(value, null, 2);
+    }
+    return String(value);
+  }
+
   onItemApproved(item: any) {
     console.log('[LessonEditor] Item approved:', item);
     this.loadProcessedContent();
+    
+    // If a lesson draft was approved, reload the lesson to get the updated live state
+    if (item.type === 'lesson-draft' && item.lessonId && this.lesson && this.lesson.id === item.lessonId) {
+      console.log('[LessonEditor] Lesson draft approved, reloading lesson to update live state');
+      // Reload the lesson to get the latest approved state
+      this.loadLesson(item.lessonId);
+      this.loadLesson(String(this.lesson.id));
+    }
   }
 
   onItemRejected(item: any) {

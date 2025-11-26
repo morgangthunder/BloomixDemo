@@ -8,7 +8,7 @@ import { HttpClient } from '@angular/common/http';
 import { LessonService } from '../../core/services/lesson.service';
 import { WebSocketService, ChatMessage } from '../../core/services/websocket.service';
 import { ScreenshotStorageService } from '../../core/services/screenshot-storage.service';
-import { Subject } from 'rxjs';
+import { Subject, firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { Lesson, Stage, SubStage } from '../../core/models/lesson.model';
 import { environment } from '../../../environments/environment';
@@ -910,6 +910,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   isLoadingInteraction = false;
   
   private destroy$ = new Subject<void>();
+  private processedOutputsCache = new Map<string, any[]>();
 
   constructor(
     private lessonService: LessonService,
@@ -1045,6 +1046,82 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Attempt to resolve a processed content output for the currently active sub-stage
+   */
+  private async ensureContentOutputForActiveSubstage(): Promise<string | null> {
+    if (!this.lesson?.id || !this.activeSubStage) {
+      return null;
+    }
+
+    const subStage = this.activeSubStage;
+    if (subStage.contentOutputId !== undefined && subStage.contentOutputId !== null) {
+      return this.normalizeContentOutputId(subStage.contentOutputId);
+    }
+
+    const outputs = await this.fetchProcessedOutputsForLesson(this.lesson.id);
+    if (!outputs.length) {
+      return null;
+    }
+
+    const interactionType = subStage.interaction?.type || subStage.interactionType;
+    const subStageTitle = (subStage.title || '').toLowerCase();
+    const stageTitle = (this.currentStage?.title || '').toLowerCase();
+
+    let match = outputs.find(output =>
+      output.outputType === interactionType &&
+      (output.outputName?.toLowerCase().includes(subStageTitle) ||
+       output.title?.toLowerCase().includes(subStageTitle))
+    );
+
+    if (!match && stageTitle) {
+      match = outputs.find(output =>
+        output.outputType === interactionType &&
+        (output.outputName?.toLowerCase().includes(stageTitle) ||
+         output.title?.toLowerCase().includes(stageTitle))
+      );
+    }
+
+    if (!match && outputs.length === 1) {
+      match = outputs[0];
+    }
+
+    if (match) {
+      subStage.contentOutputId = match.id;
+      if (subStage.interaction) {
+        subStage.interaction.contentOutputId = match.id;
+      }
+      return match.id;
+    }
+
+    return null;
+  }
+
+  private async fetchProcessedOutputsForLesson(lessonId: string): Promise<any[]> {
+    if (this.processedOutputsCache.has(lessonId)) {
+      return this.processedOutputsCache.get(lessonId)!;
+    }
+
+    try {
+      const outputs = await firstValueFrom(
+        this.http.get<any[]>(`${environment.apiUrl}/lesson-editor/lessons/${lessonId}/processed-outputs`)
+      );
+      this.processedOutputsCache.set(lessonId, outputs || []);
+      return outputs || [];
+    } catch (error) {
+      console.error('[LessonView] Failed to fetch processed outputs for lesson:', error);
+      this.processedOutputsCache.set(lessonId, []);
+      return [];
+    }
+  }
+
+  private normalizeContentOutputId(value?: string | number | null): string | null {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    return typeof value === 'string' ? value : String(value);
+  }
+
+  /**
    * Load lesson data from API
    */
   private loadLessonData(lessonId: string) {
@@ -1097,6 +1174,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         const firstSubStage = firstStage.subStages[0];
         this.activeSubStageId = firstSubStage.id;
         this.updateActiveSubStage();
+        this.loadInteractionData();
         
         // Auto-play first script if it exists
         console.log('[LessonView] First substage data:', JSON.stringify(firstSubStage, null, 2).substring(0, 500));
@@ -1424,12 +1502,14 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       normalized.interactionTypeId = rawData.interactionTypeId;
     }
     
-    console.log('[LessonView] Normalized interaction data:', {
-      fragmentsCount: normalized.fragments.length,
-      targetStatement: normalized.targetStatement,
-      maxFragments: normalized.maxFragments,
-      showHints: normalized.showHints
-    });
+    if (environment.logLevel === 'debug') {
+      console.log('[LessonView] Normalized interaction data:', {
+        fragmentsCount: normalized.fragments.length,
+        targetStatement: normalized.targetStatement,
+        maxFragments: normalized.maxFragments,
+        showHints: normalized.showHints
+      });
+    }
     
     return normalized;
   }
@@ -1444,42 +1524,75 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     this.normalizedInteractionData = null;
     this.normalizedEmbeddedInteractionData = null;
     
-    if (!this.activeSubStage?.contentOutputId) {
-      console.log('[LessonView] No contentOutputId for this sub-stage');
+    const subStage = this.activeSubStage;
+    if (!subStage) {
+      console.warn('[LessonView] No active sub-stage to load interaction data for');
       return;
     }
 
-    const contentOutputId = this.activeSubStage.contentOutputId;
-    console.log('[LessonView] Loading interaction data for contentOutputId:', contentOutputId);
-    
-    this.isLoadingInteraction = true;
+    const fetchFromOutput = (contentOutputId: string) => {
+      console.log('[LessonView] Loading interaction data for contentOutputId:', contentOutputId);
+      
+      this.isLoadingInteraction = true;
 
-    // Fetch processed content output
-    this.http.get(`${environment.apiUrl}/lesson-editor/processed-outputs/${contentOutputId}`)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (output: any) => {
-          console.log('[LessonView] Loaded interaction data (raw):', output);
-          
-          // Extract interaction data from the output
-          if (output.outputData && output.outputData.interactionTypeId) {
-            const rawData = {
-              ...output.outputData,
-              interactionTypeId: output.outputData.interactionTypeId
-            };
-            // Normalize the data structure
-            this.interactionData = rawData;
-            this.normalizedInteractionData = this.normalizeInteractionData(rawData);
-          } else {
-            console.warn('[LessonView] No interaction data in output');
+      this.http.get(`${environment.apiUrl}/lesson-editor/processed-outputs/${contentOutputId}`)
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: (output: any) => {
+            console.log('[LessonView] Loaded interaction data (raw):', output);
+            
+            if (output.outputData && output.outputData.interactionTypeId) {
+              const rawData = {
+                ...output.outputData,
+                interactionTypeId: output.outputData.interactionTypeId
+              };
+              this.interactionData = rawData;
+              this.normalizedInteractionData = this.normalizeInteractionData(rawData);
+            } else if (output.outputData && output.outputType === 'true-false-selection') {
+              const fragments = (output.outputData.statements || []).map((stmt: any) => ({
+                text: stmt.text,
+                isTrueInContext: stmt.isTrue,
+                explanation: stmt.explanation || ''
+              }));
+              const rawData = {
+                fragments,
+                targetStatement: output.outputName || 'True or False?',
+                interactionTypeId: 'true-false-selection'
+              };
+              this.interactionData = rawData;
+              this.normalizedInteractionData = this.normalizeInteractionData(rawData);
+            } else {
+              console.warn('[LessonView] No interaction data in output');
+            }
+            
+            this.isLoadingInteraction = false;
+          },
+          error: (error) => {
+            console.error('[LessonView] Error loading interaction data:', error);
+            this.isLoadingInteraction = false;
           }
-          
-          this.isLoadingInteraction = false;
-        },
-        error: (error) => {
-          console.error('[LessonView] Error loading interaction data:', error);
+        });
+    };
+
+    const existingContentOutputId = this.normalizeContentOutputId(subStage.contentOutputId);
+    if (existingContentOutputId) {
+      fetchFromOutput(existingContentOutputId);
+      return;
+    }
+
+    this.isLoadingInteraction = true;
+    this.ensureContentOutputForActiveSubstage()
+      .then((resolvedId) => {
+        if (resolvedId) {
+          fetchFromOutput(resolvedId);
+        } else {
+          console.warn('[LessonView] No processed content mapped to this sub-stage');
           this.isLoadingInteraction = false;
         }
+      })
+      .catch(err => {
+        console.error('[LessonView] Failed to resolve processed content for sub-stage:', err);
+        this.isLoadingInteraction = false;
       });
   }
 

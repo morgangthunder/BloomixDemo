@@ -34,12 +34,26 @@ export class LessonDraftsService {
     if (existingDraft) {
       // Update existing draft
       existingDraft.draftData = dto.draftData;
-      existingDraft.changeSummary = dto.changeSummary || existingDraft.changeSummary;
-      existingDraft.changesCount = dto.changesCount || existingDraft.changesCount;
       existingDraft.status = 'pending'; // Reset to pending if previously rejected
       existingDraft.updatedAt = new Date();
       
-      return await this.lessonDraftRepository.save(existingDraft);
+      // Save first, then regenerate diff to get accurate change count
+      const savedDraft = await this.lessonDraftRepository.save(existingDraft);
+      
+      // Regenerate diff to get accurate change count and summary
+      // This ensures we compare against the CURRENT live lesson, not an old version
+      try {
+        const diff = await this.generateDiff(savedDraft.id);
+        savedDraft.changesCount = diff.changesCount;
+        savedDraft.changeSummary = this.formatChangeSummary(diff);
+        return await this.lessonDraftRepository.save(savedDraft);
+      } catch (error) {
+        // If diff generation fails, use provided values as fallback
+        console.error('[LessonDraftsService] Failed to generate diff:', error);
+        savedDraft.changesCount = dto.changesCount || savedDraft.changesCount;
+        savedDraft.changeSummary = dto.changeSummary || savedDraft.changeSummary;
+        return await this.lessonDraftRepository.save(savedDraft);
+      }
     }
 
     // Create new draft
@@ -387,20 +401,39 @@ export class LessonDraftsService {
     const draftContentSourceIds = new Set(draftContentSources.map((cs: any) => cs.id));
 
     // Find new content sources
+    // Note: Iframe guide content sources are tracked via interaction_config changes (URL change).
+    // We skip showing them as content_submission to avoid duplicates, since the interaction_config
+    // change already covers the approval requirement for the URL change.
     draftContentSourceIds.forEach(draftId => {
       if (!liveContentSourceIds.has(draftId)) {
         const draftSource = draftContentSources.find((cs: any) => cs.id === draftId);
         if (draftSource) {
-          const sourceType = this.getContentSourceTypeLabel(draftSource.type);
+          // Check if this is an iframe guide content source
+          const sourceType = draftSource.type || '';
+          const metadata = typeof draftSource.metadata === 'string' 
+            ? JSON.parse(draftSource.metadata || '{}')
+            : (draftSource.metadata || {});
+          const isIframeGuide = sourceType === 'iframe_guide_webpage' || sourceType === 'iframe_guide_doc' || 
+              metadata.source === 'iframe-guide' ||
+              (draftSource.title && draftSource.title.includes('iFrame Guide'));
+          
+          // Skip iframe guide content sources - they're already tracked in interaction_config changes
+          // This prevents duplicate entries while still ensuring approval via the interaction_config change
+          if (isIframeGuide) {
+            return; // Skip - already handled in interaction_config changes
+          }
+          
+          const sourceTypeLabel = this.getContentSourceTypeLabel(sourceType);
+          
           changes.push({
             category: 'content_submission',
             type: 'content_added',
-            field: sourceType,
+            field: sourceTypeLabel,
             from: null,
             to: draftSource.title || draftSource.sourceUrl || draftSource.filePath || 'Untitled',
-            description: `New ${sourceType} added: "${draftSource.title || draftSource.sourceUrl || draftSource.filePath || 'Untitled'}"`,
+            description: `New ${sourceTypeLabel} added: "${draftSource.title || draftSource.sourceUrl || draftSource.filePath || 'Untitled'}"`,
             contentSourceId: draftId,
-            contentSourceType: draftSource.type,
+            contentSourceType: sourceType,
             contentSourceUrl: draftSource.sourceUrl || draftSource.filePath || null
           });
           changeCategories.add('content_submission');
@@ -414,14 +447,27 @@ export class LessonDraftsService {
         const liveSource = liveContentSources.find((cs: any) => cs.id === liveId) || 
                           liveDbContentSources.find(cs => cs.id === liveId);
         if (liveSource) {
-          const sourceType = this.getContentSourceTypeLabel(liveSource.type || (liveSource as any).type);
+          const sourceType = liveSource.type || (liveSource as any).type || '';
+          const liveMetadata = typeof (liveSource as any).metadata === 'string'
+            ? JSON.parse((liveSource as any).metadata || '{}')
+            : ((liveSource as any).metadata || {});
+          const isIframeGuide = sourceType === 'iframe_guide_webpage' || sourceType === 'iframe_guide_doc' || 
+              liveMetadata.source === 'iframe-guide' ||
+              ((liveSource as any).title && (liveSource as any).title.includes('iFrame Guide'));
+          
+          // Skip iframe guide content sources - they're already tracked in interaction_config changes
+          if (isIframeGuide) {
+            return; // Skip - already handled in interaction_config changes
+          }
+          
+          const sourceTypeLabel = this.getContentSourceTypeLabel(sourceType);
           changes.push({
             category: 'content_submission',
             type: 'content_removed',
-            field: sourceType,
+            field: sourceTypeLabel,
             from: liveSource.title || (liveSource as any).sourceUrl || (liveSource as any).filePath || 'Untitled',
             to: null,
-            description: `${sourceType} removed: "${liveSource.title || (liveSource as any).sourceUrl || (liveSource as any).filePath || 'Untitled'}"`,
+            description: `${sourceTypeLabel} removed: "${liveSource.title || (liveSource as any).sourceUrl || (liveSource as any).filePath || 'Untitled'}"`,
             contentSourceId: liveId
           });
           changeCategories.add('content_submission');
@@ -437,17 +483,34 @@ export class LessonDraftsService {
                           liveDbContentSources.find(cs => cs.id === draftId);
         
         if (draftSource && liveSource) {
-          const sourceType = this.getContentSourceTypeLabel(draftSource.type);
+          // Check if this is an iframe guide content source
+          const sourceType = draftSource.type || (liveSource as any).type || '';
+          const draftMetadata = typeof draftSource.metadata === 'string' 
+            ? JSON.parse(draftSource.metadata || '{}')
+            : (draftSource.metadata || {});
+          const liveMetadata = typeof (liveSource as any).metadata === 'string'
+            ? JSON.parse((liveSource as any).metadata || '{}')
+            : ((liveSource as any).metadata || {});
+          const isIframeGuide = sourceType === 'iframe_guide_webpage' || sourceType === 'iframe_guide_doc' || 
+              draftMetadata.source === 'iframe-guide' ||
+              liveMetadata.source === 'iframe-guide' ||
+              (draftSource.title && draftSource.title.includes('iFrame Guide')) ||
+              ((liveSource as any).title && (liveSource as any).title.includes('iFrame Guide'));
+          
+          // For iframe guide content sources, we still track changes but mark them as related
+          // This ensures they go through approval while making the relationship clear
+          
+          const sourceTypeLabel = this.getContentSourceTypeLabel(sourceType);
           
           // Check title change
           if ((liveSource.title || (liveSource as any).title) !== draftSource.title) {
             changes.push({
               category: 'content_submission',
               type: 'content_updated',
-              field: `${sourceType}: ${draftSource.title || 'Untitled'}`,
+              field: `${sourceTypeLabel}: ${draftSource.title || 'Untitled'}`,
               from: liveSource.title || (liveSource as any).title || '(blank)',
               to: draftSource.title || '(blank)',
-              description: `${sourceType} title changed from "${liveSource.title || (liveSource as any).title || '(blank)'}" to "${draftSource.title || '(blank)'}"`,
+              description: `${sourceTypeLabel} title changed from "${liveSource.title || (liveSource as any).title || '(blank)'}" to "${draftSource.title || '(blank)'}"`,
               contentSourceId: draftId
             });
             changeCategories.add('content_submission');
@@ -460,10 +523,10 @@ export class LessonDraftsService {
             changes.push({
               category: 'content_submission',
               type: 'content_updated',
-              field: `${sourceType}: ${draftSource.title || 'Untitled'}`,
+              field: `${sourceTypeLabel}: ${draftSource.title || 'Untitled'}`,
               from: liveUrl || '(blank)',
               to: draftUrl || '(blank)',
-              description: `${sourceType} URL/source changed from "${liveUrl || '(blank)'}" to "${draftUrl || '(blank)'}"`,
+              description: `${sourceTypeLabel} URL/source changed from "${liveUrl || '(blank)'}" to "${draftUrl || '(blank)'}"`,
               contentSourceId: draftId,
               contentSourceUrl: draftUrl || null
             });
@@ -484,6 +547,24 @@ export class LessonDraftsService {
       changesCount: changes.length,
       changeCategories: Array.from(changeCategories)
     };
+  }
+
+  private formatChangeSummary(diff: any): string {
+    const categories = diff.changeCategories || [];
+    const counts: Record<string, number> = {};
+    
+    diff.changes.forEach((change: any) => {
+      counts[change.category] = (counts[change.category] || 0) + 1;
+    });
+    
+    const parts: string[] = [];
+    if (counts.metadata) parts.push(`${counts.metadata} metadata change${counts.metadata > 1 ? 's' : ''}`);
+    if (counts.structure) parts.push(`${counts.structure} structure change${counts.structure > 1 ? 's' : ''}`);
+    if (counts.script) parts.push(`${counts.script} script change${counts.script > 1 ? 's' : ''}`);
+    if (counts.interaction) parts.push(`${counts.interaction} interaction change${counts.interaction > 1 ? 's' : ''}`);
+    if (counts.content_submission) parts.push(`${counts.content_submission} content change${counts.content_submission > 1 ? 's' : ''}`);
+    
+    return parts.join(', ') || 'No changes';
   }
 
   private getContentSourceTypeLabel(type: string): string {
@@ -585,6 +666,18 @@ export class LessonDraftsService {
     }
 
     await this.lessonDraftRepository.remove(draft);
+  }
+
+  /**
+   * Delete all pending drafts for a tenant (admin utility)
+   */
+  async deleteAllPendingDrafts(tenantId: string): Promise<number> {
+    const result = await this.lessonDraftRepository.delete({
+      tenantId: tenantId,
+      status: 'pending'
+    });
+    
+    return result.affected || 0;
   }
 }
 

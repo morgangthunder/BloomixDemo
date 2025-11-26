@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
@@ -115,7 +115,7 @@ interface ChangeGroup {
         </div>
 
         <!-- Changes Modal -->
-        <div *ngIf="selectedDraft && showChangesModal" class="modal-overlay" (click)="closeChangesModal()">
+        <div *ngIf="selectedDraft && showChangesModal && selectedDraftDiff && selectedDraftDiff.changesCount > 0" class="modal-overlay" (click)="closeChangesModal()">
           <div class="modal-content" (click)="$event.stopPropagation()">
             <div class="modal-header">
               <h2>Changes for: {{selectedDraftDiff?.lessonTitle}}</h2>
@@ -128,11 +128,7 @@ interface ChangeGroup {
                 <p>Loading changes...</p>
               </div>
 
-              <div *ngIf="!loadingDiff && selectedDraftDiff.changes.length === 0" class="no-changes">
-                <p>No changes detected</p>
-              </div>
-
-              <div *ngIf="!loadingDiff && selectedDraftDiff.changes.length > 0" class="changes-list">
+              <div *ngIf="!loadingDiff && selectedDraftDiff && selectedDraftDiff.changesCount > 0 && selectedDraftDiff.changes.length > 0" class="changes-list">
                 <!-- Grouped by category -->
                 <div *ngFor="let group of changeGroups" class="change-group">
                   <div class="change-group-header" (click)="toggleGroup(group)">
@@ -741,7 +737,7 @@ interface ChangeGroup {
     }
   `]
 })
-export class ApprovalQueueComponent implements OnInit {
+export class ApprovalQueueComponent implements OnInit, AfterViewInit {
   pendingDrafts: PendingDraft[] = [];
   loading = true;
   showChangesModal = false;
@@ -756,7 +752,15 @@ export class ApprovalQueueComponent implements OnInit {
   ) {}
 
   ngOnInit() {
+    // Always refresh when component loads to get latest data
     this.loadPendingDrafts();
+  }
+
+  ngAfterViewInit() {
+    // Also refresh after view init to catch any drafts that were just created
+    setTimeout(() => {
+      this.loadPendingDrafts();
+    }, 500);
   }
 
   loadPendingDrafts() {
@@ -767,9 +771,12 @@ export class ApprovalQueueComponent implements OnInit {
       }
     }).subscribe({
       next: (drafts) => {
-        this.pendingDrafts = drafts;
+        // Filter out drafts with 0 changes - they shouldn't appear in the queue
+        this.pendingDrafts = (drafts || []).filter((draft: PendingDraft) => 
+          draft.changesCount && draft.changesCount > 0
+        );
         this.loading = false;
-        console.log('[ApprovalQueue] Loaded drafts:', drafts);
+        console.log('[ApprovalQueue] Loaded drafts:', this.pendingDrafts);
       },
       error: (err) => {
         console.error('[ApprovalQueue] Failed to load drafts:', err);
@@ -779,6 +786,12 @@ export class ApprovalQueueComponent implements OnInit {
   }
 
   viewChanges(draft: PendingDraft) {
+    // Don't show modal if there are no changes
+    if (draft.changesCount === 0 || !draft.changesCount) {
+      console.log('[ApprovalQueue] Draft has no changes, not showing modal');
+      return;
+    }
+
     this.selectedDraft = draft;
     this.showChangesModal = true;
     this.loadingDiff = true;
@@ -789,12 +802,21 @@ export class ApprovalQueueComponent implements OnInit {
       next: (diff) => {
         this.selectedDraftDiff = diff;
         this.loadingDiff = false;
+        
+        // If diff shows no changes, close the modal
+        if (diff.changesCount === 0 || (diff.changes && diff.changes.length === 0)) {
+          console.log('[ApprovalQueue] Diff shows no changes, closing modal');
+          this.closeChangesModal();
+          return;
+        }
+        
         this.groupChangesByCategory(diff.changes);
         console.log('[ApprovalQueue] Loaded diff:', diff);
       },
       error: (err) => {
         console.error('[ApprovalQueue] Failed to load diff:', err);
         this.loadingDiff = false;
+        this.closeChangesModal();
       }
     });
   }

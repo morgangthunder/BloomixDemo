@@ -30,7 +30,7 @@ import { environment } from '../../../../environments/environment';
           <button 
             class="modal-tab"
             [class.active]="activeTab === 'preview'"
-            (click)="activeTab = 'preview'">
+            (click)="switchToPreviewTab()">
             👁️ Preview
           </button>
         </div>
@@ -38,6 +38,14 @@ import { environment } from '../../../../environments/environment';
         <div class="modal-body-scrollable">
           <!-- Configure Tab -->
           <div *ngIf="activeTab === 'configure'" class="config-section">
+            <div class="form-group processed-content-selector">
+              <label>Processed Content</label>
+              <div class="config-value">
+                <span class="value">{{selectedContentOutputName || 'None selected'}}</span>
+                <button type="button" class="btn-small" (click)="onProcessedContentSelect($event)">Select</button>
+              </div>
+              <p class="hint">Choose which processed output powers this interaction.</p>
+            </div>
             <!-- Dynamic config form based on configSchema -->
             <div *ngIf="configSchema && configSchema.fields && configSchema.fields.length > 0">
               <div *ngFor="let field of configSchema.fields" class="form-group">
@@ -215,7 +223,8 @@ import { environment } from '../../../../environments/environment';
                   type="url" 
                   id="iframe-guide-webpage"
                   [(ngModel)]="config.iframeGuideWebpageUrl"
-                  (ngModelChange)="onConfigChange()"
+                  (blur)="normalizeUrl()"
+                  (ngModelChange)="onUrlInputChange($event)"
                   placeholder="https://example.com/guide"
                   class="form-input" />
                 <!-- Read-only display in builder mode -->
@@ -230,10 +239,14 @@ import { environment } from '../../../../environments/environment';
                   *ngIf="!isBuilderMode && config.iframeGuideWebpageUrl && !processingWebpage && lessonId"
                   type="button"
                   (click)="processWebpageUrl()"
-                  class="btn-process-url">
+                  [disabled]="isWebpageProcessed"
+                  [class.btn-process-url]="!isWebpageProcessed"
+                  [class.btn-process-url-disabled]="isWebpageProcessed"
+                  [title]="isWebpageProcessed ? 'This URL has already been processed' : 'Process and link this URL to the lesson'">
                   🔄 Process & Link to Lesson
                 </button>
                 <p *ngIf="processingWebpage" class="upload-status">⏳ Processing webpage...</p>
+                <p *ngIf="isWebpageProcessed && !processingWebpage" class="hint" style="color: #00d4ff; margin-top: 0.5rem;">✅ URL has been processed and linked to lesson</p>
               </div>
             </div>
           </div>
@@ -250,7 +263,7 @@ import { environment } from '../../../../environments/environment';
               <div *ngIf="previewData && (interactionCategory === 'html' || interactionCategory === 'pixijs' || interactionCategory === 'iframe') && htmlCode" 
                    class="iframe-preview-container">
                 <iframe 
-                  [src]="getInteractionPreviewBlobUrl()"
+                  [src]="getInteractionPreviewBlobUrlSafe()"
                   style="width: 100%; height: 600px; border: 1px solid #333; border-radius: 0.5rem; background: #0f0f23;"
                   frameborder="0"></iframe>
               </div>
@@ -274,7 +287,14 @@ import { environment } from '../../../../environments/environment';
 
         <div class="modal-footer-sticky">
           <button (click)="close()" class="btn-secondary">Cancel</button>
-          <button (click)="save()" class="btn-primary">Save Configuration</button>
+          <button 
+            (click)="save()" 
+            [class.btn-primary]="hasConfigChanges"
+            [class.btn-primary-disabled]="!hasConfigChanges"
+            [disabled]="!hasConfigChanges"
+            [title]="!hasConfigChanges ? 'No changes to save' : 'Save configuration changes'">
+            Save Configuration
+          </button>
         </div>
       </div>
     </div>
@@ -385,6 +405,31 @@ import { environment } from '../../../../environments/environment';
       background: #0a0a0a;
     }
 
+    .processed-content-selector .config-value {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .processed-content-selector .value {
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .btn-small {
+      background: #333;
+      border: 1px solid #444;
+      color: #fff;
+      padding: 0.35rem 0.85rem;
+      border-radius: 0.4rem;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    .btn-small:hover {
+      background: #555;
+    }
+
     .modal-footer-sticky {
       padding: 1rem 1.5rem;
       border-top: 1px solid #333;
@@ -492,6 +537,21 @@ import { environment } from '../../../../environments/environment';
     .btn-primary:hover {
       background: #00bce6;
       transform: translateY(-1px);
+    }
+
+    .btn-primary:disabled,
+    .btn-primary-disabled {
+      background: #2a2a2a;
+      color: #666;
+      cursor: not-allowed;
+      opacity: 0.6;
+      border: 1px solid #333;
+    }
+
+    .btn-primary:disabled:hover,
+    .btn-primary-disabled:hover {
+      background: #2a2a2a;
+      transform: none;
     }
 
     .btn-secondary {
@@ -714,6 +774,20 @@ import { environment } from '../../../../environments/environment';
       transform: translateY(-1px);
     }
 
+    .btn-process-url:disabled,
+    .btn-process-url-disabled {
+      background: #2a2a2a;
+      color: #666;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    .btn-process-url:disabled:hover,
+    .btn-process-url-disabled:hover {
+      background: #2a2a2a;
+      transform: none;
+    }
+
     .readonly-field {
       margin-top: 0.5rem;
     }
@@ -755,12 +829,15 @@ export class InteractionConfigureModalComponent implements OnChanges {
   @Input() jsCode: string = '';
   @Input() isBuilderMode: boolean = false; // true in interaction-builder, false in lesson-editor
   @Input() lessonId?: string; // Lesson ID for linking content sources
+  @Input() selectedContentOutputName: string | null = null;
 
   @Output() closed = new EventEmitter<void>();
   @Output() saved = new EventEmitter<any>();
+  @Output() processedContentSelect = new EventEmitter<void>();
 
   activeTab: 'configure' | 'preview' = 'configure';
   config: any = {};
+  initialConfigSnapshot: any = {}; // Store initial config to detect changes
   previewData: any = null;
   currentBlobUrl: SafeResourceUrl | null = null;
 
@@ -801,6 +878,12 @@ export class InteractionConfigureModalComponent implements OnChanges {
         });
       }
       
+      // Normalize URL when modal opens
+      this.ensureUrlNormalized();
+      
+      // Store initial config snapshot for change detection (deep copy)
+      this.initialConfigSnapshot = JSON.parse(JSON.stringify(this.config));
+      
       // Merge sample data with config for preview
       this.previewData = {
         ...this.sampleData,
@@ -829,8 +912,65 @@ export class InteractionConfigureModalComponent implements OnChanges {
     }
   }
 
+  /**
+   * Check if config has been modified from initial state
+   * Also checks if a new file has been selected
+   */
+  get hasConfigChanges(): boolean {
+    const configChanged = JSON.stringify(this.config) !== JSON.stringify(this.initialConfigSnapshot);
+    const fileSelected = !!this.iframeGuideDocFile;
+    return configChanged || fileSelected;
+  }
+
+  /**
+   * Check if webpage URL has already been processed
+   */
+  get isWebpageProcessed(): boolean {
+    if (!this.config.iframeGuideWebpageUrl || this.isBuilderMode) {
+      return false;
+    }
+    // Check if there's a content source ID stored (indicates processed)
+    return !!this.config.iframeGuideWebpageContentSourceId;
+  }
+
+  /**
+   * Check if document has already been processed
+   */
+  get isDocumentProcessed(): boolean {
+    if (!this.config.iframeGuideDocUrl || this.isBuilderMode) {
+      return false;
+    }
+    // Check if there's a content source ID stored (indicates processed)
+    if (this.config.iframeGuideDocContentSourceId) {
+      return true;
+    }
+    // Fallback: If iframeGuideDocUrl is a UUID (36 chars with hyphens), it's a content source ID (processed)
+    // Otherwise, it might be a file path or URL (not yet processed)
+    const url = String(this.config.iframeGuideDocUrl);
+    return url.match(/^[a-f0-9-]{36}$/i) !== null;
+  }
+
+  /**
+   * Check if URL or doc can be processed (not already processed and has value)
+   */
+  get canProcessContent(): boolean {
+    if (this.isBuilderMode) {
+      return false;
+    }
+    // Can process if there's a URL that hasn't been processed, or a doc file that hasn't been processed
+    const hasUnprocessedUrl = this.config.iframeGuideWebpageUrl && !this.isWebpageProcessed;
+    const hasUnprocessedDoc = (this.iframeGuideDocFile || this.config.iframeGuideDocUrl) && !this.isDocumentProcessed;
+    return !!(hasUnprocessedUrl || hasUnprocessedDoc);
+  }
+
   onPreviewComplete(result: any) {
     console.log('[ConfigModal] ✅ Preview completed:', result);
+  }
+
+  onProcessedContentSelect(event: Event) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.processedContentSelect.emit();
   }
 
   getArrayItemPreview(item: any): string {
@@ -874,6 +1014,32 @@ export class InteractionConfigureModalComponent implements OnChanges {
     document.body.style.overflow = 'auto';
   }
 
+  getInteractionPreviewBlobUrlSafe(): SafeResourceUrl {
+    // Ensure URL is normalized before generating preview
+    this.ensureUrlNormalized();
+    return this.getInteractionPreviewBlobUrl();
+  }
+
+  ensureUrlNormalized() {
+    // Normalize URL in config if it exists and doesn't have protocol
+    if (this.config.iframeGuideWebpageUrl && !this.isBuilderMode) {
+      let url = String(this.config.iframeGuideWebpageUrl).trim();
+      if (url && !url.match(/^https?:\/\//i)) {
+        url = 'https://' + url;
+        this.config.iframeGuideWebpageUrl = url;
+        // Trigger change detection
+        this.onConfigChange();
+        console.log('[ConfigModal] ✅ Normalized URL:', url);
+      }
+    }
+  }
+
+  switchToPreviewTab() {
+    // Normalize URL before switching to preview tab
+    this.ensureUrlNormalized();
+    this.activeTab = 'preview';
+  }
+
   getInteractionPreviewBlobUrl(): SafeResourceUrl {
     console.log('[ConfigModal] 🎬 Generating preview blob URL...');
     console.log('[ConfigModal] Category:', this.interactionCategory);
@@ -886,8 +1052,33 @@ export class InteractionConfigureModalComponent implements OnChanges {
       return this.domSanitizer.bypassSecurityTrustResourceUrl('');
     }
 
+    // Normalize URL in config before generating preview
+    // Always use the current config, but ensure URL is normalized
+    const normalizedConfig = { ...this.config };
+    if (normalizedConfig.iframeGuideWebpageUrl && !this.isBuilderMode) {
+      let url = String(normalizedConfig.iframeGuideWebpageUrl).trim();
+      if (url && !url.match(/^https?:\/\//i)) {
+        url = 'https://' + url;
+        normalizedConfig.iframeGuideWebpageUrl = url;
+        // Also update the actual config so it persists
+        this.config.iframeGuideWebpageUrl = url;
+      }
+      // CRITICAL: Normalize config.url if it exists (this is what the iframe uses)
+      // DO NOT overwrite config.url with iframeGuideWebpageUrl - they serve different purposes:
+      // - config.url: The actual URL for the iframe to display
+      // - iframeGuideWebpageUrl: For content processing only, not for iframe display
+      if (normalizedConfig.url && !this.isBuilderMode) {
+        let url = String(normalizedConfig.url).trim();
+        if (url && !url.match(/^https?:\/\//i)) {
+          url = 'https://' + url;
+          normalizedConfig.url = url;
+          console.log('[ConfigModal] 🔗 Normalized config.url for iframe:', normalizedConfig.url);
+        }
+      }
+    }
+
     const sampleDataJson = this.sampleData ? JSON.stringify(this.sampleData) : '{}';
-    const configJson = JSON.stringify(this.config);
+    const configJson = JSON.stringify(normalizedConfig);
 
     console.log('[ConfigModal] 📋 Sample data for injection:', sampleDataJson.substring(0, 100) + '...');
     console.log('[ConfigModal] ⚙️ Config for injection:', configJson);
@@ -950,6 +1141,8 @@ export class InteractionConfigureModalComponent implements OnChanges {
     if (input.files && input.files.length > 0) {
       this.iframeGuideDocFile = input.files[0];
       console.log('[ConfigModal] 📄 Document selected:', this.iframeGuideDocFile.name);
+      // Mark as changed when file is selected
+      this.onConfigChange();
     }
   }
 
@@ -972,6 +1165,9 @@ export class InteractionConfigureModalComponent implements OnChanges {
       console.warn('[ConfigModal] ⚠️ Cannot process webpage: missing URL or lessonId');
       return;
     }
+
+    // Normalize URL before processing
+    this.normalizeUrl();
 
     this.processingWebpage = true;
     try {
@@ -998,21 +1194,63 @@ export class InteractionConfigureModalComponent implements OnChanges {
       await this.contentSourceService.submitForApproval(contentSource.id);
       console.log('[ConfigModal] ✅ Submitted for approval and processing');
 
-      alert('✅ Webpage added and submitted for processing. It will be vectorized and available for AI Teacher once approved.');
+      // Store the content source ID in config for reference (so we know it's been processed)
+      this.config.iframeGuideWebpageContentSourceId = contentSource.id;
+      
+      // Update initial snapshot since we've made a change
+      this.initialConfigSnapshot = JSON.parse(JSON.stringify(this.config));
     } catch (error: any) {
       console.error('[ConfigModal] ❌ Failed to process webpage:', error);
-      alert(`❌ Failed to process webpage: ${error?.message || 'Unknown error'}`);
+      throw error; // Re-throw so caller can handle
     } finally {
       this.processingWebpage = false;
     }
   }
 
+  onUrlInputChange(value: string) {
+    // Normalize URL immediately on input change
+    if (value && !this.isBuilderMode) {
+      let url = String(value).trim();
+      // Auto-add https:// if missing
+      if (url && !url.match(/^https?:\/\//i)) {
+        url = 'https://' + url;
+        this.config.iframeGuideWebpageUrl = url;
+      }
+    }
+    this.onConfigChange();
+  }
+
+  normalizeUrl() {
+    if (this.config.iframeGuideWebpageUrl && !this.isBuilderMode) {
+      let url = this.config.iframeGuideWebpageUrl.trim();
+      // Auto-add https:// if missing
+      if (url && !url.match(/^https?:\/\//i)) {
+        url = 'https://' + url;
+        this.config.iframeGuideWebpageUrl = url;
+        this.onConfigChange();
+      }
+    }
+  }
+
   async save() {
-    // If there's a document file, upload it first
+    // Normalize URL before processing (ensure https:// is added)
+    // This updates the config object directly
+    if (this.config.iframeGuideWebpageUrl && !this.isBuilderMode) {
+      let url = String(this.config.iframeGuideWebpageUrl).trim();
+      if (url && !url.match(/^https?:\/\//i)) {
+        url = 'https://' + url;
+        this.config.iframeGuideWebpageUrl = url;
+        // Trigger change detection
+        this.onConfigChange();
+      }
+    }
+    this.normalizeUrl();
+
+    // Automatically process document file if present
     if (this.iframeGuideDocFile && this.lessonId) {
       this.uploadingDocument = true;
       try {
-        console.log('[ConfigModal] 📤 Uploading document:', this.iframeGuideDocFile.name);
+        console.log('[ConfigModal] 📤 Auto-processing document:', this.iframeGuideDocFile.name);
         
         // Determine file type
         const fileName = this.iframeGuideDocFile.name.toLowerCase();
@@ -1026,18 +1264,6 @@ export class InteractionConfigureModalComponent implements OnChanges {
           fileType = 'text';
         }
 
-        // Upload file using FileStorageService endpoint (if available) or direct to content-sources
-        const formData = new FormData();
-        formData.append('file', this.iframeGuideDocFile);
-        
-        // Try uploading to a file storage endpoint first, or create content source directly with file
-        // For now, we'll create the content source and let the backend handle file upload
-        // This is a simplified approach - in production, you'd upload to S3/MinIO first
-        
-        // Create content source with file data
-        // Note: The backend may need to be updated to accept file uploads directly
-        // For now, we'll use a workaround: create content source with metadata, then upload file separately
-        
         // Create FormData for content source creation with file
         const contentFormData = new FormData();
         contentFormData.append('file', this.iframeGuideDocFile);
@@ -1050,7 +1276,6 @@ export class InteractionConfigureModalComponent implements OnChanges {
         }));
 
         // Upload file and create content source in one request
-        // We'll need to check if backend supports this, otherwise use two-step process
         const uploadResponse = await this.http.post<any>(`${environment.apiUrl}/content-sources/upload-file`, contentFormData).toPromise();
         console.log('[ConfigModal] ✅ File uploaded and content source created:', uploadResponse);
 
@@ -1071,15 +1296,18 @@ export class InteractionConfigureModalComponent implements OnChanges {
         // Store the content source ID in config for reference
         this.config.iframeGuideDocUrl = contentSourceId;
         this.config.iframeGuideDocFileName = this.iframeGuideDocFile.name;
+        this.config.iframeGuideDocContentSourceId = contentSourceId; // Track that it's been processed
 
-        alert('✅ Document uploaded and submitted for processing. It will be vectorized and available for AI Teacher once approved.');
+        // Clear the file reference since it's been processed
+        this.iframeGuideDocFile = null;
+        
+        // Update initial snapshot since we've made a change
+        this.initialConfigSnapshot = JSON.parse(JSON.stringify(this.config));
       } catch (error: any) {
         console.error('[ConfigModal] ❌ Failed to upload document:', error);
         // If upload endpoint doesn't exist, try alternative approach
         if (error?.status === 404 || error?.error?.message?.includes('not found')) {
           console.log('[ConfigModal] ⚠️ Upload endpoint not found, trying alternative approach...');
-          // Fallback: Create content source with URL placeholder, then update with file
-          // For now, just show error and let user know
           alert(`⚠️ File upload endpoint not available. Please use the Content Library to upload documents first, then link them to this lesson.`);
         } else {
           alert(`❌ Failed to upload document: ${error?.message || 'Unknown error'}`);
@@ -1091,8 +1319,31 @@ export class InteractionConfigureModalComponent implements OnChanges {
       }
     }
 
-    this.restorePageElements();
+    // Automatically process webpage URL if present and not already processed
+    if (this.config.iframeGuideWebpageUrl && this.lessonId && !this.processingWebpage) {
+      // Check if URL hasn't been processed yet (no content source ID stored)
+      const urlAlreadyProcessed = this.config.iframeGuideWebpageContentSourceId;
+      
+      if (!urlAlreadyProcessed) {
+        try {
+          console.log('[ConfigModal] 🌐 Auto-processing webpage URL:', this.config.iframeGuideWebpageUrl);
+          await this.processWebpageUrl();
+          console.log('[ConfigModal] ✅ Webpage auto-processed and linked to lesson');
+        } catch (error: any) {
+          console.error('[ConfigModal] ❌ Failed to auto-process webpage:', error);
+          // Continue with save even if URL processing fails - user can manually process later
+        }
+      }
+    }
+
+    // Update initial snapshot after successful save
+    this.initialConfigSnapshot = JSON.parse(JSON.stringify(this.config));
+    
+    // Emit saved event but don't close modal - let parent component handle it if needed
     this.saved.emit(this.config);
+    
+    // Show success message
+    console.log('[ConfigModal] ✅ Configuration saved successfully');
   }
 }
 
