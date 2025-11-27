@@ -1,9 +1,13 @@
 import { Component, OnInit, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { IonContent } from '@ionic/angular/standalone';
 import { environment } from '../../../environments/environment';
+import { ContentSourceService } from '../../core/services/content-source.service';
+import { ContentSource } from '../../core/models/content-source.model';
+import { ContentSourceViewModalComponent } from '../../shared/components/content-source-view-modal/content-source-view-modal.component';
 
 interface DraftChange {
   category: string;
@@ -51,7 +55,7 @@ interface ChangeGroup {
 @Component({
   selector: 'app-approval-queue',
   standalone: true,
-  imports: [CommonModule, IonContent],
+  imports: [CommonModule, FormsModule, IonContent, ContentSourceViewModalComponent],
   template: `
     <ion-content>
       <div class="approval-queue-page">
@@ -63,26 +67,44 @@ interface ChangeGroup {
             </svg>
           </button>
           <div>
-            <h1>Lesson Approval Queue</h1>
-            <p class="subtitle">Review pending lesson drafts</p>
+            <h1>Approval Queue</h1>
+            <p class="subtitle">Review and approve pending items</p>
           </div>
         </div>
 
-        <!-- Loading State -->
-        <div *ngIf="loading" class="loading-state">
-          <div class="spinner"></div>
-          <p>Loading pending drafts...</p>
+        <!-- Tabs -->
+        <div class="tabs-container">
+          <button 
+            class="tab-button" 
+            [class.active]="activeTab === 'lessons'"
+            (click)="activeTab = 'lessons'">
+            📝 Lesson Approvals ({{pendingDrafts.length}})
+          </button>
+          <button 
+            class="tab-button" 
+            [class.active]="activeTab === 'content'"
+            (click)="activeTab = 'content'; loadPendingContent()">
+            📚 Content Approvals ({{pendingContent.length}})
+          </button>
         </div>
 
-        <!-- Empty State -->
-        <div *ngIf="!loading && pendingDrafts.length === 0" class="empty-state">
-          <div class="empty-icon">✅</div>
-          <h2>No Pending Drafts</h2>
-          <p>All lesson changes have been reviewed!</p>
-        </div>
+        <!-- Lesson Approvals Tab -->
+        <div *ngIf="activeTab === 'lessons'" class="tab-content">
+          <!-- Loading State -->
+          <div *ngIf="loading" class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading pending drafts...</p>
+          </div>
 
-        <!-- Drafts List -->
-        <div *ngIf="!loading && pendingDrafts.length > 0" class="drafts-list">
+          <!-- Empty State -->
+          <div *ngIf="!loading && pendingDrafts.length === 0" class="empty-state">
+            <div class="empty-icon">✅</div>
+            <h2>No Pending Drafts</h2>
+            <p>All lesson changes have been reviewed!</p>
+          </div>
+
+          <!-- Drafts List -->
+          <div *ngIf="!loading && pendingDrafts.length > 0" class="drafts-list">
           <div *ngFor="let draft of pendingDrafts" class="draft-card">
             <div class="draft-header">
               <div class="draft-info">
@@ -113,6 +135,130 @@ interface ChangeGroup {
             </div>
           </div>
         </div>
+        </div>
+
+        <!-- Content Approvals Tab -->
+        <div *ngIf="activeTab === 'content'" class="tab-content">
+          <!-- Loading State -->
+          <div *ngIf="loadingContent" class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading pending content...</p>
+          </div>
+
+          <!-- Empty State -->
+          <div *ngIf="!loadingContent && pendingContent.length === 0" class="empty-state">
+            <div class="empty-icon">✅</div>
+            <h2>No Pending Content</h2>
+            <p>All content sources have been reviewed!</p>
+          </div>
+
+          <!-- Content List -->
+          <div *ngIf="!loadingContent && pendingContent.length > 0" class="content-list">
+            <div *ngFor="let source of pendingContent" class="content-card" [class.expanded]="expandedContent[source.id]">
+              <!-- Brief View (Collapsed) -->
+              <div class="content-card-brief" (click)="toggleContentExpand(source.id)">
+                <div class="content-brief-info">
+                  <span class="content-type-badge">{{source.type}}</span>
+                  <h3>{{source.title || 'Untitled'}}</h3>
+                  <span class="content-status-badge pending">Pending</span>
+                </div>
+                <div class="expand-icon">{{expandedContent[source.id] ? '▼' : '▶'}}</div>
+              </div>
+
+              <!-- Expanded View -->
+              <div *ngIf="expandedContent[source.id]" class="content-card-expanded">
+                <div class="content-body">
+                  <!-- Source URL -->
+                  <div class="field" *ngIf="source.sourceUrl">
+                    <label>Source:</label>
+                    <a [href]="source.sourceUrl" target="_blank" rel="noopener">
+                      {{source.sourceUrl}}
+                    </a>
+                  </div>
+
+                  <!-- Summary -->
+                  <div class="field" *ngIf="source.summary">
+                    <label>Summary:</label>
+                    <p>{{source.summary}}</p>
+                  </div>
+
+                  <!-- Metadata -->
+                  <div class="field" *ngIf="source.metadata && source.metadata.topics && source.metadata.topics.length > 0">
+                    <label>Topics:</label>
+                    <div class="topics">
+                      <span *ngFor="let topic of source.metadata.topics" class="topic-tag">{{topic}}</span>
+                    </div>
+                  </div>
+
+                  <div class="field" *ngIf="source.metadata && source.metadata.keywords && source.metadata.keywords.length > 0">
+                    <label>Keywords:</label>
+                    <div class="keywords">
+                      <span *ngFor="let keyword of source.metadata.keywords.slice(0, 10)" class="keyword-tag">{{keyword}}</span>
+                    </div>
+                  </div>
+
+                  <!-- Creator Info -->
+                  <div class="field" *ngIf="source.creator">
+                    <label>Submitted by:</label>
+                    <span>{{source.creator.username}} ({{source.creator.email}})</span>
+                  </div>
+
+                  <div class="field">
+                    <label>Submitted:</label>
+                    <span>{{formatDate(source.createdAt)}}</span>
+                  </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="content-actions">
+                  <div class="rejection-section" *ngIf="showRejectForm === source.id">
+                    <textarea 
+                      [(ngModel)]="rejectionReason"
+                      placeholder="Enter rejection reason..."
+                      class="rejection-input"
+                      rows="3">
+                    </textarea>
+                    <div class="rejection-actions">
+                      <button (click)="confirmReject(source.id)" class="btn-danger">
+                        Confirm Reject
+                      </button>
+                      <button (click)="cancelReject()" class="btn-secondary">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="action-buttons" *ngIf="showRejectForm !== source.id">
+                    <button 
+                      (click)="approveContent(source.id)" 
+                      class="btn-approve" 
+                      [disabled]="processingContent">
+                      {{processingContent ? 'Processing...' : '✓ Approve'}}
+                    </button>
+                    <button 
+                      (click)="startReject(source.id)" 
+                      class="btn-reject" 
+                      [disabled]="processingContent">
+                      ✕ Reject
+                    </button>
+                    <button (click)="viewContentSource(source)" class="btn-view">
+                      👁️ View
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Content Source View Modal -->
+        <app-content-source-view-modal
+          [isOpen]="!!viewingContentSource"
+          [contentSource]="viewingContentSource"
+          (closed)="closeContentViewModal()"
+          (deleted)="onContentSourceDeleted($event)"
+          (reprocessed)="onContentSourceReprocessed($event)">
+        </app-content-source-view-modal>
 
         <!-- Changes Modal -->
         <div *ngIf="selectedDraft && showChangesModal && selectedDraftDiff && selectedDraftDiff.changesCount > 0" class="modal-overlay" (click)="closeChangesModal()">
@@ -713,6 +859,223 @@ interface ChangeGroup {
       background: rgba(255, 255, 255, 0.15);
     }
 
+    /* Tabs */
+    .tabs-container {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 30px;
+      border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .tab-button {
+      background: none;
+      border: none;
+      color: rgba(255, 255, 255, 0.6);
+      padding: 12px 24px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      transition: all 0.2s;
+      position: relative;
+      top: 2px;
+    }
+
+    .tab-button:hover {
+      color: rgba(255, 255, 255, 0.9);
+    }
+
+    .tab-button.active {
+      color: #00d4ff;
+      border-bottom-color: #00d4ff;
+    }
+
+    .tab-content {
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Content Approvals Styles */
+    .content-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .content-card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: all 0.3s;
+    }
+
+    .content-card:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(0, 212, 255, 0.3);
+    }
+
+    .content-card-brief {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .content-card-brief:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .content-brief-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+    }
+
+    .content-type-badge {
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .content-brief-info h3 {
+      margin: 0;
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: white;
+      flex: 1;
+    }
+
+    .content-status-badge {
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .content-status-badge.pending {
+      background: rgba(251, 191, 36, 0.2);
+      color: #fbbf24;
+    }
+
+    .content-card-expanded {
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 20px;
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    .content-body {
+      margin-bottom: 20px;
+    }
+
+    .content-body .field {
+      margin-bottom: 16px;
+    }
+
+    .content-body .field label {
+      display: block;
+      color: #9ca3af;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .content-body .field p, .content-body .field span {
+      color: #d1d5db;
+      line-height: 1.6;
+    }
+
+    .content-body .field a {
+      color: #60a5fa;
+      text-decoration: none;
+      word-break: break-all;
+    }
+
+    .content-body .field a:hover {
+      text-decoration: underline;
+    }
+
+    .topics, .keywords {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .topic-tag {
+      background: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+
+    .keyword-tag {
+      background: rgba(59, 130, 246, 0.1);
+      color: #60a5fa;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
+    .content-actions {
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      padding-top: 20px;
+    }
+
+    .rejection-section {
+      margin-bottom: 16px;
+    }
+
+    .rejection-input {
+      width: 100%;
+      padding: 12px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 8px;
+      color: white;
+      font-family: inherit;
+      margin-bottom: 12px;
+      resize: vertical;
+    }
+
+    .rejection-input:focus {
+      outline: none;
+      border-color: #ef4444;
+    }
+
+    .rejection-actions {
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn-danger {
+      background: #ef4444;
+      color: white;
+      padding: 10px 24px;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-danger:hover {
+      background: #dc2626;
+    }
+
     @media (max-width: 768px) {
       .draft-header {
         flex-direction: column;
@@ -734,10 +1097,27 @@ interface ChangeGroup {
         transform: rotate(90deg);
         padding: 8px 0;
       }
+
+      .tabs-container {
+        flex-direction: column;
+        border-bottom: none;
+      }
+
+      .tab-button {
+        border-bottom: none;
+        border-left: 3px solid transparent;
+        top: 0;
+      }
+
+      .tab-button.active {
+        border-left-color: #00d4ff;
+        border-bottom-color: transparent;
+      }
     }
   `]
 })
 export class ApprovalQueueComponent implements OnInit, AfterViewInit {
+  activeTab: 'lessons' | 'content' = 'lessons';
   pendingDrafts: PendingDraft[] = [];
   loading = true;
   showChangesModal = false;
@@ -745,15 +1125,26 @@ export class ApprovalQueueComponent implements OnInit, AfterViewInit {
   selectedDraftDiff: DraftDiff | null = null;
   loadingDiff = false;
   changeGroups: ChangeGroup[] = [];
+  
+  // Content approvals
+  pendingContent: ContentSource[] = [];
+  loadingContent = false;
+  processingContent = false;
+  showRejectForm: string | null = null;
+  rejectionReason = '';
+  expandedContent: { [key: string]: boolean } = {};
+  viewingContentSource: ContentSource | null = null;
 
   constructor(
     private http: HttpClient,
-    private router: Router
+    private router: Router,
+    private contentSourceService: ContentSourceService
   ) {}
 
   ngOnInit() {
     // Always refresh when component loads to get latest data
     this.loadPendingDrafts();
+    this.loadPendingContent(); // Load content approvals on init so count shows correctly
   }
 
   ngAfterViewInit() {
@@ -976,7 +1367,8 @@ export class ApprovalQueueComponent implements OnInit, AfterViewInit {
     return labels[category] || category;
   }
 
-  formatDate(dateStr: string): string {
+  formatDate(dateStr: string | undefined): string {
+    if (!dateStr) return 'N/A';
     const date = new Date(dateStr);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -993,6 +1385,111 @@ export class ApprovalQueueComponent implements OnInit, AfterViewInit {
 
   goBack() {
     this.router.navigate(['/super-admin']);
+  }
+
+  // Content Approvals Methods
+  async loadPendingContent() {
+    this.loadingContent = true;
+    try {
+      await this.contentSourceService.loadContentSources('pending');
+      this.contentSourceService.pendingContent$.subscribe(pending => {
+        this.pendingContent = pending;
+        this.loadingContent = false;
+      });
+    } catch (error) {
+      console.error('[ApprovalQueue] Failed to load pending content:', error);
+      this.loadingContent = false;
+    }
+  }
+
+  toggleContentExpand(contentId: string) {
+    this.expandedContent[contentId] = !this.expandedContent[contentId];
+  }
+
+  canApproveContent(source: ContentSource): boolean {
+    const userRole = environment.userRole;
+    return userRole === 'super-admin' || userRole === 'admin';
+  }
+
+  async approveContent(id: string) {
+    if (!confirm('Approve this content source? It will be indexed in Weaviate for semantic search.')) {
+      return;
+    }
+
+    this.processingContent = true;
+    try {
+      const approved = await this.contentSourceService.approveContent(id);
+      console.log('[ApprovalQueue] Content approved:', approved);
+      alert(`✅ Content approved and indexed in Weaviate!`);
+      await this.loadPendingContent();
+    } catch (error) {
+      console.error('[ApprovalQueue] Failed to approve content:', error);
+      alert('Failed to approve content source');
+    } finally {
+      this.processingContent = false;
+    }
+  }
+
+  startReject(id: string) {
+    this.showRejectForm = id;
+    this.rejectionReason = '';
+  }
+
+  cancelReject() {
+    this.showRejectForm = null;
+    this.rejectionReason = '';
+  }
+
+  async confirmReject(id: string) {
+    if (!this.rejectionReason.trim()) {
+      alert('Please enter a rejection reason');
+      return;
+    }
+
+    this.processingContent = true;
+    try {
+      await this.contentSourceService.rejectContent(id, this.rejectionReason);
+      console.log('[ApprovalQueue] Content rejected:', id);
+      alert('Content source rejected');
+      this.cancelReject();
+      await this.loadPendingContent();
+    } catch (error) {
+      console.error('[ApprovalQueue] Failed to reject content:', error);
+      alert('Failed to reject content source');
+    } finally {
+      this.processingContent = false;
+    }
+  }
+
+  viewContentSource(source: ContentSource) {
+    this.viewingContentSource = source;
+    // Hide header when modal opens
+    document.body.style.overflow = 'hidden';
+    const header = document.querySelector('app-header');
+    if (header) {
+      (header as HTMLElement).style.display = 'none';
+    }
+  }
+
+  closeContentViewModal() {
+    this.viewingContentSource = null;
+    // Show header when modal closes
+    document.body.style.overflow = '';
+    const header = document.querySelector('app-header');
+    if (header) {
+      (header as HTMLElement).style.display = '';
+    }
+  }
+
+  async onContentSourceDeleted(contentSourceId: string) {
+    console.log('[ApprovalQueue] Content source deleted:', contentSourceId);
+    await this.loadPendingContent();
+    this.closeContentViewModal();
+  }
+
+  async onContentSourceReprocessed(contentSourceId: string) {
+    console.log('[ApprovalQueue] Content source reprocessed:', contentSourceId);
+    await this.loadPendingContent();
   }
 }
 

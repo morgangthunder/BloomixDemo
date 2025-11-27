@@ -10,6 +10,7 @@ import { AddTextContentModalComponent } from '../../shared/components/add-text-c
 import { AddImageModalComponent } from '../../shared/components/add-image-modal/add-image-modal.component';
 import { AddPdfModalComponent } from '../../shared/components/add-pdf-modal/add-pdf-modal.component';
 import { ApprovalQueueModalComponent } from '../../shared/components/approval-queue-modal/approval-queue-modal.component';
+import { ContentSourceViewModalComponent } from '../../shared/components/content-source-view-modal/content-source-view-modal.component';
 import { ProcessedContentService, ProcessedContentItem } from '../../core/services/processed-content.service';
 import { ToastService } from '../../core/services/toast.service';
 import { HttpClient } from '@angular/common/http';
@@ -26,7 +27,8 @@ import { environment } from '../../../environments/environment';
     AddTextContentModalComponent,
     AddImageModalComponent,
     AddPdfModalComponent,
-    ApprovalQueueModalComponent
+    ApprovalQueueModalComponent,
+    ContentSourceViewModalComponent
   ],
   template: `
     <ion-content>
@@ -267,46 +269,14 @@ import { environment } from '../../../environments/environment';
         (itemRejected)="onItemRejected($event)">
       </app-approval-queue-modal>
 
-      <!-- Content Source Viewer Modal (Brief) -->
-      <div class="modal-overlay" *ngIf="viewingContent" (click)="closeContentViewer()">
-        <div class="modal-content viewer-modal-brief" (click)="$event.stopPropagation()">
-          <div class="modal-header">
-            <h2>🔗 {{viewingContent.title || 'Content Source'}}</h2>
-            <button (click)="closeContentViewer()" class="close-btn">&times;</button>
-          </div>
-          
-          <div class="modal-body">
-            <div class="viewer-section">
-              <label>URL Type</label>
-              <div class="viewer-value">
-                <span class="content-type-badge">{{viewingContent.type}}</span>
-              </div>
-            </div>
-
-            <div class="viewer-section" *ngIf="viewingContent.sourceUrl">
-              <label>URL</label>
-              <div class="viewer-value">
-                <a [href]="viewingContent.sourceUrl" target="_blank" rel="noopener">
-                  {{viewingContent.sourceUrl}}
-                </a>
-              </div>
-            </div>
-
-            <div class="viewer-section" *ngIf="viewingContent.lessons && viewingContent.lessons.length > 0">
-              <label>Used in Lessons</label>
-              <div class="viewer-value">
-                <div class="lesson-tags">
-                  <span *ngFor="let lesson of viewingContent.lessons" class="lesson-tag">{{lesson.title}}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="modal-footer">
-            <button (click)="closeContentViewer()" class="btn-secondary">Close</button>
-          </div>
-        </div>
-      </div>
+      <!-- Content Source Viewer Modal (Shared Component) -->
+      <app-content-source-view-modal
+        [isOpen]="!!viewingContent"
+        [contentSource]="viewingContent"
+        (closed)="closeContentViewer()"
+        (deleted)="onContentSourceDeleted($event)"
+        (reprocessed)="onContentSourceReprocessed($event)">
+      </app-content-source-view-modal>
 
       <!-- Processed Content Viewer Modal (Detailed - reuse from Lesson Builder) -->
       <div class="modal-overlay" *ngIf="viewingProcessedContent" (click)="closeProcessedContentViewer()">
@@ -1165,6 +1135,7 @@ export class ContentLibraryComponent implements OnInit, OnDestroy {
     
     await this.loadContent();
     await this.loadPendingCount();
+    await this.loadProcessedContent(); // Load processed content on init so count shows correctly
   }
 
   ngOnDestroy() {
@@ -1372,6 +1343,28 @@ export class ContentLibraryComponent implements OnInit, OnDestroy {
   editContent(source: ContentSource) {
     console.log('Editing content:', source);
     // TODO: Open edit modal
+  }
+
+  async onContentSourceDeleted(contentSourceId: string) {
+    console.log('[ContentLibrary] Content source deleted:', contentSourceId);
+    this.toastService.success('Content source deleted successfully', 3000);
+    await this.loadContent();
+    this.closeContentViewer();
+  }
+
+  async onContentSourceReprocessed(contentSourceId: string) {
+    console.log('[ContentLibrary] Content source reprocessed:', contentSourceId);
+    this.toastService.success('Content source reprocessed successfully - status set to pending', 3000);
+    // Reload content to get updated status
+    await this.loadContent();
+    // If we're viewing this content source, refresh it
+    if (this.viewingContent?.id === contentSourceId) {
+      const updated = await this.contentSourceService.getContentSource(contentSourceId);
+      if (updated) {
+        this.viewingContent = updated;
+        console.log('[ContentLibrary] ✅ Refreshed viewing content, new status:', updated.status);
+      }
+    }
   }
 
   // Processed Content Methods

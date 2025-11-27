@@ -21,6 +21,7 @@ import { AddImageModalComponent } from '../../shared/components/add-image-modal/
 import { AddPdfModalComponent } from '../../shared/components/add-pdf-modal/add-pdf-modal.component';
 import { TrueFalseSelectionComponent } from '../interactions/true-false-selection/true-false-selection.component';
 import { InteractionConfigureModalComponent } from '../../shared/components/interaction-configure-modal/interaction-configure-modal.component';
+import { ContentSourceViewModalComponent } from '../../shared/components/content-source-view-modal/content-source-view-modal.component';
 
 type EditorTab = 'details' | 'structure' | 'script' | 'content' | 'preview' | 'ai-assistant';
 
@@ -67,8 +68,8 @@ interface ProcessedContentOutput {
   workflowName: string;
 }
 
-        // VERSION CHECK: This component should show "VERSION 0.0.4" in console logs
-        const LESSON_EDITOR_VERSION = '0.0.4';
+        // VERSION CHECK: This component should show "VERSION 0.0.5" in console logs
+        const LESSON_EDITOR_VERSION = '0.0.5';
         const LESSON_EDITOR_VERSION_CHECK_MESSAGE = `🚀 LESSON EDITOR COMPONENT VERSION ${LESSON_EDITOR_VERSION} LOADED - ${new Date().toISOString()} - CACHE BUST ID: ${Math.random().toString(36).substr(2, 9)}`;
 
 @Component({
@@ -84,7 +85,8 @@ interface ProcessedContentOutput {
     AddImageModalComponent,
     AddPdfModalComponent,
     TrueFalseSelectionComponent,
-    InteractionConfigureModalComponent
+    InteractionConfigureModalComponent,
+    ContentSourceViewModalComponent
   ],
   template: `
     <div class="lesson-editor-v2" *ngIf="lesson">
@@ -890,6 +892,15 @@ interface ProcessedContentOutput {
         (close)="closePdfModal()"
         (contentAdded)="onNewContentAdded($event)">
       </app-add-pdf-modal>
+
+      <!-- Source Content View Modal (Shared Component) -->
+      <app-content-source-view-modal
+        [isOpen]="showSourceContentViewModal"
+        [contentSource]="viewingSourceContent"
+        (closed)="closeSourceContentViewModal()"
+        (deleted)="onSourceContentDeleted($event)"
+        (reprocessed)="onSourceContentReprocessed($event)">
+      </app-content-source-view-modal>
 
       <!-- Source Content Editor Modal -->
       <div class="modal-overlay-fullscreen" *ngIf="showSourceContentModal" (click)="closeSourceContentModal()">
@@ -3193,6 +3204,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   }
   set activeTab(value: EditorTab) {
     this._activeTab = value;
+    // Save to localStorage
+    this.saveSelectionToStorage();
     // Load preview data when switching to preview tab
     if (value === 'preview') {
       this.ensurePreviewDataLoaded();
@@ -3261,7 +3274,9 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   isInteractionPreviewLoading: boolean = false;
   currentInteractionType: any = null;
   showSourceContentModal: boolean = false;
+  showSourceContentViewModal: boolean = false;
   selectedSourceContent: any = null;
+  viewingSourceContent: any = null;
   showProcessedContentJsonModal: boolean = false;
   selectedProcessedJson: any = null;
   
@@ -3337,8 +3352,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   ngOnInit() {
     // VERSION CHECK: This log should always appear when new code is loaded
-    console.log('🔥🔥🔥 LESSON EDITOR VERSION 0.0.4 - FIXED SAVE BUTTON + APPROVAL QUEUE + PREVIEW URL 🔥🔥🔥');
-    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 0.0.4');
+    console.log('🔥🔥🔥 LESSON EDITOR VERSION 0.0.5 - IFRAME GUIDE URL IN PASTE URL MODAL + FIXED TEXT COLOR 🔥🔥🔥');
+    console.log('[LessonEditor] 🚀 ngOnInit - NEW CODE LOADED - VERSION 0.0.5');
     console.log('[LessonEditor] ✅ Parses actual DB JSON with scriptBlocks, scriptBlocksAfterInteraction!');
     console.log('[LessonEditor] ✅ Converts DB format to editor format!');
     console.log('[LessonEditor] ✅ Database-first development - no mock data!');
@@ -3391,6 +3406,9 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     
     // Load processed content for this lesson
     this.loadProcessedContent();
+    
+    // Load linked content sources for this lesson
+    this.loadLinkedContentSources();
   }
 
   /**
@@ -3441,9 +3459,9 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
             headers: { 'x-tenant-id': environment.tenantId }
           }).pipe(
             map(lesson => {
-              // Only treat as pending if status is 'pending' (not 'approved' or 'rejected')
-              if (draft && draft.status === 'pending') {
-                console.log('[LessonEditor] 📝 Found pending draft, storing both live and draft data');
+              // Only treat as pending if status is 'pending' AND has actual changes
+              if (draft && draft.status === 'pending' && draft.changesCount && draft.changesCount > 0) {
+                console.log('[LessonEditor] 📝 Found pending draft with changes, storing both live and draft data');
                 this.hasDraft = true;
                 this.hasPendingDraft = true;
                 this.pendingDraftData = draft.draftData;
@@ -3465,7 +3483,12 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
                 });
                 return lesson; // Return live lesson initially
               } else {
-                console.log('[LessonEditor] 📖 No pending draft found (draft status:', draft?.status || 'none', ')');
+                // No pending draft, or draft has no changes
+                if (draft && draft.status === 'pending' && (!draft.changesCount || draft.changesCount === 0)) {
+                  console.log('[LessonEditor] 📖 Found pending draft but it has no changes (changesCount:', draft.changesCount, ')');
+                } else {
+                  console.log('[LessonEditor] 📖 No pending draft found (draft status:', draft?.status || 'none', ')');
+                }
                 this.hasPendingDraft = false;
                 this.pendingDraftData = null;
                 this.liveLessonData = null;
@@ -3508,18 +3531,44 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
             this.stages = this.parseStagesFromJSON(stagesData);
             console.log('[LessonEditor] ✅ Parsed stages:', this.stages);
             
-            // Collapse all script blocks by default
+            // Collapse all script blocks by default and fix any overlapping times
             this.collapsedScriptBlocks.clear();
-            this.stages.forEach(stage => {
-              stage.subStages.forEach(substage => {
-                if (substage.scriptBlocks) {
-                  substage.scriptBlocks.forEach((block, index) => {
+            let overlapsFixed = false;
+            this.stages.forEach((stage, stageIdx) => {
+              stage.subStages.forEach((substage, substageIdx) => {
+                if (substage.scriptBlocks && substage.scriptBlocks.length > 0) {
+                  console.log(`[LessonEditor] 🔍 Checking substage "${substage.title}" (${substage.scriptBlocks.length} blocks)`);
+                  // Log blocks before fix
+                  substage.scriptBlocks.forEach((block, blockIdx) => {
+                    console.log(`[LessonEditor]   Block ${blockIdx}: type=${block.type}, startTime=${block.startTime}, endTime=${block.endTime}, id=${block.id}`);
+                  });
+                  
+                  // Fix any overlapping times for blocks of the same type
+                  const hadOverlaps = this.fixScriptBlockOverlaps(substage.scriptBlocks);
+                  if (hadOverlaps) {
+                    overlapsFixed = true;
+                    console.log(`[LessonEditor] ✅ Fixed overlaps in substage "${substage.title}"`);
+                    // Log blocks after fix
+                    substage.scriptBlocks.forEach((block, blockIdx) => {
+                      console.log(`[LessonEditor]   Block ${blockIdx} (after fix): type=${block.type}, startTime=${block.startTime}, endTime=${block.endTime}, id=${block.id}`);
+                    });
+                  }
+                  
+                  substage.scriptBlocks.forEach((block) => {
                     this.collapsedScriptBlocks.add(block.id);
                   });
                 }
               });
             });
-            console.log('[LessonEditor] 📦 Collapsed all script blocks by default');
+            console.log('[LessonEditor] 📦 Collapsed all script blocks by default and fixed overlaps');
+            
+            // If overlaps were fixed, we'll save them when the user makes their next change
+            // Don't auto-save here to avoid creating unnecessary drafts
+            if (overlapsFixed) {
+              console.log('[LessonEditor] ✅ Fixed script block overlaps. Changes will be saved when you make your next edit.');
+              // Don't mark as changed - just fix in memory
+              // The fixed times will be saved when the user makes their next change
+            }
           } else {
             console.warn('[LessonEditor] ⚠️ No stages found in lesson data');
             this.stages = [];
@@ -3550,8 +3599,12 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
           console.log('[LessonEditor] 📚 Loaded learning objectives:', this.learningObjectives);
           console.log('[LessonEditor] 🎯 Loaded lesson outcomes:', this.lessonOutcomes);
           
-          // Set default selection to lesson
-          this.selectedItem = { type: 'lesson', id: lesson.id };
+          // Restore selection from localStorage (after stages are loaded)
+          // If no valid selection is found, default to lesson
+          this.restoreSelectionFromStorage();
+          if (!this.selectedItem || (this.selectedItem.type === 'lesson' && !this.selectedItem.id)) {
+            this.selectedItem = { type: 'lesson', id: lesson.id };
+          }
         },
         error: (error: any) => {
           console.error('[LessonEditor] ❌ Failed to load lesson:', error);
@@ -3580,6 +3633,29 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
         });
     } else {
       console.log('[LessonEditor] ⚠️ No lesson ID or new lesson, skipping processed content load');
+    }
+  }
+
+  /**
+   * Load content sources directly linked to this lesson
+   * This includes iframe guide URLs and documents that have been linked but may not have processed content yet
+   */
+  loadLinkedContentSources() {
+    const lessonId = this.route.snapshot.paramMap.get('id');
+    console.log('[LessonEditor] 🔍 Loading linked content sources for lesson:', lessonId);
+    if (lessonId && lessonId !== 'new') {
+      this.contentSourceService.getLinkedContent(lessonId)
+        .then((sources) => {
+          console.log('[LessonEditor] 🔍 Linked content sources loaded:', sources);
+          this.sourceContentItems = sources || [];
+        })
+        .catch((error) => {
+          console.error('[LessonEditor] ❌ Failed to load linked content sources:', error);
+          this.sourceContentItems = [];
+        });
+    } else {
+      console.log('[LessonEditor] ⚠️ No lesson ID or new lesson, skipping linked content sources load');
+      this.sourceContentItems = [];
     }
   }
 
@@ -3705,7 +3781,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   // Draft Management  
   async saveDraft() {
-    console.log('[LessonEditor] 🔥🔥🔥 VERSION 0.0.4 - saveDraft() called 🔥🔥🔥');
+    console.log('[LessonEditor] 🔥🔥🔥 VERSION 0.0.5 - saveDraft() called 🔥🔥🔥');
     
     // If there are no unsaved changes, don't save and show a message
     if (!this.hasUnsavedChanges && this.lastSaved) {
@@ -4198,21 +4274,51 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       // Completely replace the array
       this.stages.splice(0, this.stages.length, ...parsedStages);
       
-      // Collapse all script blocks by default
+      // Collapse all script blocks by default and fix any overlapping times
       this.collapsedScriptBlocks.clear();
-      this.stages.forEach(stage => {
-        stage.subStages.forEach(substage => {
-          if (substage.scriptBlocks) {
+      let overlapsFixed = false;
+      this.stages.forEach((stage, stageIdx) => {
+        stage.subStages.forEach((substage, substageIdx) => {
+          if (substage.scriptBlocks && substage.scriptBlocks.length > 0) {
+            console.log(`[LessonEditor] 🔍 Checking substage "${substage.title}" (${substage.scriptBlocks.length} blocks)`);
+            // Log blocks before fix
+            substage.scriptBlocks.forEach((block, blockIdx) => {
+              console.log(`[LessonEditor]   Block ${blockIdx}: type=${block.type}, startTime=${block.startTime}, endTime=${block.endTime}, id=${block.id}`);
+            });
+            
+            // Fix any overlapping times for blocks of the same type
+            const hadOverlaps = this.fixScriptBlockOverlaps(substage.scriptBlocks);
+            if (hadOverlaps) {
+              overlapsFixed = true;
+              console.log(`[LessonEditor] ✅ Fixed overlaps in substage "${substage.title}"`);
+              // Log blocks after fix
+              substage.scriptBlocks.forEach((block, blockIdx) => {
+                console.log(`[LessonEditor]   Block ${blockIdx} (after fix): type=${block.type}, startTime=${block.startTime}, endTime=${block.endTime}, id=${block.id}`);
+              });
+            }
+            
             substage.scriptBlocks.forEach((block) => {
               this.collapsedScriptBlocks.add(block.id);
             });
           }
         });
       });
-      console.log('[LessonEditor] 📦 Collapsed all script blocks by default');
+      console.log('[LessonEditor] 📦 Collapsed all script blocks by default and fixed overlaps');
+      
+      // If overlaps were fixed, we'll save them when the user makes their next change
+      // Don't auto-save here to avoid creating unnecessary drafts
+      if (overlapsFixed) {
+        console.log('[LessonEditor] ✅ Fixed script block overlaps. Changes will be saved when you make your next edit.');
+        // Don't mark as changed - just fix in memory
+        // The fixed times will be saved when the user makes their next change
+      }
       
       console.log('[LessonEditor] 🔄 Parsed stages count:', this.stages.length);
       console.log('[LessonEditor] 🔄 Stages array reference changed:', this.stages);
+      
+      // Restore selection from localStorage after stages are loaded
+      this.restoreSelectionFromStorage();
+      
       if (this.stages.length > 0) {
         console.log('[LessonEditor] 🔄 First stage:', this.stages[0]);
         console.log('[LessonEditor] 🔄 First stage subStages count:', this.stages[0]?.subStages?.length || 0);
@@ -4385,6 +4491,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   // Selection
   selectItem(item: {type: 'lesson' | 'stage' | 'substage', id: string, stageId?: string}) {
     this.selectedItem = item;
+    // Save to localStorage
+    this.saveSelectionToStorage();
     // Load preview data if we're on preview tab and selected a substage
     if (this.activeTab === 'preview' && item.type === 'substage') {
       this.ensurePreviewDataLoaded();
@@ -4397,6 +4505,88 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       console.log('[LessonEditor] 📍 Selected substage data:', substage);
       console.log('[LessonEditor] 📍 Substage has interaction?', !!substage?.interaction);
       console.log('[LessonEditor] 📍 Interaction details:', substage?.interaction);
+    }
+  }
+  
+  /**
+   * Save current selection and active tab to localStorage
+   */
+  private saveSelectionToStorage() {
+    if (!this.lesson?.id) return;
+    
+    const storageKey = `lesson-editor-selection-${this.lesson.id}`;
+    const selection = {
+      selectedItem: this.selectedItem,
+      activeTab: this.activeTab
+    };
+    
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(selection));
+      console.log('[LessonEditor] 💾 Saved selection to localStorage:', selection);
+    } catch (error) {
+      console.warn('[LessonEditor] ⚠️ Failed to save selection to localStorage:', error);
+    }
+  }
+  
+  /**
+   * Restore selection and active tab from localStorage
+   * Validates that the restored selection exists in the loaded lesson data
+   */
+  private restoreSelectionFromStorage() {
+    if (!this.lesson?.id || !this.stages || this.stages.length === 0) return;
+    
+    const storageKey = `lesson-editor-selection-${this.lesson.id}`;
+    
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (!stored) {
+        console.log('[LessonEditor] 📦 No stored selection found');
+        return;
+      }
+      
+      const selection = JSON.parse(stored);
+      console.log('[LessonEditor] 📦 Restoring selection from localStorage:', selection);
+      
+      // Validate and restore selectedItem
+      if (selection.selectedItem) {
+        const item = selection.selectedItem;
+        
+        // Validate the selection exists in the loaded lesson
+        let isValid = false;
+        
+        if (item.type === 'lesson' && item.id === this.lesson.id) {
+          isValid = true;
+        } else if (item.type === 'stage') {
+          isValid = this.stages.some(stage => stage.id === item.id);
+        } else if (item.type === 'substage' && item.stageId) {
+          const stage = this.stages.find(s => s.id === item.stageId);
+          if (stage) {
+            isValid = stage.subStages.some(substage => substage.id === item.id);
+          }
+        }
+        
+        if (isValid) {
+          this.selectedItem = item;
+          console.log('[LessonEditor] ✅ Restored selectedItem:', item);
+        } else {
+          console.log('[LessonEditor] ⚠️ Stored selectedItem is invalid, using default');
+        }
+      }
+      
+      // Restore activeTab
+      if (selection.activeTab && ['details', 'structure', 'script', 'content', 'preview', 'ai-assistant'].includes(selection.activeTab)) {
+        this._activeTab = selection.activeTab;
+        console.log('[LessonEditor] ✅ Restored activeTab:', selection.activeTab);
+        
+        // If preview tab and substage selected, ensure preview data is loaded
+        if (this._activeTab === 'preview' && this.selectedItem.type === 'substage') {
+          setTimeout(() => {
+            this.ensurePreviewDataLoaded();
+          }, 100);
+        }
+      }
+    } catch (error) {
+      console.warn('[LessonEditor] ⚠️ Failed to restore selection from localStorage:', error);
     }
   }
 
@@ -5234,6 +5424,71 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     return proposedStartTime;
   }
 
+  /**
+   * Fix overlapping times for script blocks of the same type
+   * This is called when loading lesson data to ensure no overlaps exist
+   * Returns true if any overlaps were fixed
+   */
+  private fixScriptBlockOverlaps(blocks: ScriptBlock[]): boolean {
+    if (!blocks || blocks.length === 0) {
+      console.log('[LessonEditor] ⚠️ fixScriptBlockOverlaps: No blocks provided');
+      return false;
+    }
+
+    console.log(`[LessonEditor] 🔧 fixScriptBlockOverlaps: Processing ${blocks.length} blocks`);
+    let overlapsFixed = false;
+
+    // Group blocks by type
+    const blocksByType = new Map<string, ScriptBlock[]>();
+    blocks.forEach(block => {
+      const type = block.type || 'teacher_talk';
+      if (!blocksByType.has(type)) {
+        blocksByType.set(type, []);
+      }
+      blocksByType.get(type)!.push(block);
+      console.log(`[LessonEditor]   Grouped block: type=${type}, startTime=${block.startTime}, endTime=${block.endTime}`);
+    });
+
+    console.log(`[LessonEditor]   Grouped into ${blocksByType.size} type groups:`, Array.from(blocksByType.keys()));
+
+    // Fix overlaps within each type group
+    blocksByType.forEach((typeBlocks, type) => {
+      console.log(`[LessonEditor]   Processing ${typeBlocks.length} blocks of type "${type}"`);
+      
+      // Sort by startTime
+      typeBlocks.sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+      console.log(`[LessonEditor]   Sorted blocks:`, typeBlocks.map(b => `${b.startTime}-${b.endTime}`).join(', '));
+
+      // Ensure no overlaps - each block starts after the previous one ends
+      for (let i = 1; i < typeBlocks.length; i++) {
+        const currentBlock = typeBlocks[i];
+        const previousBlock = typeBlocks[i - 1];
+        
+        const previousEndTime = previousBlock.endTime || previousBlock.startTime || 0;
+        const currentStartTime = currentBlock.startTime || 0;
+        const currentEndTime = currentBlock.endTime || currentBlock.startTime || 0;
+        const currentDuration = currentEndTime - currentStartTime || 10;
+
+        console.log(`[LessonEditor]   Checking block ${i}: previousEndTime=${previousEndTime}, currentStartTime=${currentStartTime}, currentEndTime=${currentEndTime}, duration=${currentDuration}`);
+
+        // If current block starts before or at the same time as previous block ends, adjust it
+        if (currentStartTime <= previousEndTime) {
+          const oldStartTime = currentBlock.startTime;
+          const oldEndTime = currentBlock.endTime;
+          currentBlock.startTime = previousEndTime;
+          currentBlock.endTime = currentBlock.startTime + currentDuration;
+          overlapsFixed = true;
+          console.log(`[LessonEditor] 🔧 Fixed overlap: ${type} block ${currentBlock.id} adjusted from ${oldStartTime}-${oldEndTime} to ${currentBlock.startTime}-${currentBlock.endTime}`);
+        } else {
+          console.log(`[LessonEditor]   No overlap for block ${i}`);
+        }
+      }
+    });
+
+    console.log(`[LessonEditor]   fixScriptBlockOverlaps result: overlapsFixed=${overlapsFixed}`);
+    return overlapsFixed;
+  }
+
   markAsChanged() {
     this.hasUnsavedChanges = true;
     this.hasBeenSubmitted = false; // Reset submission status when changes are made
@@ -5373,14 +5628,26 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
    * Get source content items used in this lesson
    */
   getSourceContentForLesson(): any[] {
-    // Get unique source content items from processed content
+    // Get unique source content items from both:
+    // 1. Processed content items (content sources that have been processed)
+    // 2. Directly linked content sources (e.g., iframe guide URLs that may not have processed content yet)
     const sources: any[] = [];
     const seenIds = new Set<string>();
     
+    // First, add content sources from processed content items
     this.processedContentItems.forEach(item => {
       if (item.contentSource && !seenIds.has(item.contentSource.id)) {
         sources.push(item.contentSource);
         seenIds.add(item.contentSource.id);
+      }
+    });
+    
+    // Then, add directly linked content sources (e.g., iframe guide URLs)
+    // These may not have processed content yet but are still linked to the lesson
+    this.sourceContentItems.forEach(source => {
+      if (source && source.id && !seenIds.has(source.id)) {
+        sources.push(source);
+        seenIds.add(source.id);
       }
     });
     
@@ -5389,8 +5656,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   viewSourceContent(source: any) {
     console.log('[LessonEditor] View source content:', source);
-    this.selectedSourceContent = { ...source };
-    this.showSourceContentModal = true;
+    this.viewingSourceContent = source;
+    this.showSourceContentViewModal = true;
     // Hide header
     document.body.style.overflow = 'hidden';
     const header = document.querySelector('app-header');
@@ -5405,6 +5672,29 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     document.body.style.overflow = 'hidden';
     const header = document.querySelector('app-header');
     if (header) (header as HTMLElement).style.display = 'none';
+  }
+
+  closeSourceContentViewModal() {
+    this.showSourceContentViewModal = false;
+    this.viewingSourceContent = null;
+    // Show header
+    document.body.style.overflow = '';
+    const header = document.querySelector('app-header');
+    if (header) (header as HTMLElement).style.display = '';
+  }
+
+  async onSourceContentDeleted(contentSourceId: string) {
+    console.log('[LessonEditor] Content source deleted:', contentSourceId);
+    // Reload content sources
+    await this.loadLinkedContentSources();
+    await this.loadProcessedContent();
+    this.closeSourceContentViewModal();
+  }
+
+  async onSourceContentReprocessed(contentSourceId: string) {
+    console.log('[LessonEditor] Content source reprocessed:', contentSourceId);
+    // Reload processed content
+    await this.loadProcessedContent();
   }
 
   closeSourceContentModal() {
@@ -5701,6 +5991,9 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     
     // Don't close modal - just save and show message
     this.showSnackbar('Interaction configuration saved', 'success');
+    
+    // Reload linked content sources in case iframe guide URLs or documents were processed
+    this.loadLinkedContentSources();
     
     // After saving config, we need to save the draft and refresh pending status
     // This will update the button state correctly
@@ -6056,11 +6349,13 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   onContentAdded(content: any) {
     console.log('[LessonEditor] Content added:', content);
     this.loadProcessedContent();
+    this.loadLinkedContentSources(); // Reload linked content sources
   }
 
   onNewContentAdded(content: any) {
     console.log('[LessonEditor] New content added:', content);
     this.loadProcessedContent();
+    this.loadLinkedContentSources(); // Reload linked content sources
   }
 
   // JSON Parsing - handles the actual lesson JSON format with scriptBlocks

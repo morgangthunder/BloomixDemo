@@ -4,16 +4,16 @@ import { AppComponent } from './app/app.component';
 import { environment } from './environments/environment';
 
 // ========================================
-// 🔥 FRONTEND VERSION 0.1.1 🔥
+// 🔥 FRONTEND VERSION 0.0.3 🔥
 // ========================================
-const FRONTEND_VERSION = '0.1.1';
-const CACHE_BUST_ID = `v0.6.9-${Math.random().toString(36).substr(2, 9)}`;
+const FRONTEND_VERSION = '0.0.3';
+const CACHE_BUST_ID = `v0.0.3-${Math.random().toString(36).substr(2, 9)}`;
 console.log('');
 console.log('═══════════════════════════════════════════════════════════');
 console.log(`🔥🔥🔥 FRONTEND VERSION ${FRONTEND_VERSION} LOADED 🔥🔥🔥`);
 console.log(`📅 Timestamp: ${new Date().toISOString()}`);
 console.log(`🆔 Cache Bust ID: ${CACHE_BUST_ID}`);
-console.log(`✅ Draft API Integration | MM:SS Time Input | DB-First`);
+console.log(`✅ Fixed processed outputs route & reprocess status update`);
 console.log('═══════════════════════════════════════════════════════════');
 console.log('');
 

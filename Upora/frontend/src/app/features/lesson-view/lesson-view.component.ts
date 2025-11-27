@@ -1924,6 +1924,36 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         lessonContentElement = document.body;
       }
       
+      // Find and exclude the AI teacher chat UI from screenshot
+      const chatWidget = document.querySelector('app-floating-teacher-widget');
+      const teacherWidget = document.querySelector('.teacher-widget');
+      
+      const ignoreElements = (element: Element): boolean => {
+        // Exclude the floating teacher widget (AI chat UI)
+        if (chatWidget && (chatWidget.contains(element) || element === chatWidget)) {
+          return true;
+        }
+        if (teacherWidget && (teacherWidget.contains(element) || element === teacherWidget)) {
+          return true;
+        }
+        // Also check by class name as fallback
+        if (element.classList?.contains('teacher-widget') || 
+            element.classList?.contains('teacher-card') ||
+            element.classList?.contains('chat-history') ||
+            element.classList?.contains('chat-input-container')) {
+          return true;
+        }
+        return false;
+      };
+
+      console.log('[LessonView] 📸 Excluding AI teacher chat UI from screenshot');
+      if (chatWidget) {
+        console.log('[LessonView] 📸 Found chat widget to exclude:', chatWidget);
+      }
+      if (teacherWidget) {
+        console.log('[LessonView] 📸 Found teacher widget to exclude:', teacherWidget);
+      }
+
       const canvas = await html2canvas(lessonContentElement, {
         backgroundColor: '#ffffff',
         logging: false, // Disable verbose logging
@@ -1934,6 +1964,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         height: lessonContentElement.scrollHeight || lessonContentElement.offsetHeight,
         windowWidth: window.innerWidth,
         windowHeight: window.innerHeight,
+        ignoreElements: ignoreElements, // Exclude AI chat UI
       });
 
       // Check if canvas is valid

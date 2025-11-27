@@ -150,6 +150,26 @@ export class LessonEditorController {
     return this.lessonEditorService.getAllProcessedOutputs();
   }
 
+  // IMPORTANT: This route must come BEFORE processed-outputs/:id to avoid route conflicts
+  @Get('processed-outputs/by-content-source')
+  async getProcessedOutputsByContentSource(
+    @Query('contentSourceId') contentSourceId: string,
+  ): Promise<ProcessedContentOutput[]> {
+    try {
+      if (!contentSourceId) {
+        console.log('[LessonEditorController] No contentSourceId provided, returning empty array');
+        return [];
+      }
+      console.log('[LessonEditorController] Getting processed outputs for content source:', contentSourceId);
+      const outputs = await this.lessonEditorService.getProcessedOutputsByContentSource(contentSourceId);
+      console.log('[LessonEditorController] Returning', outputs.length, 'processed outputs');
+      return outputs;
+    } catch (error) {
+      console.error('[LessonEditorController] Error getting processed outputs:', error);
+      throw error;
+    }
+  }
+
   @Get('processed-outputs/:id')
   async getProcessedOutput(
     @Param('id') id: string,

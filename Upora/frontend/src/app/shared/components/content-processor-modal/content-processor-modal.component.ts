@@ -2,8 +2,11 @@ import { Component, EventEmitter, Output, Input, OnInit, OnChanges, SimpleChange
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { environment } from '../../../../environments/environment';
 import { ProcessedContentService, ProcessedContentItem } from '../../../core/services/processed-content.service';
+import { ContentSourceService } from '../../../core/services/content-source.service';
 
 // YouTube data interfaces (no longer using YouTubeProcessorService)
 export interface YouTubeVideoData {
@@ -68,6 +71,41 @@ interface InteractionType {
           <!-- Step 2: Configure Content -->
           <div class="step" [class.active]="currentStep === 2" *ngIf="selectedInteractionType">
             <h3>2. Configure {{selectedInteractionType.name}}</h3>
+            
+            <!-- iFrame Guide URL Configuration -->
+            <div *ngIf="selectedInteractionType.id === 'iframe_guide_url'" class="iframe-guide-config">
+              <div class="url-input-section">
+                <label>Webpage URL</label>
+                <div class="input-group">
+                  <input
+                    type="url"
+                    [(ngModel)]="iframeGuideUrl"
+                    placeholder="https://example.com/guide"
+                    class="url-input"
+                    [class.error]="urlError">
+                </div>
+                <div class="url-error" *ngIf="urlError">
+                  <span class="error-icon">⚠️</span>
+                  {{urlError}}
+                </div>
+                <p class="hint-white">Enter a webpage URL that contains guidance for navigating a web app or playing a game. This will be processed and used to help guide users through the iframe interaction.</p>
+              </div>
+
+              <div class="modal-actions">
+                <button (click)="previousStep()" class="btn-secondary">Back</button>
+                <button 
+                  (click)="processIframeGuideUrl()" 
+                  [disabled]="!iframeGuideUrl || processing"
+                  class="btn-primary">
+                  {{processing ? 'Processing...' : 'Add & Process'}}
+                </button>
+              </div>
+
+              <div *ngIf="processing" class="processing-status">
+                <div class="spinner"></div>
+                <p>{{processingMessage}}</p>
+              </div>
+            </div>
             
             <!-- YouTube Video Configuration -->
             <div *ngIf="selectedInteractionType.id === 'youtube_video'" class="youtube-config">
@@ -570,6 +608,17 @@ interface InteractionType {
       color: #9ca3af;
       font-size: 14px;
       margin: 0 0 16px 0;
+    }
+    .hint-white {
+      color: white;
+      font-size: 14px;
+      margin: 12px 0 0 0;
+      line-height: 1.5;
+    }
+    .iframe-guide-config {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
     }
     .time-inputs {
       display: grid;
@@ -1244,6 +1293,7 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
   currentStep = 1;
   selectedInteractionType?: InteractionType;
   youtubeUrl = '';
+  iframeGuideUrl = '';
   videoData?: YouTubeVideoData;
   processedContent?: any;
 
@@ -1278,6 +1328,13 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
       enabled: true
     },
     {
+      id: 'iframe_guide_url',
+      name: 'iFrame Guide URL',
+      description: 'Add a webpage URL that contains guidance for navigating a web app or playing a game. This will be processed and used to help guide users through the iframe interaction.',
+      icon: '🎮',
+      enabled: true
+    },
+    {
       id: 'audio_url',
       name: 'Audio URL',
       description: 'Embed audio content from various sources (podcasts, music, etc.)',
@@ -1295,7 +1352,8 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
 
   constructor(
     private http: HttpClient,
-    private processedContentService: ProcessedContentService
+    private processedContentService: ProcessedContentService,
+    private contentSourceService: ContentSourceService
   ) {}
 
   ngOnInit() {
@@ -1369,6 +1427,11 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
     if (!type.enabled) return;
     this.selectedInteractionType = type;
     this.currentStep = 2;
+    
+    // If iframe guide URL is selected, we can process it directly
+    if (type.id === 'iframe_guide_url') {
+      // Stay at step 2, user will enter URL and click process
+    }
   }
 
   validateYouTubeUrl(url: string) {
@@ -1794,10 +1857,111 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
     return duration > 600; // 10 minutes = 600 seconds
   }
 
+  async processIframeGuideUrl() {
+    if (!this.iframeGuideUrl || !this.iframeGuideUrl.trim()) {
+      this.urlError = 'Please enter a valid URL';
+      return;
+    }
+
+    // Normalize URL
+    let url = this.iframeGuideUrl.trim();
+    if (!url.match(/^https?:\/\//i)) {
+      url = 'https://' + url;
+    }
+
+    this.processing = true;
+    this.processingMessage = 'Checking for existing content source...';
+    this.hasError = false;
+    this.urlError = '';
+
+    try {
+      // Check if content source already exists for this URL
+      const existingSource = await this.contentSourceService.findContentSourceByUrl(url);
+      
+      let contentSource: any;
+      if (existingSource) {
+        console.log('[ContentProcessor] 🔍 Found existing content source for URL:', existingSource.id);
+        contentSource = existingSource;
+        this.processingMessage = 'Using existing content source...';
+        
+        // Show user-friendly message
+        this.showSnackbarMessage('This URL already exists as a content source. Linking it to this lesson...');
+      } else {
+        // Create content source
+        try {
+          this.processingMessage = 'Creating content source...';
+          contentSource = await this.contentSourceService.createContentSource({
+            type: 'url',
+            sourceUrl: url,
+            title: `iFrame Guide: ${url}`,
+            metadata: {
+              source: 'iframe-guide',
+            }
+          });
+          console.log('[ContentProcessor] ✅ Content source created:', contentSource.id);
+        } catch (createError: any) {
+          // If creation fails due to duplicate, try to find it again
+          if (createError?.message?.includes('already exists')) {
+            const foundSource = await this.contentSourceService.findContentSourceByUrl(url);
+            if (foundSource) {
+              console.log('[ContentProcessor] 🔍 Found existing content source after creation error:', foundSource.id);
+              contentSource = foundSource;
+              this.showSnackbarMessage('This URL already exists as a content source. Linking it to this lesson...');
+            } else {
+              throw createError;
+            }
+          } else {
+            throw createError;
+          }
+        }
+      }
+
+      // Link to lesson if lessonId is provided
+      // This works even if the content source was already linked to another lesson
+      if (this.lessonId) {
+        this.processingMessage = 'Linking to lesson...';
+        await this.contentSourceService.linkToLesson(this.lessonId, contentSource.id);
+        console.log('[ContentProcessor] ✅ Linked to lesson:', this.lessonId);
+      }
+
+      // Submit for approval only if not already approved
+      if (contentSource.status === 'pending') {
+        this.processingMessage = 'Submitting for approval and processing...';
+        await this.contentSourceService.submitForApproval(contentSource.id);
+      } else {
+        this.processingMessage = 'Content source already approved. Processing...';
+      }
+
+      this.processingMessage = 'Processing complete!';
+      this.contentSubmittedForApproval.emit({
+        contentSource,
+        type: 'iframe-guide-url'
+      });
+
+      // Close modal after a short delay
+      setTimeout(() => {
+        this.close();
+      }, 1000);
+    } catch (error: any) {
+      console.error('[ContentProcessor] ❌ Failed to process iframe guide URL:', error);
+      this.hasError = true;
+      
+      // Show user-friendly error message
+      if (error?.message?.includes('already exists')) {
+        this.errorMessage = 'This URL is already a content source. It has been linked to this lesson. You can find it in the Content Library.';
+      } else {
+        this.errorMessage = error?.message || 'Failed to process URL. Please try again.';
+      }
+      
+      this.processing = false;
+    }
+  }
+
   private reset() {
     this.currentStep = 1;
     this.selectedInteractionType = undefined;
     this.youtubeUrl = '';
+    this.iframeGuideUrl = '';
     this.videoData = undefined;
     this.processedContent = undefined;
     this.startTime = undefined;

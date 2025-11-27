@@ -4,7 +4,7 @@ import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
-const BACKEND_VERSION = '0.1.1';
+const BACKEND_VERSION = '0.0.4';
 
 async function bootstrap() {
   console.log(`🔥🔥🔥 BACKEND VERSION ${BACKEND_VERSION} STARTING 🔥🔥🔥`);
@@ -45,7 +45,7 @@ async function bootstrap() {
   await app.listen(port);
   
   // ========================================
-  // 🔥 BACKEND VERSION 0.4.0 🔥
+  // 🔥 BACKEND VERSION 0.0.4 - FIXED ROUTE ORDER & STATUS UPDATE 🔥
   // ========================================
   console.log('');
   console.log('═══════════════════════════════════════════════════════════');

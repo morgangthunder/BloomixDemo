@@ -14,6 +14,7 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ContentSourcesService } from './content-sources.service';
@@ -35,13 +36,20 @@ export class ContentSourcesController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(
+  async create(
     @Body() createDto: CreateContentSourceDto,
     @Headers('x-tenant-id') tenantId: string,
     @Headers('x-user-id') userId: string,
   ) {
-    // tenantId and userId come from headers and are added by the service
-    return this.contentSourcesService.create(createDto, tenantId, userId);
+    try {
+      // tenantId and userId come from headers and are added by the service
+      return await this.contentSourcesService.create(createDto, tenantId, userId);
+    } catch (error) {
+      if (error.message?.includes('already exists')) {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
   }
 
   @Get()
@@ -157,17 +165,102 @@ export class ContentSourcesController {
     @Param('id', ParseUUIDPipe) contentSourceId: string,
     @Headers('x-user-id') userId: string,
   ) {
-    console.log('[ContentSourcesController] 🤖 Analyzing content source with LLM...');
-    const results = await this.contentAnalyzerService.analyzeContentSource(contentSourceId, userId);
-    return {
-      contentSourceId,
-      generatedOutputs: results.length,
-      results: results.map(r => ({
-        interactionType: r.interactionTypeId,
-        confidence: r.confidence,
-        tokensUsed: r.tokensUsed,
-      })),
-    };
+    try {
+      console.log('[ContentSourcesController] 🤖 Analyzing content source with LLM...', contentSourceId);
+      if (!userId) {
+        throw new BadRequestException('User ID is required');
+      }
+      const results = await this.contentAnalyzerService.analyzeContentSource(contentSourceId, userId);
+      return {
+        contentSourceId,
+        generatedOutputs: results.length,
+        results: results.map(r => ({
+          interactionType: r.interactionTypeId,
+          confidence: r.confidence,
+          tokensUsed: r.tokensUsed,
+        })),
+      };
+    } catch (error) {
+      console.error('[ContentSourcesController] ❌ Error analyzing content:', error);
+      throw error;
+    }
+  }
+
+  @Post(':id/reprocess')
+  @HttpCode(HttpStatus.OK)
+  async reprocessContent(
+    @Param('id', ParseUUIDPipe) contentSourceId: string,
+    @Headers('x-user-id') userId: string,
+  ) {
+    try {
+      console.log('[ContentSourcesController] 🔄 Re-processing content source:', contentSourceId);
+      if (!userId) {
+        throw new BadRequestException('User ID is required');
+      }
+      const contentSource = await this.contentSourcesService.findOne(contentSourceId);
+      
+      if (!contentSource) {
+        throw new NotFoundException(`Content source ${contentSourceId} not found`);
+      }
+      
+      // Check if this is an iframe guide URL
+      if (contentSource.type === 'url' && contentSource.metadata?.source === 'iframe-guide') {
+        // Re-process using iframe guide URL analysis
+        const result = await this.contentAnalyzerService.processIframeGuideUrl(contentSourceId, userId);
+        if (!result) {
+          return {
+            success: false,
+            contentSourceId,
+            message: 'Failed to reprocess content source',
+          };
+        }
+        
+        // Set content source status back to pending after reprocessing
+        try {
+          await this.contentSourcesService.updateStatus(contentSourceId, 'pending');
+          console.log('[ContentSourcesController] ✅ Content source status set to pending after reprocessing');
+        } catch (statusError) {
+          console.error('[ContentSourcesController] ❌ Failed to update status to pending:', statusError);
+          // Continue even if status update fails
+        }
+        
+        return {
+          success: result.success !== false,
+          contentSourceId,
+          hasGuidance: result.hasGuidance,
+          processedOutputId: result.processedOutputId,
+          message: result.hasGuidance 
+            ? 'Content re-processed successfully' 
+            : (result.message || 'No guidance found in webpage'),
+        };
+      } else {
+        // Re-analyze using standard content analyzer
+        const results = await this.contentAnalyzerService.analyzeContentSource(contentSourceId, userId);
+        
+        // Set content source status back to pending after reprocessing
+        try {
+          await this.contentSourcesService.updateStatus(contentSourceId, 'pending');
+          console.log('[ContentSourcesController] ✅ Content source status set to pending after reprocessing');
+        } catch (statusError) {
+          console.error('[ContentSourcesController] ❌ Failed to update status to pending:', statusError);
+          // Continue even if status update fails
+        }
+        
+        return {
+          success: true,
+          contentSourceId,
+          generatedOutputs: results.length,
+          results: results.map(r => ({
+            interactionType: r.interactionTypeId,
+            confidence: r.confidence,
+            tokensUsed: r.tokensUsed,
+          })),
+        };
+      }
+    } catch (error) {
+      console.error('[ContentSourcesController] ❌ Error reprocessing content:', error);
+      throw error;
+    }
   }
 
   @Post('auto-populate/text')

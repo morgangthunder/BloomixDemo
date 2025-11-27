@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 import { TrueFalseSelectionComponent } from '../../../features/interactions/true-false-selection/true-false-selection.component';
 import { ContentSourceService } from '../../../core/services/content-source.service';
 import { environment } from '../../../../environments/environment';
@@ -1171,28 +1172,61 @@ export class InteractionConfigureModalComponent implements OnChanges {
 
     this.processingWebpage = true;
     try {
-      console.log('[ConfigModal] 🌐 Processing webpage URL:', this.config.iframeGuideWebpageUrl);
+      const normalizedUrl = this.config.iframeGuideWebpageUrl.trim();
+      console.log('[ConfigModal] 🌐 Processing webpage URL:', normalizedUrl);
       
-      // Create content source
-      const contentSource = await this.contentSourceService.createContentSource({
-        type: 'url',
-        sourceUrl: this.config.iframeGuideWebpageUrl,
-        title: `iFrame Guide: ${this.config.iframeGuideWebpageUrl}`,
-        metadata: {
-          source: 'iframe-guide',
-          interactionType: this.interactionType,
+      // Check if content source already exists for this URL
+      const existingSource = await this.contentSourceService.findContentSourceByUrl(normalizedUrl);
+      
+      let contentSource: any;
+      if (existingSource) {
+        console.log('[ConfigModal] 🔍 Found existing content source for URL:', existingSource.id);
+        contentSource = existingSource;
+        
+        // Show info message that we're reusing existing content source
+        // Note: We'll link it to this lesson below, which is the expected behavior
+      } else {
+        // Create new content source only if it doesn't exist
+        try {
+          console.log('[ConfigModal] 📝 Creating new content source for URL');
+          contentSource = await this.contentSourceService.createContentSource({
+            type: 'url',
+            sourceUrl: normalizedUrl,
+            title: `iFrame Guide: ${normalizedUrl}`,
+            metadata: {
+              source: 'iframe-guide',
+              interactionType: this.interactionType,
+            }
+          });
+          console.log('[ConfigModal] ✅ Content source created:', contentSource.id);
+        } catch (createError: any) {
+          // If creation fails due to duplicate, try to find it again
+          if (createError?.message?.includes('already exists')) {
+            const foundSource = await this.contentSourceService.findContentSourceByUrl(normalizedUrl);
+            if (foundSource) {
+              console.log('[ConfigModal] 🔍 Found existing content source after creation error:', foundSource.id);
+              contentSource = foundSource;
+            } else {
+              throw createError;
+            }
+          } else {
+            throw createError;
+          }
         }
-      });
+      }
 
-      console.log('[ConfigModal] ✅ Content source created:', contentSource.id);
-
-      // Link to lesson
+      // Link to lesson (this will not create duplicate links - backend handles it)
+      // This works even if the content source was already linked to another lesson
       await this.contentSourceService.linkToLesson(this.lessonId, contentSource.id);
       console.log('[ConfigModal] ✅ Linked to lesson:', this.lessonId);
 
-      // Submit for approval (which triggers processing)
-      await this.contentSourceService.submitForApproval(contentSource.id);
-      console.log('[ConfigModal] ✅ Submitted for approval and processing');
+      // Submit for approval only if not already approved
+      if (contentSource.status === 'pending') {
+        await this.contentSourceService.submitForApproval(contentSource.id);
+        console.log('[ConfigModal] ✅ Submitted for approval and processing');
+      } else {
+        console.log('[ConfigModal] ℹ️ Content source already approved, skipping submission');
+      }
 
       // Store the content source ID in config for reference (so we know it's been processed)
       this.config.iframeGuideWebpageContentSourceId = contentSource.id;
@@ -1201,6 +1235,10 @@ export class InteractionConfigureModalComponent implements OnChanges {
       this.initialConfigSnapshot = JSON.parse(JSON.stringify(this.config));
     } catch (error: any) {
       console.error('[ConfigModal] ❌ Failed to process webpage:', error);
+      // Show user-friendly error message
+      if (error?.message?.includes('already exists')) {
+        throw new Error('This URL is already a content source. It has been linked to this lesson. You can find it in the Content Library.');
+      }
       throw error; // Re-throw so caller can handle
     } finally {
       this.processingWebpage = false;
@@ -1331,7 +1369,15 @@ export class InteractionConfigureModalComponent implements OnChanges {
           console.log('[ConfigModal] ✅ Webpage auto-processed and linked to lesson');
         } catch (error: any) {
           console.error('[ConfigModal] ❌ Failed to auto-process webpage:', error);
-          // Continue with save even if URL processing fails - user can manually process later
+          
+          // Show user-friendly error message
+          if (error?.message?.includes('already exists')) {
+            // This is actually fine - the URL was found and linked, just show info
+            console.log('[ConfigModal] ℹ️ URL already exists, was linked to lesson');
+          } else {
+            // Show error but continue with save - user can manually process later
+            alert(`⚠️ Failed to process webpage URL: ${error?.message || 'Unknown error'}\n\nYou can manually process it later or try again.`);
+          }
         }
       }
     }

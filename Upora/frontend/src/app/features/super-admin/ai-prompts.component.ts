@@ -483,6 +483,11 @@ export class AiPromptsComponent implements OnInit {
           label: 'Video Transcript Analysis Prompt',
           content: 'You are analyzing a video transcript to identify possible educational interactions.\n\nGiven the transcript, identify interaction types that leverage:\n- Temporal flow of information\n- Visual descriptions (for Mystery Reveal, Hotspot Explorer)\n- Demonstrations and explanations\n- Q&A patterns\n\nReturn JSON with interaction suggestions and timestamp hints.',
           placeholder: 'Enter the prompt for analyzing video transcripts...'
+        },
+        iframeGuideUrlAnalysis: {
+          label: 'iFrame Guide URL Analysis Prompt',
+          content: 'You are analyzing a webpage that will be used as a guide for an iframe interaction in an educational lesson. Your task is to extract any content relating to steps, guidance, or instructions on how to play a game or navigate a web app.\n\nAnalyze the webpage content and return a concise digest in JSON format that can be used as a reference to help an LLM guide a user through the process in conjunction with screenshots that will be shared as the user attempts it.\n\nIf the webpage contains guidance for:\n- Game play instructions or rules\n- Step-by-step navigation instructions\n- UI element explanations\n- Feature usage guides\n- Tutorial content\n\nReturn JSON format:\n{\n  "hasGuidance": true,\n  "guidance": {\n    "steps": ["step 1", "step 2", ...],\n    "keyElements": ["element1", "element2", ...],\n    "instructions": "concise guidance text",\n    "tips": ["tip1", "tip2", ...]\n  }\n}\n\nIf the webpage has no such guidance, return:\n{\n  "hasGuidance": false,\n  "message": "No guidance for web app navigation or game play found"\n}',
+          placeholder: 'Enter the prompt for analyzing iframe guide URLs...'
         }
       }
     },

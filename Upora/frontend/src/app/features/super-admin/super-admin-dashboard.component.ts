@@ -93,12 +93,12 @@ import { filter, Subscription } from 'rxjs';
             <div class="card-arrow">→</div>
           </div>
 
-          <!-- Lesson Approval Queue -->
+          <!-- Approval Queue -->
           <div class="dashboard-card" (click)="navigateTo('/super-admin/approval-queue')">
             <div class="card-icon">✅</div>
             <div class="card-content">
-              <h3>Lesson Approval Queue</h3>
-              <p>Review lesson drafts, approve or reject changes</p>
+              <h3>Approval Queue</h3>
+              <p>Review lesson drafts and content, approve or reject changes</p>
               <div class="card-stats">
                 <span class="stat-value" style="color: white;">{{pendingDraftsCount}}</span>
                 <span class="stat-label" style="color: white;"> Pending</span>

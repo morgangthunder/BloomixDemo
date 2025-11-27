@@ -162,6 +162,26 @@ export class LessonEditorService {
     });
   }
 
+  async getProcessedOutputsByContentSource(contentSourceId: string): Promise<ProcessedContentOutput[]> {
+    try {
+      this.logger.log(`[LessonEditorService] Getting processed outputs for content source: ${contentSourceId}`);
+      // Get all processed outputs for a specific content source
+      // Don't load relations to avoid errors if contentSource doesn't exist
+      const outputs = await this.processedOutputRepo.find({
+        where: { contentSourceId },
+        // Removed relations to avoid 500 errors if contentSource is deleted or doesn't exist
+        order: { createdAt: 'DESC' },
+      });
+      this.logger.log(`[LessonEditorService] Found ${outputs.length} processed outputs`);
+      return outputs || [];
+    } catch (error) {
+      this.logger.error(`[LessonEditorService] Error getting processed outputs: ${error.message}`, error.stack);
+      // Return empty array instead of throwing to prevent 500 errors
+      // The frontend can handle empty arrays gracefully
+      return [];
+    }
+  }
+
   async getProcessedOutput(id: string): Promise<ProcessedContentOutput> {
     const output = await this.processedOutputRepo.findOne({
       where: { id },

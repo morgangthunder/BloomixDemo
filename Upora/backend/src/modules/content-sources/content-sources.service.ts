@@ -3,8 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ContentSource } from '../../entities/content-source.entity';
 import { LessonDataLink } from '../../entities/lesson-data-link.entity';
+import { ProcessedContentOutput } from '../../entities/processed-content-output.entity';
 import { WeaviateService } from '../../services/weaviate.service';
 import { YouTubeService } from '../../services/youtube.service';
+import { ContentAnalyzerService } from '../../services/content-analyzer.service';
 import { CreateContentSourceDto } from './dto/create-content-source.dto';
 import { UpdateContentSourceDto } from './dto/update-content-source.dto';
 import { SearchContentDto } from './dto/search-content.dto';
@@ -18,18 +20,68 @@ export class ContentSourcesService {
     private contentSourcesRepository: Repository<ContentSource>,
     @InjectRepository(LessonDataLink)
     private lessonDataLinksRepository: Repository<LessonDataLink>,
+    @InjectRepository(ProcessedContentOutput)
+    private processedContentRepository: Repository<ProcessedContentOutput>,
     private weaviateService: WeaviateService,
     private youtubeService: YouTubeService,
+    private contentAnalyzerService: ContentAnalyzerService,
   ) {}
 
   /**
+   * Find content source by URL (normalized comparison)
+   */
+  async findByUrl(sourceUrl: string, tenantId?: string): Promise<ContentSource | null> {
+    if (!sourceUrl) return null;
+    
+    // Normalize URL for comparison (remove protocol, www, trailing slashes, lowercase)
+    const normalizeUrl = (url: string): string => {
+      return url
+        .trim()
+        .toLowerCase()
+        .replace(/^https?:\/\//, '')
+        .replace(/^www\./, '')
+        .replace(/\/$/, '');
+    };
+    
+    const normalizedSearchUrl = normalizeUrl(sourceUrl);
+    
+    const where: any = {};
+    if (tenantId) {
+      where.tenantId = tenantId;
+    }
+    
+    // Get all content sources with URLs and check normalized versions
+    const allSources = await this.contentSourcesRepository.find({ where });
+    
+    // Find matching URL (normalized comparison)
+    const matchingSource = allSources.find(source => {
+      if (!source.sourceUrl) return false;
+      const normalizedSourceUrl = normalizeUrl(source.sourceUrl);
+      return normalizedSourceUrl === normalizedSearchUrl;
+    });
+    
+    return matchingSource || null;
+  }
+
+  /**
    * Create a new content source
+   * Checks for existing URL and reuses if found
    */
   async create(
     createDto: CreateContentSourceDto, 
     tenantId: string, 
     userId: string
   ): Promise<ContentSource> {
+    // Check if URL already exists (for URL type content sources)
+    if (createDto.type === 'url' && createDto.sourceUrl) {
+      const existingSource = await this.findByUrl(createDto.sourceUrl, tenantId);
+      
+      if (existingSource) {
+        this.logger.log(`Content source with URL already exists: ${existingSource.id}`);
+        throw new Error(`A content source with this URL already exists. Please use the existing content source instead of creating a duplicate.`);
+      }
+    }
+    
     const contentSource = this.contentSourcesRepository.create({
       ...createDto,
       tenantId,
@@ -154,6 +206,18 @@ export class ContentSourcesService {
       // Content is still approved, just not indexed
     }
 
+    // If this is an iframe guide URL, automatically process it
+    if (saved.type === 'url' && saved.metadata?.source === 'iframe-guide' && saved.sourceUrl) {
+      try {
+        this.logger.log(`[ContentSources] 🌐 Auto-processing iframe guide URL: ${saved.id}`);
+        await this.contentAnalyzerService.processIframeGuideUrl(saved.id, approvedBy);
+        this.logger.log(`[ContentSources] ✅ Iframe guide URL processed successfully`);
+      } catch (error) {
+        this.logger.error(`[ContentSources] ❌ Failed to auto-process iframe guide URL: ${error.message}`);
+        // Don't fail approval if processing fails
+      }
+    }
+
     return saved;
   }
 
@@ -172,10 +236,45 @@ export class ContentSourcesService {
   }
 
   /**
+   * Update content source status
+   */
+  async updateStatus(id: string, status: 'pending' | 'approved' | 'rejected', tenantId?: string): Promise<ContentSource> {
+    const contentSource = await this.findOne(id, tenantId);
+    contentSource.status = status;
+    
+    // Clear approval fields if setting to pending
+    if (status === 'pending') {
+      (contentSource as any).approvedBy = null;
+      (contentSource as any).approvedAt = null;
+      (contentSource as any).rejectionReason = null;
+    }
+    
+    this.logger.log(`Content source ${id} status updated to: ${status}`);
+    return await this.contentSourcesRepository.save(contentSource);
+  }
+
+  /**
    * Delete content source (and remove from Weaviate if indexed)
+   * Also deletes associated processed outputs
    */
   async remove(id: string, tenantId?: string): Promise<void> {
     const contentSource = await this.findOne(id, tenantId);
+
+    // Delete associated processed outputs
+    try {
+      const processedOutputs = await this.processedContentRepository.find({
+        where: { contentSourceId: id },
+      });
+
+      if (processedOutputs.length > 0) {
+        this.logger.log(`Deleting ${processedOutputs.length} processed output(s) for content source ${id}`);
+        await this.processedContentRepository.remove(processedOutputs);
+        this.logger.log(`✅ Deleted ${processedOutputs.length} processed output(s)`);
+      }
+    } catch (error) {
+      this.logger.error(`Failed to delete processed outputs: ${error.message}`);
+      // Continue with content source deletion even if processed outputs deletion fails
+    }
 
     // Remove from Weaviate if indexed
     if (contentSource.weaviateId) {

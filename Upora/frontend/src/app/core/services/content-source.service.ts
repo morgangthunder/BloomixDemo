@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
+import { firstValueFrom } from 'rxjs';
 import { ApiService } from './api.service';
 import { ContentSource, SearchResult, LessonDataLink } from '../models/content-source.model';
 import { environment } from '../../../environments/environment';
@@ -51,14 +52,57 @@ export class ContentSourceService {
   }
 
   /**
+   * Find content source by URL
+   */
+  async findContentSourceByUrl(url: string): Promise<ContentSource | null> {
+    try {
+      await this.loadContentSources();
+      const allSources = await firstValueFrom(
+        this.contentSources$.pipe(
+          map(sources => sources || [])
+        )
+      );
+      
+      // Normalize URL for comparison
+      const normalizeUrl = (u: string): string => {
+        return u
+          .trim()
+          .toLowerCase()
+          .replace(/^https?:\/\//, '')
+          .replace(/^www\./, '')
+          .replace(/\/$/, '');
+      };
+      
+      const normalizedSearchUrl = normalizeUrl(url);
+      const found = (allSources || []).find((source: any) => {
+        if (!source.sourceUrl) return false;
+        return normalizeUrl(source.sourceUrl) === normalizedSearchUrl;
+      });
+      
+      return found || null;
+    } catch (error) {
+      console.error('[ContentSourceService] Failed to find content source by URL:', error);
+      return null;
+    }
+  }
+
+  /**
    * Create new content source
+   * Throws error if URL already exists
    */
   async createContentSource(data: Partial<ContentSource>): Promise<ContentSource> {
-    const created = await this.apiService.post<ContentSource>('/content-sources', data).toPromise();
+    try {
+      const created = await this.apiService.post<ContentSource>('/content-sources', data).toPromise();
 
-    console.log(`[ContentSourceService] Created content source: ${created?.id}`);
-    await this.loadContentSources(); // Reload list
-    return created!;
+      console.log(`[ContentSourceService] Created content source: ${created?.id}`);
+      await this.loadContentSources(); // Reload list
+      return created!;
+    } catch (error: any) {
+      if (error?.status === 400 && error?.error?.message?.includes('already exists')) {
+        throw new Error(error.error.message);
+      }
+      throw error;
+    }
   }
 
   /**
