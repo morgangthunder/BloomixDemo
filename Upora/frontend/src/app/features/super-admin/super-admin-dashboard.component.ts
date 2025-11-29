@@ -5,6 +5,7 @@ import { IonContent } from '@ionic/angular/standalone';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 import { filter, Subscription } from 'rxjs';
+import { ContentSourceService } from '../../core/services/content-source.service';
 
 @Component({
   selector: 'app-super-admin-dashboard',
@@ -100,7 +101,7 @@ import { filter, Subscription } from 'rxjs';
               <h3>Approval Queue</h3>
               <p>Review lesson drafts and content, approve or reject changes</p>
               <div class="card-stats">
-                <span class="stat-value" style="color: white;">{{pendingDraftsCount}}</span>
+                <span class="stat-value" style="color: white;">{{pendingDraftsCount + pendingContentCount}}</span>
                 <span class="stat-label" style="color: white;"> Pending</span>
               </div>
             </div>
@@ -264,7 +265,8 @@ import { filter, Subscription } from 'rxjs';
 export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
   constructor(
     private router: Router,
-    private http: HttpClient
+    private http: HttpClient,
+    private contentSourceService: ContentSourceService
   ) {}
 
   navigateTo(path: string) {
@@ -272,10 +274,12 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
   }
 
   pendingDraftsCount = 0;
+  pendingContentCount = 0;
   private routerSubscription?: Subscription;
 
   ngOnInit() {
     this.loadPendingDraftsCount();
+    this.loadPendingContentCount();
     
     // Refresh count when navigating back to this page
     this.routerSubscription = this.router.events
@@ -285,6 +289,7 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
           // Small delay to ensure any pending drafts are saved
           setTimeout(() => {
             this.loadPendingDraftsCount();
+            this.loadPendingContentCount();
           }, 300);
         }
       });
@@ -316,6 +321,18 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
         this.pendingDraftsCount = 0;
       }
     });
+  }
+
+  async loadPendingContentCount() {
+    try {
+      await this.contentSourceService.loadContentSources('pending');
+      this.contentSourceService.pendingContent$.subscribe(pending => {
+        this.pendingContentCount = pending.length;
+      });
+    } catch (error) {
+      console.error('Failed to load pending content count:', error);
+      this.pendingContentCount = 0;
+    }
   }
 }
 

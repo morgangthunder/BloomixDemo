@@ -60,7 +60,7 @@ export class LlmGenerationLog {
   tenantId: string;
 
   @Column('varchar', { name: 'assistant_id', nullable: true })
-  assistantId: string | null; // 'inventor' | 'ai-teacher' | 'auto-populator' | 'content-analyzer' | etc.
+  assistantId: string | null; // 'inventor' | 'ai-interaction-handler' | 'auto-populator' | 'content-analyzer' | etc.
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

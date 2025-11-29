@@ -22,6 +22,8 @@ export interface ProcessedContentItem {
   metadata?: any;
   contentSourceId?: string;
   workflowName?: string;
+  outputData?: any; // The processed output data (rankedSuggestions, etc.)
+  outputType?: string; // The type of output (true-false-selection, iframe-guide, etc.)
   contentSource?: {
     id: string;
     title: string;

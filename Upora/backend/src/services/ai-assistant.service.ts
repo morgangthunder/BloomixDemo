@@ -14,7 +14,7 @@ export interface ChatMessage {
 }
 
 export interface AssistantChatRequest {
-  assistantId: string; // 'inventor' | 'ai-teacher' | 'lesson-builder' | etc.
+  assistantId: string; // 'inventor' | 'ai-interaction-handler' | 'lesson-builder' | etc.
   promptKey: string; // 'html-interaction' | 'general' | etc.
   userMessage: string;
   context?: any; // Additional context (e.g., current interaction data)
@@ -36,7 +36,7 @@ export interface AssistantChatResponse {
 
 /**
  * Reusable AI Assistant Service
- * Handles chat interactions with AI assistants (inventor, ai-teacher, lesson-builder, etc.)
+ * Handles chat interactions with AI assistants (inventor, ai-interaction-handler, lesson-builder, etc.)
  * 
  * Features:
  * - Loads prompts from database

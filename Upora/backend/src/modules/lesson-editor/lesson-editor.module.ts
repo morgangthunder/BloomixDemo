@@ -6,6 +6,7 @@ import { ProcessedContentOutput } from '../../entities/processed-content-output.
 import { ScriptBlock } from '../../entities/script-block.entity';
 import { Lesson } from '../../entities/lesson.entity';
 import { ContentSource } from '../../entities/content-source.entity';
+import { LessonDataLink } from '../../entities/lesson-data-link.entity';
 import { LessonDataService } from '../../services/lesson-data.service';
 import { ContentValidationService } from '../../services/content-validation.service';
 import { WeaviateModule } from '../../services/weaviate.module';
@@ -17,6 +18,7 @@ import { WeaviateModule } from '../../services/weaviate.module';
       ScriptBlock,
       Lesson,
       ContentSource,
+      LessonDataLink,
     ]),
     WeaviateModule, // Import WeaviateModule for WeaviateService
   ],

@@ -80,6 +80,24 @@ export class InteractionType {
   @Column('boolean', { name: 'is_active', default: true })
   isActive: boolean; // Can be disabled without deletion
 
+  @Column('text', { name: 'ai_prompt_template', nullable: true })
+  aiPromptTemplate: string; // Builder-defined prompt additions for AI Teacher
+
+  @Column('jsonb', { name: 'ai_event_handlers', nullable: true })
+  aiEventHandlers: {
+    [eventType: string]: {
+      triggerLLM: boolean;
+      customPrompt?: string;
+      responseFormat?: 'text' | 'structured' | 'action';
+    };
+  } | null; // Event handling configuration
+
+  @Column('jsonb', { name: 'ai_response_actions', nullable: true })
+  aiResponseActions: {
+    actionTypes: string[]; // ['highlight', 'show-hint', 'update-ui', etc.]
+    defaultFormat: 'text' | 'structured';
+  } | null; // Response action configuration
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

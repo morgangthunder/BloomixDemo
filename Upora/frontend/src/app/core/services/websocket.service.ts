@@ -37,6 +37,10 @@ export class WebSocketService {
   private screenshotRequestSubject = new BehaviorSubject<{ message: string; timestamp: Date } | null>(null);
   screenshotRequest$ = this.screenshotRequestSubject.asObservable();
   
+  // Interaction AI response events
+  private interactionAIResponseSubject = new BehaviorSubject<any>(null);
+  interactionAIResponse$ = this.interactionAIResponseSubject.asObservable();
+  
   // Timeout tracking for AI responses
   private responseTimeout: any = null;
   private readonly RESPONSE_TIMEOUT_MS = 30000; // 30 seconds
@@ -264,6 +268,24 @@ export class WebSocketService {
   }
 
   /**
+   * Get socket instance (for advanced usage)
+   */
+  getSocket(): Socket | null {
+    return this.socket;
+  }
+
+  /**
+   * Emit custom event (for interaction events)
+   */
+  emitCustomEvent(eventName: string, data: any): void {
+    if (this.socket?.connected) {
+      this.socket.emit(eventName, data);
+    } else {
+      console.warn('[WebSocketService] Cannot emit event - socket not connected');
+    }
+  }
+
+  /**
    * Setup Socket.io event listeners
    */
   private setupEventListeners(): void {
@@ -329,6 +351,12 @@ export class WebSocketService {
       console.log('[WebSocketService] 🎟️  Tokens used:', data.tokensUsed);
       const current = this.tokenUsageSubject.value;
       this.tokenUsageSubject.next(current + data.tokensUsed);
+    });
+
+    // Interaction AI response events
+    this.socket.on('interaction-ai-response', (data: any) => {
+      console.log('[WebSocketService] 🎮 Interaction AI response received:', data);
+      this.interactionAIResponseSubject.next(data);
     });
 
     // Error events

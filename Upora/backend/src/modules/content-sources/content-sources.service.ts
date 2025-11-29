@@ -173,7 +173,80 @@ export class ContentSourcesService {
   async approve(id: string, approvedBy: string, tenantId?: string): Promise<ContentSource> {
     const contentSource = await this.findOne(id, tenantId);
 
-    // Update status
+    // DON'T save approval status yet - we'll do that after processing succeeds
+    // First, try to process the content source
+    let processedOutputCreated = false;
+    let processingError: Error | null = null;
+
+    try {
+      // If this is an iframe guide URL, use specialized processing
+      if (contentSource.type === 'url' && contentSource.metadata?.source === 'iframe-guide' && contentSource.sourceUrl) {
+        this.logger.log(`[ContentSources] 🌐 Auto-processing iframe guide URL: ${contentSource.id}`);
+        const result = await this.contentAnalyzerService.processIframeGuideUrl(contentSource.id, approvedBy);
+        
+        // Check if processed content was actually created
+        // processIframeGuideUrl should ALWAYS return processedOutputId now (even when no guidance found)
+        if (result && result.processedOutputId) {
+          // Verify processed output exists
+          const processedOutput = await this.processedContentRepository.findOne({
+            where: {
+              id: result.processedOutputId,
+            },
+          });
+          
+          if (processedOutput) {
+            processedOutputCreated = true;
+            this.logger.log(`[ContentSources] ✅ Iframe guide URL processed successfully - processed content created (ID: ${result.processedOutputId})`);
+          } else {
+            processingError = new Error(`Processed content with ID ${result.processedOutputId} was not found in database`);
+            this.logger.error(`[ContentSources] ❌ ${processingError.message}`);
+          }
+        } else if (result && !result.processedOutputId) {
+          processingError = new Error('Processed content ID not returned from iframe guide URL processing');
+          this.logger.error(`[ContentSources] ❌ ${processingError.message}`);
+        } else {
+          processingError = new Error('Processing returned null or undefined');
+          this.logger.error(`[ContentSources] ❌ ${processingError.message}`);
+        }
+      } else {
+        // For all other content types, use standard content analysis
+        this.logger.log(`[ContentSources] 🔍 Auto-processing content source: ${contentSource.id} (type: ${contentSource.type})`);
+        const results = await this.contentAnalyzerService.analyzeContentSource(contentSource.id, approvedBy);
+        
+        if (results && results.length > 0) {
+          // Verify processed output exists
+          const processedOutput = await this.processedContentRepository.findOne({
+            where: {
+              contentSourceId: contentSource.id,
+              outputType: 'true-false-selection',
+            },
+          });
+          
+          if (processedOutput) {
+            processedOutputCreated = true;
+            this.logger.log(`[ContentSources] ✅ Content source processed successfully - generated ${results.length} output(s)`);
+          } else {
+            processingError = new Error('Processed content was not created despite successful analysis');
+            this.logger.error(`[ContentSources] ❌ ${processingError.message}`);
+          }
+        } else {
+          processingError = new Error('Content analysis failed - no processed content generated');
+          this.logger.error(`[ContentSources] ❌ ${processingError.message}`);
+        }
+      }
+    } catch (error) {
+      processingError = error instanceof Error ? error : new Error(String(error));
+      this.logger.error(`[ContentSources] ❌ Failed to auto-process content source: ${processingError.message}`);
+    }
+
+    // If processing failed, throw error and don't approve
+    if (!processedOutputCreated) {
+      const errorMessage = processingError?.message || 'Failed to create processed content';
+      this.logger.error(`[ContentSources] ❌ Approval rejected: ${errorMessage}`);
+      throw new Error(`Cannot approve content source: ${errorMessage}. Please ensure the content can be processed before approving.`);
+    }
+
+    // Only now update status to approved since processing succeeded
     contentSource.status = 'approved';
     contentSource.approvedBy = approvedBy;
     contentSource.approvedAt = new Date();
@@ -204,18 +277,6 @@ export class ContentSourcesService {
     } catch (error) {
       this.logger.error(`Failed to index in Weaviate: ${error.message}`);
       // Content is still approved, just not indexed
-    }
-
-    // If this is an iframe guide URL, automatically process it
-    if (saved.type === 'url' && saved.metadata?.source === 'iframe-guide' && saved.sourceUrl) {
-      try {
-        this.logger.log(`[ContentSources] 🌐 Auto-processing iframe guide URL: ${saved.id}`);
-        await this.contentAnalyzerService.processIframeGuideUrl(saved.id, approvedBy);
-        this.logger.log(`[ContentSources] ✅ Iframe guide URL processed successfully`);
-      } catch (error) {
-        this.logger.error(`[ContentSources] ❌ Failed to auto-process iframe guide URL: ${error.message}`);
-        // Don't fail approval if processing fails
-      }
     }
 
     return saved;
@@ -251,6 +312,43 @@ export class ContentSourcesService {
     
     this.logger.log(`Content source ${id} status updated to: ${status}`);
     return await this.contentSourcesRepository.save(contentSource);
+  }
+
+  /**
+   * Get lessons that use this content source
+   */
+  async getLessonsForContentSource(contentSourceId: string): Promise<Array<{ id: string; title: string }>> {
+    const links = await this.lessonDataLinksRepository.find({
+      where: { contentSourceId },
+      relations: ['lesson'],
+    });
+
+    return links
+      .filter(link => link.lesson)
+      .map(link => ({
+        id: link.lesson.id,
+        title: link.lesson.title,
+      }));
+  }
+
+  /**
+   * Delete processed outputs for a content source
+   */
+  async deleteProcessedOutputs(contentSourceId: string): Promise<void> {
+    try {
+      const processedOutputs = await this.processedContentRepository.find({
+        where: { contentSourceId },
+      });
+
+      if (processedOutputs.length > 0) {
+        this.logger.log(`Deleting ${processedOutputs.length} processed output(s) for content source ${contentSourceId}`);
+        await this.processedContentRepository.remove(processedOutputs);
+        this.logger.log(`✅ Deleted ${processedOutputs.length} processed output(s)`);
+      }
+    } catch (error) {
+      this.logger.error(`Failed to delete processed outputs: ${error.message}`);
+      throw error;
+    }
   }
 
   /**

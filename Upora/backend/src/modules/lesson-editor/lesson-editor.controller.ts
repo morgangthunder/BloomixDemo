@@ -197,9 +197,15 @@ export class LessonEditorController {
   }
 
   @Delete('processed-outputs/:id')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteProcessedOutput(@Param('id') id: string): Promise<void> {
-    return this.lessonEditorService.deleteProcessedOutput(id);
+  @HttpCode(HttpStatus.OK)
+  async deleteProcessedOutput(@Param('id') id: string): Promise<{ contentSourceId: string | null; message: string }> {
+    const result = await this.lessonEditorService.deleteProcessedOutput(id);
+    return {
+      contentSourceId: result.contentSourceId,
+      message: result.contentSourceId 
+        ? 'Processed content deleted. Associated content source has been set to pending and will need to be re-approved to trigger re-processing.'
+        : 'Processed content deleted.',
+    };
   }
 
   @Post('reindex-processed-content')

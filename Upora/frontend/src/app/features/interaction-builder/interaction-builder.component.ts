@@ -159,6 +159,8 @@ interface ChatMessage {
                       (click)="switchTab('sample')">📋 Sample</button>
               <button [class.active]="activeTab === 'preview'" 
                       (click)="switchTab('preview')">👁️ Preview</button>
+              <button [class.active]="activeTab === 'ai'" 
+                      (click)="switchTab('ai')">🤖 AI</button>
             </div>
 
             <!-- Tab Content Container - Scrollable -->
@@ -531,6 +533,60 @@ interface ChatMessage {
               </div>
 
               <!-- Preview Tab -->
+              <!-- AI Tab -->
+              <div *ngIf="isTabActive('ai') && currentInteraction" class="tab-content">
+                <div class="ai-config-section">
+                  <div class="section-header">
+                    <h3>AI Teacher Integration</h3>
+                    <p class="hint">Configure how this interaction integrates with the AI Teacher</p>
+                  </div>
+
+                  <!-- Custom Prompt Template -->
+                  <div class="form-group">
+                    <label>Custom Prompt Template</label>
+                    <p class="hint">Additional instructions for the AI Teacher when responding to events from this interaction. This is appended to the base system prompt and interaction context.</p>
+                    <textarea 
+                      [(ngModel)]="aiPromptTemplateText"
+                      (ngModelChange)="onAIPromptTemplateChange()"
+                      rows="8"
+                      placeholder="Example:&#10;When a student selects an incorrect answer, provide a hint that guides them toward the correct understanding without giving away the answer directly.&#10;&#10;If the student is struggling, break down the concept into smaller steps."></textarea>
+                  </div>
+
+                  <!-- Event Handlers -->
+                  <div class="form-group">
+                    <label>Event Handlers (JSON)</label>
+                    <p class="hint">Configure which events trigger LLM responses and how. Format: JSON object with event types as keys.</p>
+                    <textarea 
+                      [(ngModel)]="aiEventHandlersText"
+                      (ngModelChange)="onAIEventHandlersChange()"
+                      rows="10"
+                      placeholder="Define event handlers in JSON format"></textarea>
+                    <div *ngIf="aiEventHandlersError" class="error-message">{{ aiEventHandlersError }}</div>
+                  </div>
+
+                  <!-- Response Actions -->
+                  <div class="form-group">
+                    <label>Response Actions (JSON)</label>
+                    <p class="hint">Define which action types this interaction can execute from AI responses. Format: JSON object with actionTypes array and defaultFormat.</p>
+                    <textarea 
+                      [(ngModel)]="aiResponseActionsText"
+                      (ngModelChange)="onAIResponseActionsChange()"
+                      rows="6"
+                      placeholder="Define response actions in JSON format"></textarea>
+                    <div *ngIf="aiResponseActionsError" class="error-message">{{ aiResponseActionsError }}</div>
+                  </div>
+
+                  <div class="info-box">
+                    <h4>📚 SDK Quick Reference</h4>
+                    <p>Interactions can emit events using the SDK:</p>
+                    <pre>{{ '{' }}aiSDK.emitEvent({{ '{' }}&#10;  type: 'user-selection',&#10;  data: {{ '{' }} index: 0 {{ '}' }},&#10;  requiresLLMResponse: true&#10;{{ '}' }});{{ '}' }}</pre>
+                    <p>Subscribe to responses:</p>
+                    <pre>aiSDK.onResponse((response) => {{ '{' }}&#10;  console.log(response.response);&#10;  response.actions?.forEach(action => {{ '{' }}&#10;    if (action.type === 'highlight') highlight(action.target);&#10;  {{ '}' }});&#10;{{ '}' }});</pre>
+                    <p class="hint">📚 SDK documentation is available in the codebase at: <code>Upora/frontend/src/app/core/services/INTERACTION_AI_SDK_QUICK_REFERENCE.md</code></p>
+                  </div>
+                </div>
+              </div>
+
               <div *ngIf="isTabActive('preview') && currentInteraction" class="tab-content preview-tab-content">
                 <div class="preview-section">
                   <div class="section-header">
@@ -2397,12 +2453,19 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   sidebarHidden = false;
 
   // Tabs
-  activeTab: 'settings' | 'code' | 'config' | 'sample' | 'preview' = 'settings';
+  activeTab: 'settings' | 'code' | 'config' | 'sample' | 'preview' | 'ai' = 'settings';
   activeCodeTab: 'html' | 'css' | 'js' = 'html';
 
   // JSON text fields (for editing)
   iframeConfigText = '';
   uploadingDocument = false;
+  
+  // AI configuration fields
+  aiPromptTemplateText = '';
+  aiEventHandlersText = '';
+  aiResponseActionsText = '';
+  aiEventHandlersError = '';
+  aiResponseActionsError = '';
   configSchemaText = '';
   sampleDataText = '';
   configSchemaError = '';
@@ -2527,6 +2590,13 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     this.iframeConfigText = interaction.iframeConfig ? JSON.stringify(interaction.iframeConfig, null, 2) : '';
     this.configSchemaText = interaction.configSchema ? JSON.stringify(interaction.configSchema, null, 2) : '';
     this.sampleDataText = interaction.sampleData ? JSON.stringify(interaction.sampleData, null, 2) : '';
+    
+    // Load AI configuration fields
+    this.aiPromptTemplateText = (interaction as any).aiPromptTemplate || '';
+    this.aiEventHandlersText = (interaction as any).aiEventHandlers ? JSON.stringify((interaction as any).aiEventHandlers, null, 2) : '';
+    this.aiResponseActionsText = (interaction as any).aiResponseActions ? JSON.stringify((interaction as any).aiResponseActions, null, 2) : '';
+    this.aiEventHandlersError = '';
+    this.aiResponseActionsError = '';
 
     // Store as last working version if it has code
     if (interaction.htmlCode || interaction.jsCode || interaction.iframeUrl) {
@@ -2751,6 +2821,40 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     }
   }
 
+  onAIPromptTemplateChange() {
+    this.markChanged();
+  }
+
+  onAIEventHandlersChange() {
+    this.markChanged();
+    this.aiEventHandlersError = '';
+    
+    if (!this.aiEventHandlersText.trim()) {
+      return;
+    }
+
+    try {
+      JSON.parse(this.aiEventHandlersText);
+    } catch (e: any) {
+      this.aiEventHandlersError = e.message;
+    }
+  }
+
+  onAIResponseActionsChange() {
+    this.markChanged();
+    this.aiResponseActionsError = '';
+    
+    if (!this.aiResponseActionsText.trim()) {
+      return;
+    }
+
+    try {
+      JSON.parse(this.aiResponseActionsText);
+    } catch (e: any) {
+      this.aiResponseActionsError = e.message;
+    }
+  }
+
   saveInteraction() {
     if (!this.currentInteraction) return;
 
@@ -2806,6 +2910,28 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
       }
     }
 
+    // Validate AI Event Handlers JSON
+    if (this.aiEventHandlersError) {
+      validationErrors.push('AI Event Handlers has JSON errors. Please fix or use Reset to revert.');
+    } else if (this.aiEventHandlersText.trim()) {
+      try {
+        JSON.parse(this.aiEventHandlersText);
+      } catch (e: any) {
+        validationErrors.push(`AI Event Handlers JSON syntax error: ${e.message}`);
+      }
+    }
+
+    // Validate AI Response Actions JSON
+    if (this.aiResponseActionsError) {
+      validationErrors.push('AI Response Actions has JSON errors. Please fix or use Reset to revert.');
+    } else if (this.aiResponseActionsText.trim()) {
+      try {
+        JSON.parse(this.aiResponseActionsText);
+      } catch (e: any) {
+        validationErrors.push(`AI Response Actions JSON syntax error: ${e.message}`);
+      }
+    }
+
     // If there are validation errors, show snackbar and prevent save
     if (validationErrors.length > 0) {
       const errorMsg = validationErrors.join(' ');
@@ -2813,14 +2939,22 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // Prepare save data with AI config
+    const saveData: any = { ...this.currentInteraction };
+    
+    // Add AI configuration
+    saveData.aiPromptTemplate = this.aiPromptTemplateText.trim() || null;
+    saveData.aiEventHandlers = this.aiEventHandlersText.trim() ? JSON.parse(this.aiEventHandlersText) : null;
+    saveData.aiResponseActions = this.aiResponseActionsText.trim() ? JSON.parse(this.aiResponseActionsText) : null;
+
     this.saving = true;
     const endpoint = this.isNewInteraction 
       ? `${environment.apiUrl}/interaction-types`
       : `${environment.apiUrl}/interaction-types/${this.currentInteraction.id}`;
 
     const request$ = this.isNewInteraction
-      ? this.http.post<InteractionType>(endpoint, this.currentInteraction)
-      : this.http.put<InteractionType>(endpoint, this.currentInteraction);
+      ? this.http.post<InteractionType>(endpoint, saveData)
+      : this.http.put<InteractionType>(endpoint, saveData);
     
     request$
       .pipe(takeUntil(this.destroy$))
@@ -2860,7 +2994,7 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     }, 3000);
   }
 
-  switchTab(tab: 'settings' | 'code' | 'config' | 'sample' | 'preview') {
+  switchTab(tab: 'settings' | 'code' | 'config' | 'sample' | 'preview' | 'ai') {
     if (!this.currentInteraction) {
       this.showSuccessSnackbar('⚠️ You must select or create an interaction first');
       // Stay on settings tab
@@ -2870,7 +3004,7 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     this.activeTab = tab;
   }
 
-  isTabActive(tab: 'settings' | 'code' | 'config' | 'sample' | 'preview'): boolean {
+  isTabActive(tab: 'settings' | 'code' | 'config' | 'sample' | 'preview' | 'ai'): boolean {
     return this.activeTab === tab;
   }
 

@@ -631,12 +631,20 @@ export class ContentSourceViewModalComponent implements OnInit, OnChanges {
       ).toPromise();
 
       // Map to ProcessedOutput format
-      this.processedOutputs = (outputs || []).map((output: any) => ({
-        id: output.id,
-        outputName: output.outputName || output.title || output.name || 'Untitled',
-        outputType: output.outputType || output.type || 'unknown',
-        contentSourceId: output.contentSourceId || this.contentSource?.id,
-      }));
+      this.processedOutputs = (outputs || []).map((output: any) => {
+        // Use outputName if available, otherwise construct from content source
+        let displayName = output.outputName;
+        if (!displayName && this.contentSource) {
+          const sourceTitle = this.contentSource.title || this.contentSource.sourceUrl || 'Content';
+          displayName = `${sourceTitle} - processed content`;
+        }
+        return {
+          id: output.id,
+          outputName: displayName || output.title || output.name || 'Untitled',
+          outputType: output.outputType || output.type || 'unknown',
+          contentSourceId: output.contentSourceId || this.contentSource?.id,
+        };
+      });
       console.log('[ContentSourceView] Loaded processed outputs:', this.processedOutputs.length);
     } catch (error) {
       console.error('[ContentSourceView] Failed to load processed outputs:', error);

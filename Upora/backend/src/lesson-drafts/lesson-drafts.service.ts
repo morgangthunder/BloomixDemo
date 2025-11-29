@@ -279,6 +279,91 @@ export class LessonDraftsService {
               });
               changeCategories.add('script');
             }
+
+            // Check display configuration changes
+            // Note: These fields may be in playbackRules or at the top level
+            const livePlaybackRules = liveBlock.playbackRules || {};
+            const draftPlaybackRules = draftBlock.playbackRules || {};
+            const liveShowInSnack = liveBlock.showInSnack || livePlaybackRules.showInSnack || false;
+            const draftShowInSnack = draftBlock.showInSnack || draftPlaybackRules.showInSnack || false;
+            if (liveShowInSnack !== draftShowInSnack) {
+              changes.push({
+                category: 'script',
+                type: 'script_display_config',
+                field: `${liveStage.title || `Stage ${stageIdx + 1}`} > ${liveSubStage.title || `Substage ${subIdx + 1}`}`,
+                from: liveShowInSnack ? 'Show in snack' : 'Not in snack',
+                to: draftShowInSnack ? 'Show in snack' : 'Not in snack',
+                description: `Script block ${blockIdx + 1} snack display ${draftShowInSnack ? 'enabled' : 'disabled'}`,
+                context: `Block ${blockIdx + 1}`
+              });
+              changeCategories.add('script');
+            }
+
+            if (draftShowInSnack) {
+              const liveDuration = liveBlock.snackDuration || livePlaybackRules.snackDuration;
+              const draftDuration = draftBlock.snackDuration || draftPlaybackRules.snackDuration;
+              if (liveDuration !== draftDuration) {
+                const liveSeconds = liveDuration ? (liveDuration / 1000).toFixed(1) + 's' : 'Until closed';
+                const draftSeconds = draftDuration ? (draftDuration / 1000).toFixed(1) + 's' : 'Until closed';
+                changes.push({
+                  category: 'script',
+                  type: 'script_display_config',
+                  field: `${liveStage.title || `Stage ${stageIdx + 1}`} > ${liveSubStage.title || `Substage ${subIdx + 1}`}`,
+                  from: liveSeconds,
+                  to: draftSeconds,
+                  description: `Script block ${blockIdx + 1} snack duration changed from "${liveSeconds}" to "${draftSeconds}"`,
+                  context: `Block ${blockIdx + 1}`
+                });
+                changeCategories.add('script');
+              }
+            }
+
+            const liveOpenChatUI = liveBlock.openChatUI || livePlaybackRules.openChatUI || false;
+            const draftOpenChatUI = draftBlock.openChatUI || draftPlaybackRules.openChatUI || false;
+            if (liveOpenChatUI !== draftOpenChatUI) {
+              changes.push({
+                category: 'script',
+                type: 'script_display_config',
+                field: `${liveStage.title || `Stage ${stageIdx + 1}`} > ${liveSubStage.title || `Substage ${subIdx + 1}`}`,
+                from: liveOpenChatUI ? 'Open chat UI' : 'Don\'t open chat UI',
+                to: draftOpenChatUI ? 'Open chat UI' : 'Don\'t open chat UI',
+                description: `Script block ${blockIdx + 1} chat UI auto-open ${draftOpenChatUI ? 'enabled' : 'disabled'}`,
+                context: `Block ${blockIdx + 1}`
+              });
+              changeCategories.add('script');
+            }
+            
+            // Check minimizeChatUI
+            const liveMinimizeChatUI = liveBlock.minimizeChatUI || livePlaybackRules.minimizeChatUI || false;
+            const draftMinimizeChatUI = draftBlock.minimizeChatUI || draftPlaybackRules.minimizeChatUI || false;
+            if (liveMinimizeChatUI !== draftMinimizeChatUI) {
+              changes.push({
+                category: 'script_config',
+                type: 'minimize_chat_ui',
+                field: `${liveStage.title || `Stage ${stageIdx + 1}`} > ${liveSubStage.title || `Substage ${subIdx + 1}`}`,
+                from: liveMinimizeChatUI ? 'Yes' : 'No',
+                to: draftMinimizeChatUI ? 'Yes' : 'No',
+                description: `Script block ${blockIdx + 1} 'Minimize chat UI' changed from "${liveMinimizeChatUI ? 'Yes' : 'No'}" to "${draftMinimizeChatUI ? 'Yes' : 'No'}"`,
+                context: `Block ${blockIdx + 1}`
+              });
+              changeCategories.add('script_config');
+            }
+            
+            // Check activateFullscreen
+            const liveActivateFullscreen = liveBlock.activateFullscreen || livePlaybackRules.activateFullscreen || false;
+            const draftActivateFullscreen = draftBlock.activateFullscreen || draftPlaybackRules.activateFullscreen || false;
+            if (liveActivateFullscreen !== draftActivateFullscreen) {
+              changes.push({
+                category: 'script_config',
+                type: 'activate_fullscreen',
+                field: `${liveStage.title || `Stage ${stageIdx + 1}`} > ${liveSubStage.title || `Substage ${subIdx + 1}`}`,
+                from: liveActivateFullscreen ? 'Yes' : 'No',
+                to: draftActivateFullscreen ? 'Yes' : 'No',
+                description: `Script block ${blockIdx + 1} 'Activate fullscreen' changed from "${liveActivateFullscreen ? 'Yes' : 'No'}" to "${draftActivateFullscreen ? 'Yes' : 'No'}"`,
+                context: `Block ${blockIdx + 1}`
+              });
+              changeCategories.add('script_config');
+            }
           });
 
           // Check for new script blocks
@@ -536,6 +621,9 @@ export class LessonDraftsService {
       }
     });
 
+    // Check if there are content changes that require approval
+    const hasContentChanges = changeCategories.has('content_submission');
+
     return {
       draftId: draft.id,
       lessonId: draft.lessonId,
@@ -545,7 +633,8 @@ export class LessonDraftsService {
       updatedAt: draft.updatedAt,
       changes,
       changesCount: changes.length,
-      changeCategories: Array.from(changeCategories)
+      changeCategories: Array.from(changeCategories),
+      hasContentChanges: hasContentChanges
     };
   }
 
@@ -618,6 +707,47 @@ export class LessonDraftsService {
     await this.lessonRepository.save(lesson);
 
     // Mark draft as approved
+    draft.status = 'approved';
+    draft.reviewedAt = new Date();
+    draft.reviewedBy = dto.reviewedBy;
+    await this.lessonDraftRepository.save(draft);
+
+    return lesson;
+  }
+
+  /**
+   * Publish a draft directly (bypass approval queue) - only for non-content changes
+   */
+  async publishDraft(draftId: string, dto: ApproveDraftDto): Promise<Lesson> {
+    const draft = await this.lessonDraftRepository.findOne({
+      where: { id: draftId },
+      relations: ['lesson']
+    });
+
+    if (!draft) {
+      throw new NotFoundException('Draft not found');
+    }
+
+    // Check if draft has content changes - if so, it must go through approval
+    const diff = await this.generateDiff(draftId);
+    if (diff.hasContentChanges) {
+      throw new ConflictException('Draft contains content changes and must go through approval');
+    }
+
+    // Apply draft changes to live lesson (same as approve)
+    const lesson = draft.lesson;
+    lesson.title = draft.draftData.title || lesson.title;
+    lesson.description = draft.draftData.description || lesson.description;
+    lesson.category = draft.draftData.category || lesson.category;
+    lesson.difficulty = draft.draftData.difficulty || lesson.difficulty;
+    lesson.durationMinutes = draft.draftData.durationMinutes || lesson.durationMinutes;
+    lesson.thumbnailUrl = draft.draftData.thumbnailUrl || lesson.thumbnailUrl;
+    lesson.tags = draft.draftData.tags || lesson.tags;
+    lesson.data = draft.draftData;
+
+    await this.lessonRepository.save(lesson);
+
+    // Mark draft as approved (published directly)
     draft.status = 'approved';
     draft.reviewedAt = new Date();
     draft.reviewedBy = dto.reviewedBy;

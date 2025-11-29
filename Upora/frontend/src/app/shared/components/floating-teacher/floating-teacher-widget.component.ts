@@ -611,6 +611,40 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy, Aft
   @Output() raiseHandClicked = new EventEmitter<void>();
   @Output() scriptClosed = new EventEmitter<void>();
 
+  // Public methods for programmatic control
+  /**
+   * Add a message to the chat history programmatically
+   */
+  addChatMessage(content: string, role: 'user' | 'assistant' | 'error' = 'assistant'): void {
+    const message: ChatMessage = {
+      role,
+      content,
+      timestamp: new Date(),
+    };
+    this.chatMessages = [...this.chatMessages, message];
+    this.scrollToBottom();
+  }
+
+  /**
+   * Show a script block programmatically
+   */
+  showScript(text: string): void {
+    const script: ScriptBlock = {
+      text,
+      estimatedDuration: 10,
+    };
+    this.currentScript = script;
+    this.isMinimized = false; // Ensure widget is visible
+  }
+
+  /**
+   * Open/restore the widget if minimized
+   */
+  openWidget(): void {
+    this.isMinimized = false;
+    this.isHidden = false;
+  }
+
   @ViewChild('chatHistory') chatHistory?: ElementRef<HTMLDivElement>;
 
   isPlaying = false;
@@ -658,6 +692,18 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy, Aft
       const relativeTop = messageRect.top - chatRect.top + chatElement.scrollTop;
       
       chatElement.scrollTop = relativeTop - 10; // 10px padding from top
+    }
+  }
+
+  /**
+   * Scroll chat history to bottom
+   */
+  scrollToBottom(): void {
+    if (this.chatHistory) {
+      setTimeout(() => {
+        const chatElement = this.chatHistory!.nativeElement;
+        chatElement.scrollTop = chatElement.scrollHeight;
+      }, 100);
     }
   }
 

@@ -1,8 +1,10 @@
-import { Component, Input, Output, EventEmitter, inject, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, Input, Output, EventEmitter, inject, OnChanges, SimpleChanges, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../../environments/environment';
 import { ApiService } from '../../../core/services/api.service';
+import { InteractionAISDK, StandardEventTypes } from '../../../core/services/interaction-ai-sdk.service';
+import { Subscription } from 'rxjs';
 
 interface Fragment {
   text: string;
@@ -15,6 +17,7 @@ interface TrueFalseSelectionData {
   targetStatement: string;
   maxFragments: number;
   showHints?: boolean; // Show explanations before submission (default: false)
+  _sourceFormat?: string; // Internal flag to identify data source format (rankedInteractions, direct, legacy-statements, etc.)
 }
 
 @Component({
@@ -142,6 +145,27 @@ interface TrueFalseSelectionData {
       background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%);
       color: #ffffff;
       min-height: 100%;
+    }
+
+    .data-source-indicator {
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+
+    .data-source-indicator.new-format {
+      background: rgba(34, 197, 94, 0.2);
+      border: 1px solid rgba(34, 197, 94, 0.5);
+      color: #4ade80;
+    }
+
+    .data-source-indicator.fallback-format {
+      background: rgba(251, 191, 36, 0.2);
+      border: 1px solid rgba(251, 191, 36, 0.5);
+      color: #fbbf24;
     }
 
     .target-statement {
@@ -553,14 +577,16 @@ interface TrueFalseSelectionData {
     }
   `]
 })
-export class TrueFalseSelectionComponent implements OnChanges {
+export class TrueFalseSelectionComponent implements OnChanges, OnInit, OnDestroy {
   private http = inject(HttpClient);
   private apiService = inject(ApiService);
+  private aiSDK = inject(InteractionAISDK);
 
   @Input() data: TrueFalseSelectionData | null = null;
   @Input() lessonId: string | null = null;
   @Input() stageId: string | null = null;
   @Input() substageId: string | null = null;
+  @Input() processedContentId: string | null = null;
   @Output() completed = new EventEmitter<{ score: number; selectedFragments: string[] }>();
 
   selectedFragments: Set<number> = new Set();
@@ -569,6 +595,50 @@ export class TrueFalseSelectionComponent implements OnChanges {
   classAverage: number | null = null;
   totalAttempts: number = 0;
   percentile: number = 0;
+  
+  private aiResponseSubscription?: Subscription;
+  private aiActionSubscription?: Subscription;
+
+  ngOnInit() {
+    // Subscribe to AI responses
+    this.aiResponseSubscription = this.aiSDK.onResponse((response) => {
+      console.log('[TrueFalseSelection] Received AI response:', response);
+      // Display response in chat (handled by lesson-view component)
+      // Execute actions if present
+      if (response.actions) {
+        response.actions.forEach((action) => {
+          this.handleAIAction(action);
+        });
+      }
+    });
+
+    // Subscribe to highlight actions
+    this.aiActionSubscription = this.aiSDK.onAction('highlight', (action) => {
+      this.handleAIAction(action);
+    });
+
+    // Emit interaction started event
+    if (this.lessonId && this.substageId) {
+      this.aiSDK.emitEvent({
+        type: StandardEventTypes.INTERACTION_STARTED,
+        data: {
+          interactionType: 'true-false-selection',
+          totalFragments: this.data?.fragments?.length || 0,
+        },
+        requiresLLMResponse: false,
+      });
+    }
+  }
+
+  ngOnDestroy() {
+    // Clean up subscriptions
+    if (this.aiResponseSubscription) {
+      this.aiResponseSubscription.unsubscribe();
+    }
+    if (this.aiActionSubscription) {
+      this.aiActionSubscription.unsubscribe();
+    }
+  }
 
   ngOnChanges(changes: SimpleChanges) {
     if (changes['data']) {
@@ -583,6 +653,26 @@ export class TrueFalseSelectionComponent implements OnChanges {
     }
   }
 
+  /**
+   * Handle AI actions (e.g., highlight, show-hint)
+   */
+  private handleAIAction(action: any) {
+    console.log('[TrueFalseSelection] Handling AI action:', action);
+    
+    if (action.type === 'highlight') {
+      // Highlight a specific fragment
+      const fragmentIndex = parseInt(action.target, 10);
+      if (!isNaN(fragmentIndex) && this.data?.fragments[fragmentIndex]) {
+        // Add visual highlight (could be implemented with CSS class)
+        // For now, just log
+        console.log('[TrueFalseSelection] Highlighting fragment:', fragmentIndex);
+      }
+    } else if (action.type === 'show-hint') {
+      // Show a hint (could display in a tooltip or modal)
+      console.log('[TrueFalseSelection] Showing hint:', action.data);
+    }
+  }
+
   isSelected(index: number): boolean {
     return this.selectedFragments.has(index);
   }
@@ -590,13 +680,38 @@ export class TrueFalseSelectionComponent implements OnChanges {
   toggleFragment(index: number) {
     if (this.showScore) return;
 
-    if (this.selectedFragments.has(index)) {
+    const wasSelected = this.selectedFragments.has(index);
+    
+    if (wasSelected) {
       this.selectedFragments.delete(index);
     } else {
       this.selectedFragments.add(index);
     }
 
     console.log('[TrueFalseSelection] Fragment', index, this.isSelected(index) ? 'selected' : 'deselected');
+
+    // Emit event to AI SDK
+    if (this.data && this.data.fragments[index]) {
+      const fragment = this.data.fragments[index];
+      const currentScore = this.calculateScore();
+      
+      this.aiSDK.updateState('selectedFragments', Array.from(this.selectedFragments));
+      this.aiSDK.updateState('currentScore', currentScore);
+      
+      this.aiSDK.emitEvent({
+        type: StandardEventTypes.USER_SELECTION,
+        data: {
+          fragmentIndex: index,
+          fragmentText: fragment.text,
+          isCorrect: fragment.isTrueInContext,
+          wasSelected,
+          isNowSelected: this.isSelected(index),
+          currentScore,
+          totalSelected: this.selectedFragments.size,
+        },
+        requiresLLMResponse: true, // Trigger AI response for user selections
+      }, this.processedContentId || undefined);
+    }
   }
 
   getTrueCount(): number {
@@ -619,6 +734,26 @@ export class TrueFalseSelectionComponent implements OnChanges {
       if (isCorrect) correct++;
     });
     return correct;
+  }
+
+  /**
+   * Calculate current score based on selections
+   */
+  private calculateScore(): number {
+    if (!this.data) return 0;
+    
+    const totalFragments = this.data.fragments.length;
+    let correctPoints = 0;
+    
+    this.data.fragments.forEach((frag, idx) => {
+      const isSelected = this.selectedFragments.has(idx);
+      const isCorrect = (isSelected && frag.isTrueInContext) || (!isSelected && !frag.isTrueInContext);
+      if (isCorrect) {
+        correctPoints++;
+      }
+    });
+    
+    return totalFragments > 0 ? Math.round((correctPoints / totalFragments) * 100) : 0;
   }
 
   async checkAnswers() {
@@ -665,6 +800,19 @@ export class TrueFalseSelectionComponent implements OnChanges {
     
     this.score = calculatedScore;
     console.log('[TrueFalseSelection] ✅ this.score SET TO:', this.score, '%');
+
+    // Emit interaction completed event
+    const selectedTexts = Array.from(this.selectedFragments).map(idx => this.data!.fragments[idx].text);
+    this.aiSDK.emitEvent({
+      type: StandardEventTypes.INTERACTION_COMPLETED,
+      data: {
+        score: this.score,
+        selectedFragments: selectedTexts,
+        totalFragments,
+        correctCount: correctPoints,
+      },
+      requiresLLMResponse: true, // Get feedback on completion
+    }, this.processedContentId || undefined);
 
     // Save result and get class average
     await this.saveResultAndFetchAverage();

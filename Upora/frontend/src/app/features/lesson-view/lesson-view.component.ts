@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 // html2canvas will be dynamically imported
 import { Router, ActivatedRoute } from '@angular/router';
@@ -8,17 +8,21 @@ import { HttpClient } from '@angular/common/http';
 import { LessonService } from '../../core/services/lesson.service';
 import { WebSocketService, ChatMessage } from '../../core/services/websocket.service';
 import { ScreenshotStorageService } from '../../core/services/screenshot-storage.service';
+import { InteractionAISDK } from '../../core/services/interaction-ai-sdk.service';
+import { SnackMessageService } from '../../core/services/snack-message.service';
 import { Subject, firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { Lesson, Stage, SubStage } from '../../core/models/lesson.model';
 import { environment } from '../../../environments/environment';
+import { DEFAULT_LESSON_ID, isDefaultLessonId } from '../../core/constants/default-lesson-id';
 import { TrueFalseSelectionComponent } from '../interactions/true-false-selection/true-false-selection.component';
 import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/components/floating-teacher/floating-teacher-widget.component';
+import { SnackMessageComponent } from '../../shared/components/snack-message/snack-message.component';
 
 @Component({
   selector: 'app-lesson-view',
   standalone: true,
-  imports: [CommonModule, FormsModule, IonContent, TrueFalseSelectionComponent, FloatingTeacherWidgetComponent],
+  imports: [CommonModule, FormsModule, IonContent, TrueFalseSelectionComponent, FloatingTeacherWidgetComponent, SnackMessageComponent],
   template: `
     <div class="bg-brand-dark text-white overflow-hidden flex flex-col md:flex-row lesson-view-wrapper" [class.fullscreen-active]="isFullscreen">
       <!-- Mobile overlay -->
@@ -171,6 +175,7 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
                 [lessonId]="lesson?.id || null"
                 [stageId]="activeStageId?.toString() || null"
                 [substageId]="activeSubStageId?.toString() || null"
+                [processedContentId]="getProcessedContentIdForInteraction()"
                 (completed)="onInteractionCompleted($event)">
               </app-true-false-selection>
             </div>
@@ -328,6 +333,7 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
 
       <!-- Floating Teacher Widget -->
       <app-floating-teacher-widget
+        #teacherWidget
         *ngIf="!teacherWidgetHidden"
         [class.fullscreen-widget]="isFullscreen"
         [currentScript]="currentTeacherScript"
@@ -344,6 +350,9 @@ import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/compon
         (sendChat)="sendChatMessage($event)"
         (raiseHandClicked)="raiseHand()">
       </app-floating-teacher-widget>
+
+      <!-- Snack Message Component -->
+      <app-snack-message></app-snack-message>
     </div>
   `,
   styles: [`
@@ -911,6 +920,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   
   private destroy$ = new Subject<void>();
   private processedOutputsCache = new Map<string, any[]>();
+  
+  @ViewChild('teacherWidget') teacherWidget?: FloatingTeacherWidgetComponent;
 
   constructor(
     private lessonService: LessonService,
@@ -918,7 +929,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private wsService: WebSocketService,
     private http: HttpClient,
-    private screenshotStorage: ScreenshotStorageService
+    private screenshotStorage: ScreenshotStorageService,
+    private interactionAISDK: InteractionAISDK,
+    private snackService: SnackMessageService
   ) {}
 
   ngOnInit() {
@@ -1054,18 +1067,35 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     }
 
     const subStage = this.activeSubStage;
+    
+    // Check if there's a contentOutputId set, but validate it first
     if (subStage.contentOutputId !== undefined && subStage.contentOutputId !== null) {
-      return this.normalizeContentOutputId(subStage.contentOutputId);
+      const normalizedId = this.normalizeContentOutputId(subStage.contentOutputId);
+      // If normalization returns null, it means it's a placeholder/invalid ID
+      // In that case, continue to matching logic below
+      if (normalizedId) {
+        return normalizedId;
+      }
+      // If it's invalid, clear it and continue to matching
+      console.log('[LessonView] Invalid contentOutputId in sub-stage, attempting to find match...');
     }
 
     const outputs = await this.fetchProcessedOutputsForLesson(this.lesson.id);
     if (!outputs.length) {
+      console.warn('[LessonView] No processed outputs found for lesson:', this.lesson.id);
       return null;
     }
 
     const interactionType = subStage.interaction?.type || subStage.interactionType;
     const subStageTitle = (subStage.title || '').toLowerCase();
     const stageTitle = (this.currentStage?.title || '').toLowerCase();
+
+    console.log('[LessonView] Attempting to match processed output:', {
+      interactionType,
+      subStageTitle,
+      stageTitle,
+      availableOutputs: outputs.map(o => ({ id: o.id, type: o.outputType, name: o.outputName || o.title }))
+    });
 
     let match = outputs.find(output =>
       output.outputType === interactionType &&
@@ -1081,11 +1111,17 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       );
     }
 
-    if (!match && outputs.length === 1) {
-      match = outputs[0];
+    // If still no match but there's only one output of the right type, use it
+    if (!match) {
+      const matchingTypeOutputs = outputs.filter(o => o.outputType === interactionType);
+      if (matchingTypeOutputs.length === 1) {
+        match = matchingTypeOutputs[0];
+        console.log('[LessonView] Using single matching output type:', match.id);
+      }
     }
 
     if (match) {
+      console.log('[LessonView] ✅ Matched processed output:', match.id, match.outputName || match.title);
       subStage.contentOutputId = match.id;
       if (subStage.interaction) {
         subStage.interaction.contentOutputId = match.id;
@@ -1093,6 +1129,11 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       return match.id;
     }
 
+    console.warn('[LessonView] ❌ No processed output match found for sub-stage:', {
+      subStageTitle,
+      interactionType,
+      availableTypes: [...new Set(outputs.map(o => o.outputType))]
+    });
     return null;
   }
 
@@ -1114,11 +1155,28 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     }
   }
 
+  getProcessedContentIdForInteraction(): string | null {
+    return this.normalizeContentOutputId(
+      this.activeSubStage?.interaction?.contentOutputId || this.activeSubStage?.contentOutputId
+    );
+  }
+
   private normalizeContentOutputId(value?: string | number | null): string | null {
     if (value === null || value === undefined) {
       return null;
     }
-    return typeof value === 'string' ? value : String(value);
+    const id = typeof value === 'string' ? value : String(value);
+    
+    // Filter out placeholder/invalid IDs (e.g., 40000000-0000-0000-0000-000000000099)
+    // These are placeholder UUIDs that don't represent real processed outputs
+    if (id.startsWith('40000000-0000-0000-0000-') || 
+        isDefaultLessonId(id) ||
+        id.length < 36) {
+      console.warn('[LessonView] Invalid/placeholder contentOutputId detected:', id);
+      return null;
+    }
+    
+    return id;
   }
 
   /**
@@ -1182,7 +1240,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         console.log('[LessonView] Script blocks found:', scriptBlocks.length);
         if (scriptBlocks.length > 0) {
           console.log('[LessonView] 🎬 Auto-playing first script:', scriptBlocks[0]);
-          this.playTeacherScript(scriptBlocks[0]);
+          this.playTeacherScript(scriptBlocks[0], scriptBlocks[0]);
         } else {
           console.log('[LessonView] ⚠️ No teacher script in first substage');
         }
@@ -1302,7 +1360,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       this.playTeacherScript({
         text: `Welcome to ${this.activeSubStage.title || 'this sub-stage'}! Let me explain what we'll be learning here. This is a demonstration of the AI teacher script system. In production, these scripts will be defined in the lesson data and can be edited by lesson builders.`,
         estimatedDuration: 15
-      });
+      }, null);
     }
   }
 
@@ -1317,6 +1375,34 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       this.normalizedEmbeddedInteractionData = this.normalizeInteractionData(embeddedInteraction.config);
     } else {
       this.normalizedEmbeddedInteractionData = null;
+    }
+    
+    // Initialize SDK for interaction if present
+    if (this.activeSubStage && this.lesson?.id) {
+      const interaction = this.activeSubStage.interaction || (this.activeSubStage as any).interactionType;
+      if (interaction) {
+        const interactionId = interaction.type || interaction.id || interaction;
+        const processedContentId = this.normalizeContentOutputId(
+          interaction.contentOutputId || (this.activeSubStage as any).contentOutputId
+        );
+        this.interactionAISDK.initialize(
+          this.lesson.id,
+          String(this.activeSubStage.id),
+          interactionId,
+          processedContentId || undefined,
+        );
+        // Set teacher widget reference for SDK (use setTimeout to ensure ViewChild is available)
+        setTimeout(() => {
+          if (this.teacherWidget) {
+            this.interactionAISDK.setTeacherWidgetRef(this.teacherWidget);
+            console.log('[LessonView] ✅ Teacher widget reference set for SDK');
+          }
+        }, 0);
+        console.log('[LessonView] ✅ Initialized AI SDK for interaction:', interactionId, 'processedContentId:', processedContentId);
+      } else {
+        // Clear SDK context if no interaction
+        this.interactionAISDK.clearContext();
+      }
     }
     
     // Clear any existing auto-advance timeout
@@ -1502,14 +1588,15 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       normalized.interactionTypeId = rawData.interactionTypeId;
     }
     
-    if (environment.logLevel === 'debug') {
-      console.log('[LessonView] Normalized interaction data:', {
-        fragmentsCount: normalized.fragments.length,
-        targetStatement: normalized.targetStatement,
-        maxFragments: normalized.maxFragments,
-        showHints: normalized.showHints
-      });
-    }
+    // Removed verbose logging - only log if explicitly needed for debugging
+    // if (environment.logLevel === 'debug') {
+    //   console.log('[LessonView] Normalized interaction data:', {
+    //     fragmentsCount: normalized.fragments.length,
+    //     targetStatement: normalized.targetStatement,
+    //     maxFragments: normalized.maxFragments,
+    //     showHints: normalized.showHints
+    //   });
+    // }
     
     return normalized;
   }
@@ -1531,7 +1618,16 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     }
 
     const fetchFromOutput = (contentOutputId: string) => {
-      console.log('[LessonView] Loading interaction data for contentOutputId:', contentOutputId);
+      // Validate ID before making request
+      if (!contentOutputId || contentOutputId.startsWith('40000000-0000-0000-0000-') || 
+          isDefaultLessonId(contentOutputId)) {
+        console.warn('[LessonView] Skipping invalid/placeholder contentOutputId:', contentOutputId);
+        this.isLoadingInteraction = false;
+        return;
+      }
+      
+      console.log('[LessonView] 🔍 Loading interaction data for contentOutputId:', contentOutputId);
+      console.log('[LessonView] 📍 Sub-stage:', subStage.title, '| Interaction type:', subStage.interaction?.type);
       
       this.isLoadingInteraction = true;
 
@@ -1541,34 +1637,100 @@ export class LessonViewComponent implements OnInit, OnDestroy {
           next: (output: any) => {
             console.log('[LessonView] Loaded interaction data (raw):', output);
             
-            if (output.outputData && output.outputData.interactionTypeId) {
-              const rawData = {
+            let rawData: any = null;
+            
+            // Check for rankedInteractions structure (new LLM format)
+            if (output.outputData && output.outputData.rankedInteractions && Array.isArray(output.outputData.rankedInteractions)) {
+              // Find the interaction matching the outputType
+              const matchingInteraction = output.outputData.rankedInteractions.find(
+                (interaction: any) => interaction.id === output.outputType || interaction.id === 'true-false-selection'
+              );
+              
+              if (matchingInteraction && matchingInteraction.inputData) {
+                rawData = {
+                  ...matchingInteraction.inputData,
+                  interactionTypeId: matchingInteraction.id || output.outputType,
+                  confidence: matchingInteraction.confidence,
+                  _sourceFormat: 'rankedInteractions' // Flag to identify format
+                };
+                console.log('[LessonView] ✅ Using NEW rankedInteractions format');
+                console.log('[LessonView] Extracted data from rankedInteractions:', {
+                  interactionId: matchingInteraction.id,
+                  confidence: matchingInteraction.confidence,
+                  fragmentsCount: matchingInteraction.inputData.fragments?.length || 0,
+                  targetStatement: matchingInteraction.inputData.targetStatement
+                });
+              } else if (output.outputData && output.outputData.rankedInteractions) {
+                console.warn('[LessonView] ⚠️ rankedInteractions found but no matching interaction for outputType:', output.outputType);
+              }
+            }
+            
+            // Fallback: Check for direct interactionTypeId (old format)
+            if (!rawData && output.outputData && output.outputData.interactionTypeId) {
+              rawData = {
                 ...output.outputData,
-                interactionTypeId: output.outputData.interactionTypeId
+                interactionTypeId: output.outputData.interactionTypeId,
+                _sourceFormat: 'direct' // Flag to identify format
               };
-              this.interactionData = rawData;
-              this.normalizedInteractionData = this.normalizeInteractionData(rawData);
-            } else if (output.outputData && output.outputType === 'true-false-selection') {
+              console.warn('[LessonView] ⚠️ Using FALLBACK: direct outputData structure (old format)');
+            }
+            
+            // Fallback: Check for statements array (legacy format)
+            if (!rawData && output.outputData && output.outputType === 'true-false-selection') {
               const fragments = (output.outputData.statements || []).map((stmt: any) => ({
                 text: stmt.text,
                 isTrueInContext: stmt.isTrue,
                 explanation: stmt.explanation || ''
               }));
-              const rawData = {
+              rawData = {
                 fragments,
                 targetStatement: output.outputName || 'True or False?',
-                interactionTypeId: 'true-false-selection'
+                interactionTypeId: 'true-false-selection',
+                _sourceFormat: 'legacy-statements' // Flag to identify format
               };
+              console.warn('[LessonView] ⚠️ Using FALLBACK: legacy statements format');
+            }
+            
+            // Fallback: Try to extract from nested structures
+            if (!rawData && output.outputData) {
+              rawData = {
+                ...output.outputData,
+                _sourceFormat: 'raw-fallback' // Flag to identify format
+              };
+              console.warn('[LessonView] ⚠️ Using FALLBACK: raw outputData (last resort)');
+            }
+            
+            if (rawData) {
               this.interactionData = rawData;
               this.normalizedInteractionData = this.normalizeInteractionData(rawData);
+              
+              // Log format being used for verification
+              const formatUsed = rawData._sourceFormat || 'unknown';
+              const isNewFormat = formatUsed === 'rankedInteractions';
+              
+              console.log('[LessonView] ✅ Interaction data loaded successfully');
+              console.log('[LessonView] 📊 Data source format:', formatUsed);
+              console.log('[LessonView] ' + (isNewFormat ? '✅' : '⚠️') + ' Using ' + (isNewFormat ? 'NEW' : 'FALLBACK') + ' format');
+              console.log('[LessonView] Normalized interaction data:', {
+                fragmentsCount: this.normalizedInteractionData?.fragments?.length || 0,
+                targetStatement: this.normalizedInteractionData?.targetStatement,
+                hasFragments: !!this.normalizedInteractionData?.fragments,
+                sourceFormat: formatUsed,
+                contentOutputId: contentOutputId
+              });
             } else {
-              console.warn('[LessonView] No interaction data in output');
+              console.warn('[LessonView] ❌ No interaction data found in output:', output);
             }
             
             this.isLoadingInteraction = false;
           },
           error: (error) => {
-            console.error('[LessonView] Error loading interaction data:', error);
+            // Only log 404 errors as warnings, not errors (they're expected for invalid IDs)
+            if (error.status === 404) {
+              console.warn('[LessonView] Processed output not found (404):', contentOutputId, '- This may be a placeholder ID');
+            } else {
+              console.error('[LessonView] Error loading interaction data:', error);
+            }
             this.isLoadingInteraction = false;
           }
         });
@@ -1624,7 +1786,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     const afterScripts = (this.activeSubStage as any)?.scriptBlocksAfterInteraction;
     if (afterScripts && afterScripts.length > 0) {
       console.log('[LessonView] Playing post-interaction script');
-      this.playTeacherScript(afterScripts[0]);
+      this.playTeacherScript(afterScripts[0], afterScripts[0]);
     }
     
     // Auto-advance to next substage/stage
@@ -2230,7 +2392,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   /**
    * Play a teacher script block
    */
-  private playTeacherScript(script?: ScriptBlock | any) {
+  private playTeacherScript(script?: ScriptBlock | any, scriptBlock?: any) {
     if (!script || !script.text) {
       console.log('[LessonView] No script to play');
       return;
@@ -2244,5 +2406,58 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     console.log('[LessonView] Playing teacher script:', script.text.substring(0, 50) + '...');
     this.currentTeacherScript = script;
     this.teacherWidgetHidden = false; // Auto-show when script plays
+    
+    // Use scriptBlock parameter if provided, otherwise use script object itself
+    const block = scriptBlock || script;
+    // Script blocks from DB may not have a 'type' field - default to 'teacher_talk' if it has text/content
+    const blockType = block.type || (script as any).type || (block.text || block.content ? 'teacher_talk' : undefined);
+    const blockContent = block.content || block.text || script.text || script.content || '';
+    
+    console.log('[LessonView] 🔍 Script block debug:', {
+      blockType,
+      showInSnack: block.showInSnack || (script as any).showInSnack,
+      snackDuration: block.snackDuration || (script as any).snackDuration,
+      blockKeys: Object.keys(block),
+      scriptKeys: Object.keys(script || {}),
+      block: JSON.stringify(block).substring(0, 200)
+    });
+    
+    // Handle script block display configuration
+    // Show in snack - only for teacher_talk blocks
+    if (blockType === 'teacher_talk' || (!blockType && (block.text || block.content || script.text))) {
+      // Show in snack if configured
+      const shouldShowInSnack = block.showInSnack || (script as any).showInSnack;
+      console.log('[LessonView] 🔍 Should show in snack?', shouldShowInSnack, 'block.showInSnack:', block.showInSnack, 'script.showInSnack:', (script as any).showInSnack);
+      
+      if (shouldShowInSnack) {
+        const duration = block.snackDuration || (script as any).snackDuration;
+        console.log('[LessonView] ✅ Showing snack message:', blockContent.substring(0, 50) + '...', 'duration:', duration);
+        this.snackService.show(blockContent, duration);
+        console.log('[LessonView] ✅ Snack service.show() called');
+      } else {
+        console.log('[LessonView] ⚠️ Not showing snack - showInSnack is false/undefined');
+      }
+    }
+    
+    // Chat UI controls - available for all script block types
+    // Open chat UI if configured
+    if ((block.openChatUI || (script as any).openChatUI) && this.teacherWidget) {
+      this.teacherWidget.openWidget();
+      console.log('[LessonView] ✅ Opening chat UI');
+    }
+    
+    // Minimize chat UI if configured
+    if ((block.minimizeChatUI || (script as any).minimizeChatUI) && this.teacherWidget) {
+      this.teacherWidget.minimize();
+      console.log('[LessonView] ✅ Minimizing chat UI');
+    }
+    
+    // Activate fullscreen if configured - available for all script block types
+    if (block.activateFullscreen || (script as any).activateFullscreen) {
+      if (!this.isFullscreen) {
+        this.toggleFullscreen();
+        console.log('[LessonView] ✅ Activating fullscreen');
+      }
+    }
   }
 }

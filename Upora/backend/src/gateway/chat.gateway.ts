@@ -14,6 +14,11 @@ import { Repository } from 'typeorm';
 import { Lesson } from '../entities/lesson.entity';
 import { AiAssistantService, ChatMessage as AssistantChatMessage } from '../services/ai-assistant.service';
 import { User } from '../entities/user.entity';
+import { InteractionType } from '../entities/interaction-type.entity';
+import { InteractionAIContextService, InteractionEvent } from '../services/interaction-ai-context.service';
+import { AITeacherPromptBuilderService } from '../services/ai-teacher-prompt-builder.service';
+import { InteractionResponseParserService, LLMResponse } from '../services/interaction-response-parser.service';
+import { GrokService } from '../services/grok.service';
 
 interface ChatMessage {
   lessonId: string;
@@ -56,6 +61,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private aiAssistantService: AiAssistantService,
     @InjectRepository(Lesson)
     private lessonRepository: Repository<Lesson>,
+    @InjectRepository(InteractionType)
+    private interactionTypeRepository: Repository<InteractionType>,
+    private interactionContextService: InteractionAIContextService,
+    private promptBuilderService: AITeacherPromptBuilderService,
+    private responseParserService: InteractionResponseParserService,
+    private grokService: GrokService,
   ) {}
 
   /**
@@ -377,6 +388,147 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
+
+  /**
+   * Handle interaction events from frontend
+   */
+  @SubscribeMessage('interaction-event')
+  async handleInteractionEvent(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: {
+      lessonId: string;
+      substageId: string;
+      interactionId: string;
+      event: InteractionEvent;
+      currentState: Record<string, any>;
+      processedContentId?: string;
+      userId: string;
+      tenantId: string;
+    },
+  ) {
+    this.logger.log(`[ChatGateway] 🎮 Received interaction event: ${payload.event.type}`);
+    
+    const { lessonId, substageId, interactionId, event, currentState, processedContentId, userId, tenantId } = payload;
+    
+    if (!lessonId || !substageId || !interactionId || !event) {
+      this.logger.error('[ChatGateway] ❌ Missing required fields in interaction-event');
+      return { success: false, error: 'Missing required fields' };
+    }
+    
+    const roomName = `tenant-${tenantId}-lesson-${lessonId}`;
+    
+    try {
+      // Get interaction type
+      const interactionType = await this.interactionTypeRepository.findOne({
+        where: { id: interactionId },
+      });
+      
+      if (!interactionType) {
+        this.logger.error(`[ChatGateway] ❌ Interaction type not found: ${interactionId}`);
+        return { success: false, error: 'Interaction type not found' };
+      }
+      
+      // Get or create context
+      const context = await this.interactionContextService.getContext(
+        lessonId,
+        substageId,
+        interactionId,
+        processedContentId,
+      );
+      
+      // Update state
+      if (currentState && Object.keys(currentState).length > 0) {
+        this.interactionContextService.updateState(context.id, currentState);
+      }
+      
+      // Add event to context
+      this.interactionContextService.addEvent(context.id, event);
+      
+      // Check if event should trigger LLM (check event handler config or event flag)
+      const eventHandler = interactionType.aiEventHandlers?.[event.type];
+      const shouldTriggerLLM = event.requiresLLMResponse || eventHandler?.triggerLLM || false;
+      
+      if (!shouldTriggerLLM) {
+        this.logger.debug(`[ChatGateway] Event ${event.type} does not require LLM response`);
+        return { success: true, llmResponse: false };
+      }
+      
+      // Show typing indicator
+      this.server.to(roomName).emit('ai-typing', { typing: true });
+      
+      // Build prompt
+      const customPrompt = eventHandler?.customPrompt;
+      const fullPrompt = await this.promptBuilderService.buildPrompt(
+        interactionType,
+        context,
+        customPrompt,
+      );
+      
+      // Call Grok API
+      const grokResponse = await this.grokService.chatCompletion({
+        messages: [
+          {
+            role: 'system',
+            content: fullPrompt,
+          },
+          {
+            role: 'user',
+            content: `Event: ${event.type}\nData: ${JSON.stringify(event.data, null, 2)}`,
+          },
+        ],
+        temperature: 0.7,
+        maxTokens: 500,
+      });
+      
+      // Parse response
+      const parsedResponse: LLMResponse = this.responseParserService.parseResponse(
+        grokResponse.content,
+      );
+      
+      // Validate response
+      if (!this.responseParserService.validateResponse(parsedResponse)) {
+        this.logger.warn('[ChatGateway] Invalid response structure, using text fallback');
+        parsedResponse.response = grokResponse.content;
+      }
+      
+      // Update context state if response includes state updates
+      if (parsedResponse.stateUpdates) {
+        this.interactionContextService.updateState(context.id, parsedResponse.stateUpdates);
+      }
+      
+      // Emit response to interaction
+      this.server.to(roomName).emit('ai-typing', { typing: false });
+      this.server.to(roomName).emit('interaction-ai-response', {
+        interactionId,
+        substageId,
+        response: parsedResponse,
+        timestamp: new Date(),
+      });
+      
+      this.logger.log(`[ChatGateway] ✅ Interaction AI response sent for event ${event.type}`);
+      
+      return {
+        success: true,
+        llmResponse: true,
+        tokensUsed: grokResponse.tokensUsed,
+      };
+    } catch (error: any) {
+      this.logger.error(`[ChatGateway] ❌ Error processing interaction event: ${error.message}`, error.stack);
+      
+      this.server.to(roomName).emit('ai-typing', { typing: false });
+      this.server.to(roomName).emit('interaction-ai-response', {
+        interactionId,
+        substageId,
+        response: {
+          response: '⚠️ Unable to process interaction event. Please try again.',
+        },
+        timestamp: new Date(),
+        error: true,
+      });
+      
+      return { success: false, error: error.message };
+    }
+  }
 
   /**
    * Broadcast to a specific lesson room

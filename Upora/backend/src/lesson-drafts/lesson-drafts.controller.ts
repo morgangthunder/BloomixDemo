@@ -110,6 +110,27 @@ export class LessonDraftsController {
   }
 
   /**
+   * Publish a draft directly (bypass approval queue for non-content changes)
+   */
+  @Post(':id/publish')
+  async publishDraft(
+    @Param('id') id: string,
+    @Headers('x-user-id') userId: string,
+  ) {
+    const lesson = await this.lessonDraftsService.publishDraft(id, {
+      reviewedBy: userId
+    });
+
+    return {
+      message: 'Draft published successfully',
+      lesson: {
+        id: lesson.id,
+        title: lesson.title
+      }
+    };
+  }
+
+  /**
    * Reject a draft
    */
   @Post(':id/reject')

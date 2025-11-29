@@ -1,13 +1,15 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { ProcessedContentOutput } from '../../entities/processed-content-output.entity';
 import { ScriptBlock } from '../../entities/script-block.entity';
 import { Lesson } from '../../entities/lesson.entity';
 import { ContentSource } from '../../entities/content-source.entity';
+import { LessonDataLink } from '../../entities/lesson-data-link.entity';
 import { LessonDataService, LessonDataSchema, ProcessedContentData } from '../../services/lesson-data.service';
 import { ContentValidationService } from '../../services/content-validation.service';
 import { WeaviateService } from '../../services/weaviate.service';
+import { DEFAULT_LESSON_ID } from '../../constants/default-lesson-id';
 
 @Injectable()
 export class LessonEditorService {
@@ -22,6 +24,8 @@ export class LessonEditorService {
     private lessonRepo: Repository<Lesson>,
     @InjectRepository(ContentSource)
     private contentSourceRepo: Repository<ContentSource>,
+    @InjectRepository(LessonDataLink)
+    private lessonDataLinkRepo: Repository<LessonDataLink>,
     private lessonDataService: LessonDataService,
     private contentValidationService: ContentValidationService,
     private weaviateService: WeaviateService,
@@ -30,11 +34,72 @@ export class LessonEditorService {
   // ========== Processed Content Outputs ==========
 
   async getProcessedOutputs(lessonId: string): Promise<any[]> {
-    const outputs = await this.processedOutputRepo.find({
+    // First, try to find outputs directly linked by lessonId
+    let outputs = await this.processedOutputRepo.find({
       where: { lessonId },
       relations: ['contentSource'],
       order: { createdAt: 'DESC' },
     });
+    
+    // If no outputs found by lessonId, try to find via content sources linked to the lesson
+    if (outputs.length === 0) {
+      this.logger.log(`[LessonEditorService] No processed outputs found with lessonId=${lessonId}, trying via content sources...`);
+      
+      // Find all content sources linked to this lesson
+      const lessonDataLinks = await this.lessonDataLinkRepo.find({
+        where: { lessonId },
+        relations: ['contentSource'],
+      });
+      
+      this.logger.log(`[LessonEditorService] Found ${lessonDataLinks.length} lesson data links for lesson ${lessonId}`);
+      
+      if (lessonDataLinks.length > 0) {
+        const contentSourceIds = lessonDataLinks
+          .map(link => link.contentSourceId)
+          .filter(id => id !== null && id !== undefined);
+        
+        this.logger.log(`[LessonEditorService] Extracted ${contentSourceIds.length} content source IDs: ${contentSourceIds.join(', ')}`);
+        
+        if (contentSourceIds.length > 0) {
+          this.logger.log(`[LessonEditorService] Querying processed outputs for content sources: ${contentSourceIds.join(', ')}`);
+          
+          // Find processed outputs for these content sources
+          outputs = await this.processedOutputRepo.find({
+            where: { contentSourceId: In(contentSourceIds) },
+            relations: ['contentSource'],
+            order: { createdAt: 'DESC' },
+          });
+          
+          this.logger.log(`[LessonEditorService] Found ${outputs.length} processed outputs via content sources`);
+          if (outputs.length > 0) {
+            this.logger.log(`[LessonEditorService] Processed output IDs: ${outputs.map(o => o.id).join(', ')}`);
+          }
+        } else {
+          this.logger.warn(`[LessonEditorService] No valid content source IDs found in lesson data links`);
+        }
+      } else {
+        this.logger.warn(`[LessonEditorService] No lesson data links found for lesson ${lessonId}`);
+        
+        // Last resort: Try to find processed outputs by matching content source titles
+        // that might be related to this lesson (e.g., "Source for: Photosynthesis")
+        // This is a fallback when content sources aren't properly linked
+        this.logger.log(`[LessonEditorService] Attempting fallback: searching for processed outputs with placeholder lessonId...`);
+        
+        const fallbackOutputs = await this.processedOutputRepo.find({
+          where: { 
+            lessonId: DEFAULT_LESSON_ID, // Default - not linked to specific lesson yet
+          },
+          relations: ['contentSource'],
+          order: { createdAt: 'DESC' },
+          take: 10, // Limit to avoid returning too many
+        });
+        
+        if (fallbackOutputs.length > 0) {
+          this.logger.log(`[LessonEditorService] Found ${fallbackOutputs.length} processed outputs with placeholder lessonId (fallback)`);
+          outputs = fallbackOutputs;
+        }
+      }
+    }
     
     // Auto-generate source content for outputs that don't have one
     for (const output of outputs) {
@@ -43,18 +108,23 @@ export class LessonEditorService {
       }
     }
     
-    // Re-fetch to get the updated contentSourceId
-    const updatedOutputs = await this.processedOutputRepo.find({
-      where: { lessonId },
-      relations: ['contentSource'],
-      order: { createdAt: 'DESC' },
-    });
+    // Re-fetch to get the updated contentSourceId (if any were created)
+    if (outputs.some(o => !o.contentSourceId)) {
+      const outputIds = outputs.map(o => o.id);
+      outputs = await this.processedOutputRepo.find({
+        where: { id: In(outputIds) },
+        relations: ['contentSource'],
+        order: { createdAt: 'DESC' },
+      });
+    }
     
     // Transform to match frontend expectations
-    return updatedOutputs.map(output => ({
+    return outputs.map(output => ({
       id: output.id,
       type: output.outputType,
+      outputType: output.outputType, // Include both for compatibility
       title: output.outputName,
+      outputName: output.outputName, // Include both for compatibility
       description: output.description,
       thumbnail: output.thumbnail,
       duration: output.duration,
@@ -70,6 +140,7 @@ export class LessonEditorService {
       metadata: {},
       contentSourceId: output.contentSourceId,
       workflowName: output.workflowName,
+      outputData: output.outputData, // Include outputData for interaction data
       contentSource: output.contentSource ? {
         id: output.contentSource.id,
         title: output.contentSource.title,
@@ -219,7 +290,7 @@ export class LessonEditorService {
         keywords: savedOutput.title?.split(' ').filter(w => w.length > 3) || [],
         type: savedOutput.outputType || 'youtube_video',
         status: 'approved', // Processed content is auto-approved
-        title: savedOutput.title || 'Untitled',
+        title: savedOutput.title || savedOutput.outputName || 'Processed Content',
         sourceUrl: savedOutput.videoId ? `https://www.youtube.com/watch?v=${savedOutput.videoId}` : '',
         contentCategory: 'processed_content',
         videoId: savedOutput.videoId ?? undefined,
@@ -244,12 +315,39 @@ export class LessonEditorService {
     return this.getProcessedOutput(id);
   }
 
-  async deleteProcessedOutput(id: string): Promise<void> {
-    const result = await this.processedOutputRepo.delete(id);
-    if (result.affected === 0) {
+  async deleteProcessedOutput(id: string): Promise<{ contentSourceId: string | null }> {
+    // Get the processed output to find the content source ID
+    const processedOutput = await this.processedOutputRepo.findOne({
+      where: { id },
+    });
+
+    if (!processedOutput) {
       throw new NotFoundException(`Processed output ${id} not found`);
     }
+
+    const contentSourceId = processedOutput.contentSourceId;
+
+    // Delete the processed output
+    await this.processedOutputRepo.delete(id);
+
+    // Set the associated content source status to pending if it exists
+    if (contentSourceId) {
+      const contentSource = await this.contentSourceRepo.findOne({
+        where: { id: contentSourceId },
+      });
+
+      if (contentSource && contentSource.status === 'approved') {
+        contentSource.status = 'pending';
+        (contentSource as any).approvedBy = null;
+        (contentSource as any).approvedAt = null;
+        (contentSource as any).rejectionReason = null;
+        await this.contentSourceRepo.save(contentSource);
+        this.logger.log(`[LessonEditorService] Set content source ${contentSourceId} status to pending after deleting processed output`);
+      }
+    }
+
     // TODO: Also delete from Weaviate if indexed
+    return { contentSourceId };
   }
 
   /**
@@ -279,7 +377,7 @@ export class LessonEditorService {
           keywords: output.title?.split(' ').filter(w => w.length > 3) || [],
           type: output.outputType || 'youtube_video',
           status: 'approved',
-          title: output.title || 'Untitled',
+          title: output.title || output.outputName || 'Processed Content',
           sourceUrl: output.videoId ? `https://www.youtube.com/watch?v=${output.videoId}` : '',
           contentCategory: 'processed_content',
           videoId: output.videoId ?? undefined,

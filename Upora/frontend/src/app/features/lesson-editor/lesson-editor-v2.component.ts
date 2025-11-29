@@ -58,6 +58,12 @@ interface ScriptBlock {
   startTime: number; // seconds
   endTime: number;
   metadata?: any;
+  // Display configuration (for teacher_talk blocks)
+  showInSnack?: boolean; // Show in snack message
+  snackDuration?: number; // Duration in milliseconds (undefined = until manually closed)
+  openChatUI?: boolean; // Open/restore chat UI if minimized
+  minimizeChatUI?: boolean; // Minimize chat UI on load
+  activateFullscreen?: boolean; // Activate fullscreen on load
 }
 
 interface ProcessedContentOutput {
@@ -136,8 +142,8 @@ interface ProcessedContentOutput {
                   class="btn-primary desktop-full mobile-icon" 
                   [disabled]="hasBeenSubmitted || saving || !canSubmit()" 
                   [class.submitted]="hasBeenSubmitted"
-                  title="{{hasBeenSubmitted ? 'Already submitted' : 'Submit for Approval'}}">
-            <span class="desktop-only">{{hasBeenSubmitted ? '✓ Submitted' : '✓ Submit for Approval'}}</span>
+                  [title]="hasBeenSubmitted ? 'Already submitted' : (hasContentChanges ? 'Submit for Approval' : 'Publish Changes')">
+            <span class="desktop-only">{{hasBeenSubmitted ? '✓ Submitted' : (hasContentChanges ? '✓ Submit for Approval' : '✓ Publish')}}</span>
             <span class="mobile-only">✓</span>
           </button>
         </div>
@@ -509,7 +515,7 @@ interface ProcessedContentOutput {
                   </div>
 
                   <div class="script-blocks">
-                    <div *ngFor="let block of getSelectedSubStage()?.scriptBlocks || []; let i = index" 
+                    <div *ngFor="let block of getSelectedSubStage()?.scriptBlocks || []; let i = index; trackBy: trackByBlockId" 
                          class="script-block" 
                          [class.teacher-talk]="block.type === 'teacher_talk'"
                          [class.load-interaction]="block.type === 'load_interaction'"
@@ -521,22 +527,22 @@ interface ProcessedContentOutput {
                          (dragover)="onScriptBlockDragOver(i, $event)"
                          (dragleave)="onScriptBlockDragLeave()"
                          (drop)="onScriptBlockDrop(i, $event)">
-                      <div class="block-header" (click)="toggleScriptBlockCollapse(block.id)">
-                        <span class="drag-handle" title="Drag to reorder" (click)="$event.stopPropagation()">⋮⋮</span>
-                        <button class="collapse-toggle" (click)="$event.stopPropagation(); toggleScriptBlockCollapse(block.id)">
+                      <div class="block-header" (click)="toggleScriptBlockCollapseByIndex(i, $event)">
+                        <span class="drag-handle" title="Drag to reorder" (mousedown)="$event.stopPropagation()" (click)="$event.stopPropagation()">⋮⋮</span>
+                        <button type="button" class="collapse-toggle" (click)="toggleScriptBlockCollapseByIndex(i, $event)">
                           <span *ngIf="isScriptBlockCollapsed(block.id)">▶</span>
                           <span *ngIf="!isScriptBlockCollapsed(block.id)">▼</span>
                         </button>
-                        <span class="block-type-icon">{{getBlockIcon(block.type)}}</span>
-                        <span class="block-type-label">{{getBlockTypeLabel(block.type)}}</span>
-                        <span class="block-time-display">{{formatTime(block.startTime)}} - {{formatTime(block.endTime)}}</span>
+                        <span class="block-type-icon" (click)="$event.stopPropagation()">{{getBlockIcon(block.type)}}</span>
+                        <span class="block-type-label" (click)="$event.stopPropagation()">{{getBlockTypeLabel(block.type)}}</span>
+                        <span class="block-time-display" (click)="$event.stopPropagation()">{{formatTime(block.startTime)}} - {{formatTime(block.endTime)}}</span>
                         <button (click)="deleteScriptBlock(i); $event.stopPropagation()" class="btn-icon" title="Delete block">
                           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                           </svg>
                         </button>
                       </div>
-                      <div class="block-content" *ngIf="!isScriptBlockCollapsed(block.id)">
+                      <div class="block-content" *ngIf="!isScriptBlockCollapsed(block.id)" (click)="$event.stopPropagation()">
                         <select [(ngModel)]="block.type" (ngModelChange)="markAsChanged()" class="block-type-select">
                           <option value="teacher_talk">👨‍🏫 Teacher Talk</option>
                           <option value="load_interaction">🎯 Interaction</option>
@@ -564,6 +570,69 @@ interface ProcessedContentOutput {
                                   (ngModelChange)="markAsChanged()"
                                   placeholder="Enter what the AI teacher should say..."
                                   rows="3"></textarea>
+                        
+                        <!-- Display Configuration -->
+                        <div class="script-block-config">
+                          <!-- Show in snack message - only for teacher_talk blocks -->
+                          <div *ngIf="block.type === 'teacher_talk'" class="config-section">
+                            <label class="checkbox-label">
+                              <input type="checkbox" 
+                                     [(ngModel)]="block.showInSnack" 
+                                     (ngModelChange)="markAsChanged()"
+                                     [checked]="block.showInSnack || false">
+                              <span> Show in snack message</span>
+                            </label>
+                          </div>
+                          
+                          <div *ngIf="block.type === 'teacher_talk' && block.showInSnack" class="config-section">
+                            <label>Snack duration</label>
+                            <div class="snack-duration-input">
+                              <input type="number" 
+                                     [ngModel]="block.snackDuration ? block.snackDuration / 1000 : null" 
+                                     (ngModelChange)="onSnackDurationChange($event, block)"
+                                     placeholder="Leave empty"
+                                     min="0"
+                                     step="1"
+                                     class="snack-duration-field">
+                              <span class="duration-unit">seconds</span>
+                            </div>
+                          </div>
+                          
+                          <!-- Chat UI controls - mutually exclusive, available for all script block types -->
+                          <div class="config-section">
+                            <label class="checkbox-label">
+                              <input type="checkbox" 
+                                     [(ngModel)]="block.openChatUI" 
+                                     (ngModelChange)="onOpenChatUIChange($event, block)"
+                                     [checked]="block.openChatUI || false"
+                                     [disabled]="block.minimizeChatUI || false">
+                              <span> Open chat UI if minimized</span>
+                            </label>
+                          </div>
+                          
+                          <div class="config-section">
+                            <label class="checkbox-label">
+                              <input type="checkbox" 
+                                     [(ngModel)]="block.minimizeChatUI" 
+                                     (ngModelChange)="onMinimizeChatUIChange($event, block)"
+                                     [checked]="block.minimizeChatUI || false"
+                                     [disabled]="block.openChatUI || false">
+                              <span> Minimize chat UI</span>
+                            </label>
+                          </div>
+                          
+                          <!-- Fullscreen control - available for all script block types -->
+                          <div class="config-section">
+                            <label class="checkbox-label">
+                              <input type="checkbox" 
+                                     [(ngModel)]="block.activateFullscreen" 
+                                     (ngModelChange)="markAsChanged()"
+                                     [checked]="block.activateFullscreen || false">
+                              <span> Activate fullscreen</span>
+                            </label>
+                          </div>
+                        </div>
+                        
                         <div *ngIf="block.type === 'load_interaction'" class="interaction-selector">
                           <label>Interaction Type:</label>
                           <div class="interaction-display">
@@ -1823,6 +1892,66 @@ interface ProcessedContentOutput {
       color: white;
       font-size: 0.875rem;
       resize: vertical;
+    }
+    .script-block-config {
+      margin-top: 0.75rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid #333;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .script-block-config .config-section {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .script-block-config .config-section label {
+      font-size: 0.875rem;
+      color: #ccc;
+      font-weight: 500;
+    }
+    .script-block-config .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+    }
+    .script-block-config .checkbox-label input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: #cc0000;
+    }
+    .script-block-config .checkbox-label span {
+      color: #ccc;
+      font-size: 0.875rem;
+    }
+    .snack-duration-input {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .snack-duration-field {
+      width: 100px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 4px;
+      padding: 0.5rem;
+      color: white;
+      font-size: 0.875rem;
+      text-align: center;
+    }
+    .snack-duration-field:focus {
+      outline: none;
+      border-color: #cc0000;
+    }
+    .snack-duration-field::placeholder {
+      color: #666;
+    }
+    .duration-unit {
+      color: #999;
+      font-size: 0.875rem;
     }
 
     /* BUTTONS */
@@ -3182,6 +3311,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   hasBeenSubmitted: boolean = false;
   hasDraft: boolean = false;
   hasPendingDraft: boolean = false;
+  hasContentChanges: boolean = false; // Track if draft has content changes requiring approval
   showingPendingChanges: boolean = false;
   pendingDraftData: any = null;
   liveLessonData: any = null;
@@ -3224,6 +3354,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   draggedScriptBlockIndex: number | null = null;
   dragOverScriptBlockIndex: number | null = null;
   collapsedScriptBlocks: Set<string> = new Set(); // Track which script blocks are collapsed (by block.id)
+  private isTogglingBlock: string | null = null; // Prevent multiple simultaneous toggles
   
   // View Changes Modal
   showViewChangesModal: boolean = false;
@@ -3495,6 +3626,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
                 this.showingPendingChanges = false;
                 this.hasBeenSubmitted = false; // Reset submission status when no pending draft
                 this.hasDraft = false; // Reset draft status
+                this.hasContentChanges = false; // Reset content changes flag
                 return lesson;
               }
             })
@@ -3554,13 +3686,18 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
                     });
                   }
                   
+                  // Add all block IDs to collapsed set (using actual IDs from blocks array)
                   substage.scriptBlocks.forEach((block) => {
-                    this.collapsedScriptBlocks.add(block.id);
+                    if (block && block.id) {
+                      this.collapsedScriptBlocks.add(block.id);
+                      console.log(`[LessonEditor]   Added block to collapsed set: ${block.id}`);
+                    }
                   });
                 }
               });
             });
             console.log('[LessonEditor] 📦 Collapsed all script blocks by default and fixed overlaps');
+            console.log('[LessonEditor] 📦 Collapsed blocks Set:', Array.from(this.collapsedScriptBlocks));
             
             // If overlaps were fixed, we'll save them when the user makes their next change
             // Don't auto-save here to avoid creating unnecessary drafts
@@ -3865,7 +4002,13 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
                 text: block.content || '',
                 idealTimestamp: block.startTime || 0,
                 estimatedDuration: (block.endTime || block.startTime || 0) - (block.startTime || 0) || 10,
-                playbackRules: block.metadata || {}
+                playbackRules: block.metadata || {},
+                // Include display configuration
+                showInSnack: block.showInSnack || false,
+                snackDuration: block.snackDuration || undefined,
+                openChatUI: block.openChatUI || false,
+                minimizeChatUI: block.minimizeChatUI || false,
+                activateFullscreen: block.activateFullscreen || false
               }));
             
             // Separate scriptBlocks and scriptBlocksAfterInteraction based on interaction position
@@ -3885,6 +4028,17 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
               interaction: interactionData
             };
           })
+        }))
+      },
+      // Include content sources in draft data for proper diff comparison
+      contentReferences: {
+        contentSources: this.getSourceContentForLesson().map(source => ({
+          id: source.id,
+          title: source.title,
+          type: source.type,
+          sourceUrl: (source as any).sourceUrl || (source as any).url || null,
+          filePath: (source as any).filePath || null,
+          metadata: (source as any).metadata || {}
         }))
       }
     };
@@ -3908,7 +4062,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       }
     }).pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (response: any) => {
+        next: async (response: any) => {
           this.saving = false;
           this.hasUnsavedChanges = false;
           this.hasDraft = true;
@@ -3922,6 +4076,27 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
             id: this.currentDraftId
           };
           console.log('[LessonEditor] ✅ Draft saved:', response, 'Draft ID:', this.currentDraftId);
+          
+          // Check if draft has content changes by getting the diff
+          if (this.currentDraftId) {
+            try {
+              const diff = await firstValueFrom(
+                this.http.get<any>(`${environment.apiUrl}/lesson-drafts/${this.currentDraftId}/diff`, {
+                  headers: {
+                    'x-tenant-id': environment.tenantId,
+                    'x-user-id': environment.defaultUserId
+                  }
+                }).pipe(
+                  catchError(() => of({ hasContentChanges: false }))
+                )
+              );
+              this.hasContentChanges = diff.hasContentChanges || false;
+              console.log('[LessonEditor] Draft has content changes:', this.hasContentChanges);
+            } catch (error) {
+              console.error('[LessonEditor] Failed to check content changes:', error);
+              this.hasContentChanges = false; // Default to false if we can't check
+            }
+          }
           
           // CRITICAL: Ensure liveLessonData is set if it's not already set
           // This allows "Show Current State" to work after saving
@@ -4007,39 +4182,119 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   }
 
   async submitForApproval() {
+    console.log('[LessonEditor] 📤 submitForApproval called');
+    console.log('[LessonEditor] 📤 hasContentChanges:', this.hasContentChanges);
+    console.log('[LessonEditor] 📤 hasUnsavedChanges:', this.hasUnsavedChanges);
+    console.log('[LessonEditor] 📤 hasDraft:', this.hasDraft);
+    console.log('[LessonEditor] 📤 currentDraftId:', this.currentDraftId);
+    console.log('[LessonEditor] 📤 lesson.id:', this.lesson?.id);
+    
     if (!this.lesson) {
       this.showSnackbar('No lesson to submit', 'error');
       return;
     }
 
-    // Automatically save draft if there are unsaved changes
-    if (this.hasUnsavedChanges || !this.hasDraft) {
-      console.log('[LessonEditor] 💾 Auto-saving draft before submission...');
+    // First, refresh draft status to check for existing drafts on the server
+    console.log('[LessonEditor] 🔍 Refreshing draft status...');
+    const hasPendingDraft = await this.refreshPendingDraftStatus();
+    console.log('[LessonEditor] 🔍 After refresh - hasPendingDraft:', hasPendingDraft);
+    console.log('[LessonEditor] 🔍 After refresh - currentDraftId:', this.currentDraftId);
+    console.log('[LessonEditor] 🔍 After refresh - hasDraft:', this.hasDraft);
+    console.log('[LessonEditor] 🔍 After refresh - hasContentChanges:', this.hasContentChanges);
+
+    // If we found a pending draft, check if we should show warning
+    if (hasPendingDraft && this.showPendingChangesWarning === false) {
+      // Only show warning if there are actual changes to review
+      if (this.pendingDraftData) {
+        this.pendingWarningAction = 'submit';
+        this.showPendingChangesWarning = true;
+        return;
+      }
+    }
+
+    // Save draft if there are unsaved changes
+    if (this.hasUnsavedChanges) {
+      console.log('[LessonEditor] 💾 Saving draft before submission (has unsaved changes)...');
       await this.saveDraft();
       // Wait a moment for save to complete
       await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Refresh draft status again after save
+      await this.refreshPendingDraftStatus();
     }
 
-    // Check if draft was saved successfully
-    if (!this.hasDraft) {
-      console.log('[LessonEditor] ❌ Cannot submit - draft save failed or no changes');
-      this.showSnackbar('Failed to save draft. Please try again.', 'error');
+    // Check if we have a draft ID now (either from save or from refresh)
+    if (!this.currentDraftId) {
+      console.log('[LessonEditor] ❌ Cannot submit - no draft available');
+      console.log('[LessonEditor] ❌ hasDraft:', this.hasDraft);
+      console.log('[LessonEditor] ❌ hasUnsavedChanges:', this.hasUnsavedChanges);
+      this.showSnackbar('No draft to publish. Please save your changes first.', 'error');
       return;
     }
 
-    // Check for pending changes
-    if (await this.refreshPendingDraftStatus()) {
-      this.pendingWarningAction = 'submit';
-      this.showPendingChangesWarning = true;
+    // Check if draft has content changes - if not, publish directly
+    if (!this.hasContentChanges) {
+      console.log('[LessonEditor] 📤 Publishing draft directly (no content changes)...');
+      await this.publishDraft();
       return;
     }
     
-    console.log('[LessonEditor] 📤 Submitting draft for approval...');
+    console.log('[LessonEditor] 📤 Submitting draft for approval (has content changes)...');
     
     // In the approval workflow, submitting means the draft is already created
     // and set to 'pending' status. We just need to mark it locally as submitted.
     this.hasBeenSubmitted = true;
     this.showSnackbar('Draft submitted for approval! Check the Approval Queue.', 'success');
+  }
+
+  async publishDraft() {
+    if (!this.lesson?.id || !this.currentDraftId) {
+      console.warn('[LessonEditor] ⚠️ Cannot publish: lesson.id=', this.lesson?.id, 'currentDraftId=', this.currentDraftId);
+      this.showSnackbar('No draft to publish', 'error');
+      return;
+    }
+
+    try {
+      console.log('[LessonEditor] 🚀 Publishing draft:', this.currentDraftId, 'for lesson:', this.lesson.id);
+      
+      const response = await firstValueFrom(
+        this.http.post<any>(`${environment.apiUrl}/lesson-drafts/${this.currentDraftId}/publish`, {}, {
+          headers: {
+            'x-tenant-id': environment.tenantId,
+            'x-user-id': environment.defaultUserId
+          }
+        })
+      );
+
+      console.log('[LessonEditor] ✅ Draft published successfully:', response);
+      
+      // Reload the lesson to get the updated state
+      await this.loadLesson(this.lesson.id);
+      
+      // Reset draft state
+      this.hasDraft = false;
+      this.hasPendingDraft = false;
+      this.hasContentChanges = false;
+      this.hasBeenSubmitted = false;
+      this.currentDraftId = null;
+      this.pendingDraftData = null;
+      this.liveLessonData = null;
+      this.showingPendingChanges = false;
+      
+      this.showSnackbar('Changes published successfully!', 'success');
+    } catch (error: any) {
+      console.error('[LessonEditor] ❌ Failed to publish draft:', error);
+      const errorMessage = error.error?.message || error.message || 'Failed to publish draft';
+      
+      // If publish fails because draft has content changes, fall back to approval
+      if (error.status === 409 && errorMessage.includes('content changes')) {
+        console.log('[LessonEditor] ⚠️ Draft has content changes, submitting for approval instead...');
+        this.hasBeenSubmitted = true;
+        this.showSnackbar('Draft submitted for approval (contains content changes)', 'info');
+      } else {
+        this.showSnackbar(`Failed to publish: ${errorMessage}`, 'error');
+      }
+    }
   }
 
   togglePendingChanges() {
@@ -4448,12 +4703,26 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   // Snackbar helper
   showSnackbar(message: string, type: 'success' | 'error' | 'info' = 'info') {
     console.log('[LessonEditor] 🍪 Showing snackbar:', message, type);
+    
+    // Clear any existing timeout
+    if (this.snackbarTimeout) {
+      clearTimeout(this.snackbarTimeout);
+      this.snackbarTimeout = null;
+    }
+    
     this.snackbarMessage = message;
     this.snackbarType = type;
     this.snackbarVisible = true;
     
     // Force change detection
     this.cdr.detectChanges();
+    
+    // Auto-hide after 5 seconds for success/info, 7 seconds for error
+    const duration = type === 'error' ? 7000 : 5000;
+    this.snackbarTimeout = setTimeout(() => {
+      this.snackbarVisible = false;
+      this.cdr.detectChanges();
+    }, duration);
     
     // Auto-hide after 3 seconds
     if (this.snackbarTimeout) {
@@ -4672,8 +4941,17 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       nextStartTime = maxEndTime;
     }
     
+    // Ensure unique ID by checking against existing blocks
+    const existingIds = new Set(substage.scriptBlocks.map(b => b.id));
+    let newBlockId = `block-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    let counter = 0;
+    while (existingIds.has(newBlockId)) {
+      counter++;
+      newBlockId = `block-${Date.now()}-${counter}-${Math.random().toString(36).substr(2, 9)}`;
+    }
+    
     const newBlock: ScriptBlock = {
-      id: `block-${Date.now()}`,
+      id: newBlockId,
       type: 'teacher_talk',
       content: '',
       startTime: nextStartTime,
@@ -4731,6 +5009,35 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     const confirmed = confirm('Delete this script block?');
     if (!confirmed) return;
     substage.scriptBlocks.splice(index, 1);
+    this.markAsChanged();
+  }
+
+  onSnackDurationChange(value: number | null, block: ScriptBlock): void {
+    if (value === null || value === undefined || value === 0 || isNaN(value)) {
+      block.snackDuration = undefined;
+    } else {
+      // Round to whole number before converting to milliseconds
+      const wholeSeconds = Math.round(value);
+      block.snackDuration = wholeSeconds * 1000; // Convert seconds to milliseconds
+    }
+    this.markAsChanged();
+  }
+
+  onOpenChatUIChange(value: boolean, block: ScriptBlock): void {
+    block.openChatUI = value;
+    if (value && block.minimizeChatUI) {
+      // If opening chat UI, uncheck minimize
+      block.minimizeChatUI = false;
+    }
+    this.markAsChanged();
+  }
+
+  onMinimizeChatUIChange(value: boolean, block: ScriptBlock): void {
+    block.minimizeChatUI = value;
+    if (value && block.openChatUI) {
+      // If minimizing chat UI, uncheck open
+      block.openChatUI = false;
+    }
     this.markAsChanged();
   }
 
@@ -4930,6 +5237,20 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
         return;
       }
       substage.interaction.contentOutputId = normalizedId;
+      console.log('[LessonEditor] ✅ Linked processed content to interaction:', {
+        substageId: substage.id,
+        substageTitle: substage.title,
+        interactionType: substage.interaction.type,
+        contentOutputId: normalizedId,
+        contentTitle: item.title
+      });
+    } else {
+      console.log('[LessonEditor] ✅ Linked processed content to substage:', {
+        substageId: substage.id,
+        substageTitle: substage.title,
+        contentOutputId: normalizedId,
+        contentTitle: item.title
+      });
     }
 
     if (!this.processedContentItems.find(existing => existing.id === normalizedId)) {
@@ -5039,6 +5360,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       if (pendingCount === 0) {
         this.hasPendingDraft = false;
         this.pendingDraftData = null;
+        this.hasContentChanges = false;
         return false;
       }
 
@@ -5051,6 +5373,27 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       if (latestDraft.changesCount && latestDraft.changesCount > 0) {
         this.hasPendingDraft = true;
         this.pendingDraftData = latestDraft.draftData;
+        this.currentDraftId = latestDraft.id; // CRITICAL: Set currentDraftId so publish can find it
+        this.hasDraft = true; // Mark that we have a draft
+        
+        // Check if draft has content changes by getting the diff
+        try {
+          const diff = await firstValueFrom(
+            this.http.get<any>(`${environment.apiUrl}/lesson-drafts/${latestDraft.id}/diff`, {
+              headers: {
+                'x-tenant-id': environment.tenantId,
+                'x-user-id': environment.defaultUserId
+              }
+            }).pipe(
+              catchError(() => of({ hasContentChanges: false }))
+            )
+          );
+          this.hasContentChanges = diff.hasContentChanges || false;
+          console.log('[LessonEditor] Draft has content changes:', this.hasContentChanges);
+        } catch (error) {
+          console.error('[LessonEditor] Failed to check content changes:', error);
+          this.hasContentChanges = false; // Default to false if we can't check
+        }
         this.lastSaved = latestDraft.createdAt ? new Date(latestDraft.createdAt) : this.lastSaved;
       } else {
         // No actual changes, so no pending draft
@@ -5231,16 +5574,148 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     return timesUpdated;
   }
 
-  toggleScriptBlockCollapse(blockId: string) {
-    if (this.collapsedScriptBlocks.has(blockId)) {
+  toggleScriptBlockCollapseByIndex(blockIndex: number, event?: Event): void {
+    // Stop event propagation immediately
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    
+    // CRITICAL: blockIndex is required - we use it exclusively to identify which block to toggle
+    if (blockIndex === undefined || blockIndex < 0) {
+      console.warn('[LessonEditor] ⚠️ Invalid blockIndex in toggleScriptBlockCollapseByIndex:', blockIndex);
+      return;
+    }
+    
+    // Verify the block exists in the actual array using ONLY the index
+    const substage = this.getSelectedSubStage();
+    if (!substage || !substage.scriptBlocks) {
+      console.warn('[LessonEditor] ⚠️ No substage or script blocks available');
+      return;
+    }
+    
+    // Verify index is within bounds
+    if (blockIndex >= substage.scriptBlocks.length) {
+      console.warn('[LessonEditor] ⚠️ Block index out of bounds:', blockIndex, 'Array length:', substage.scriptBlocks.length);
+      return;
+    }
+    
+    // Get the block at the exact index - this is the ONLY block we will toggle
+    const actualBlock = substage.scriptBlocks[blockIndex];
+    if (!actualBlock || !actualBlock.id) {
+      console.warn('[LessonEditor] ⚠️ Block not found at index:', blockIndex);
+      return;
+    }
+    
+    const blockId = actualBlock.id;
+    
+    // Prevent multiple simultaneous toggles
+    if (this.isTogglingBlock === blockId) {
+      console.log('[LessonEditor] ⚠️ Block toggle already in progress for:', blockId);
+      return;
+    }
+    
+    // Set flag to prevent duplicate toggles
+    this.isTogglingBlock = blockId;
+    
+    // Only toggle the specific block at this exact index
+    const wasCollapsed = this.collapsedScriptBlocks.has(blockId);
+    console.log('[LessonEditor] 🔄 Toggling collapse for block at index:', blockIndex, 'ID:', blockId, 'Was collapsed:', wasCollapsed);
+    console.log('[LessonEditor] 🔍 All blocks before toggle:', substage.scriptBlocks.map((b, idx) => ({ index: idx, id: b.id, collapsed: this.collapsedScriptBlocks.has(b.id) })));
+    
+    // Toggle immediately - only this specific block
+    if (wasCollapsed) {
       this.collapsedScriptBlocks.delete(blockId);
     } else {
       this.collapsedScriptBlocks.add(blockId);
     }
+    
+    console.log('[LessonEditor] ✅ Collapsed blocks after toggle:', Array.from(this.collapsedScriptBlocks));
+    console.log('[LessonEditor] 🔍 All blocks after toggle:', substage.scriptBlocks.map((b, idx) => ({ index: idx, id: b.id, collapsed: this.collapsedScriptBlocks.has(b.id) })));
+    
+    // Clear the flag after a short delay
+    setTimeout(() => {
+      this.isTogglingBlock = null;
+    }, 100);
+  }
+
+  // Legacy method for backwards compatibility (if needed)
+  toggleScriptBlockCollapse(block: ScriptBlock, event?: Event, blockIndex?: number): void {
+    // Stop event propagation immediately to prevent triggering collapse on parent elements
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    
+    // CRITICAL: blockIndex is required - we use it exclusively to identify which block to toggle
+    if (blockIndex === undefined || blockIndex < 0) {
+      console.warn('[LessonEditor] ⚠️ Invalid blockIndex in toggleScriptBlockCollapse:', blockIndex);
+      return;
+    }
+    
+    // Verify the block exists in the actual array using ONLY the index
+    const substage = this.getSelectedSubStage();
+    if (!substage || !substage.scriptBlocks) {
+      console.warn('[LessonEditor] ⚠️ No substage or script blocks available');
+      return;
+    }
+    
+    // Verify index is within bounds
+    if (blockIndex >= substage.scriptBlocks.length) {
+      console.warn('[LessonEditor] ⚠️ Block index out of bounds:', blockIndex, 'Array length:', substage.scriptBlocks.length);
+      return;
+    }
+    
+    // Get the block at the exact index - this is the ONLY block we will toggle
+    const actualBlock = substage.scriptBlocks[blockIndex];
+    if (!actualBlock || !actualBlock.id) {
+      console.warn('[LessonEditor] ⚠️ Block not found at index:', blockIndex);
+      return;
+    }
+    
+    const blockId = actualBlock.id;
+    
+    // Prevent multiple simultaneous toggles
+    if (this.isTogglingBlock === blockId) {
+      console.log('[LessonEditor] ⚠️ Block toggle already in progress for:', blockId);
+      return;
+    }
+    
+    // Set flag to prevent duplicate toggles
+    this.isTogglingBlock = blockId;
+    
+    // Only toggle the specific block at this exact index
+    const wasCollapsed = this.collapsedScriptBlocks.has(blockId);
+    console.log('[LessonEditor] 🔄 Toggling collapse for block at index:', blockIndex, 'ID:', blockId, 'Was collapsed:', wasCollapsed);
+    console.log('[LessonEditor] 🔍 All blocks before toggle:', substage.scriptBlocks.map((b, idx) => ({ index: idx, id: b.id, collapsed: this.collapsedScriptBlocks.has(b.id) })));
+    
+    // Toggle immediately - only this specific block
+    if (wasCollapsed) {
+      this.collapsedScriptBlocks.delete(blockId);
+    } else {
+      this.collapsedScriptBlocks.add(blockId);
+    }
+    
+    console.log('[LessonEditor] ✅ Collapsed blocks after toggle:', Array.from(this.collapsedScriptBlocks));
+    console.log('[LessonEditor] 🔍 All blocks after toggle:', substage.scriptBlocks.map((b, idx) => ({ index: idx, id: b.id, collapsed: this.collapsedScriptBlocks.has(b.id) })));
+    
+    // Clear the flag after a short delay
+    setTimeout(() => {
+      this.isTogglingBlock = null;
+    }, 100);
   }
 
   isScriptBlockCollapsed(blockId: string): boolean {
-    return this.collapsedScriptBlocks.has(blockId);
+    if (!blockId) {
+      console.warn('[LessonEditor] ⚠️ isScriptBlockCollapsed called with empty blockId');
+      return false;
+    }
+    const isCollapsed = this.collapsedScriptBlocks.has(blockId);
+    return isCollapsed;
+  }
+
+  trackByBlockId(index: number, block: ScriptBlock): string {
+    return block.id || `block-${index}`;
   }
 
   getBlockTypeLabel(type: string): string {
@@ -6383,17 +6858,53 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
           // Parse script blocks - convert from DB format to editor format
           const scriptBlocks: ScriptBlock[] = [];
           
+          // Track used IDs to prevent duplicates
+          const usedIds = new Set<string>();
+          const generateUniqueId = (prefix: string, fallbackId?: string): string => {
+            let baseId = fallbackId || `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            let uniqueId = baseId;
+            let counter = 0;
+            while (usedIds.has(uniqueId)) {
+              counter++;
+              uniqueId = `${baseId}-${counter}`;
+            }
+            usedIds.add(uniqueId);
+            return uniqueId;
+          };
+          
           // Add pre-interaction script blocks
           if (Array.isArray(ssData.scriptBlocks)) {
             console.log(`[LessonEditor]     Pre-interaction scripts:`, ssData.scriptBlocks.length);
-            ssData.scriptBlocks.forEach((block: any) => {
+            ssData.scriptBlocks.forEach((block: any, blockIdx: number) => {
+              const playbackRules = block.playbackRules || {};
+              // Extract display configuration from playbackRules or top level (for backward compatibility)
+              const showInSnack = block.showInSnack !== undefined ? block.showInSnack : (playbackRules.showInSnack || false);
+              const snackDuration = block.snackDuration !== undefined ? block.snackDuration : playbackRules.snackDuration;
+              const openChatUI = block.openChatUI !== undefined ? block.openChatUI : (playbackRules.openChatUI || false);
+              const minimizeChatUI = block.minimizeChatUI !== undefined ? block.minimizeChatUI : (playbackRules.minimizeChatUI || false);
+              const activateFullscreen = block.activateFullscreen !== undefined ? block.activateFullscreen : (playbackRules.activateFullscreen || false);
+              
+              // Ensure block ID is unique and doesn't match interaction pattern
+              let blockId = block.id;
+              if (!blockId || blockId.startsWith('interaction-') || usedIds.has(blockId)) {
+                blockId = generateUniqueId('block', blockId);
+              } else {
+                usedIds.add(blockId);
+              }
+              
               scriptBlocks.push({
-                id: block.id || `block-${Date.now()}-${Math.random()}`,
+                id: blockId,
                 type: 'teacher_talk',
                 content: block.text || '',
                 startTime: block.idealTimestamp || 0,
                 endTime: (block.idealTimestamp || 0) + (block.estimatedDuration || 10),
-                metadata: block.playbackRules || {}
+                metadata: playbackRules,
+                // Include display configuration at top level for editor
+                showInSnack: showInSnack,
+                snackDuration: snackDuration,
+                openChatUI: openChatUI,
+                minimizeChatUI: minimizeChatUI,
+                activateFullscreen: activateFullscreen
               });
             });
           }
@@ -6401,8 +6912,9 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
           // Add interaction load block if interaction exists
           if (ssData.interaction) {
             console.log(`[LessonEditor]     Interaction:`, ssData.interaction.type);
+            const interactionId = generateUniqueId('interaction', `interaction-${ssData.id}`);
             scriptBlocks.push({
-              id: `interaction-${ssData.id}`,
+              id: interactionId,
               type: 'load_interaction',
               content: '',
               startTime: scriptBlocks.length > 0 ? scriptBlocks[scriptBlocks.length - 1].endTime : 0,
@@ -6417,15 +6929,33 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
           // Add post-interaction script blocks
           if (Array.isArray(ssData.scriptBlocksAfterInteraction)) {
             console.log(`[LessonEditor]     Post-interaction scripts:`, ssData.scriptBlocksAfterInteraction.length);
-            ssData.scriptBlocksAfterInteraction.forEach((block: any) => {
+            ssData.scriptBlocksAfterInteraction.forEach((block: any, blockIdx: number) => {
               const lastEndTime = scriptBlocks.length > 0 ? scriptBlocks[scriptBlocks.length - 1].endTime : 0;
+              const playbackRules = block.playbackRules || {};
+              // Extract display configuration from playbackRules or top level (for backward compatibility)
+              const showInSnack = block.showInSnack !== undefined ? block.showInSnack : (playbackRules.showInSnack || false);
+              const snackDuration = block.snackDuration !== undefined ? block.snackDuration : playbackRules.snackDuration;
+              const openChatUI = block.openChatUI !== undefined ? block.openChatUI : (playbackRules.openChatUI || false);
+              
+              // Ensure block ID is unique and doesn't match interaction pattern
+              let blockId = block.id;
+              if (!blockId || blockId.startsWith('interaction-') || usedIds.has(blockId)) {
+                blockId = generateUniqueId('block', blockId);
+              } else {
+                usedIds.add(blockId);
+              }
+              
               scriptBlocks.push({
-                id: block.id || `block-${Date.now()}-${Math.random()}`,
+                id: blockId,
                 type: 'teacher_talk',
                 content: block.text || '',
                 startTime: lastEndTime,
                 endTime: lastEndTime + (block.estimatedDuration || 10),
-                metadata: block.playbackRules || {}
+                metadata: playbackRules,
+                // Include display configuration at top level for editor
+                showInSnack: showInSnack,
+                snackDuration: snackDuration,
+                openChatUI: openChatUI
               });
             });
           }

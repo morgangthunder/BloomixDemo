@@ -74,6 +74,8 @@ export class TestsService {
         'ai-assistant-service': 'ai-assistant.service.spec',
         'app-controller': 'app.controller.spec',
         'lesson-data-persistence': 'lesson-data-persistence.spec',
+        'prompts': 'prompts.spec',
+        'interaction-ai-sdk': 'interaction-ai-sdk.spec',
       };
 
       const pattern = suitePatterns[suiteName] || suiteName;

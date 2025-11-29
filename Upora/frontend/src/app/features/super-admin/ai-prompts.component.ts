@@ -82,14 +82,14 @@ interface AIAssistant {
                   <button 
                     class="btn-cancel-small" 
                     (click)="resetPrompt(selectedAssistant, promptKey)"
-                    [disabled]="savingPrompt === promptKey"
+                    [disabled]="savingPrompt === promptKey || !hasPromptChanged(selectedAssistant, promptKey)"
                     title="Reset to last saved version">
                     Cancel
                   </button>
                   <button 
                     class="btn-save-small" 
                     (click)="saveIndividualPrompt(selectedAssistant, promptKey)"
-                    [disabled]="savingPrompt === promptKey">
+                    [disabled]="savingPrompt === promptKey || !hasPromptChanged(selectedAssistant, promptKey)">
                     {{ savingPrompt === promptKey ? 'Saving...' : 'Save' }}
                   </button>
                 </div>
@@ -99,7 +99,10 @@ interface AIAssistant {
 
           <div class="editor-actions">
             <button class="btn-secondary" (click)="cancelEdit()">← Back to Assistants</button>
-            <button class="btn-primary" (click)="saveAllPrompts()" [disabled]="savingAll">
+            <button class="btn-warning" (click)="resetToLatestDefaults()" [disabled]="savingAll">
+              🔄 Reset to Latest Defaults
+            </button>
+            <button class="btn-primary" (click)="saveAllPrompts()" [disabled]="savingAll || !hasAnyPromptChanged()">
               {{ savingAll ? 'Saving All...' : 'Save All Changes' }}
             </button>
           </div>
@@ -389,9 +392,38 @@ interface AIAssistant {
       color: #0f0f23;
     }
 
-    .btn-primary:hover {
+    .btn-primary:hover:not(:disabled) {
       background: #00bce6;
       box-shadow: 0 4px 12px rgba(0, 212, 255, 0.3);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-warning {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      border: none;
+      color: white;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-right: 1rem;
+    }
+
+    .btn-warning:hover:not(:disabled) {
+      background: linear-gradient(135deg, #e68900 0%, #c26505 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+    }
+
+    .btn-warning:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     /* Mobile Responsive */
@@ -466,28 +498,33 @@ export class AiPromptsComponent implements OnInit {
       prompts: {
         pdfAnalysis: {
           label: 'PDF Analysis Prompt',
-          content: 'You are analyzing a PDF document to identify possible educational interactions.\n\nGiven the PDF content, identify which interaction types can be generated with high confidence.\n\nFor each possible interaction:\n1. Assess if the content has the necessary elements\n2. Rate confidence (0.0-1.0)\n3. Explain why this interaction fits\n\nReturn JSON: { "possibleInteractions": [{ "type": "fragment-builder", "confidence": 0.95, "reason": "..." }] }',
+          content: 'You are analyzing a PDF document to identify possible educational interactions and extract or construct their input data sets.\n\nFROM CONTENT: {contentText}\n\nTASK: Analyze the content and identify which interaction types can be populated with data from this content.\n\nCRITICAL RULES:\n1. FAITHFULNESS TO SOURCE: The generated JSON must be FAITHFUL to the source content. If you cannot find suitable content in the source to generate the necessary input data for an interaction and format it correctly in JSON, DO NOT generate that interaction. Only include interactions where the source content provides sufficient material.\n2. GAP FILLING: You may fill in small gaps (e.g., minor clarifications, formatting adjustments) but ONLY to a minimal degree. The vast majority of the data must come directly from the source content.\n3. CONFIDENCE SCORE: Your confidence score (0.0-1.0) should reflect how faithful the generated JSON is to the source content:\n   - 0.9-1.0: Content directly supports the interaction with clear, extractable data\n   - 0.7-0.89: Content supports the interaction but requires minor interpretation or small gaps filled\n   - 0.5-0.69: Content partially supports the interaction but requires significant interpretation\n   - Below 0.5: Content does not adequately support the interaction - DO NOT include this interaction\n\nINSTRUCTIONS:\n1. FIRST, check if the content already contains structured data (e.g., True/False statements, fragments, steps, comparisons)\n2. If the content ALREADY contains True/False statements, fragments, or other structured data:\n   - EXTRACT them directly from the content\n   - Format them according to the exact sample data format for that interaction type\n   - DO NOT generate new content - use what is already in the source\n3. If the content does NOT contain structured data but could support it:\n   - Only generate input data sets if the source content provides sufficient material\n   - If the source content is insufficient, DO NOT include that interaction type\n   - Follow the exact format shown in the "Sample" tab of the interaction builder\n4. For each identified interaction type, rate confidence (0.0-1.0) based on faithfulness to source and explain why this interaction fits\n\nIMPORTANT: You will be provided with a list of all available interaction types and their sample input data formats. You MUST follow those exact formats when extracting or constructing input data sets. Only include interactions where the source content genuinely supports them.\n\nReturn JSON with ranked interaction suggestions and extracted/constructed input data. Omit any interactions that cannot be faithfully generated from the source content.',
           placeholder: 'Enter the prompt for analyzing PDF content sources...'
         },
         urlAnalysis: {
           label: 'URL/Webpage Analysis Prompt',
-          content: 'You are analyzing webpage content to identify possible educational interactions.\n\nGiven the webpage text, identify which interaction types can be generated.\n\nConsider:\n- Article structure and clarity\n- Presence of examples, comparisons, processes\n- Complexity and reading level\n\nReturn JSON with possible interactions and confidence scores.',
+          content: 'You are analyzing webpage content to identify possible educational interactions and extract or construct their input data sets.\n\nFROM CONTENT: {contentText}\n\nTASK: Analyze the content and identify which interaction types can be populated with data from this content.\n\nCRITICAL RULES:\n1. FAITHFULNESS TO SOURCE: The generated JSON must be FAITHFUL to the source content. If you cannot find suitable content in the source to generate the necessary input data for an interaction and format it correctly in JSON, DO NOT generate that interaction. Only include interactions where the source content provides sufficient material.\n2. GAP FILLING: You may fill in small gaps (e.g., minor clarifications, formatting adjustments) but ONLY to a minimal degree. The vast majority of the data must come directly from the source content.\n3. CONFIDENCE SCORE: Your confidence score (0.0-1.0) should reflect how faithful the generated JSON is to the source content:\n   - 0.9-1.0: Content directly supports the interaction with clear, extractable data\n   - 0.7-0.89: Content supports the interaction but requires minor interpretation or small gaps filled\n   - 0.5-0.69: Content partially supports the interaction but requires significant interpretation\n   - Below 0.5: Content does not adequately support the interaction - DO NOT include this interaction\n\nINSTRUCTIONS:\n1. FIRST, check if the content already contains structured data (e.g., True/False statements, fragments, steps, comparisons)\n2. If the content ALREADY contains True/False statements, fragments, or other structured data:\n   - EXTRACT them directly from the content\n   - Format them according to the exact sample data format for that interaction type\n   - DO NOT generate new content - use what is already in the source\n3. If the content does NOT contain structured data but could support it:\n   - Only generate input data sets if the source content provides sufficient material\n   - If the source content is insufficient, DO NOT include that interaction type\n   - Follow the exact format shown in the "Sample" tab of the interaction builder\n4. For each identified interaction type, rate confidence (0.0-1.0) based on faithfulness to source\n\nConsider:\n- Article structure and clarity\n- Presence of examples, comparisons, processes\n- Complexity and reading level\n\nIMPORTANT: You will be provided with a list of all available interaction types and their sample input data formats. You MUST follow those exact formats when extracting or constructing input data sets. Only include interactions where the source content genuinely supports them.\n\nReturn JSON with ranked interaction suggestions and extracted/constructed input data. Omit any interactions that cannot be faithfully generated from the source content.',
           placeholder: 'Enter the prompt for analyzing web content...'
         },
         textAnalysis: {
           label: 'Text Input Analysis Prompt',
-          content: 'You are analyzing raw text input to identify possible educational interactions.\n\nGiven the text, identify which interaction types work best.\n\nPrioritize:\n- Clear concepts and statements (Fragment Builder, True/False)\n- Cause-effect relationships (Prediction Branching)\n- Comparisons (Analogy Bridge)\n- Step-by-step processes (Stepping Stones)\n\nReturn JSON with ranked interaction suggestions.',
+          content: 'You are analyzing raw text input to identify possible educational interactions and extract or construct their input data sets.\n\nFROM CONTENT: {contentText}\n\nTASK: Analyze the content and identify which interaction types can be populated with data from this content.\n\nCRITICAL RULES:\n1. FAITHFULNESS TO SOURCE: The generated JSON must be FAITHFUL to the source content. If you cannot find suitable content in the source to generate the necessary input data for an interaction and format it correctly in JSON, DO NOT generate that interaction. Only include interactions where the source content provides sufficient material.\n2. GAP FILLING: You may fill in small gaps (e.g., minor clarifications, formatting adjustments) but ONLY to a minimal degree. The vast majority of the data must come directly from the source content.\n3. CONFIDENCE SCORE: Your confidence score (0.0-1.0) should reflect how faithful the generated JSON is to the source content:\n   - 0.9-1.0: Content directly supports the interaction with clear, extractable data\n   - 0.7-0.89: Content supports the interaction but requires minor interpretation or small gaps filled\n   - 0.5-0.69: Content partially supports the interaction but requires significant interpretation\n   - Below 0.5: Content does not adequately support the interaction - DO NOT include this interaction\n\nINSTRUCTIONS:\n1. FIRST, check if the content already contains structured data (e.g., True/False statements, fragments, steps, comparisons)\n2. If the content ALREADY contains True/False statements, fragments, or other structured data:\n   - EXTRACT them directly from the content\n   - Format them according to the exact sample data format for that interaction type\n   - DO NOT generate new content - use what is already in the source\n3. If the content does NOT contain structured data but could support it:\n   - Only generate input data sets if the source content provides sufficient material\n   - If the source content is insufficient, DO NOT include that interaction type\n   - Follow the exact format shown in the "Sample" tab of the interaction builder\n4. For each identified interaction type, rate confidence (0.0-1.0) based on faithfulness to source\n\nPrioritize:\n- Clear concepts and statements (Fragment Builder, True/False)\n- Cause-effect relationships (Prediction Branching)\n- Comparisons (Analogy Bridge)\n- Step-by-step processes (Stepping Stones)\n\nIMPORTANT: You will be provided with a list of all available interaction types and their sample input data formats. You MUST follow those exact formats when extracting or constructing input data sets. Only include interactions where the source content genuinely supports them.\n\nReturn JSON with ranked interaction suggestions and extracted/constructed input data. Omit any interactions that cannot be faithfully generated from the source content.',
           placeholder: 'Enter the prompt for analyzing text input...'
         },
         videoTranscriptAnalysis: {
           label: 'Video Transcript Analysis Prompt',
-          content: 'You are analyzing a video transcript to identify possible educational interactions.\n\nGiven the transcript, identify interaction types that leverage:\n- Temporal flow of information\n- Visual descriptions (for Mystery Reveal, Hotspot Explorer)\n- Demonstrations and explanations\n- Q&A patterns\n\nReturn JSON with interaction suggestions and timestamp hints.',
+          content: 'You are analyzing a video transcript to identify possible educational interactions and extract or construct their input data sets.\n\nFROM CONTENT: {contentText}\n\nTASK: Analyze the transcript and identify which interaction types can be populated with data from this content.\n\nCRITICAL RULES:\n1. FAITHFULNESS TO SOURCE: The generated JSON must be FAITHFUL to the source content. If you cannot find suitable content in the source to generate the necessary input data for an interaction and format it correctly in JSON, DO NOT generate that interaction. Only include interactions where the source content provides sufficient material.\n2. GAP FILLING: You may fill in small gaps (e.g., minor clarifications, formatting adjustments) but ONLY to a minimal degree. The vast majority of the data must come directly from the source content.\n3. CONFIDENCE SCORE: Your confidence score (0.0-1.0) should reflect how faithful the generated JSON is to the source content:\n   - 0.9-1.0: Content directly supports the interaction with clear, extractable data\n   - 0.7-0.89: Content supports the interaction but requires minor interpretation or small gaps filled\n   - 0.5-0.69: Content partially supports the interaction but requires significant interpretation\n   - Below 0.5: Content does not adequately support the interaction - DO NOT include this interaction\n\nINSTRUCTIONS:\n1. FIRST, check if the transcript already contains structured data (e.g., True/False statements, fragments, steps, comparisons, Q&A patterns)\n2. If the transcript ALREADY contains True/False statements, fragments, or other structured data:\n   - EXTRACT them directly from the transcript\n   - Format them according to the exact sample data format for that interaction type\n   - DO NOT generate new content - use what is already in the source\n3. If the transcript does NOT contain structured data but could support it:\n   - Only generate input data sets if the source content provides sufficient material\n   - If the source content is insufficient, DO NOT include that interaction type\n   - Follow the exact format shown in the "Sample" tab of the interaction builder\n4. Identify interaction types that leverage:\n   - Temporal flow of information\n   - Visual descriptions (for Mystery Reveal, Hotspot Explorer)\n   - Demonstrations and explanations\n   - Q&A patterns\n5. Include timestamp hints where relevant\n6. For each identified interaction type, rate confidence (0.0-1.0) based on faithfulness to source\n\nIMPORTANT: You will be provided with a list of all available interaction types and their sample input data formats. You MUST follow those exact formats when extracting or constructing input data sets. Only include interactions where the source content genuinely supports them.\n\nReturn JSON with ranked interaction suggestions, timestamp hints, and extracted/constructed input data. Omit any interactions that cannot be faithfully generated from the source content.',
           placeholder: 'Enter the prompt for analyzing video transcripts...'
         },
         iframeGuideUrlAnalysis: {
           label: 'iFrame Guide URL Analysis Prompt',
           content: 'You are analyzing a webpage that will be used as a guide for an iframe interaction in an educational lesson. Your task is to extract any content relating to steps, guidance, or instructions on how to play a game or navigate a web app.\n\nAnalyze the webpage content and return a concise digest in JSON format that can be used as a reference to help an LLM guide a user through the process in conjunction with screenshots that will be shared as the user attempts it.\n\nIf the webpage contains guidance for:\n- Game play instructions or rules\n- Step-by-step navigation instructions\n- UI element explanations\n- Feature usage guides\n- Tutorial content\n\nReturn JSON format:\n{\n  "hasGuidance": true,\n  "guidance": {\n    "steps": ["step 1", "step 2", ...],\n    "keyElements": ["element1", "element2", ...],\n    "instructions": "concise guidance text",\n    "tips": ["tip1", "tip2", ...]\n  }\n}\n\nIf the webpage has no such guidance, return:\n{\n  "hasGuidance": false,\n  "message": "No guidance for web app navigation or game play found"\n}',
           placeholder: 'Enter the prompt for analyzing iframe guide URLs...'
+        },
+        iframeGuideDocAnalysis: {
+          label: 'iFrame Guide Doc Analysis Prompt',
+          content: 'You are analyzing a document (PDF, image, or other file) that will be used as a guide for an iframe interaction in an educational lesson. Your task is to extract any content relating to steps, guidance, or instructions on how to play a game or navigate a web app.\n\nAnalyze the document content and return a concise digest in JSON format that can be used as a reference to help an LLM guide a user through the process in conjunction with screenshots that will be shared as the user attempts it.\n\nIf the document contains guidance for:\n- Game play instructions or rules\n- Step-by-step navigation instructions\n- UI element explanations\n- Feature usage guides\n- Tutorial content\n- Diagrams or visual guides\n\nReturn JSON format:\n{\n  "hasGuidance": true,\n  "guidance": {\n    "steps": ["step 1", "step 2", ...],\n    "keyElements": ["element1", "element2", ...],\n    "instructions": "concise guidance text",\n    "tips": ["tip1", "tip2", ...],\n    "visualReferences": ["description of diagram 1", "description of diagram 2", ...]\n  }\n}\n\nIf the document has no such guidance, return:\n{\n  "hasGuidance": false,\n  "message": "No guidance for web app navigation or game play found"\n}',
+          placeholder: 'Enter the prompt for analyzing iframe guide documents...'
         }
       }
     },
@@ -529,6 +566,34 @@ export class AiPromptsComponent implements OnInit {
           label: 'Content Processing Recommendation',
           content: 'Given new content added to a lesson, recommend the best processing methods and interaction types...',
           placeholder: 'Enter the prompt for content processing recommendations...'
+        }
+      }
+    },
+    {
+      id: 'ai-interaction-handler',
+      name: 'AI Interaction Handler',
+      icon: '🤖',
+      description: 'Manages prompts for interactions. This is a multi-layer prompt system: base + SDK content + event handling + response format + interaction context + custom instructions. Used by all interactions when communicating with the AI Interaction Handler.',
+      prompts: {
+        'base-system': {
+          label: 'Base System Prompt',
+          content: 'You are an AI Interaction Handler helping students learn through interactive activities.\n\n**IMPORTANT:** After this base prompt, you will receive:\n1. SDK Reference - Information about available event types, response actions, and response structure\n2. Event Handling Instructions - How to respond to different types of events\n3. Response Format Instructions - How to structure your responses\n4. Interaction Context - The specific interaction type, processed content data, current state, and recent events\n5. Custom Instructions - Interaction-specific guidance from the lesson builder\n\n**Your role:**\n- Provide helpful, encouraging guidance based on the interaction context\n- Use the processed content data to inform your responses\n- Respond appropriately to events based on the event handling instructions\n- Format your responses according to the response format instructions\n- Follow any custom instructions provided for this specific interaction\n- Explain concepts clearly and simply\n- Give hints when students struggle\n- Celebrate correct answers\n- Guide students toward understanding without giving away answers\n\n**Response approach:**\n- Be concise and friendly\n- Use age-appropriate language\n- Focus on learning, not just correctness\n- Ask questions to encourage thinking\n- Consider the interaction state and recent events when responding',
+          placeholder: 'Enter the base system prompt for AI Interaction Handler...'
+        },
+        'sdk-content': {
+          label: 'SDK Content Reference (For AI Interaction Handler Responses)',
+          content: '**Purpose:** This reference helps the AI Interaction Handler respond to students during interactions and provide instructions for the interaction to execute.\n\n## Available Event Types\n\nInteractions can emit various event types. Common standard events include:\n- `user-selection`: User selected an option/item\n- `user-input`: User entered text or data\n- `progress-update`: Progress changed\n- `score-change`: Score changed\n- `hint-request`: User requested a hint\n- `explanation-request`: User requested an explanation\n- `interaction-started`: Interaction began\n- `interaction-completed`: Interaction finished\n\n**Note:** Interactions can also emit custom event types. The event data will include the event type and relevant information.\n\n## Response Actions\n\nThe AI Interaction Handler can request the interaction to perform actions by including them in responses:\n- `highlight`: Highlight a specific element (target should be element ID or index)\n- `show-hint`: Display a hint message (data should include the hint text)\n- `update-ui`: Update UI elements (data should include update instructions)\n- `play-sound`: Play a sound effect (data should include sound identifier)\n- Custom actions as defined by the interaction\n\n## Response Display Modes\n\nYour responses can be displayed in different ways. Use metadata flags to control how responses are shown:\n\n**Display Options:**\n- **Chat UI**: Default mode - responses appear in the chat history of the AI Teacher widget\n- **Snack Message**: Temporary notification at the top of the screen (useful for quick hints, mobile-friendly)\n- **Script Block**: Displayed as a prominent script block in the teacher widget (for important announcements)\n\n**When to Use Each Mode:**\n- **Chat UI** (default): For conversational responses, detailed explanations, follow-up questions\n- **Snack Message**: For brief hints, quick confirmations, non-intrusive feedback (especially on mobile)\n- **Script Block**: For important announcements, welcome messages, key instructions that should be prominent\n\n## Response Structure with Display Control\n\nResponses should be structured as follows:\n```json\n{\n  "response": "Your main text response to the student",\n  "actions": [\n    {\n      "type": "highlight",\n      "target": "element-id-or-index",\n      "data": {}\n    }\n  ],\n  "stateUpdates": {\n    "key": "value"\n  },\n  "metadata": {\n    "showInSnack": true,           // Show in snack message instead of chat\n    "snackDuration": 3000,        // Duration in milliseconds (optional, undefined = until closed)\n    "postToChat": true,           // Also post to chat UI (can combine with snack)\n    "openChatUI": true,           // Open/restore chat widget if minimized\n    "showAsScript": false,        // Display as script block instead of chat message\n    "confidence": 0.9,            // Your confidence in the response (0.0-1.0)\n    "suggestedNextStep": "..."    // Optional suggestion for next step\n  }\n}\n```\n\n**Display Metadata Guidelines:**\n- Use `showInSnack: true` for brief, non-intrusive messages (hints, quick confirmations)\n- Set `snackDuration` (milliseconds) for auto-hiding snacks, or omit for manual close\n- Use `showAsScript: true` for important announcements that need prominence\n- Use `openChatUI: true` when you want to ensure the chat is visible for longer conversations\n- You can combine modes (e.g., show in snack AND post to chat for persistence)\n\nIf returning only text, simply provide the text response. The system will parse structured JSON if present.',
+          placeholder: 'Enter the SDK content reference for AI Interaction Handler responses during interactions...'
+        },
+        'event-handling': {
+          label: 'Event Handling Instructions',
+          content: '## How to Respond to Events\n\n**User Actions (`user-selection`, `user-input`):**\n- Provide immediate feedback on the action\n- If incorrect, offer guidance without revealing the answer\n- If correct, acknowledge and encourage\n- Consider the context from processed content and interaction state\n\n**Progress Updates (`progress-update`, `score-change`):**\n- Acknowledge progress positively\n- If progress is slow, offer encouragement and strategies\n- If score is low, provide targeted help\n- Celebrate improvements\n\n**AI Requests (`hint-request`, `explanation-request`):**\n- Provide helpful hints that guide without giving away answers\n- Break down complex concepts into simpler parts\n- Use examples from the processed content when relevant\n- Encourage the student to think through the problem\n\n**Lifecycle Events (`interaction-started`, `interaction-completed`):**\n- Welcome students at the start\n- Provide summary and encouragement at completion\n- Highlight key learnings\n\n**Custom Events:**\n- Respond based on the event data provided\n- Use the interaction context to inform your response\n- Follow any custom instructions for this interaction',
+          placeholder: 'Enter instructions for how to handle different event types...'
+        },
+        'response-format': {
+          label: 'Response Format Instructions',
+          content: '## Response Format Guidelines\n\n**Text-Only Responses:**\n- Provide clear, concise text\n- Be encouraging and supportive\n- Use appropriate tone for the student\'s age level\n- Keep responses focused and actionable\n\n**Structured Responses (with actions):**\n- Include a text response that explains what you\'re doing\n- Specify actions clearly with type, target, and data\n- Ensure actions are appropriate for the interaction type\n- Actions should enhance learning, not distract\n\n**State Updates:**\n- Only update state when necessary\n- Use clear, descriptive keys\n- Keep state updates minimal and relevant\n\n**Display Mode Selection:**\n- **Brief hints/confirmations** → Use `showInSnack: true` with appropriate duration\n- **Detailed explanations** → Use default chat UI (or `postToChat: true`)\n- **Important announcements** → Use `showAsScript: true` for prominence\n- **Mobile-friendly guidance** → Prefer snack messages for quick, non-intrusive feedback\n- **Complex responses** → Use chat UI to allow scrolling and persistence\n\n**Best Practices:**\n- Always provide a text response, even when using actions\n- Explain why you\'re taking an action\n- Ensure actions align with learning objectives\n- Consider the student\'s current state and progress\n- Choose display mode based on message importance and length\n- Use snack messages for brief feedback to avoid interrupting the interaction flow\n- Use chat UI for longer explanations that students may want to reference\n- Use script blocks sparingly for truly important announcements',
+          placeholder: 'Enter instructions for formatting responses...'
         }
       }
     },
@@ -826,6 +891,21 @@ Return JSON array of script blocks with timestamps and playback rules.`,
           label: 'General Interaction Assistant',
           content: 'Loading from database...',
           placeholder: 'Provide general interaction design guidance...'
+        },
+        'sdk-html': {
+          label: 'SDK Reference: HTML Interactions',
+          content: '## AI Teacher SDK for HTML Interactions\n\n**Integration:** HTML interactions run in iframes. Use `createIframeAISDK()` to access the AI Teacher.\n\n**Setup:**\n```javascript\nconst aiSDK = createIframeAISDK();\naiSDK.isReady((ready) => {\n  if (ready) {\n    // SDK ready\n  }\n});\n```\n\n**Core Methods:**\n- `aiSDK.emitEvent({ type, data, requiresLLMResponse })` - Send events\n- `aiSDK.updateState(key, value)` - Update state\n- `aiSDK.onResponse(callback)` - Receive AI responses\n- `aiSDK.onAction(type, callback)` - Handle specific actions\n\n**Display Methods:**\n- `aiSDK.postToChat(content, role, openChat)` - Post message to chat UI\n- `aiSDK.showScript(text, openChat)` - Display as script block\n- `aiSDK.showSnack(content, duration)` - Show snack message (returns message ID)\n- `aiSDK.hideSnack()` - Hide current snack message\n\n**Standard Events:** `user-selection`, `user-input`, `hint-request`, `interaction-submit`, `interaction-complete`\n\n**Response Actions:** `highlight`, `show-hint`, `update-ui`\n\n**Response Display:** AI responses include metadata for display control:\n- `metadata.showInSnack` - Show in snack message\n- `metadata.snackDuration` - Snack duration (ms, optional)\n- `metadata.postToChat` - Also post to chat\n- `metadata.openChatUI` - Open chat if minimized\n- `metadata.showAsScript` - Show as script block\n\n**Example:**\n```javascript\n// On user click\naiSDK.emitEvent({\n  type: \'user-selection\',\n  data: { index: 0, isCorrect: true },\n  requiresLLMResponse: true\n});\n\n// Handle AI response\naiSDK.onResponse((r) => {\n  // Response automatically displayed based on metadata\n  // Or manually control display:\n  if (r.metadata?.showInSnack) {\n    aiSDK.showSnack(r.response, r.metadata.snackDuration);\n  }\n  if (r.actions) {\n    r.actions.forEach(a => {\n      if (a.type === \'highlight\') highlightElement(a.target);\n    });\n  }\n});\n```',
+          placeholder: 'Enter condensed SDK documentation for HTML interactions...'
+        },
+        'sdk-pixijs': {
+          label: 'SDK Reference: PixiJS Interactions',
+          content: '## AI Teacher SDK for PixiJS Interactions\n\n**Integration:** PixiJS interactions run in iframes. Use `createIframeAISDK()` to access the AI Teacher.\n\n**Setup:**\n```javascript\nconst aiSDK = createIframeAISDK();\naiSDK.isReady((ready) => {\n  if (ready) {\n    // SDK ready\n  }\n});\n```\n\n**Core Methods:**\n- `aiSDK.emitEvent({ type, data, requiresLLMResponse })` - Send events\n- `aiSDK.updateState(key, value)` - Update state\n- `aiSDK.onResponse(callback)` - Receive AI responses\n- `aiSDK.onAction(type, callback)` - Handle specific actions\n\n**Display Methods:**\n- `aiSDK.postToChat(content, role, openChat)` - Post message to chat UI\n- `aiSDK.showScript(text, openChat)` - Display as script block\n- `aiSDK.showSnack(content, duration)` - Show snack message (returns message ID)\n- `aiSDK.hideSnack()` - Hide current snack message\n\n**Standard Events:** `user-selection`, `progress-update`, `score-change`, `interaction-complete`\n\n**Response Actions:** `highlight`, `show-hint`, `update-ui`\n\n**Response Display:** AI responses include metadata for display control:\n- `metadata.showInSnack` - Show in snack message\n- `metadata.snackDuration` - Snack duration (ms, optional)\n- `metadata.postToChat` - Also post to chat\n- `metadata.openChatUI` - Open chat if minimized\n- `metadata.showAsScript` - Show as script block\n\n**Example (Drag & Drop):**\n```javascript\n// On sprite drag end\nfunction onDragEnd(sprite, target) {\n  aiSDK.updateState(\'lastDrag\', { sprite, target });\n  aiSDK.emitEvent({\n    type: \'user-selection\',\n    data: { spriteId: sprite.id, targetId: target.id, isCorrect: checkCorrect(sprite, target) },\n    requiresLLMResponse: true\n  });\n}\n\n// Handle AI feedback\naiSDK.onResponse((r) => {\n  // Response automatically displayed based on metadata\n  // Or manually control display:\n  if (r.metadata?.showInSnack) {\n    aiSDK.showSnack(r.response, r.metadata.snackDuration);\n  } else if (r.response) {\n    showFeedback(r.response);\n  }\n});\n```',
+          placeholder: 'Enter condensed SDK documentation for PixiJS interactions...'
+        },
+        'sdk-iframe': {
+          label: 'SDK Reference: iFrame Interactions',
+          content: '## AI Teacher SDK for iFrame Interactions\n\n**Integration:** iFrame interactions embed external websites. Use `createIframeAISDK()` to access the AI Teacher.\n\n**Setup:**\n```javascript\nconst aiSDK = createIframeAISDK();\naiSDK.isReady((ready) => {\n  if (ready) {\n    // SDK ready\n  }\n});\n```\n\n**Core Methods:**\n- `aiSDK.emitEvent({ type, data, requiresLLMResponse })` - Send events\n- `aiSDK.updateState(key, value)` - Update state\n- `aiSDK.onResponse(callback)` - Receive AI responses\n- `aiSDK.onAction(type, callback)` - Handle specific actions\n\n**Display Methods:**\n- `aiSDK.postToChat(content, role, openChat)` - Post message to chat UI\n- `aiSDK.showScript(text, openChat)` - Display as script block\n- `aiSDK.showSnack(content, duration)` - Show snack message (returns message ID)\n- `aiSDK.hideSnack()` - Hide current snack message\n\n**Standard Events:** `user-selection`, `progress-update`, `hint-request`, `explanation-request`\n\n**Response Actions:** `show-hint`, `update-ui`\n\n**Response Display:** AI responses include metadata for display control:\n- `metadata.showInSnack` - Show in snack message\n- `metadata.snackDuration` - Snack duration (ms, optional)\n- `metadata.postToChat` - Also post to chat\n- `metadata.openChatUI` - Open chat if minimized\n- `metadata.showAsScript` - Show as script block\n\n**Note:** iFrame interactions typically use guide URLs/docs for AI context. Events should include relevant interaction data.\n\n**Example:**\n```javascript\n// On user action in iframe\nfunction onUserAction(actionData) {\n  aiSDK.emitEvent({\n    type: \'user-selection\',\n    data: actionData,\n    requiresLLMResponse: true\n  });\n}\n\n// Request hint\naiSDK.emitEvent({\n  type: \'hint-request\',\n  data: { context: \'stuck on step 3\' },\n  requiresLLMResponse: true\n});\n\n// Handle AI response\naiSDK.onResponse((r) => {\n  // Response automatically displayed based on metadata\n  // Or manually control display:\n  if (r.metadata?.showInSnack) {\n    aiSDK.showSnack(r.response, r.metadata.snackDuration);\n  }\n});\n```',
+          placeholder: 'Enter condensed SDK documentation for iFrame interactions...'
         }
       }
     },
@@ -848,6 +928,27 @@ Return JSON array of script blocks with timestamps and playback rules.`,
   savingAll = false;
   savingPrompt: string | null = null; // Track which individual prompt is being saved
   originalPrompts: Map<string, string> = new Map(); // Store original content for reset
+  hardcodedDefaults: Map<string, AIAssistant> = new Map(); // Store hardcoded defaults before database load
+
+  /**
+   * Check if a prompt has been changed from its original saved version
+   */
+  hasPromptChanged(assistant: AIAssistant, promptKey: string): boolean {
+    const promptId = `${assistant.id}.${promptKey}`;
+    const original = this.originalPrompts.get(promptId);
+    const current = assistant.prompts[promptKey]?.content || '';
+    return original !== current;
+  }
+
+  /**
+   * Check if any prompt in the selected assistant has been changed
+   */
+  hasAnyPromptChanged(): boolean {
+    if (!this.selectedAssistant) return false;
+    return this.getPromptKeys(this.selectedAssistant).some(key => 
+      this.hasPromptChanged(this.selectedAssistant!, key)
+    );
+  }
 
   constructor(
     private router: Router,
@@ -858,6 +959,13 @@ Return JSON array of script blocks with timestamps and playback rules.`,
 
   async ngOnInit() {
     console.log('[AIPrompts] Component initialized');
+    
+    // Store hardcoded defaults BEFORE loading from database
+    this.assistants.forEach(assistant => {
+      const defaultsCopy = JSON.parse(JSON.stringify(assistant)); // Deep copy
+      this.hardcodedDefaults.set(assistant.id, defaultsCopy);
+    });
+    
     await this.loadPromptsFromBackend();
     
     // Check for assistantId in query params
@@ -890,7 +998,10 @@ Return JSON array of script blocks with timestamps and playback rules.`,
           if (assistant) {
             // If prompt exists in hardcoded list, update it
             if (assistant.prompts[dbPrompt.promptKey]) {
-              assistant.prompts[dbPrompt.promptKey].content = dbPrompt.content;
+              // Only update if database has content (don't overwrite with empty)
+              if (dbPrompt.content && dbPrompt.content.trim().length > 0) {
+                assistant.prompts[dbPrompt.promptKey].content = dbPrompt.content;
+              }
             } else {
               // Add new prompt from database that's not in hardcoded list
               assistant.prompts[dbPrompt.promptKey] = {
@@ -982,6 +1093,39 @@ Return JSON array of script blocks with timestamps and playback rules.`,
     }
   }
 
+  resetToLatestDefaults() {
+    if (!this.selectedAssistant) return;
+    
+    if (!confirm('This will reset all prompts to the latest hardcoded defaults. Any unsaved changes will be lost. Continue?')) {
+      return;
+    }
+    
+    // Get the hardcoded defaults (stored before database load)
+    const defaultAssistant = this.hardcodedDefaults.get(this.selectedAssistant.id);
+    if (defaultAssistant) {
+      console.log('[AIPrompts] 🔄 Resetting prompts from hardcoded defaults for:', this.selectedAssistant.id);
+      
+      // Copy fresh defaults to the selected assistant
+      Object.keys(defaultAssistant.prompts).forEach(key => {
+        if (this.selectedAssistant!.prompts[key]) {
+          const oldContent = this.selectedAssistant!.prompts[key].content;
+          const newContent = defaultAssistant.prompts[key].content;
+          this.selectedAssistant!.prompts[key].content = newContent;
+          console.log(`[AIPrompts]   - ${key}: ${oldContent !== newContent ? 'CHANGED' : 'unchanged'} (${newContent.length} chars)`);
+        }
+      });
+      
+      // Keep the current originalPrompts (from database) for comparison
+      // This way Save buttons will enable if hardcoded defaults differ from database
+      
+      this.toastService.success('Reset to latest defaults. Click "Save All Changes" to update the database.', 5000);
+      console.log('[AIPrompts] ✅ Reset complete');
+    } else {
+      console.error('[AIPrompts] ❌ Could not find hardcoded defaults for:', this.selectedAssistant.id);
+      this.toastService.error('Could not find hardcoded defaults. Please refresh the page.', 3000);
+    }
+  }
+
   async saveAllPrompts() {
     if (!this.selectedAssistant || this.savingAll) return;
 
@@ -1008,19 +1152,20 @@ Return JSON array of script blocks with timestamps and playback rules.`,
       
       console.log('[AIPrompts] ✅ All prompts saved successfully');
       const assistantName = this.selectedAssistant.name;
+      
+      // Update originalPrompts to reflect saved state (so Save buttons disable)
+      Object.keys(this.selectedAssistant.prompts).forEach(key => {
+        const promptId = `${this.selectedAssistant!.id}.${key}`;
+        this.originalPrompts.set(promptId, this.selectedAssistant!.prompts[key].content);
+      });
+      
       this.toastService.success(
         'Prompts saved for ' + assistantName + '! Changes will take effect immediately.',
         4000
       );
       
-      this.selectedAssistant = null;
-      
-      // Remove query param after saving all
-      this.router.navigate([], {
-        relativeTo: this.route,
-        queryParams: { assistant: null },
-        queryParamsHandling: 'merge'
-      });
+      // Don't navigate away - stay on the same page
+      // Keep selectedAssistant so user can continue editing if needed
     } catch (error: any) {
       console.error('[AIPrompts] ❌ Failed to save prompts:', error);
       this.toastService.error('Failed to save prompts: ' + (error?.message || 'Unknown error'), 5000);

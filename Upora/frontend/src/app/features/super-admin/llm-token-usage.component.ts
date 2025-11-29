@@ -1434,7 +1434,7 @@ export class LlmTokenUsageComponent implements OnInit {
     if (!assistantId) return '🤖';
     const iconMap: any = {
       'inventor': '🔧',
-      'ai-teacher': '🤖',
+      'ai-interaction-handler': '🤖',
       'teacher': '🤖',
       'content-analyzer': '📊',
       'auto-populator': '✨',

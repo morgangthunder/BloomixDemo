@@ -13,5 +13,5 @@ CREATE INDEX IF NOT EXISTS idx_llm_logs_user_assistant ON llm_generation_logs(us
 -- Add an index for querying by tenant + assistant
 CREATE INDEX IF NOT EXISTS idx_llm_logs_tenant_assistant ON llm_generation_logs(tenant_id, assistant_id);
 
-COMMENT ON COLUMN llm_generation_logs.assistant_id IS 'ID of the AI assistant that made this request (e.g., inventor, auto-populator, content-analyzer, ai-teacher)';
+COMMENT ON COLUMN llm_generation_logs.assistant_id IS 'ID of the AI assistant that made this request (e.g., inventor, auto-populator, content-analyzer, ai-interaction-handler)';
 

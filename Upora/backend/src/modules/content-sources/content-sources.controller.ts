@@ -186,6 +186,20 @@ export class ContentSourcesController {
     }
   }
 
+  @Get(':id/lessons')
+  @HttpCode(HttpStatus.OK)
+  async getLessonsForContentSource(
+    @Param('id', ParseUUIDPipe) contentSourceId: string,
+  ): Promise<{ lessons: Array<{ id: string; title: string }> }> {
+    try {
+      const lessons = await this.contentSourcesService.getLessonsForContentSource(contentSourceId);
+      return { lessons };
+    } catch (error) {
+      console.error('[ContentSourcesController] ❌ Error getting lessons for content source:', error);
+      throw error;
+    }
+  }
+
   @Post(':id/reprocess')
   @HttpCode(HttpStatus.OK)
   async reprocessContent(
@@ -193,7 +207,7 @@ export class ContentSourcesController {
     @Headers('x-user-id') userId: string,
   ) {
     try {
-      console.log('[ContentSourcesController] 🔄 Re-processing content source:', contentSourceId);
+      console.log('[ContentSourcesController] 🔄 Marking content source for reprocessing:', contentSourceId);
       if (!userId) {
         throw new BadRequestException('User ID is required');
       }
@@ -203,60 +217,21 @@ export class ContentSourcesController {
         throw new NotFoundException(`Content source ${contentSourceId} not found`);
       }
       
-      // Check if this is an iframe guide URL
-      if (contentSource.type === 'url' && contentSource.metadata?.source === 'iframe-guide') {
-        // Re-process using iframe guide URL analysis
-        const result = await this.contentAnalyzerService.processIframeGuideUrl(contentSourceId, userId);
-        if (!result) {
-          return {
-            success: false,
-            contentSourceId,
-            message: 'Failed to reprocess content source',
-          };
-        }
-        
-        // Set content source status back to pending after reprocessing
-        try {
-          await this.contentSourcesService.updateStatus(contentSourceId, 'pending');
-          console.log('[ContentSourcesController] ✅ Content source status set to pending after reprocessing');
-        } catch (statusError) {
-          console.error('[ContentSourcesController] ❌ Failed to update status to pending:', statusError);
-          // Continue even if status update fails
-        }
-        
-        return {
-          success: result.success !== false,
-          contentSourceId,
-          hasGuidance: result.hasGuidance,
-          processedOutputId: result.processedOutputId,
-          message: result.hasGuidance 
-            ? 'Content re-processed successfully' 
-            : (result.message || 'No guidance found in webpage'),
-        };
-      } else {
-        // Re-analyze using standard content analyzer
-        const results = await this.contentAnalyzerService.analyzeContentSource(contentSourceId, userId);
-        
-        // Set content source status back to pending after reprocessing
-        try {
-          await this.contentSourcesService.updateStatus(contentSourceId, 'pending');
-          console.log('[ContentSourcesController] ✅ Content source status set to pending after reprocessing');
-        } catch (statusError) {
-          console.error('[ContentSourcesController] ❌ Failed to update status to pending:', statusError);
-          // Continue even if status update fails
-        }
-        
-        return {
-          success: true,
-          contentSourceId,
-          generatedOutputs: results.length,
-          results: results.map(r => ({
-            interactionType: r.interactionTypeId,
-            confidence: r.confidence,
-            tokensUsed: r.tokensUsed,
-          })),
-        };
-      }
+      // Delete existing processed content outputs for this source
+      // Processing will happen again when the content source is approved
+      await this.contentSourcesService.deleteProcessedOutputs(contentSourceId);
+      console.log('[ContentSourcesController] ✅ Deleted existing processed outputs');
+      
+      // Set content source status back to pending
+      // Processing will happen automatically when approved
+      await this.contentSourcesService.updateStatus(contentSourceId, 'pending');
+      console.log('[ContentSourcesController] ✅ Content source status set to pending - will be processed on approval');
+      
+      return {
+        success: true,
+        contentSourceId,
+        message: 'Content source marked for reprocessing. It will be processed again when approved.',
+      };
     } catch (error) {
       console.error('[ContentSourcesController] ❌ Error reprocessing content:', error);
       throw error;

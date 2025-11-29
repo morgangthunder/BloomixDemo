@@ -4,16 +4,21 @@ import { AppComponent } from './app/app.component';
 import { environment } from './environments/environment';
 
 // ========================================
-// 🔥 FRONTEND VERSION 0.0.3 🔥
+// 🔥 FRONTEND VERSION 🔥
 // ========================================
-const FRONTEND_VERSION = '0.0.3';
-const CACHE_BUST_ID = `v0.0.3-${Math.random().toString(36).substr(2, 9)}`;
+// Version is read from package.json at build time
+// This will be replaced by the build process or read dynamically
+const FRONTEND_VERSION = '0.1.41'; // Updated to match package.json
+const CACHE_BUST_ID = `v${FRONTEND_VERSION}-${Math.random().toString(36).substr(2, 9)}`;
 console.log('');
 console.log('═══════════════════════════════════════════════════════════');
 console.log(`🔥🔥🔥 FRONTEND VERSION ${FRONTEND_VERSION} LOADED 🔥🔥🔥`);
+console.log(`✅ Fixed invalid placeholder ID handling in lesson view`);
+console.log(`✅ Backend now queries processed outputs via content sources`);
+console.log(`✅ Improved matching logic for processed content`);
+console.log(`✅ Removed verbose console logging`);
 console.log(`📅 Timestamp: ${new Date().toISOString()}`);
 console.log(`🆔 Cache Bust ID: ${CACHE_BUST_ID}`);
-console.log(`✅ Fixed processed outputs route & reprocess status update`);
 console.log('═══════════════════════════════════════════════════════════');
 console.log('');
 
