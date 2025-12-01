@@ -2851,10 +2851,10 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     isSDKTest: boolean = false
   ): string {
     // Full wrapper HTML with buttons overlaid on top of iframe
-    // Escape code for template literal injection
-    const escapedHtml = htmlCode ? htmlCode.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${').replace(/\n/g, '\\n') : '';
-    const escapedCss = cssCode ? cssCode.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${').replace(/\n/g, '\\n') : '';
-    const escapedJs = jsCode ? jsCode.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${').replace(/\n/g, '\\n') : '';
+    // Escape code for template literal injection (escape backticks, ${}, and backslashes, but keep newlines)
+    const escapedHtml = htmlCode ? htmlCode.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${') : '';
+    const escapedCss = cssCode ? cssCode.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${') : '';
+    const escapedJs = jsCode ? jsCode.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${') : '';
     
     return `<!DOCTYPE html>
 <html lang="en">
@@ -3024,7 +3024,7 @@ ${isSDKTest ? `      <div id="sdk-test-header">
         <h1>AI Teacher SDK Test</h1>
         <p id="status-text">Initializing...</p>
       </div>
-      <div id="sdk-test-buttons"></div>` : (escapedHtml ? escapedHtml.split('\\n').join('\n') : '<div>No overlay content</div>')}
+      <div id="sdk-test-buttons"></div>` : (escapedHtml || '<div>No overlay content</div>')}
     </div>
   </div>
 
@@ -3602,7 +3602,7 @@ ${isSDKTest ? `      <div id="sdk-test-header">
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
           try {
-${escapedJs ? escapedJs.split('\\n').map(line => '            ' + line).join('\n') : '            // No JavaScript code provided'}
+${escapedJs ? escapedJs.split('\n').map(line => '            ' + line).join('\n') : '            // No JavaScript code provided'}
           } catch (e) {
             console.error("[iFrame Overlay] Error in builder's JavaScript:", e);
           }
@@ -3610,7 +3610,7 @@ ${escapedJs ? escapedJs.split('\\n').map(line => '            ' + line).join('\n
       } else {
         setTimeout(() => {
           try {
-${escapedJs ? escapedJs.split('\\n').map(line => '            ' + line).join('\n') : '            // No JavaScript code provided'}
+${escapedJs ? escapedJs.split('\n').map(line => '            ' + line).join('\n') : '            // No JavaScript code provided'}
           } catch (e) {
             console.error("[iFrame Overlay] Error in builder's JavaScript:", e);
           }
@@ -3619,7 +3619,7 @@ ${escapedJs ? escapedJs.split('\\n').map(line => '            ' + line).join('\n
     })();`}
   </script>
   ${escapedCss ? `<style type="text/css">
-${escapedCss.split('\\n').join('\n')}
+${escapedCss}
   </style>` : ''}
 </body>
 </html>`;
