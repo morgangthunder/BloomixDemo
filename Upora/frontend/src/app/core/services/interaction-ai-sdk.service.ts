@@ -193,13 +193,12 @@ export class InteractionAISDK {
    * Minimize the chat UI
    */
   minimizeChatUI(): void {
-    // Dispatch event to request widget to be shown (if hidden)
-    const showEvent = new CustomEvent('interaction-request-show-widget', {
-      detail: { source: 'interaction-sdk', action: 'minimize' }
-    });
-    window.dispatchEvent(showEvent);
-    
+    // Only minimize if widget is already visible and not hidden
+    // Don't show it if it's hidden - minimize should only work on visible widgets
     if (this.teacherWidgetRef) {
+      // Check if widget is hidden - if so, don't do anything
+      // The widget component should expose isHidden, but for now we'll just try to minimize
+      // If it's hidden, minimize() should be a no-op or the widget should handle it
       this.teacherWidgetRef.minimize();
       console.log('[InteractionAISDK] ✅ Minimized chat UI');
     } else {
@@ -259,17 +258,22 @@ export class InteractionAISDK {
    * @param openChat If true, opens/restores the chat widget if minimized
    */
   postToChat(content: string, role: 'user' | 'assistant' | 'error' = 'assistant', openChat: boolean = false): void {
-    if (this.teacherWidgetRef) {
-      if (openChat) {
-        this.teacherWidgetRef.openWidget();
+    // Ensure widget is visible first
+    this.showWidget();
+    
+    // Wait a moment for widget to be shown, then post message
+    setTimeout(() => {
+      if (this.teacherWidgetRef) {
+        if (openChat) {
+          this.teacherWidgetRef.openWidget();
+        }
+        // Use addChatMessage which will update the widget's chatMessages
+        this.teacherWidgetRef.addChatMessage(content, role);
+        console.log('[InteractionAISDK] ✅ Posted message to chat:', content.substring(0, 50));
+      } else {
+        console.warn('[InteractionAISDK] ⚠️ Teacher widget reference not set, cannot post to chat');
       }
-      // Use addChatMessage which will update the widget's chatMessages
-      // Note: This modifies the @Input() array, which should work since we create a new array
-      this.teacherWidgetRef.addChatMessage(content, role);
-      console.log('[InteractionAISDK] ✅ Posted message to chat:', content.substring(0, 50));
-    } else {
-      console.warn('[InteractionAISDK] ⚠️ Teacher widget reference not set, cannot post to chat');
-    }
+    }, 100);
   }
 
   /**
@@ -278,14 +282,21 @@ export class InteractionAISDK {
    * @param openChat If true, opens/restores the chat widget if minimized
    */
   showScript(text: string, openChat: boolean = false): void {
-    if (this.teacherWidgetRef) {
-      if (openChat) {
-        this.teacherWidgetRef.openWidget();
+    // Ensure widget is visible first
+    this.showWidget();
+    
+    // Wait a moment for widget to be shown, then show script
+    setTimeout(() => {
+      if (this.teacherWidgetRef) {
+        if (openChat) {
+          this.teacherWidgetRef.openWidget();
+        }
+        this.teacherWidgetRef.showScript(text);
+        console.log('[InteractionAISDK] ✅ Showed script:', text.substring(0, 50));
+      } else {
+        console.warn('[InteractionAISDK] Teacher widget reference not set, cannot show script');
       }
-      this.teacherWidgetRef.showScript(text);
-    } else {
-      console.warn('[InteractionAISDK] Teacher widget reference not set, cannot show script');
-    }
+    }, 100);
   }
 
   /**
@@ -298,7 +309,8 @@ export class InteractionAISDK {
     const snackId = this.snackService.show(content, duration);
     
     // By default, also post to chat UI unless hideFromChatUI is true
-    if (!hideFromChatUI && this.teacherWidgetRef) {
+    if (!hideFromChatUI) {
+      // Use postToChat which will ensure widget is visible
       this.postToChat(content, 'assistant', false);
     }
     
