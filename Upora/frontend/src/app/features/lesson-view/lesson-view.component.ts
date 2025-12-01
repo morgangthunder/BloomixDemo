@@ -3035,7 +3035,9 @@ ${escapedHtml || '<div>No overlay content</div>'}
     window.interactionConfig = ${configJson};
     
     // Provide createIframeAISDK helper function for builder's code
-    const createIframeAISDK = () => {
+    // Only declare if it doesn't already exist (builder's code might provide it)
+    if (typeof createIframeAISDK === 'undefined') {
+      window.createIframeAISDK = () => {
       let subscriptionId = null;
       let requestCounter = 0;
 
