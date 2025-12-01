@@ -1761,12 +1761,15 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       console.log('[LessonView] Loading interaction build for type:', interactionTypeId);
       this.isLoadingInteraction = true;
       
-      // Fetch interaction build from API
-      this.http.get(`${environment.apiUrl}/interaction-types/${interactionTypeId}`)
+      // Fetch interaction build from API (with cache-busting to ensure we get latest code)
+      const cacheBuster = `?t=${Date.now()}`;
+      this.http.get(`${environment.apiUrl}/interaction-types/${interactionTypeId}${cacheBuster}`)
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: (build: any) => {
             console.log('[LessonView] ✅ Loaded interaction build:', build.id);
+            console.log('[LessonView] 📝 JS code length:', build.jsCode?.length || 0);
+            console.log('[LessonView] 📝 JS code includes "Show Snack":', build.jsCode?.includes('Show Snack') || false);
             this.interactionBuild = build;
             
             // Check for processed output (PixiJS/HTML interactions can use processed outputs, but it's optional)
@@ -2684,6 +2687,11 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     const htmlCode = (build.htmlCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
     const cssCode = (build.cssCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
     let jsCode = (build.jsCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
+    
+    // Debug: Log if snack buttons are in the code
+    console.log('[LessonView] 🔍 JS code includes "Show Snack (5s)":', jsCode.includes('Show Snack (5s)'));
+    console.log('[LessonView] 🔍 JS code includes "Show Snack (no chat)":', jsCode.includes('Show Snack (no chat)'));
+    console.log('[LessonView] 🔍 JS code length:', jsCode.length);
     
     // Inject interaction data and config
     const sampleDataJson = JSON.stringify(sampleData);
