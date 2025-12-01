@@ -2851,10 +2851,15 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     isSDKTest: boolean = false
   ): string {
     // Full wrapper HTML with buttons overlaid on top of iframe
+    // Normalize line endings first (handle \r\n and \r)
+    const normalizedHtml = htmlCode ? htmlCode.replace(/\r\n/g, '\n').replace(/\r/g, '\n') : '';
+    const normalizedCss = cssCode ? cssCode.replace(/\r\n/g, '\n').replace(/\r/g, '\n') : '';
+    const normalizedJs = jsCode ? jsCode.replace(/\r\n/g, '\n').replace(/\r/g, '\n') : '';
+    
     // Escape code for template literal injection (escape backticks, ${}, and backslashes, but keep newlines)
-    const escapedHtml = htmlCode ? htmlCode.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${') : '';
-    const escapedCss = cssCode ? cssCode.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${') : '';
-    const escapedJs = jsCode ? jsCode.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${') : '';
+    const escapedHtml = normalizedHtml ? normalizedHtml.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${') : '';
+    const escapedCss = normalizedCss ? normalizedCss.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${') : '';
+    const escapedJs = normalizedJs ? normalizedJs.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${') : '';
     
     return `<!DOCTYPE html>
 <html lang="en">
