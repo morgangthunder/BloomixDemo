@@ -1139,6 +1139,20 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   onInteractionIframeLoad() {
     console.log('[LessonView] Interaction iframe loaded');
     
+    // Ensure teacher widget reference is set before sending SDK ready
+    if (this.teacherWidget) {
+      this.interactionAISDK.setTeacherWidgetRef(this.teacherWidget);
+      console.log('[LessonView] ✅ Teacher widget reference set on iframe load');
+    } else {
+      // Retry if widget not ready yet
+      setTimeout(() => {
+        if (this.teacherWidget) {
+          this.interactionAISDK.setTeacherWidgetRef(this.teacherWidget);
+          console.log('[LessonView] ✅ Teacher widget reference set on iframe load (retry)');
+        }
+      }, 500);
+    }
+    
     // Check if config has "goFullscreenOnLoad" option
     const config = (this.activeSubStage as any)?.interaction?.config || {};
     if (config.goFullscreenOnLoad === true && !this.isFullscreen) {
