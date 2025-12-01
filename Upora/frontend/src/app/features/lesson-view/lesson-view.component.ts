@@ -3020,11 +3020,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   
   <div id="button-overlay">
     <div id="overlay-content">
-${isSDKTest ? `      <div id="sdk-test-header">
-        <h1>AI Teacher SDK Test</h1>
-        <p id="status-text">Initializing...</p>
-      </div>
-      <div id="sdk-test-buttons"></div>` : (escapedHtml || '<div>No overlay content</div>')}
+${escapedHtml || '<div>No overlay content</div>'}
     </div>
   </div>
 
@@ -3174,7 +3170,7 @@ ${isSDKTest ? `      <div id="sdk-test-header">
       };
     };
     
-    ${isSDKTest ? `// SDK Test iFrame Interaction - Full JavaScript code
+    ${escapedJs ? `// Custom overlay code from builder
     (function() {
       console.log("[SDK Test iFrame] Starting initialization...");
       
