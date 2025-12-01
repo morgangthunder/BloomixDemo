@@ -2839,15 +2839,635 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Create iframe wrapper HTML with button overlay for SDK test interactions
+   */
+  private createIframeWrapperWithButtons(iframeUrl: string, configJson: string, sampleDataJson: string): string {
+    // Full wrapper HTML with buttons overlaid on top of iframe
+    // The JavaScript code is embedded inline here
+    const escapedUrl = iframeUrl.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${');
+    
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Teacher SDK Test - iFrame Wrapper</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      margin: 0;
+      padding: 0;
+      background: #0f0f23;
+      color: #ffffff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      overflow: hidden;
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+    
+    #iframe-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+    
+    #iframe-container iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+    
+    #button-overlay {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 320px;
+      max-height: 100vh;
+      background: rgba(15, 15, 35, 0.95);
+      border-left: 2px solid rgba(0, 212, 255, 0.3);
+      z-index: 10;
+      overflow-y: auto;
+      padding: 20px;
+      box-shadow: -4px 0 12px rgba(0, 0, 0, 0.5);
+    }
+    
+    #toggle-overlay {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 50px;
+      height: 50px;
+      background: rgba(0, 212, 255, 0.2);
+      border: 2px solid rgba(0, 212, 255, 0.5);
+      border-radius: 50%;
+      color: #00d4ff;
+      font-size: 24px;
+      cursor: pointer;
+      z-index: 11;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+    
+    #toggle-overlay:hover {
+      background: rgba(0, 212, 255, 0.3);
+      border-color: #00d4ff;
+      transform: scale(1.1);
+    }
+    
+    #button-overlay.hidden {
+      transform: translateX(100%);
+    }
+    
+    #sdk-test-header {
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid rgba(0, 212, 255, 0.3);
+    }
+    
+    #sdk-test-header h1 {
+      color: #00d4ff;
+      margin: 0 0 10px 0;
+      font-size: 20px;
+    }
+    
+    #status-text {
+      color: rgba(255, 255, 255, 0.7);
+      margin: 0;
+      font-size: 12px;
+    }
+    
+    .section-label {
+      color: #00d4ff;
+      font-size: 14px;
+      font-weight: bold;
+      margin: 20px 0 10px 0;
+      padding-top: 15px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .test-button {
+      display: block;
+      width: 100%;
+      padding: 10px 15px;
+      margin: 6px 0;
+      background: rgba(0, 212, 255, 0.1);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      border-radius: 4px;
+      color: #00d4ff;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: left;
+    }
+    
+    .test-button:hover {
+      background: rgba(0, 212, 255, 0.2);
+      border-color: #00d4ff;
+      transform: translateX(3px);
+    }
+    
+    .test-button:active {
+      transform: translateX(1px);
+    }
+    
+    #button-overlay::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    #button-overlay::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 3px;
+    }
+    
+    #button-overlay::-webkit-scrollbar-thumb {
+      background: rgba(0, 212, 255, 0.3);
+      border-radius: 3px;
+    }
+    
+    #button-overlay::-webkit-scrollbar-thumb:hover {
+      background: rgba(0, 212, 255, 0.5);
+    }
+  </style>
+</head>
+<body>
+  <div id="iframe-container">
+    <iframe id="external-iframe" src="${this.escapeHtml(iframeUrl)}" frameborder="0" allowfullscreen></iframe>
+  </div>
+  
+  <button id="toggle-overlay" title="Toggle SDK Test Panel">⚙</button>
+  
+  <div id="button-overlay">
+    <div id="sdk-test-header">
+      <h1>AI Teacher SDK Test</h1>
+      <p id="status-text">Initializing...</p>
+    </div>
+    <div id="sdk-test-buttons"></div>
+  </div>
+
+  <script type="text/javascript">
+    // Inject interaction data and config
+    window.interactionData = ${sampleDataJson};
+    window.interactionConfig = ${configJson};
+    
+    // SDK Test iFrame Interaction - Full JavaScript code
+    (function() {
+      console.log("[SDK Test iFrame] Starting initialization...");
+      
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initTestApp);
+      } else {
+        setTimeout(initTestApp, 10);
+      }
+    })();
+
+    const createIframeAISDK = () => {
+      let subscriptionId = null;
+      let requestCounter = 0;
+
+      const generateRequestId = () => \`req-\${Date.now()}-\${++requestCounter}\`;
+      const generateSubscriptionId = () => \`sub-\${Date.now()}-\${Math.random()}\`;
+
+      const sendMessage = (type, data, callback) => {
+        const requestId = generateRequestId();
+        const message = { type, requestId, ...data };
+
+        if (callback) {
+          const listener = (event) => {
+            if (event.data.requestId === requestId) {
+              window.removeEventListener("message", listener);
+              callback(event.data);
+            }
+          };
+          window.addEventListener("message", listener);
+        }
+
+        window.parent.postMessage(message, "*");
+      };
+
+      return {
+        emitEvent: (event, processedContentId) => {
+          sendMessage("ai-sdk-emit-event", { event, processedContentId });
+        },
+        updateState: (key, value) => {
+          sendMessage("ai-sdk-update-state", { key, value });
+        },
+        getState: (callback) => {
+          sendMessage("ai-sdk-get-state", {}, (response) => {
+            callback(response.state);
+          });
+        },
+        onResponse: (callback) => {
+          subscriptionId = generateSubscriptionId();
+          sendMessage("ai-sdk-subscribe", { subscriptionId }, () => {
+            const listener = (event) => {
+              if (event.data.type === "ai-sdk-response" && event.data.subscriptionId === subscriptionId) {
+                callback(event.data.response);
+              }
+            };
+            window.addEventListener("message", listener);
+            return () => {
+              window.removeEventListener("message", listener);
+              sendMessage("ai-sdk-unsubscribe", { subscriptionId });
+            };
+          });
+        },
+        isReady: (callback) => {
+          const listener = (event) => {
+            if (event.data.type === "ai-sdk-ready") {
+              window.removeEventListener("message", listener);
+              callback(true);
+            }
+          };
+          window.addEventListener("message", listener);
+        },
+        minimizeChatUI: () => {
+          sendMessage("ai-sdk-minimize-chat-ui", {});
+        },
+        showChatUI: () => {
+          sendMessage("ai-sdk-show-chat-ui", {});
+        },
+        activateFullscreen: () => {
+          sendMessage("ai-sdk-activate-fullscreen", {});
+        },
+        deactivateFullscreen: () => {
+          sendMessage("ai-sdk-deactivate-fullscreen", {});
+        },
+        postToChat: (content, role, showInWidget) => {
+          sendMessage("ai-sdk-post-to-chat", { content, role, showInWidget });
+        },
+        showScript: (script, autoPlay) => {
+          sendMessage("ai-sdk-show-script", { script, autoPlay });
+        },
+        showSnack: (content, duration, hideFromChatUI, callback) => {
+          sendMessage("ai-sdk-show-snack", { content, duration, hideFromChatUI: hideFromChatUI || false }, (response) => {
+            if (callback && response.snackId) {
+              callback(response.snackId);
+            }
+          });
+        },
+        hideSnack: () => {
+          sendMessage("ai-sdk-hide-snack", {});
+        },
+        saveInstanceData: (data, callback) => {
+          sendMessage("ai-sdk-save-instance-data", { data }, (response) => {
+            if (callback) {
+              callback(response.success, response.error);
+            }
+          });
+        },
+        getInstanceDataHistory: (filters, callback) => {
+          sendMessage("ai-sdk-get-instance-data-history", { filters }, (response) => {
+            if (callback) {
+              callback(response.data, response.error);
+            }
+          });
+        },
+        saveUserProgress: (data, callback) => {
+          sendMessage("ai-sdk-save-user-progress", { data }, (response) => {
+            if (callback) {
+              callback(response.progress, response.error);
+            }
+          });
+        },
+        getUserProgress: (callback) => {
+          sendMessage("ai-sdk-get-user-progress", {}, (response) => {
+            if (callback) {
+              callback(response.progress, response.error);
+            }
+          });
+        },
+        markCompleted: (callback) => {
+          sendMessage("ai-sdk-mark-completed", {}, (response) => {
+            if (callback) {
+              callback(response.progress, response.error);
+            }
+          });
+        },
+        incrementAttempts: (callback) => {
+          sendMessage("ai-sdk-increment-attempts", {}, (response) => {
+            if (callback) {
+              callback(response.progress, response.error);
+            }
+          });
+        },
+        getUserPublicProfile: (userId, callback) => {
+          sendMessage("ai-sdk-get-user-public-profile", { userId }, (response) => {
+            if (callback) {
+              callback(response.profile, response.error);
+            }
+          });
+        },
+      };
+    };
+
+    let aiSDK = null;
+    let statusText = null;
+    let buttonsContainer = null;
+    let externalIframe = null;
+    let buttonOverlay = null;
+    let toggleButton = null;
+
+    function updateStatus(message, color = "#ffffff") {
+      if (statusText) {
+        statusText.textContent = message;
+        statusText.style.color = color;
+      }
+      console.log("[SDK Test iFrame]", message);
+    }
+
+    function createButton(text, onClick) {
+      const button = document.createElement("button");
+      button.className = "test-button";
+      button.textContent = text;
+      button.onclick = onClick;
+      if (buttonsContainer) {
+        buttonsContainer.appendChild(button);
+      }
+      return button;
+    }
+
+    function initTestApp() {
+      console.log("[SDK Test iFrame] Initializing app...");
+      
+      buttonsContainer = document.getElementById("sdk-test-buttons");
+      statusText = document.getElementById("status-text");
+      externalIframe = document.getElementById("external-iframe");
+      buttonOverlay = document.getElementById("button-overlay");
+      toggleButton = document.getElementById("toggle-overlay");
+      
+      if (!buttonsContainer || !externalIframe || !buttonOverlay || !toggleButton) {
+        console.error("[SDK Test iFrame] Required elements not found!");
+        return;
+      }
+
+      const iframeUrl = (window.interactionConfig && window.interactionConfig.iframeUrl) || 
+                        (window.interactionData && window.interactionData.url) ||
+                        'https://en.wikipedia.org/wiki/Main_Page';
+      
+      externalIframe.src = iframeUrl;
+      console.log("[SDK Test iFrame] Loading external URL:", iframeUrl);
+
+      toggleButton.onclick = () => {
+        buttonOverlay.classList.toggle("hidden");
+        toggleButton.textContent = buttonOverlay.classList.contains("hidden") ? "⚙" : "✕";
+      };
+
+      aiSDK = createIframeAISDK();
+      
+      const isPreviewMode = !window.parent || window.parent === window;
+      
+      if (isPreviewMode) {
+        updateStatus("Preview Mode - SDK will work when added to a lesson", "#ffff00");
+      } else {
+        updateStatus("SDK Test Interaction Loaded. Waiting for SDK ready...", "#ffff00");
+        
+        aiSDK.isReady((ready) => {
+          if (ready) {
+            updateStatus("SDK Ready! All methods available.", "#00ff00");
+          }
+        });
+      }
+
+      const coreLabel = document.createElement("div");
+      coreLabel.className = "section-label";
+      coreLabel.textContent = "CORE METHODS";
+      buttonsContainer.appendChild(coreLabel);
+
+      createButton("Emit Event", () => {
+        aiSDK.emitEvent({
+          type: "user-selection",
+          data: { test: true, timestamp: Date.now() },
+          requiresLLMResponse: true,
+        });
+        updateStatus("Event emitted", "#00ff00");
+      });
+
+      createButton("Update State", () => {
+        aiSDK.updateState("testKey", { value: Math.random(), timestamp: Date.now() });
+        updateStatus("State updated", "#00ff00");
+      });
+
+      createButton("Get State", () => {
+        aiSDK.getState((state) => {
+          updateStatus("State: " + JSON.stringify(state).substring(0, 50), "#00ff00");
+        });
+      });
+
+      const uiLabel = document.createElement("div");
+      uiLabel.className = "section-label";
+      uiLabel.textContent = "UI CONTROL METHODS";
+      buttonsContainer.appendChild(uiLabel);
+
+      createButton("Minimize Chat UI", () => {
+        aiSDK.minimizeChatUI();
+        updateStatus("Chat UI minimized", "#00ff00");
+      });
+
+      createButton("Show Chat UI", () => {
+        aiSDK.showChatUI();
+        updateStatus("Chat UI shown", "#00ff00");
+      });
+
+      createButton("Activate Fullscreen", () => {
+        aiSDK.activateFullscreen();
+        updateStatus("Fullscreen activated", "#00ff00");
+      });
+
+      createButton("Deactivate Fullscreen", () => {
+        aiSDK.deactivateFullscreen();
+        updateStatus("Fullscreen deactivated", "#00ff00");
+      });
+
+      createButton("Post to Chat", () => {
+        const testMessage = "Test message from SDK Test interaction! This is a dummy message to test the postToChat functionality.";
+        aiSDK.postToChat(testMessage, "assistant", true);
+        updateStatus("Posted to chat: " + testMessage.substring(0, 30) + "...", "#00ff00");
+      });
+
+      createButton("Show Script", () => {
+        const testScript = "This is a test script block from the SDK Test interaction. It demonstrates the showScript functionality.";
+        aiSDK.showScript(testScript, true);
+        updateStatus("Script shown: " + testScript.substring(0, 30) + "...", "#00ff00");
+      });
+
+      createButton("Show Snack (5s)", () => {
+        aiSDK.showSnack("Test snack message! (also posts to chat)", 5000, false, (snackId) => {
+          updateStatus("Snack shown: " + snackId, "#00ff00");
+        });
+      });
+
+      createButton("Show Snack (no chat)", () => {
+        aiSDK.showSnack("Test snack message! (hidden from chat)", 5000, true, (snackId) => {
+          updateStatus("Snack shown (no chat): " + snackId, "#00ff00");
+        });
+      });
+
+      createButton("Hide Snack", () => {
+        aiSDK.hideSnack();
+        updateStatus("Snack hidden", "#00ff00");
+      });
+
+      const dataLabel = document.createElement("div");
+      dataLabel.className = "section-label";
+      dataLabel.textContent = "DATA STORAGE METHODS";
+      buttonsContainer.appendChild(dataLabel);
+
+      createButton("Save Instance Data", () => {
+        aiSDK.saveInstanceData(
+          {
+            testValue: Math.random(),
+            timestamp: Date.now(),
+            testArray: [1, 2, 3],
+          },
+          (success, error) => {
+            if (success) {
+              updateStatus("Instance data saved", "#00ff00");
+            } else {
+              updateStatus("Error: " + error, "#ff0000");
+            }
+          }
+        );
+      });
+
+      createButton("Get Instance Data History", () => {
+        aiSDK.getInstanceDataHistory(
+          { limit: 10 },
+          (data, error) => {
+            if (data) {
+              updateStatus("History: " + data.length + " records", "#00ff00");
+            } else {
+              updateStatus("Error: " + error, "#ff0000");
+            }
+          }
+        );
+      });
+
+      createButton("Save User Progress", () => {
+        aiSDK.saveUserProgress(
+          {
+            score: Math.floor(Math.random() * 100),
+            completed: false,
+            customData: {
+              testField: "test value",
+              testNumber: 42,
+            },
+          },
+          (progress, error) => {
+            if (progress) {
+              updateStatus("Progress saved. Attempts: " + progress.attempts, "#00ff00");
+            } else {
+              updateStatus("Error: " + error, "#ff0000");
+            }
+          }
+        );
+      });
+
+      createButton("Get User Progress", () => {
+        aiSDK.getUserProgress((progress, error) => {
+          if (progress) {
+            updateStatus(
+              "Progress: Attempts=" + progress.attempts + ", Completed=" + progress.completed,
+              "#00ff00"
+            );
+          } else if (error) {
+            updateStatus("Error: " + error, "#ff0000");
+          } else {
+            updateStatus("No progress found", "#ffff00");
+          }
+        });
+      });
+
+      createButton("Mark Completed", () => {
+        aiSDK.markCompleted((progress, error) => {
+          if (progress) {
+            updateStatus("Marked as completed", "#00ff00");
+          } else {
+            updateStatus("Error: " + error, "#ff0000");
+          }
+        });
+      });
+
+      createButton("Increment Attempts", () => {
+        aiSDK.incrementAttempts((progress, error) => {
+          if (progress) {
+            updateStatus("Attempts: " + progress.attempts, "#00ff00");
+          } else {
+            updateStatus("Error: " + error, "#ff0000");
+          }
+        });
+      });
+
+      createButton("Get User Public Profile", () => {
+        aiSDK.getUserPublicProfile(undefined, (profile, error) => {
+          if (profile) {
+            updateStatus("Profile: " + (profile.displayName || "No name"), "#00ff00");
+          } else if (error) {
+            updateStatus("Error: " + error, "#ff0000");
+          } else {
+            updateStatus("No profile found (this is OK)", "#ffff00");
+          }
+        });
+      });
+
+      console.log("[SDK Test iFrame] All buttons created");
+    }
+  </script>
+</body>
+</html>`;
+  }
+
+  /**
+   * Escape HTML to prevent XSS
+   */
+  private escapeHtml(text: string): string {
+    const map: { [key: string]: string } = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, (m) => map[m]);
+  }
+
+  /**
    * Create HTML document for interaction build
    */
   private createInteractionHtmlDoc(build: any, config: any, sampleData: any): string {
     const category = build.interactionTypeCategory;
     
     if (category === 'iframe') {
-      // For iframe interactions, return a simple HTML that loads the iframe URL
-      const iframeUrl = build.iframeUrl || sampleData.url || '';
-      return `<!DOCTYPE html>
+      // For iframe interactions, use wrapper HTML with button overlay
+      // Get iframeUrl from config (lesson-builder configured) or build or sampleData
+      const iframeUrl = config.iframeUrl || build.iframeUrl || sampleData.url || 'https://en.wikipedia.org/wiki/Main_Page';
+      
+      // Inject interaction data and config into wrapper
+      const sampleDataJson = JSON.stringify(sampleData);
+      const configJson = JSON.stringify({ ...config, iframeUrl });
+      
+      // Use wrapper HTML with buttons overlaid on top of iframe
+      // For SDK test interactions, we'll use the full wrapper with all buttons
+      // For other iframe interactions, we can use a simpler version
+      const isSDKTest = build.id === 'sdk-test-iframe';
+      
+      if (isSDKTest) {
+        // Full SDK test wrapper with all buttons
+        return this.createIframeWrapperWithButtons(iframeUrl, configJson, sampleDataJson);
+      } else {
+        // Simple wrapper for regular iframe interactions
+        return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
@@ -2875,8 +3495,13 @@ export class LessonViewComponent implements OnInit, OnDestroy {
 </head>
 <body>
   <iframe src="${iframeUrl}" frameborder="0" allowfullscreen></iframe>
+  <script type="text/javascript">
+    window.interactionData = ${sampleDataJson};
+    window.interactionConfig = ${configJson};
+  </script>
 </body>
 </html>`;
+      }
     }
 
     // For HTML and PixiJS interactions, create full HTML document
