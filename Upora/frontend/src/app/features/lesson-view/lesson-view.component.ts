@@ -191,9 +191,9 @@ import { SnackMessageComponent } from '../../shared/components/snack-message/sna
                 class="interaction-iframe"
                 frameborder="0"
                 sandbox="allow-scripts allow-same-origin"
-                <!-- Note: Both allow-scripts and allow-same-origin are required for interaction iframes to function properly.
-                     This warning is expected and safe for our use case where we control the content being loaded. -->
                 (load)="onInteractionIframeLoad()"
+                <!-- Note: Both allow-scripts and allow-same-origin are required for interaction iframes to function properly.
+                     The browser warning about escaping sandboxing is expected and safe for our use case where we control the content being loaded. -->
                 style="width: 100%; min-height: 600px; max-height: 90vh; border: none; overflow: auto;"></iframe>
             </div>
 
