@@ -259,7 +259,10 @@ export class InteractionAISDK {
    */
   postToChat(content: string, role: 'user' | 'assistant' | 'error' = 'assistant', openChat: boolean = false): void {
     // Ensure widget is visible first
-    this.showWidget();
+    const showEvent = new CustomEvent('interaction-request-show-widget', {
+      detail: { source: 'interaction-sdk' }
+    });
+    window.dispatchEvent(showEvent);
     
     // Wait a moment for widget to be shown, then post message
     setTimeout(() => {
@@ -283,7 +286,10 @@ export class InteractionAISDK {
    */
   showScript(text: string, openChat: boolean = false): void {
     // Ensure widget is visible first
-    this.showWidget();
+    const showEvent = new CustomEvent('interaction-request-show-widget', {
+      detail: { source: 'interaction-sdk' }
+    });
+    window.dispatchEvent(showEvent);
     
     // Wait a moment for widget to be shown, then show script
     setTimeout(() => {
