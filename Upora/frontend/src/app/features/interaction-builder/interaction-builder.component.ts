@@ -2572,6 +2572,8 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   // Store current blob URL and the preview key it was created for
   private currentBlobUrl: SafeResourceUrl | null = null;
   private currentBlobUrlKey: number | null = null;
+  private currentIframeOverlayBlobUrl: SafeResourceUrl | null = null;
+  private currentIframeOverlayBlobUrlKey: number | null = null;
 
   // Snackbar
   showSnackbar = false;
