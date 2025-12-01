@@ -3176,6 +3176,7 @@ ${escapedHtml || '<div>No overlay content</div>'}
         },
       };
     };
+    } // End of createIframeAISDK declaration check
     
     ${escapedJs ? `// Custom overlay code from builder
     (function() {
