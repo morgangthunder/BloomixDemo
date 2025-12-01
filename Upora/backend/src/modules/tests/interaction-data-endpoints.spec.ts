@@ -4,6 +4,7 @@ import { InteractionDataService } from '../../services/interaction-data.service'
 import { InteractionInstanceData } from '../../entities/interaction-instance-data.entity';
 import { UserInteractionProgress } from '../../entities/user-interaction-progress.entity';
 import { UserPublicProfile } from '../../entities/user-public-profile.entity';
+import { InteractionType } from '../../entities/interaction-type.entity';
 
 describe('Interaction Data Endpoints (SDK Tests)', () => {
   let service: InteractionDataService;
@@ -28,6 +29,10 @@ describe('Interaction Data Endpoints (SDK Tests)', () => {
     findOne: jest.fn(),
   };
 
+  const mockInteractionTypeRepository = {
+    findOne: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -43,6 +48,10 @@ describe('Interaction Data Endpoints (SDK Tests)', () => {
         {
           provide: getRepositoryToken(UserPublicProfile),
           useValue: mockPublicProfileRepository,
+        },
+        {
+          provide: getRepositoryToken(InteractionType),
+          useValue: mockInteractionTypeRepository,
         },
       ],
     }).compile();
@@ -74,6 +83,8 @@ describe('Interaction Data Endpoints (SDK Tests)', () => {
         createdAt: new Date(),
       };
 
+      // Mock interaction type lookup (no schema validation)
+      mockInteractionTypeRepository.findOne.mockResolvedValue(null);
       mockInstanceDataRepository.create.mockReturnValue(mockSaved);
       mockInstanceDataRepository.save.mockResolvedValue(mockSaved);
 
@@ -107,12 +118,27 @@ describe('Interaction Data Endpoints (SDK Tests)', () => {
         },
       ];
 
-      mockInstanceDataRepository.find.mockResolvedValue(mockHistory);
+      // Mock interaction type lookup
+      mockInteractionTypeRepository.findOne.mockResolvedValue({
+        id: 'test-interaction-1',
+        name: 'Test Interaction',
+      });
+      
+      // Mock query builder
+      const mockQueryBuilder = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockHistory),
+      };
+      
+      mockInstanceDataRepository.createQueryBuilder = jest.fn().mockReturnValue(mockQueryBuilder);
 
       const result = await service.getInstanceDataHistory(dto, 'user-1', 'interaction-builder');
 
       expect(result).toHaveLength(2);
-      expect(mockInstanceDataRepository.find).toHaveBeenCalled();
+      expect(mockInstanceDataRepository.createQueryBuilder).toHaveBeenCalled();
     });
 
     it('should allow students to access their own instance data history', async () => {
@@ -131,12 +157,28 @@ describe('Interaction Data Endpoints (SDK Tests)', () => {
         },
       ];
 
-      mockInstanceDataRepository.find.mockResolvedValue(mockHistory);
+      // Mock interaction type lookup
+      mockInteractionTypeRepository.findOne.mockResolvedValue({
+        id: 'test-interaction-1',
+        name: 'Test Interaction',
+      });
+      
+      // Mock query builder
+      const mockQueryBuilder = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockHistory),
+      };
+      
+      mockInstanceDataRepository.createQueryBuilder = jest.fn().mockReturnValue(mockQueryBuilder);
 
       // Student accessing their own data should work
       const result = await service.getInstanceDataHistory(dto, 'user-1', 'student');
 
       expect(result).toHaveLength(1);
+      expect(mockInstanceDataRepository.createQueryBuilder).toHaveBeenCalled();
     });
   });
 
@@ -161,6 +203,8 @@ describe('Interaction Data Endpoints (SDK Tests)', () => {
         startTimestamp: new Date(),
       };
 
+      // Mock interaction type lookup (no schema validation)
+      mockInteractionTypeRepository.findOne.mockResolvedValue(null);
       mockUserProgressRepository.findOne.mockResolvedValue(null); // No existing progress
       mockUserProgressRepository.create.mockReturnValue(mockProgress);
       mockUserProgressRepository.save.mockResolvedValue(mockProgress);
