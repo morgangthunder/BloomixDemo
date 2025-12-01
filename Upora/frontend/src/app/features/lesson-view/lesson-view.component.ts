@@ -3603,27 +3603,41 @@ ${escapedHtml || '<div>No overlay content</div>'}
       // The builder's code may have its own DOM ready checks, so we run it directly
       // but ensure the overlay elements exist first
       const runBuilderCode = () => {
-        try {
-          // Ensure elements exist
-          if (!document.getElementById("overlay-content")) {
-            console.error("[iFrame Overlay] overlay-content element not found!");
+        // Ensure elements exist - wait for them if needed
+        const checkElements = () => {
+          const overlayContent = document.getElementById("overlay-content");
+          if (!overlayContent) {
+            console.warn("[iFrame Overlay] overlay-content element not found, retrying...");
+            setTimeout(checkElements, 50);
             return;
           }
           
-          console.log("[iFrame Overlay] Running builder's JavaScript code...");
+          // Check if HTML content is actually rendered
+          const statusText = document.getElementById("status-text");
+          const buttonsContainer = document.getElementById("sdk-test-buttons");
+          if (!statusText && !buttonsContainer && overlayContent.children.length === 0) {
+            console.warn("[iFrame Overlay] HTML content not rendered yet, retrying...");
+            setTimeout(checkElements, 50);
+            return;
+          }
+          
+          console.log("[iFrame Overlay] Elements found, running builder's JavaScript code...");
           console.log("[iFrame Overlay] JavaScript code length:", ${escapedJs ? escapedJs.length : 0});
           
-          // Run the builder's JavaScript code directly (no indentation to avoid breaking IIFEs)
-${escapedJs ? escapedJs : '          // No JavaScript code provided'}
-        } catch (e) {
-          console.error("[iFrame Overlay] Error in builder's JavaScript:", e);
-          console.error("[iFrame Overlay] Error stack:", e.stack);
-          // Show error in overlay
-          const overlayContent = document.getElementById("overlay-content");
-          if (overlayContent) {
-            overlayContent.innerHTML = '<div style="color: red; padding: 20px;"><h3>Error in overlay code:</h3><pre style="white-space: pre-wrap;">' + e.message + '</pre></div>';
+          try {
+            // Run the builder's JavaScript code directly (no indentation to avoid breaking IIFEs)
+${escapedJs ? escapedJs : '            // No JavaScript code provided'}
+          } catch (e) {
+            console.error("[iFrame Overlay] Error in builder's JavaScript:", e);
+            console.error("[iFrame Overlay] Error stack:", e.stack);
+            // Show error in overlay
+            if (overlayContent) {
+              overlayContent.innerHTML = '<div style="color: red; padding: 20px;"><h3>Error in overlay code:</h3><pre style="white-space: pre-wrap;">' + e.message + '</pre></div>';
+            }
           }
-        }
+        };
+        
+        checkElements();
       };
       
       if (document.readyState === 'loading') {
