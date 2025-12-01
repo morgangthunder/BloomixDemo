@@ -3605,8 +3605,11 @@ ${escapedHtml || '<div>No overlay content</div>'}
             return;
           }
           
-          // Run the builder's JavaScript code
-${escapedJs ? escapedJs.split('\n').map(line => '          ' + line).join('\n') : '          // No JavaScript code provided'}
+          console.log("[iFrame Overlay] Running builder's JavaScript code...");
+          console.log("[iFrame Overlay] JavaScript code length:", ${escapedJs ? escapedJs.length : 0});
+          
+          // Run the builder's JavaScript code directly (no indentation to avoid breaking IIFEs)
+${escapedJs ? escapedJs : '          // No JavaScript code provided'}
         } catch (e) {
           console.error("[iFrame Overlay] Error in builder's JavaScript:", e);
           console.error("[iFrame Overlay] Error stack:", e.stack);
