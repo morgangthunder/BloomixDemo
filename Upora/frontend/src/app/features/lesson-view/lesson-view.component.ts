@@ -1512,12 +1512,18 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         
         // Set context for data storage SDK methods
         if (this.currentStage && this.activeSubStage) {
+          const userId = environment.defaultUserId;
+          const tenantId = environment.tenantId;
+          const userRole = 'student'; // Default role, could be enhanced later
           this.interactionAISDK.setContext(
             this.lesson.id,
             String(this.currentStage.id),
             String(this.activeSubStage.id),
             interactionId,
-            processedContentId || undefined
+            processedContentId || undefined,
+            userId,
+            tenantId,
+            userRole
           );
         }
         

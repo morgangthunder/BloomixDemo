@@ -219,15 +219,27 @@ export class InteractionDataService {
    */
   async markCompleted(
     userId: string,
+    tenantId: string,
     lessonId: string,
     stageId: string,
     substageId: string,
     interactionTypeId: string,
   ): Promise<UserInteractionProgress> {
-    const progress = await this.getUserProgress(userId, lessonId, stageId, substageId, interactionTypeId);
+    let progress = await this.getUserProgress(userId, lessonId, stageId, substageId, interactionTypeId);
 
     if (!progress) {
-      throw new NotFoundException('User progress not found');
+      // Create progress if it doesn't exist
+      progress = this.userProgressRepo.create({
+        userId,
+        tenantId,
+        lessonId,
+        stageId,
+        substageId,
+        interactionTypeId,
+        startTimestamp: new Date(),
+        attempts: 1,
+        completed: false,
+      });
     }
 
     progress.completed = true;
@@ -241,15 +253,27 @@ export class InteractionDataService {
    */
   async incrementAttempts(
     userId: string,
+    tenantId: string,
     lessonId: string,
     stageId: string,
     substageId: string,
     interactionTypeId: string,
   ): Promise<UserInteractionProgress> {
-    const progress = await this.getUserProgress(userId, lessonId, stageId, substageId, interactionTypeId);
+    let progress = await this.getUserProgress(userId, lessonId, stageId, substageId, interactionTypeId);
 
     if (!progress) {
-      throw new NotFoundException('User progress not found');
+      // Create progress if it doesn't exist
+      progress = this.userProgressRepo.create({
+        userId,
+        tenantId,
+        lessonId,
+        stageId,
+        substageId,
+        interactionTypeId,
+        startTimestamp: new Date(),
+        attempts: 0,
+        completed: false,
+      });
     }
 
     progress.attempts += 1;

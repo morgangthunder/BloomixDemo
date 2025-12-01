@@ -86,9 +86,11 @@ export class InteractionDataController {
   async markCompleted(
     @Body() body: { lessonId: string; stageId: string; substageId: string; interactionTypeId: string },
     @Headers('x-user-id') userId: string,
+    @Headers('x-tenant-id') tenantId: string,
   ) {
     const progress = await this.dataService.markCompleted(
       userId,
+      tenantId,
       body.lessonId,
       body.stageId,
       body.substageId,
@@ -104,9 +106,11 @@ export class InteractionDataController {
   async incrementAttempts(
     @Body() body: { lessonId: string; stageId: string; substageId: string; interactionTypeId: string },
     @Headers('x-user-id') userId: string,
+    @Headers('x-tenant-id') tenantId: string,
   ) {
     const progress = await this.dataService.incrementAttempts(
       userId,
+      tenantId,
       body.lessonId,
       body.stageId,
       body.substageId,

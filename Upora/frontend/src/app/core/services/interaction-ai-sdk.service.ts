@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable, Subscription, Subscriber } from 'rxjs';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import {
   InteractionAIContextService,
@@ -91,6 +91,9 @@ export class InteractionAISDK {
   private currentSubstageId: string | null = null;
   private currentInteractionTypeId: string | null = null;
   private currentProcessedContentId: string | null = null;
+  private currentUserId: string | null = null;
+  private currentTenantId: string | null = null;
+  private currentUserRole: string | null = null;
 
   constructor(private contextService: InteractionAIContextService) {}
 
@@ -297,12 +300,32 @@ export class InteractionAISDK {
   /**
    * Set current interaction context (called by lesson-view component)
    */
-  setContext(lessonId: string, stageId: string, substageId: string, interactionTypeId: string, processedContentId?: string): void {
+  setContext(lessonId: string, stageId: string, substageId: string, interactionTypeId: string, processedContentId?: string, userId?: string, tenantId?: string, userRole?: string): void {
     this.currentLessonId = lessonId;
     this.currentStageId = stageId;
     this.currentSubstageId = substageId;
     this.currentInteractionTypeId = interactionTypeId;
     this.currentProcessedContentId = processedContentId || null;
+    this.currentUserId = userId || null;
+    this.currentTenantId = tenantId || null;
+    this.currentUserRole = userRole || null;
+  }
+
+  /**
+   * Get HTTP headers with user/tenant info
+   */
+  private getHeaders(): HttpHeaders {
+    const headers: { [key: string]: string } = {};
+    if (this.currentUserId) {
+      headers['x-user-id'] = this.currentUserId;
+    }
+    if (this.currentTenantId) {
+      headers['x-tenant-id'] = this.currentTenantId;
+    }
+    if (this.currentUserRole) {
+      headers['x-user-role'] = this.currentUserRole;
+    }
+    return new HttpHeaders(headers);
   }
 
   /**
@@ -362,7 +385,10 @@ export class InteractionAISDK {
       }
 
       const response = await firstValueFrom(
-        this.http.get<{ data: InstanceData[] }>(`${environment.apiUrl}/interaction-data/instance/history`, { params })
+        this.http.get<{ data: InstanceData[] }>(`${environment.apiUrl}/interaction-data/instance/history`, { 
+          params,
+          headers: this.getHeaders()
+        })
       );
       return response.data;
     } catch (error: any) {
@@ -393,7 +419,7 @@ export class InteractionAISDK {
           substageId: this.currentSubstageId,
           interactionTypeId: this.currentInteractionTypeId,
           ...data,
-        })
+        }, { headers: this.getHeaders() })
       );
       console.log('[InteractionAISDK] ✅ User progress saved');
       return response.progress;
@@ -414,7 +440,8 @@ export class InteractionAISDK {
     try {
       const response = await firstValueFrom(
         this.http.get<{ progress: UserProgress | null }>(
-          `${environment.apiUrl}/interaction-data/user-progress/${this.currentLessonId}/${this.currentStageId}/${this.currentSubstageId}/${this.currentInteractionTypeId}`
+          `${environment.apiUrl}/interaction-data/user-progress/${this.currentLessonId}/${this.currentStageId}/${this.currentSubstageId}/${this.currentInteractionTypeId}`,
+          { headers: this.getHeaders() }
         )
       );
       return response.progress;
@@ -452,7 +479,7 @@ export class InteractionAISDK {
           stageId: this.currentStageId,
           substageId: this.currentSubstageId,
           interactionTypeId: this.currentInteractionTypeId,
-        })
+        }, { headers: this.getHeaders() })
       );
       console.log('[InteractionAISDK] ✅ Interaction marked as completed');
       return response.progress;
@@ -479,7 +506,8 @@ export class InteractionAISDK {
             stageId: this.currentStageId,
             substageId: this.currentSubstageId,
             interactionTypeId: this.currentInteractionTypeId,
-          }
+          },
+          { headers: this.getHeaders() }
         )
       );
       console.log('[InteractionAISDK] ✅ Attempts incremented');
