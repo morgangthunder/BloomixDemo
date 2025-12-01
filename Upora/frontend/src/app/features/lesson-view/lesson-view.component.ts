@@ -1620,12 +1620,23 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         }
         
         // Set teacher widget reference for SDK (use setTimeout to ensure ViewChild is available)
+        // Use a longer delay and retry logic to ensure widget is available, especially on mobile/first load
         setTimeout(() => {
           if (this.teacherWidget) {
             this.interactionAISDK.setTeacherWidgetRef(this.teacherWidget);
             console.log('[LessonView] ✅ Teacher widget reference set for SDK');
+          } else {
+            // Retry if widget not ready yet (common on mobile/first load)
+            setTimeout(() => {
+              if (this.teacherWidget) {
+                this.interactionAISDK.setTeacherWidgetRef(this.teacherWidget);
+                console.log('[LessonView] ✅ Teacher widget reference set for SDK (retry)');
+              } else {
+                console.warn('[LessonView] ⚠️ Teacher widget not available after retry');
+              }
+            }, 500);
           }
-        }, 0);
+        }, 100);
         console.log('[LessonView] ✅ Initialized AI SDK for interaction:', interactionId, 'processedContentId:', processedContentId);
       } else {
         // Clear SDK context if no interaction
@@ -2601,6 +2612,13 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     if (!this.teacherWidgetHidden) {
       this.unreadMessageCount = 0;
       this.lastReadMessageCount = this.chatMessages.length;
+      // Ensure widget reference is set when widget becomes visible
+      setTimeout(() => {
+        if (this.teacherWidget) {
+          this.interactionAISDK.setTeacherWidgetRef(this.teacherWidget);
+          console.log('[LessonView] ✅ Teacher widget reference set on toggle');
+        }
+      }, 100);
       console.log('[LessonView] ✅ Widget opened - unread count reset');
     }
   }
