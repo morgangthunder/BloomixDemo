@@ -318,9 +318,63 @@ interface ChatMessage {
                               (ngModelChange)="onIframeConfigChange()"
                               class="code-textarea"
                               rows="6"
-                              placeholder="iFrame configuration JSON"
+                              placeholder='{"useOverlay": false, "allowFullscreen": true, "sandbox": "allow-scripts allow-same-origin"}'
                               spellcheck="false"></textarea>
-                    <small class="hint">Optional: width, height, allow permissions, etc.</small>
+                    <small class="hint">Optional: Set "useOverlay": true to enable overlay mode with custom HTML/CSS/JS code. Other options: width, height, allow permissions, etc.</small>
+                  </div>
+
+                  <!-- Overlay Mode Toggle -->
+                  <div class="form-group" *ngIf="getIframeConfigValue('useOverlay')">
+                    <div class="info-section">
+                      <h4>🎨 Overlay Mode Enabled</h4>
+                      <p>When overlay mode is enabled, you can add custom HTML/CSS/JS code that will appear in an overlay panel on top of the iframe. This allows you to add interactive elements, buttons, or UI controls that work with the AI Teacher SDK.</p>
+                      <p><strong>Use the HTML, CSS, and JavaScript tabs below to add your overlay content.</strong></p>
+                    </div>
+                  </div>
+
+                  <!-- HTML/CSS/JS Code Editors for Overlay (only show if overlay enabled) -->
+                  <div *ngIf="getIframeConfigValue('useOverlay')" class="overlay-code-editor">
+                    <div class="editor-subtabs">
+                      <button [class.active]="activeCodeTab === 'html'" 
+                              (click)="activeCodeTab = 'html'">HTML</button>
+                      <button [class.active]="activeCodeTab === 'css'" 
+                              (click)="activeCodeTab = 'css'">CSS</button>
+                      <button [class.active]="activeCodeTab === 'js'" 
+                              (click)="activeCodeTab = 'js'">JavaScript</button>
+                    </div>
+
+                    <div class="code-editor-container">
+                      <textarea *ngIf="activeCodeTab === 'html'"
+                                [(ngModel)]="currentInteraction!.htmlCode"
+                                (ngModelChange)="markChanged()"
+                                class="code-textarea"
+                                placeholder='<div id="overlay-content">Your overlay HTML here</div>'
+                                spellcheck="false"></textarea>
+
+                      <textarea *ngIf="activeCodeTab === 'css'"
+                                [(ngModel)]="currentInteraction!.cssCode"
+                                (ngModelChange)="markChanged()"
+                                class="code-textarea"
+                                placeholder=".overlay-content { color: #00d4ff; }"
+                                spellcheck="false"></textarea>
+
+                      <textarea *ngIf="activeCodeTab === 'js'"
+                                [(ngModel)]="currentInteraction!.jsCode"
+                                (ngModelChange)="markChanged()"
+                                class="code-textarea"
+                                placeholder="// Your overlay JavaScript code&#10;// Access AI Teacher SDK via: window.parent.postMessage(...)&#10;// Or use the createIframeAISDK() helper function"
+                                spellcheck="false"></textarea>
+                    </div>
+                    <div class="editor-note">
+                      <p>💡 <strong>Overlay Code Tips:</strong></p>
+                      <ul>
+                        <li>Your HTML will be injected into a container with id="overlay-content"</li>
+                        <li>Your CSS will be scoped to the overlay panel</li>
+                        <li>Your JavaScript can use the AI Teacher SDK (same as HTML/PixiJS interactions)</li>
+                        <li>The overlay panel is positioned on the right side by default (320px wide)</li>
+                        <li>Users can toggle the overlay visibility via a gear button</li>
+                      </ul>
+                    </div>
                   </div>
 
                   <!-- Screenshot Trigger Options -->
@@ -2687,6 +2741,13 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     } catch (e: any) {
       // Keep as text for now, will validate on save
     }
+  }
+
+  getIframeConfigValue(key: string): any {
+    if (!this.currentInteraction?.iframeConfig) {
+      return undefined;
+    }
+    return this.currentInteraction.iframeConfig[key];
   }
 
   getScreenshotTrigger(trigger: string): boolean {

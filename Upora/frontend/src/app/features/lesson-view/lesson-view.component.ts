@@ -2839,12 +2839,22 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Create iframe wrapper HTML with button overlay for SDK test interactions
+   * Create iframe wrapper HTML with customizable overlay for iframe interactions
    */
-  private createIframeWrapperWithButtons(iframeUrl: string, configJson: string, sampleDataJson: string): string {
+  private createIframeWrapperWithOverlay(
+    iframeUrl: string, 
+    configJson: string, 
+    sampleDataJson: string, 
+    htmlCode: string, 
+    cssCode: string, 
+    jsCode: string,
+    isSDKTest: boolean = false
+  ): string {
     // Full wrapper HTML with buttons overlaid on top of iframe
-    // The JavaScript code is embedded inline here
-    const escapedUrl = iframeUrl.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${');
+    // Escape code for template literal injection
+    const escapedHtml = htmlCode ? htmlCode.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${').replace(/\n/g, '\\n') : '';
+    const escapedCss = cssCode ? cssCode.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${').replace(/\n/g, '\\n') : '';
+    const escapedJs = jsCode ? jsCode.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${').replace(/\n/g, '\\n') : '';
     
     return `<!DOCTYPE html>
 <html lang="en">
@@ -3006,14 +3016,16 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     <iframe id="external-iframe" src="${this.escapeHtml(iframeUrl)}" frameborder="0" allowfullscreen></iframe>
   </div>
   
-  <button id="toggle-overlay" title="Toggle SDK Test Panel">⚙</button>
+  <button id="toggle-overlay" title="Toggle Overlay Panel">⚙</button>
   
   <div id="button-overlay">
-    <div id="sdk-test-header">
-      <h1>AI Teacher SDK Test</h1>
-      <p id="status-text">Initializing...</p>
+    <div id="overlay-content">
+${isSDKTest ? `      <div id="sdk-test-header">
+        <h1>AI Teacher SDK Test</h1>
+        <p id="status-text">Initializing...</p>
+      </div>
+      <div id="sdk-test-buttons"></div>` : (escapedHtml ? escapedHtml.split('\\n').join('\n') : '<div>No overlay content</div>')}
     </div>
-    <div id="sdk-test-buttons"></div>
   </div>
 
   <script type="text/javascript">
@@ -3021,7 +3033,148 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     window.interactionData = ${sampleDataJson};
     window.interactionConfig = ${configJson};
     
-    // SDK Test iFrame Interaction - Full JavaScript code
+    // Provide createIframeAISDK helper function for builder's code
+    const createIframeAISDK = () => {
+      let subscriptionId = null;
+      let requestCounter = 0;
+
+      const generateRequestId = () => \`req-\${Date.now()}-\${++requestCounter}\`;
+      const generateSubscriptionId = () => \`sub-\${Date.now()}-\${Math.random()}\`;
+
+      const sendMessage = (type, data, callback) => {
+        const requestId = generateRequestId();
+        const message = { type, requestId, ...data };
+
+        if (callback) {
+          const listener = (event) => {
+            if (event.data.requestId === requestId) {
+              window.removeEventListener("message", listener);
+              callback(event.data);
+            }
+          };
+          window.addEventListener("message", listener);
+        }
+
+        window.parent.postMessage(message, "*");
+      };
+
+      return {
+        emitEvent: (event, processedContentId) => {
+          sendMessage("ai-sdk-emit-event", { event, processedContentId });
+        },
+        updateState: (key, value) => {
+          sendMessage("ai-sdk-update-state", { key, value });
+        },
+        getState: (callback) => {
+          sendMessage("ai-sdk-get-state", {}, (response) => {
+            callback(response.state);
+          });
+        },
+        onResponse: (callback) => {
+          subscriptionId = generateSubscriptionId();
+          sendMessage("ai-sdk-subscribe", { subscriptionId }, () => {
+            const listener = (event) => {
+              if (event.data.type === "ai-sdk-response" && event.data.subscriptionId === subscriptionId) {
+                callback(event.data.response);
+              }
+            };
+            window.addEventListener("message", listener);
+            return () => {
+              window.removeEventListener("message", listener);
+              sendMessage("ai-sdk-unsubscribe", { subscriptionId });
+            };
+          });
+        },
+        isReady: (callback) => {
+          const listener = (event) => {
+            if (event.data.type === "ai-sdk-ready") {
+              window.removeEventListener("message", listener);
+              callback(true);
+            }
+          };
+          window.addEventListener("message", listener);
+        },
+        minimizeChatUI: () => {
+          sendMessage("ai-sdk-minimize-chat-ui", {});
+        },
+        showChatUI: () => {
+          sendMessage("ai-sdk-show-chat-ui", {});
+        },
+        activateFullscreen: () => {
+          sendMessage("ai-sdk-activate-fullscreen", {});
+        },
+        deactivateFullscreen: () => {
+          sendMessage("ai-sdk-deactivate-fullscreen", {});
+        },
+        postToChat: (content, role, showInWidget) => {
+          sendMessage("ai-sdk-post-to-chat", { content, role, showInWidget });
+        },
+        showScript: (script, autoPlay) => {
+          sendMessage("ai-sdk-show-script", { script, autoPlay });
+        },
+        showSnack: (content, duration, hideFromChatUI, callback) => {
+          sendMessage("ai-sdk-show-snack", { content, duration, hideFromChatUI: hideFromChatUI || false }, (response) => {
+            if (callback && response.snackId) {
+              callback(response.snackId);
+            }
+          });
+        },
+        hideSnack: () => {
+          sendMessage("ai-sdk-hide-snack", {});
+        },
+        saveInstanceData: (data, callback) => {
+          sendMessage("ai-sdk-save-instance-data", { data }, (response) => {
+            if (callback) {
+              callback(response.success, response.error);
+            }
+          });
+        },
+        getInstanceDataHistory: (filters, callback) => {
+          sendMessage("ai-sdk-get-instance-data-history", { filters }, (response) => {
+            if (callback) {
+              callback(response.data, response.error);
+            }
+          });
+        },
+        saveUserProgress: (data, callback) => {
+          sendMessage("ai-sdk-save-user-progress", { data }, (response) => {
+            if (callback) {
+              callback(response.progress, response.error);
+            }
+          });
+        },
+        getUserProgress: (callback) => {
+          sendMessage("ai-sdk-get-user-progress", {}, (response) => {
+            if (callback) {
+              callback(response.progress, response.error);
+            }
+          });
+        },
+        markCompleted: (callback) => {
+          sendMessage("ai-sdk-mark-completed", {}, (response) => {
+            if (callback) {
+              callback(response.progress, response.error);
+            }
+          });
+        },
+        incrementAttempts: (callback) => {
+          sendMessage("ai-sdk-increment-attempts", {}, (response) => {
+            if (callback) {
+              callback(response.progress, response.error);
+            }
+          });
+        },
+        getUserPublicProfile: (userId, callback) => {
+          sendMessage("ai-sdk-get-user-public-profile", { userId }, (response) => {
+            if (callback) {
+              callback(response.profile, response.error);
+            }
+          });
+        },
+      };
+    };
+    
+    ${isSDKTest ? `// SDK Test iFrame Interaction - Full JavaScript code
     (function() {
       console.log("[SDK Test iFrame] Starting initialization...");
       
@@ -3422,8 +3575,52 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       });
 
       console.log("[SDK Test iFrame] All buttons created");
-    }
+    }` : `// Custom overlay code from builder
+    (function() {
+      // Initialize overlay toggle
+      const toggleButton = document.getElementById("toggle-overlay");
+      const buttonOverlay = document.getElementById("button-overlay");
+      
+      if (toggleButton && buttonOverlay) {
+        toggleButton.onclick = () => {
+          buttonOverlay.classList.toggle("hidden");
+          toggleButton.textContent = buttonOverlay.classList.contains("hidden") ? "⚙" : "✕";
+        };
+      }
+      
+      // Load external iframe URL
+      const externalIframe = document.getElementById("external-iframe");
+      if (externalIframe) {
+        const iframeUrl = (window.interactionConfig && window.interactionConfig.iframeUrl) || 
+                          (window.interactionData && window.interactionData.url) ||
+                          'https://en.wikipedia.org/wiki/Main_Page';
+        externalIframe.src = iframeUrl;
+        console.log("[iFrame Overlay] Loading external URL:", iframeUrl);
+      }
+      
+      // Wait for DOM to be ready, then run builder's code
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+          try {
+${escapedJs ? escapedJs.split('\\n').map(line => '            ' + line).join('\n') : '            // No JavaScript code provided'}
+          } catch (e) {
+            console.error("[iFrame Overlay] Error in builder's JavaScript:", e);
+          }
+        });
+      } else {
+        setTimeout(() => {
+          try {
+${escapedJs ? escapedJs.split('\\n').map(line => '            ' + line).join('\n') : '            // No JavaScript code provided'}
+          } catch (e) {
+            console.error("[iFrame Overlay] Error in builder's JavaScript:", e);
+          }
+        }, 10);
+      }
+    })();`}
   </script>
+  ${escapedCss ? `<style type="text/css">
+${escapedCss.split('\\n').join('\n')}
+  </style>` : ''}
 </body>
 </html>`;
   }
@@ -3457,14 +3654,17 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       const sampleDataJson = JSON.stringify(sampleData);
       const configJson = JSON.stringify({ ...config, iframeUrl });
       
-      // Use wrapper HTML with buttons overlaid on top of iframe
-      // For SDK test interactions, we'll use the full wrapper with all buttons
-      // For other iframe interactions, we can use a simpler version
-      const isSDKTest = build.id === 'sdk-test-iframe';
+      // Check if overlay mode is enabled in iframeConfig
+      const iframeConfig = build.iframeConfig || {};
+      const useOverlay = iframeConfig.useOverlay === true || build.id === 'sdk-test-iframe';
       
-      if (isSDKTest) {
-        // Full SDK test wrapper with all buttons
-        return this.createIframeWrapperWithButtons(iframeUrl, configJson, sampleDataJson);
+      if (useOverlay) {
+        // Overlay mode: use wrapper with custom HTML/CSS/JS code from builder
+        const htmlCode = (build.htmlCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
+        const cssCode = (build.cssCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
+        const jsCode = (build.jsCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
+        
+        return this.createIframeWrapperWithOverlay(iframeUrl, configJson, sampleDataJson, htmlCode, cssCode, jsCode, build.id === 'sdk-test-iframe');
       } else {
         // Simple wrapper for regular iframe interactions
         return `<!DOCTYPE html>
@@ -3494,7 +3694,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   </style>
 </head>
 <body>
-  <iframe src="${iframeUrl}" frameborder="0" allowfullscreen></iframe>
+  <iframe src="${this.escapeHtml(iframeUrl)}" frameborder="0" allowfullscreen></iframe>
   <script type="text/javascript">
     window.interactionData = ${sampleDataJson};
     window.interactionConfig = ${configJson};
