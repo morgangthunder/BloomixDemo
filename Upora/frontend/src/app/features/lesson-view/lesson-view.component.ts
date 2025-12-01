@@ -1514,6 +1514,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     window.removeEventListener('mouseup', this.handleMouseUp.bind(this));
     window.removeEventListener('interaction-request-fullscreen', this.handleInteractionFullscreenRequest.bind(this) as EventListener);
     window.removeEventListener('interaction-request-show-widget', this.handleInteractionShowWidgetRequest.bind(this) as EventListener);
+    window.removeEventListener('interaction-request-show-widget', this.handleInteractionShowWidgetRequest.bind(this) as EventListener);
   }
 
   toggleStage(stageId: number) {
