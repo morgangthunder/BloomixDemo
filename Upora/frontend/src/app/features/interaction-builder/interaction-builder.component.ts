@@ -3368,6 +3368,16 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
       this.currentBlobUrl = null;
       this.currentBlobUrlKey = null;
     }
+    // Revoke iframe overlay blob URL if it exists
+    if (this.currentIframeOverlayBlobUrl) {
+      const urlStr = (this.currentIframeOverlayBlobUrl as any).changingThisBreaksApplicationSecurity;
+      if (urlStr && urlStr.startsWith('blob:')) {
+        URL.revokeObjectURL(urlStr);
+        console.log('[Preview] 🗑️ Revoked current iframe overlay blob URL');
+      }
+      this.currentIframeOverlayBlobUrl = null;
+      this.currentIframeOverlayBlobUrlKey = null;
+    }
   }
 
   getHtmlPreviewSafeSrcDoc(): SafeHtml {
