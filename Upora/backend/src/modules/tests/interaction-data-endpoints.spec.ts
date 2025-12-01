@@ -77,7 +77,7 @@ describe('Interaction Data Endpoints (SDK Tests)', () => {
       mockInstanceDataRepository.create.mockReturnValue(mockSaved);
       mockInstanceDataRepository.save.mockResolvedValue(mockSaved);
 
-      await service.saveInstanceData(dto, 'user-1', 'tenant-1');
+      await service.saveInstanceData(dto);
 
       expect(mockInstanceDataRepository.create).toHaveBeenCalled();
       expect(mockInstanceDataRepository.save).toHaveBeenCalled();
@@ -364,7 +364,7 @@ describe('Interaction Data Endpoints (SDK Tests)', () => {
       };
 
       await expect(
-        service.saveInstanceData(invalidDto as any, 'user-1', 'tenant-1')
+        service.saveInstanceData(invalidDto as any)
       ).rejects.toThrow();
     });
 
