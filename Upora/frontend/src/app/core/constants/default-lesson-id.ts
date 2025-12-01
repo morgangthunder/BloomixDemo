@@ -19,3 +19,4 @@ export function isDefaultLessonId(lessonId: string | null | undefined): boolean 
   return lessonId === DEFAULT_LESSON_ID || !lessonId;
 }
 
+

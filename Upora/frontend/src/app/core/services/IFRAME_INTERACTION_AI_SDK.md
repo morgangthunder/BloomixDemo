@@ -241,6 +241,118 @@ Activate fullscreen mode for the lesson view.
 aiSDK.activateFullscreen();
 ```
 
+## Data Storage Methods
+
+### `saveInstanceData(data)`
+Save anonymous instance data (stored separately from user accounts, accessible to interaction builders).
+
+**Example:**
+```javascript
+await aiSDK.saveInstanceData({
+  selectedFragments: [0, 2, 4],
+  timeToFirstSelection: 3.5,
+  interactionDuration: 45
+});
+```
+
+**Note:** The schema for instance data is defined by the interaction builder in the interaction builder UI. Only fields defined in the schema will be validated.
+
+### `getInstanceDataHistory(filters?)`
+Get historical instance data (accessible to interaction builders and super-admins only).
+
+**Example:**
+```javascript
+const history = await aiSDK.getInstanceDataHistory({
+  dateFrom: new Date('2024-01-01'),
+  dateTo: new Date('2024-12-31'),
+  limit: 100
+});
+```
+
+**Returns:** Array of instance data objects with `id`, `instanceData`, `createdAt`, etc.
+
+### `saveUserProgress(data)`
+Save or update user progress for this interaction.
+
+**Example:**
+```javascript
+await aiSDK.saveUserProgress({
+  score: 85,
+  timeTakenSeconds: 120,
+  completed: true,
+  customData: {
+    difficultyRating: 3,
+    notes: "Found this challenging"
+  },
+  interactionEvents: [
+    {
+      type: 'selection',
+      timestamp: new Date(),
+      data: { fragmentIndex: 0 }
+    }
+  ]
+});
+```
+
+**Note:** Required fields (stage/substage IDs, timestamps, attempts, completed) are automatically tracked. Custom fields are defined by the interaction builder in the schema.
+
+### `getUserProgress()`
+Get current user's progress for this interaction.
+
+**Example:**
+```javascript
+const progress = await aiSDK.getUserProgress();
+console.log('Score:', progress?.score);
+console.log('Attempts:', progress?.attempts);
+console.log('Completed:', progress?.completed);
+console.log('Custom data:', progress?.customData);
+```
+
+**Returns:** User progress object or `null` if no progress exists yet.
+
+### `updateUserProgress(updates)`
+Update user progress with partial updates.
+
+**Example:**
+```javascript
+await aiSDK.updateUserProgress({
+  score: 90,
+  customData: {
+    difficultyRating: 4
+  }
+});
+```
+
+### `markCompleted()`
+Mark the interaction as completed.
+
+**Example:**
+```javascript
+await aiSDK.markCompleted();
+```
+
+### `incrementAttempts()`
+Increment the attempts counter.
+
+**Example:**
+```javascript
+await aiSDK.incrementAttempts();
+```
+
+### `getUserPublicProfile(userId?)`
+Get a user's public profile (if available and shared).
+
+**Example:**
+```javascript
+const profile = await aiSDK.getUserPublicProfile(userId);
+if (profile) {
+  console.log('Display name:', profile.displayName);
+  console.log('Preferences:', profile.preferences);
+}
+```
+
+**Returns:** Public profile object with `displayName`, `preferences`, `publicAvatarUrl`, etc., or `null` if not available.
+
 ## Notes
 
 - The SDK uses `postMessage` to communicate with the parent window

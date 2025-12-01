@@ -894,17 +894,276 @@ Return JSON array of script blocks with timestamps and playback rules.`,
         },
         'sdk-html': {
           label: 'SDK Reference: HTML Interactions',
-          content: '## AI Teacher SDK for HTML Interactions\n\n**Integration:** HTML interactions run in iframes. Use `createIframeAISDK()` to access the AI Teacher.\n\n**Setup:**\n```javascript\nconst aiSDK = createIframeAISDK();\naiSDK.isReady((ready) => {\n  if (ready) {\n    // SDK ready\n  }\n});\n```\n\n**Core Methods:**\n- `aiSDK.emitEvent({ type, data, requiresLLMResponse })` - Send events\n- `aiSDK.updateState(key, value)` - Update state\n- `aiSDK.onResponse(callback)` - Receive AI responses\n- `aiSDK.onAction(type, callback)` - Handle specific actions\n\n**Display Methods:**\n- `aiSDK.postToChat(content, role, openChat)` - Post message to chat UI\n- `aiSDK.showScript(text, openChat)` - Display as script block\n- `aiSDK.showSnack(content, duration)` - Show snack message (returns message ID)\n- `aiSDK.hideSnack()` - Hide current snack message\n\n**Standard Events:** `user-selection`, `user-input`, `hint-request`, `interaction-submit`, `interaction-complete`\n\n**Response Actions:** `highlight`, `show-hint`, `update-ui`\n\n**Response Display:** AI responses include metadata for display control:\n- `metadata.showInSnack` - Show in snack message\n- `metadata.snackDuration` - Snack duration (ms, optional)\n- `metadata.postToChat` - Also post to chat\n- `metadata.openChatUI` - Open chat if minimized\n- `metadata.showAsScript` - Show as script block\n\n**Example:**\n```javascript\n// On user click\naiSDK.emitEvent({\n  type: \'user-selection\',\n  data: { index: 0, isCorrect: true },\n  requiresLLMResponse: true\n});\n\n// Handle AI response\naiSDK.onResponse((r) => {\n  // Response automatically displayed based on metadata\n  // Or manually control display:\n  if (r.metadata?.showInSnack) {\n    aiSDK.showSnack(r.response, r.metadata.snackDuration);\n  }\n  if (r.actions) {\n    r.actions.forEach(a => {\n      if (a.type === \'highlight\') highlightElement(a.target);\n    });\n  }\n});\n```',
+          content: `## AI Teacher SDK for HTML Interactions
+
+**Integration:** HTML interactions run in iframes. Use \`createIframeAISDK()\` to access the AI Teacher.
+
+**Setup:**
+\`\`\`javascript
+const aiSDK = createIframeAISDK();
+aiSDK.isReady((ready) => {
+  if (ready) {
+    // SDK ready
+  }
+});
+\`\`\`
+
+**Core Methods:**
+- \`aiSDK.emitEvent({ type, data, requiresLLMResponse })\` - Send events
+- \`aiSDK.updateState(key, value)\` - Update state
+- \`aiSDK.onResponse(callback)\` - Receive AI responses
+- \`aiSDK.onAction(type, callback)\` - Handle specific actions
+
+**Display Methods:**
+- \`aiSDK.postToChat(content, role, openChat)\` - Post message to chat UI
+- \`aiSDK.showScript(text, openChat)\` - Display as script block
+- \`aiSDK.showSnack(content, duration)\` - Show snack message (returns message ID)
+- \`aiSDK.hideSnack()\` - Hide current snack message
+
+**Standard Events:** \`user-selection\`, \`user-input\`, \`hint-request\`, \`interaction-submit\`, \`interaction-complete\`
+
+**Response Actions:** \`highlight\`, \`show-hint\`, \`update-ui\`
+
+**Response Display:** AI responses include metadata for display control:
+- \`metadata.showInSnack\` - Show in snack message
+- \`metadata.snackDuration\` - Snack duration (ms, optional)
+- \`metadata.postToChat\` - Also post to chat
+- \`metadata.openChatUI\` - Open chat if minimized
+- \`metadata.showAsScript\` - Show as script block
+
+**Data Storage Methods:**
+- \`aiSDK.saveInstanceData(data)\` - Save anonymous instance data (accessible to builders/admins)
+- \`aiSDK.getInstanceDataHistory(filters?)\` - Get historical instance data (builders/admins only)
+- \`aiSDK.saveUserProgress({ score, completed, customData, ... })\` - Save user progress
+- \`aiSDK.getUserProgress()\` - Get current user's progress
+- \`aiSDK.markCompleted()\` - Mark interaction as completed
+- \`aiSDK.incrementAttempts()\` - Increment attempts counter
+- \`aiSDK.getUserPublicProfile(userId?)\` - Get user's public profile (if shared)
+
+**Note:** Instance data and user progress schemas are defined by interaction builders in the Data Storage tab. Only fields defined in schemas will be validated.
+
+**Example:**
+\`\`\`javascript
+// On user click
+aiSDK.emitEvent({
+  type: 'user-selection',
+  data: { index: 0, isCorrect: true },
+  requiresLLMResponse: true
+});
+
+// Handle AI response
+aiSDK.onResponse((r) => {
+  // Response automatically displayed based on metadata
+  // Or manually control display:
+  if (r.metadata?.showInSnack) {
+    aiSDK.showSnack(r.response, r.metadata.snackDuration);
+  }
+  if (r.actions) {
+    r.actions.forEach(a => {
+      if (a.type === 'highlight') highlightElement(a.target);
+    });
+  }
+});
+
+// Save instance data (anonymous)
+await aiSDK.saveInstanceData({
+  selectedFragments: [0, 2, 4],
+  timeToFirstSelection: 3.5
+});
+
+// Save user progress
+await aiSDK.saveUserProgress({
+  score: 85,
+  completed: true,
+  customData: {
+    difficultyRating: 3
+  }
+});
+\`\`\``,
           placeholder: 'Enter condensed SDK documentation for HTML interactions...'
         },
         'sdk-pixijs': {
           label: 'SDK Reference: PixiJS Interactions',
-          content: '## AI Teacher SDK for PixiJS Interactions\n\n**Integration:** PixiJS interactions run in iframes. Use `createIframeAISDK()` to access the AI Teacher.\n\n**Setup:**\n```javascript\nconst aiSDK = createIframeAISDK();\naiSDK.isReady((ready) => {\n  if (ready) {\n    // SDK ready\n  }\n});\n```\n\n**Core Methods:**\n- `aiSDK.emitEvent({ type, data, requiresLLMResponse })` - Send events\n- `aiSDK.updateState(key, value)` - Update state\n- `aiSDK.onResponse(callback)` - Receive AI responses\n- `aiSDK.onAction(type, callback)` - Handle specific actions\n\n**Display Methods:**\n- `aiSDK.postToChat(content, role, openChat)` - Post message to chat UI\n- `aiSDK.showScript(text, openChat)` - Display as script block\n- `aiSDK.showSnack(content, duration)` - Show snack message (returns message ID)\n- `aiSDK.hideSnack()` - Hide current snack message\n\n**Standard Events:** `user-selection`, `progress-update`, `score-change`, `interaction-complete`\n\n**Response Actions:** `highlight`, `show-hint`, `update-ui`\n\n**Response Display:** AI responses include metadata for display control:\n- `metadata.showInSnack` - Show in snack message\n- `metadata.snackDuration` - Snack duration (ms, optional)\n- `metadata.postToChat` - Also post to chat\n- `metadata.openChatUI` - Open chat if minimized\n- `metadata.showAsScript` - Show as script block\n\n**Example (Drag & Drop):**\n```javascript\n// On sprite drag end\nfunction onDragEnd(sprite, target) {\n  aiSDK.updateState(\'lastDrag\', { sprite, target });\n  aiSDK.emitEvent({\n    type: \'user-selection\',\n    data: { spriteId: sprite.id, targetId: target.id, isCorrect: checkCorrect(sprite, target) },\n    requiresLLMResponse: true\n  });\n}\n\n// Handle AI feedback\naiSDK.onResponse((r) => {\n  // Response automatically displayed based on metadata\n  // Or manually control display:\n  if (r.metadata?.showInSnack) {\n    aiSDK.showSnack(r.response, r.metadata.snackDuration);\n  } else if (r.response) {\n    showFeedback(r.response);\n  }\n});\n```',
+          content: `## AI Teacher SDK for PixiJS Interactions
+
+**Integration:** PixiJS interactions run in iframes. Use \`createIframeAISDK()\` to access the AI Teacher.
+
+**Setup:**
+\`\`\`javascript
+const aiSDK = createIframeAISDK();
+aiSDK.isReady((ready) => {
+  if (ready) {
+    // SDK ready
+  }
+});
+\`\`\`
+
+**Core Methods:**
+- \`aiSDK.emitEvent({ type, data, requiresLLMResponse })\` - Send events
+- \`aiSDK.updateState(key, value)\` - Update state
+- \`aiSDK.onResponse(callback)\` - Receive AI responses
+- \`aiSDK.onAction(type, callback)\` - Handle specific actions
+
+**Display Methods:**
+- \`aiSDK.postToChat(content, role, openChat)\` - Post message to chat UI
+- \`aiSDK.showScript(text, openChat)\` - Display as script block
+- \`aiSDK.showSnack(content, duration)\` - Show snack message (returns message ID)
+- \`aiSDK.hideSnack()\` - Hide current snack message
+
+**Standard Events:** \`user-selection\`, \`progress-update\`, \`score-change\`, \`interaction-complete\`
+
+**Response Actions:** \`highlight\`, \`show-hint\`, \`update-ui\`
+
+**Response Display:** AI responses include metadata for display control:
+- \`metadata.showInSnack\` - Show in snack message
+- \`metadata.snackDuration\` - Snack duration (ms, optional)
+- \`metadata.postToChat\` - Also post to chat
+- \`metadata.openChatUI\` - Open chat if minimized
+- \`metadata.showAsScript\` - Show as script block
+
+**Data Storage Methods:**
+- \`aiSDK.saveInstanceData(data)\` - Save anonymous instance data (accessible to builders/admins)
+- \`aiSDK.getInstanceDataHistory(filters?)\` - Get historical instance data (builders/admins only)
+- \`aiSDK.saveUserProgress({ score, completed, customData, ... })\` - Save user progress
+- \`aiSDK.getUserProgress()\` - Get current user's progress
+- \`aiSDK.markCompleted()\` - Mark interaction as completed
+- \`aiSDK.incrementAttempts()\` - Increment attempts counter
+- \`aiSDK.getUserPublicProfile(userId?)\` - Get user's public profile (if shared)
+
+**Note:** Instance data and user progress schemas are defined by interaction builders in the Data Storage tab. Only fields defined in schemas will be validated.
+
+**Example (Drag & Drop):**
+\`\`\`javascript
+// On sprite drag end
+function onDragEnd(sprite, target) {
+  aiSDK.updateState('lastDrag', { sprite, target });
+  aiSDK.emitEvent({
+    type: 'user-selection',
+    data: { spriteId: sprite.id, targetId: target.id, isCorrect: checkCorrect(sprite, target) },
+    requiresLLMResponse: true
+  });
+}
+
+// Handle AI feedback
+aiSDK.onResponse((r) => {
+  // Response automatically displayed based on metadata
+  // Or manually control display:
+  if (r.metadata?.showInSnack) {
+    aiSDK.showSnack(r.response, r.metadata.snackDuration);
+  } else if (r.response) {
+    showFeedback(r.response);
+  }
+});
+
+// Save instance data (anonymous)
+await aiSDK.saveInstanceData({
+  selectedFragments: [0, 2, 4],
+  timeToFirstSelection: 3.5
+});
+
+// Save user progress
+await aiSDK.saveUserProgress({
+  score: 85,
+  completed: true,
+  customData: {
+    difficultyRating: 3
+  }
+});
+\`\`\``,
           placeholder: 'Enter condensed SDK documentation for PixiJS interactions...'
         },
         'sdk-iframe': {
           label: 'SDK Reference: iFrame Interactions',
-          content: '## AI Teacher SDK for iFrame Interactions\n\n**Integration:** iFrame interactions embed external websites. Use `createIframeAISDK()` to access the AI Teacher.\n\n**Setup:**\n```javascript\nconst aiSDK = createIframeAISDK();\naiSDK.isReady((ready) => {\n  if (ready) {\n    // SDK ready\n  }\n});\n```\n\n**Core Methods:**\n- `aiSDK.emitEvent({ type, data, requiresLLMResponse })` - Send events\n- `aiSDK.updateState(key, value)` - Update state\n- `aiSDK.onResponse(callback)` - Receive AI responses\n- `aiSDK.onAction(type, callback)` - Handle specific actions\n\n**Display Methods:**\n- `aiSDK.postToChat(content, role, openChat)` - Post message to chat UI\n- `aiSDK.showScript(text, openChat)` - Display as script block\n- `aiSDK.showSnack(content, duration)` - Show snack message (returns message ID)\n- `aiSDK.hideSnack()` - Hide current snack message\n\n**Standard Events:** `user-selection`, `progress-update`, `hint-request`, `explanation-request`\n\n**Response Actions:** `show-hint`, `update-ui`\n\n**Response Display:** AI responses include metadata for display control:\n- `metadata.showInSnack` - Show in snack message\n- `metadata.snackDuration` - Snack duration (ms, optional)\n- `metadata.postToChat` - Also post to chat\n- `metadata.openChatUI` - Open chat if minimized\n- `metadata.showAsScript` - Show as script block\n\n**Note:** iFrame interactions typically use guide URLs/docs for AI context. Events should include relevant interaction data.\n\n**Example:**\n```javascript\n// On user action in iframe\nfunction onUserAction(actionData) {\n  aiSDK.emitEvent({\n    type: \'user-selection\',\n    data: actionData,\n    requiresLLMResponse: true\n  });\n}\n\n// Request hint\naiSDK.emitEvent({\n  type: \'hint-request\',\n  data: { context: \'stuck on step 3\' },\n  requiresLLMResponse: true\n});\n\n// Handle AI response\naiSDK.onResponse((r) => {\n  // Response automatically displayed based on metadata\n  // Or manually control display:\n  if (r.metadata?.showInSnack) {\n    aiSDK.showSnack(r.response, r.metadata.snackDuration);\n  }\n});\n```',
+          content: `## AI Teacher SDK for iFrame Interactions
+
+**Integration:** iFrame interactions embed external websites. Use \`createIframeAISDK()\` to access the AI Teacher.
+
+**Setup:**
+\`\`\`javascript
+const aiSDK = createIframeAISDK();
+aiSDK.isReady((ready) => {
+  if (ready) {
+    // SDK ready
+  }
+});
+\`\`\`
+
+**Core Methods:**
+- \`aiSDK.emitEvent({ type, data, requiresLLMResponse })\` - Send events
+- \`aiSDK.updateState(key, value)\` - Update state
+- \`aiSDK.onResponse(callback)\` - Receive AI responses
+- \`aiSDK.onAction(type, callback)\` - Handle specific actions
+
+**Display Methods:**
+- \`aiSDK.postToChat(content, role, openChat)\` - Post message to chat UI
+- \`aiSDK.showScript(text, openChat)\` - Display as script block
+- \`aiSDK.showSnack(content, duration)\` - Show snack message (returns message ID)
+- \`aiSDK.hideSnack()\` - Hide current snack message
+
+**Standard Events:** \`user-selection\`, \`progress-update\`, \`hint-request\`, \`explanation-request\`
+
+**Response Actions:** \`show-hint\`, \`update-ui\`
+
+**Response Display:** AI responses include metadata for display control:
+- \`metadata.showInSnack\` - Show in snack message
+- \`metadata.snackDuration\` - Snack duration (ms, optional)
+- \`metadata.postToChat\` - Also post to chat
+- \`metadata.openChatUI\` - Open chat if minimized
+- \`metadata.showAsScript\` - Show as script block
+
+**Data Storage Methods:**
+- \`aiSDK.saveInstanceData(data)\` - Save anonymous instance data (accessible to builders/admins)
+- \`aiSDK.getInstanceDataHistory(filters?)\` - Get historical instance data (builders/admins only)
+- \`aiSDK.saveUserProgress({ score, completed, customData, ... })\` - Save user progress
+- \`aiSDK.getUserProgress()\` - Get current user's progress
+- \`aiSDK.markCompleted()\` - Mark interaction as completed
+- \`aiSDK.incrementAttempts()\` - Increment attempts counter
+- \`aiSDK.getUserPublicProfile(userId?)\` - Get user's public profile (if shared)
+
+**Note:** iFrame interactions typically use guide URLs/docs for AI context. Events should include relevant interaction data. Instance data and user progress schemas are defined by interaction builders in the Data Storage tab. Only fields defined in schemas will be validated.
+
+**Example:**
+\`\`\`javascript
+// On user action in iframe
+function onUserAction(actionData) {
+  aiSDK.emitEvent({
+    type: 'user-selection',
+    data: actionData,
+    requiresLLMResponse: true
+  });
+}
+
+// Request hint
+aiSDK.emitEvent({
+  type: 'hint-request',
+  data: { context: 'stuck on step 3' },
+  requiresLLMResponse: true
+});
+
+// Handle AI response
+aiSDK.onResponse((r) => {
+  // Response automatically displayed based on metadata
+  // Or manually control display:
+  if (r.metadata?.showInSnack) {
+    aiSDK.showSnack(r.response, r.metadata.snackDuration);
+  }
+});
+
+// Save instance data (anonymous)
+await aiSDK.saveInstanceData({
+  selectedFragments: [0, 2, 4],
+  timeToFirstSelection: 3.5
+});
+
+// Save user progress
+await aiSDK.saveUserProgress({
+  score: 85,
+  completed: true,
+  customData: {
+    difficultyRating: 3
+  }
+});
+\`\`\``,
           placeholder: 'Enter condensed SDK documentation for iFrame interactions...'
         }
       }

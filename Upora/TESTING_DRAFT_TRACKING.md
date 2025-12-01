@@ -167,3 +167,8 @@ These tests should be run in CI/CD pipelines to catch missing fields before code
 - Update the schema to mark the field as optional: `field?: string`
 - Update the test to handle optional fields appropriately
 
+
+
+
+
+

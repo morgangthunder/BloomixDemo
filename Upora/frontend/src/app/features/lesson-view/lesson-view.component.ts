@@ -9,6 +9,7 @@ import { LessonService } from '../../core/services/lesson.service';
 import { WebSocketService, ChatMessage } from '../../core/services/websocket.service';
 import { ScreenshotStorageService } from '../../core/services/screenshot-storage.service';
 import { InteractionAISDK } from '../../core/services/interaction-ai-sdk.service';
+import { InteractionAIBridgeService } from '../../core/services/interaction-ai-bridge.service';
 import { SnackMessageService } from '../../core/services/snack-message.service';
 import { Subject, firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -931,6 +932,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     private http: HttpClient,
     private screenshotStorage: ScreenshotStorageService,
     private interactionAISDK: InteractionAISDK,
+    private bridgeService: InteractionAIBridgeService,
     private snackService: SnackMessageService
   ) {}
 
@@ -1391,6 +1393,26 @@ export class LessonViewComponent implements OnInit, OnDestroy {
           interactionId,
           processedContentId || undefined,
         );
+        
+        // Initialize bridge service for iframe interactions
+        this.bridgeService.initialize(
+          this.lesson.id,
+          String(this.activeSubStage.id),
+          interactionId,
+          processedContentId || undefined
+        );
+        
+        // Set context for data storage SDK methods
+        if (this.currentStage && this.activeSubStage) {
+          this.interactionAISDK.setContext(
+            this.lesson.id,
+            String(this.currentStage.id),
+            String(this.activeSubStage.id),
+            interactionId,
+            processedContentId || undefined
+          );
+        }
+        
         // Set teacher widget reference for SDK (use setTimeout to ensure ViewChild is available)
         setTimeout(() => {
           if (this.teacherWidget) {
@@ -1402,6 +1424,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       } else {
         // Clear SDK context if no interaction
         this.interactionAISDK.clearContext();
+        this.bridgeService.destroy();
       }
     }
     

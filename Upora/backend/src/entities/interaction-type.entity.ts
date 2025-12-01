@@ -98,6 +98,26 @@ export class InteractionType {
     defaultFormat: 'text' | 'structured';
   } | null; // Response action configuration
 
+  @Column('jsonb', { name: 'instance_data_schema', nullable: true })
+  instanceDataSchema: {
+    fields: Array<{
+      name: string;
+      type: 'string' | 'number' | 'boolean' | 'array' | 'object';
+      required?: boolean;
+      description?: string;
+    }>;
+  } | null; // Schema defining what data to capture per interaction instance (anonymous)
+
+  @Column('jsonb', { name: 'user_progress_schema', nullable: true })
+  userProgressSchema: {
+    customFields: Array<{
+      name: string;
+      type: 'string' | 'number' | 'boolean' | 'array' | 'object';
+      required?: boolean;
+      description?: string;
+    }>;
+  } | null; // Schema defining optional custom fields for user progress (beyond required fields)
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

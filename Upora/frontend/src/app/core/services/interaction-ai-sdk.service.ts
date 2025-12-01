@@ -1,5 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable, Subscription, Subscriber } from 'rxjs';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 import {
   InteractionAIContextService,
   InteractionEvent,
@@ -8,6 +10,7 @@ import {
   InteractionAIResponseEvent,
 } from './interaction-ai-context.service';
 import { SnackMessageService } from './snack-message.service';
+import { environment } from '../../../environments/environment';
 
 /**
  * Standard Event Types (suggestions, not requirements)
@@ -35,12 +38,56 @@ export const StandardEventTypes = {
  * Interaction AI SDK
  * Simple interface for interaction builders to integrate with AI Teacher
  */
-@Injectable({
-  providedIn: 'root',
-})
+
+export interface InstanceData {
+  id: string;
+  lessonId: string;
+  stageId: string;
+  substageId: string;
+  interactionTypeId: string;
+  processedContentId?: string;
+  instanceData: Record<string, any>;
+  createdAt: Date;
+}
+
+export interface UserProgress {
+  id: string;
+  userId: string;
+  tenantId: string;
+  lessonId: string;
+  stageId: string;
+  substageId: string;
+  interactionTypeId: string;
+  startTimestamp: Date;
+  completeTimestamp?: Date;
+  attempts: number;
+  completed: boolean;
+  score?: number;
+  timeTakenSeconds?: number;
+  interactionEvents?: Array<{ type: string; timestamp: Date; data: Record<string, any> }>;
+  customData?: Record<string, any>;
+}
+
+export interface PublicProfile {
+  userId: string;
+  displayName?: string;
+  preferences?: Record<string, any>;
+  publicAvatarUrl?: string;
+  shareName: boolean;
+  sharePreferences: boolean;
+}
+
 export class InteractionAISDK {
   private snackService = inject(SnackMessageService);
+  private http = inject(HttpClient);
   private teacherWidgetRef: any = null; // Reference to FloatingTeacherWidgetComponent
+
+  // Current interaction context (set by lesson-view component)
+  private currentLessonId: string | null = null;
+  private currentStageId: string | null = null;
+  private currentSubstageId: string | null = null;
+  private currentInteractionTypeId: string | null = null;
+  private currentProcessedContentId: string | null = null;
 
   constructor(private contextService: InteractionAIContextService) {}
 
@@ -208,6 +255,225 @@ export class InteractionAISDK {
    */
   hideSnack(): void {
     this.snackService.hide();
+  }
+
+  /**
+   * Set current interaction context (called by lesson-view component)
+   */
+  setContext(lessonId: string, stageId: string, substageId: string, interactionTypeId: string, processedContentId?: string): void {
+    this.currentLessonId = lessonId;
+    this.currentStageId = stageId;
+    this.currentSubstageId = substageId;
+    this.currentInteractionTypeId = interactionTypeId;
+    this.currentProcessedContentId = processedContentId || null;
+  }
+
+  /**
+   * Save instance data (anonymous, all students)
+   * This data is stored separately from user accounts and accessible to interaction builders
+   */
+  async saveInstanceData(data: Record<string, any>): Promise<void> {
+    if (!this.currentLessonId || !this.currentStageId || !this.currentSubstageId || !this.currentInteractionTypeId) {
+      throw new Error('Interaction context not set. Call setContext() first.');
+    }
+
+    try {
+      await firstValueFrom(
+        this.http.post(`${environment.apiUrl}/interaction-data/instance`, {
+          lessonId: this.currentLessonId,
+          stageId: this.currentStageId,
+          substageId: this.currentSubstageId,
+          interactionTypeId: this.currentInteractionTypeId,
+          processedContentId: this.currentProcessedContentId,
+          instanceData: data,
+        })
+      );
+      console.log('[InteractionAISDK] ✅ Instance data saved');
+    } catch (error: any) {
+      console.error('[InteractionAISDK] ❌ Failed to save instance data:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get instance data history (accessible to interaction builders and super-admins only)
+   */
+  async getInstanceDataHistory(filters?: {
+    dateFrom?: Date;
+    dateTo?: Date;
+    limit?: number;
+  }): Promise<InstanceData[]> {
+    if (!this.currentLessonId || !this.currentStageId || !this.currentSubstageId || !this.currentInteractionTypeId) {
+      throw new Error('Interaction context not set. Call setContext() first.');
+    }
+
+    try {
+      const params: any = {
+        interactionTypeId: this.currentInteractionTypeId,
+        lessonId: this.currentLessonId,
+        substageId: this.currentSubstageId,
+      };
+
+      if (filters?.dateFrom) {
+        params.dateFrom = filters.dateFrom.toISOString();
+      }
+      if (filters?.dateTo) {
+        params.dateTo = filters.dateTo.toISOString();
+      }
+      if (filters?.limit) {
+        params.limit = filters.limit.toString();
+      }
+
+      const response = await firstValueFrom(
+        this.http.get<{ data: InstanceData[] }>(`${environment.apiUrl}/interaction-data/instance/history`, { params })
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error('[InteractionAISDK] ❌ Failed to get instance data history:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Save or update user progress
+   */
+  async saveUserProgress(data: {
+    score?: number;
+    timeTakenSeconds?: number;
+    interactionEvents?: Array<{ type: string; timestamp: Date; data: Record<string, any> }>;
+    customData?: Record<string, any>;
+    completed?: boolean;
+  }): Promise<UserProgress> {
+    if (!this.currentLessonId || !this.currentStageId || !this.currentSubstageId || !this.currentInteractionTypeId) {
+      throw new Error('Interaction context not set. Call setContext() first.');
+    }
+
+    try {
+      const response = await firstValueFrom(
+        this.http.post<{ saved: boolean; progress: UserProgress }>(`${environment.apiUrl}/interaction-data/user-progress`, {
+          lessonId: this.currentLessonId,
+          stageId: this.currentStageId,
+          substageId: this.currentSubstageId,
+          interactionTypeId: this.currentInteractionTypeId,
+          ...data,
+        })
+      );
+      console.log('[InteractionAISDK] ✅ User progress saved');
+      return response.progress;
+    } catch (error: any) {
+      console.error('[InteractionAISDK] ❌ Failed to save user progress:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get current user's progress for this interaction
+   */
+  async getUserProgress(): Promise<UserProgress | null> {
+    if (!this.currentLessonId || !this.currentStageId || !this.currentSubstageId || !this.currentInteractionTypeId) {
+      throw new Error('Interaction context not set. Call setContext() first.');
+    }
+
+    try {
+      const response = await firstValueFrom(
+        this.http.get<{ progress: UserProgress | null }>(
+          `${environment.apiUrl}/interaction-data/user-progress/${this.currentLessonId}/${this.currentStageId}/${this.currentSubstageId}/${this.currentInteractionTypeId}`
+        )
+      );
+      return response.progress;
+    } catch (error: any) {
+      console.error('[InteractionAISDK] ❌ Failed to get user progress:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update user progress (partial update)
+   */
+  async updateUserProgress(updates: Partial<UserProgress>): Promise<UserProgress> {
+    return await this.saveUserProgress({
+      score: updates.score,
+      timeTakenSeconds: updates.timeTakenSeconds,
+      interactionEvents: updates.interactionEvents,
+      customData: updates.customData,
+      completed: updates.completed,
+    });
+  }
+
+  /**
+   * Mark interaction as completed
+   */
+  async markCompleted(): Promise<UserProgress> {
+    if (!this.currentLessonId || !this.currentStageId || !this.currentSubstageId || !this.currentInteractionTypeId) {
+      throw new Error('Interaction context not set. Call setContext() first.');
+    }
+
+    try {
+      const response = await firstValueFrom(
+        this.http.post<{ completed: boolean; progress: UserProgress }>(`${environment.apiUrl}/interaction-data/user-progress/complete`, {
+          lessonId: this.currentLessonId,
+          stageId: this.currentStageId,
+          substageId: this.currentSubstageId,
+          interactionTypeId: this.currentInteractionTypeId,
+        })
+      );
+      console.log('[InteractionAISDK] ✅ Interaction marked as completed');
+      return response.progress;
+    } catch (error: any) {
+      console.error('[InteractionAISDK] ❌ Failed to mark as completed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Increment attempts counter
+   */
+  async incrementAttempts(): Promise<UserProgress> {
+    if (!this.currentLessonId || !this.currentStageId || !this.currentSubstageId || !this.currentInteractionTypeId) {
+      throw new Error('Interaction context not set. Call setContext() first.');
+    }
+
+    try {
+      const response = await firstValueFrom(
+        this.http.post<{ incremented: boolean; progress: UserProgress }>(
+          `${environment.apiUrl}/interaction-data/user-progress/increment-attempts`,
+          {
+            lessonId: this.currentLessonId,
+            stageId: this.currentStageId,
+            substageId: this.currentSubstageId,
+            interactionTypeId: this.currentInteractionTypeId,
+          }
+        )
+      );
+      console.log('[InteractionAISDK] ✅ Attempts incremented');
+      return response.progress;
+    } catch (error: any) {
+      console.error('[InteractionAISDK] ❌ Failed to increment attempts:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get user's public profile (if available and shared)
+   */
+  async getUserPublicProfile(userId?: string): Promise<PublicProfile | null> {
+    // If no userId provided, get current user's profile
+    // For now, we'll need to get userId from auth context
+    // This is a placeholder - actual implementation should get userId from auth service
+    if (!userId) {
+      console.warn('[InteractionAISDK] ⚠️ userId not provided, cannot fetch public profile');
+      return null;
+    }
+
+    try {
+      const response = await firstValueFrom(
+        this.http.get<{ profile: PublicProfile | null }>(`${environment.apiUrl}/interaction-data/user-profile/${userId}`)
+      );
+      return response.profile;
+    } catch (error: any) {
+      console.error('[InteractionAISDK] ❌ Failed to get user public profile:', error);
+      return null;
+    }
   }
 }
 

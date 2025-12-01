@@ -45,7 +45,7 @@ export class InteractionAIBridgeService {
       // Security: Only accept messages from same origin or trusted sources
       // In production, you might want to validate event.origin
       if (event.data && event.data.type && event.data.type.startsWith('ai-sdk-')) {
-        this.handleIframeMessage(event.data);
+        this.handleIframeMessage(event.data, event);
       }
     });
   }
@@ -53,9 +53,11 @@ export class InteractionAIBridgeService {
   /**
    * Handle messages from iframes
    */
-  private handleIframeMessage(message: any): void {
+  private handleIframeMessage(message: any, event?: MessageEvent): void {
+    const sourceWindow = event?.source as Window || window;
+    
     if (!this.initialized) {
-      this.sendToIframe(message.sourceWindow || window, {
+      this.sendToIframe(sourceWindow, {
         type: 'ai-sdk-error',
         error: 'AI SDK not initialized',
         requestId: message.requestId,
@@ -66,7 +68,7 @@ export class InteractionAIBridgeService {
     switch (message.type) {
       case 'ai-sdk-emit-event':
         this.aiSDK.emitEvent(message.event, message.processedContentId);
-        this.sendToIframe(message.sourceWindow || window, {
+        this.sendToIframe(sourceWindow, {
           type: 'ai-sdk-event-ack',
           requestId: message.requestId,
         });
@@ -74,7 +76,7 @@ export class InteractionAIBridgeService {
 
       case 'ai-sdk-update-state':
         this.aiSDK.updateState(message.key, message.value);
-        this.sendToIframe(message.sourceWindow || window, {
+        this.sendToIframe(sourceWindow, {
           type: 'ai-sdk-state-updated',
           requestId: message.requestId,
         });
@@ -82,7 +84,7 @@ export class InteractionAIBridgeService {
 
       case 'ai-sdk-get-state':
         const state = this.aiSDK.getState();
-        this.sendToIframe(message.sourceWindow || window, {
+        this.sendToIframe(sourceWindow, {
           type: 'ai-sdk-state',
           state,
           requestId: message.requestId,
@@ -92,7 +94,7 @@ export class InteractionAIBridgeService {
       case 'ai-sdk-subscribe':
         // Subscribe to AI responses and forward them to iframe
         const subscription = this.aiSDK.onResponse((response) => {
-          this.sendToIframe(message.sourceWindow || window, {
+          this.sendToIframe(sourceWindow, {
             type: 'ai-sdk-response',
             response,
             subscriptionId: message.subscriptionId,
@@ -100,7 +102,7 @@ export class InteractionAIBridgeService {
         });
         const unsubscribeFn = () => subscription.unsubscribe();
         this.messageHandlers.set(message.subscriptionId, unsubscribeFn);
-        this.sendToIframe(message.sourceWindow || window, {
+        this.sendToIframe(sourceWindow, {
           type: 'ai-sdk-subscribed',
           subscriptionId: message.subscriptionId,
           requestId: message.requestId,
@@ -113,11 +115,189 @@ export class InteractionAIBridgeService {
           handler(); // Unsubscribe function takes no arguments
           this.messageHandlers.delete(message.subscriptionId);
         }
-        this.sendToIframe(message.sourceWindow || window, {
+        this.sendToIframe(sourceWindow, {
           type: 'ai-sdk-unsubscribed',
           subscriptionId: message.subscriptionId,
           requestId: message.requestId,
         });
+        break;
+
+      // UI Control Methods
+      case 'ai-sdk-minimize-chat-ui':
+        this.aiSDK.minimizeChatUI();
+        this.sendToIframe(sourceWindow, {
+          type: 'ai-sdk-minimize-chat-ui-ack',
+          requestId: message.requestId,
+        });
+        break;
+
+      case 'ai-sdk-activate-fullscreen':
+        this.aiSDK.activateFullscreen();
+        this.sendToIframe(sourceWindow, {
+          type: 'ai-sdk-activate-fullscreen-ack',
+          requestId: message.requestId,
+        });
+        break;
+
+      case 'ai-sdk-post-to-chat':
+        this.aiSDK.postToChat(message.content, message.role || 'assistant', message.openChat || false);
+        this.sendToIframe(sourceWindow, {
+          type: 'ai-sdk-post-to-chat-ack',
+          requestId: message.requestId,
+        });
+        break;
+
+      case 'ai-sdk-show-script':
+        this.aiSDK.showScript(message.text, message.openChat || false);
+        this.sendToIframe(sourceWindow, {
+          type: 'ai-sdk-show-script-ack',
+          requestId: message.requestId,
+        });
+        break;
+
+      case 'ai-sdk-show-snack':
+        const snackId = this.aiSDK.showSnack(message.content, message.duration);
+        this.sendToIframe(sourceWindow, {
+          type: 'ai-sdk-show-snack-ack',
+          snackId,
+          requestId: message.requestId,
+        });
+        break;
+
+      case 'ai-sdk-hide-snack':
+        this.aiSDK.hideSnack();
+        this.sendToIframe(sourceWindow, {
+          type: 'ai-sdk-hide-snack-ack',
+          requestId: message.requestId,
+        });
+        break;
+
+      // Data Storage Methods
+      case 'ai-sdk-save-instance-data':
+        this.aiSDK.saveInstanceData(message.data)
+          .then(() => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-save-instance-data-ack',
+              success: true,
+              requestId: message.requestId,
+            });
+          })
+          .catch((error) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-save-instance-data-ack',
+              success: false,
+              error: error.message,
+              requestId: message.requestId,
+            });
+          });
+        break;
+
+      case 'ai-sdk-get-instance-data-history':
+        this.aiSDK.getInstanceDataHistory(message.filters)
+          .then((data) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-get-instance-data-history-ack',
+              data,
+              requestId: message.requestId,
+            });
+          })
+          .catch((error) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-get-instance-data-history-ack',
+              error: error.message,
+              requestId: message.requestId,
+            });
+          });
+        break;
+
+      case 'ai-sdk-save-user-progress':
+        this.aiSDK.saveUserProgress(message.data)
+          .then((progress) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-save-user-progress-ack',
+              progress,
+              requestId: message.requestId,
+            });
+          })
+          .catch((error) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-save-user-progress-ack',
+              error: error.message,
+              requestId: message.requestId,
+            });
+          });
+        break;
+
+      case 'ai-sdk-get-user-progress':
+        this.aiSDK.getUserProgress()
+          .then((progress) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-get-user-progress-ack',
+              progress,
+              requestId: message.requestId,
+            });
+          })
+          .catch((error) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-get-user-progress-ack',
+              error: error.message,
+              requestId: message.requestId,
+            });
+          });
+        break;
+
+      case 'ai-sdk-mark-completed':
+        this.aiSDK.markCompleted()
+          .then((progress) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-mark-completed-ack',
+              progress,
+              requestId: message.requestId,
+            });
+          })
+          .catch((error) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-mark-completed-ack',
+              error: error.message,
+              requestId: message.requestId,
+            });
+          });
+        break;
+
+      case 'ai-sdk-increment-attempts':
+        this.aiSDK.incrementAttempts()
+          .then((progress) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-increment-attempts-ack',
+              progress,
+              requestId: message.requestId,
+            });
+          })
+          .catch((error) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-increment-attempts-ack',
+              error: error.message,
+              requestId: message.requestId,
+            });
+          });
+        break;
+
+      case 'ai-sdk-get-user-public-profile':
+        this.aiSDK.getUserPublicProfile(message.userId)
+          .then((profile) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-get-user-public-profile-ack',
+              profile,
+              requestId: message.requestId,
+            });
+          })
+          .catch((error) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-get-user-public-profile-ack',
+              error: error.message,
+              requestId: message.requestId,
+            });
+          });
         break;
 
       default:
@@ -231,6 +411,101 @@ export const createIframeAISDK = () => {
         }
       };
       window.addEventListener('message', listener);
+    },
+
+    /**
+     * UI Control Methods
+     */
+    minimizeChatUI: () => {
+      sendMessage('ai-sdk-minimize-chat-ui', {});
+    },
+
+    activateFullscreen: () => {
+      sendMessage('ai-sdk-activate-fullscreen', {});
+    },
+
+    postToChat: (content: string, role: 'user' | 'assistant' | 'error' = 'assistant', openChat: boolean = false) => {
+      sendMessage('ai-sdk-post-to-chat', { content, role, openChat });
+    },
+
+    showScript: (text: string, openChat: boolean = false) => {
+      sendMessage('ai-sdk-show-script', { text, openChat });
+    },
+
+    showSnack: (content: string, duration?: number, callback?: (snackId: string) => void) => {
+      sendMessage('ai-sdk-show-snack', { content, duration }, (response) => {
+        if (callback && response.snackId) {
+          callback(response.snackId);
+        }
+      });
+    },
+
+    hideSnack: () => {
+      sendMessage('ai-sdk-hide-snack', {});
+    },
+
+    /**
+     * Data Storage Methods
+     */
+    saveInstanceData: (data: Record<string, any>, callback?: (success: boolean, error?: string) => void) => {
+      sendMessage('ai-sdk-save-instance-data', { data }, (response) => {
+        if (callback) {
+          callback(response.success, response.error);
+        }
+      });
+    },
+
+    getInstanceDataHistory: (filters?: { dateFrom?: Date; dateTo?: Date; limit?: number }, callback?: (data: any[] | null, error?: string) => void) => {
+      const filtersData = filters ? {
+        dateFrom: filters.dateFrom?.toISOString(),
+        dateTo: filters.dateTo?.toISOString(),
+        limit: filters.limit,
+      } : {};
+      sendMessage('ai-sdk-get-instance-data-history', { filters: filtersData }, (response) => {
+        if (callback) {
+          callback(response.data, response.error);
+        }
+      });
+    },
+
+    saveUserProgress: (data: { score?: number; timeTakenSeconds?: number; interactionEvents?: any[]; customData?: Record<string, any>; completed?: boolean }, callback?: (progress: any | null, error?: string) => void) => {
+      sendMessage('ai-sdk-save-user-progress', { data }, (response) => {
+        if (callback) {
+          callback(response.progress, response.error);
+        }
+      });
+    },
+
+    getUserProgress: (callback?: (progress: any | null, error?: string) => void) => {
+      sendMessage('ai-sdk-get-user-progress', {}, (response) => {
+        if (callback) {
+          callback(response.progress, response.error);
+        }
+      });
+    },
+
+    markCompleted: (callback?: (progress: any | null, error?: string) => void) => {
+      sendMessage('ai-sdk-mark-completed', {}, (response) => {
+        if (callback) {
+          callback(response.progress, response.error);
+        }
+      });
+    },
+
+    incrementAttempts: (callback?: (progress: any | null, error?: string) => void) => {
+      sendMessage('ai-sdk-increment-attempts', {}, (response) => {
+        if (callback) {
+          callback(response.progress, response.error);
+        }
+      });
+    },
+
+    getUserPublicProfile: (userId?: string, callback?: (profile: any | null, error?: string) => void) => {
+      sendMessage('ai-sdk-get-user-public-profile', { userId }, (response) => {
+        if (callback) {
+          callback(response.profile, response.error);
+        }
+      });
     },
   };
 };

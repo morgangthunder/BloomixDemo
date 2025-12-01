@@ -21,6 +21,9 @@ import { LlmProvider } from './entities/llm-provider.entity';
 import { AiPrompt } from './entities/ai-prompt.entity';
 import { InteractionResult } from './entities/interaction-result.entity';
 import { InteractionAverage } from './entities/interaction-average.entity';
+import { InteractionInstanceData } from './entities/interaction-instance-data.entity';
+import { UserInteractionProgress } from './entities/user-interaction-progress.entity';
+import { UserPublicProfile } from './entities/user-public-profile.entity';
 import { LessonDraft } from './lesson-drafts/entities/lesson-draft.entity';
 import { UsersModule } from './modules/users/users.module';
 import { LessonsModule } from './modules/lessons/lessons.module';
@@ -33,6 +36,7 @@ import { LlmProvidersModule } from './modules/llm-providers/llm-providers.module
 import { AiPromptsModule } from './modules/ai-prompts/ai-prompts.module';
 import { AiAssistantModule } from './modules/ai-assistant/ai-assistant.module';
 import { InteractionResultsModule } from './modules/interaction-results/interaction-results.module';
+import { InteractionDataModule } from './modules/interaction-data/interaction-data.module';
 import { ContentAnalyzerModule } from './services/content-analyzer.module';
 import { AutoPopulatorModule } from './services/auto-populator.module';
 import { WeaviateModule } from './services/weaviate.module';
@@ -55,7 +59,7 @@ import { TestsModule } from './modules/tests/tests.module';
         username: configService.get('database.username'),
         password: configService.get('database.password'),
         database: configService.get('database.database'),
-        entities: [User, Lesson, InteractionType, Workflow, Usage, ContentSource, LessonDataLink, ProcessedContentOutput, ScriptBlock, Course, LlmGenerationLog, StudentTopicScore, StudentMistake, LlmProvider, AiPrompt, InteractionResult, InteractionAverage, LessonDraft],
+        entities: [User, Lesson, InteractionType, Workflow, Usage, ContentSource, LessonDataLink, ProcessedContentOutput, ScriptBlock, Course, LlmGenerationLog, StudentTopicScore, StudentMistake, LlmProvider, AiPrompt, InteractionResult, InteractionAverage, InteractionInstanceData, UserInteractionProgress, UserPublicProfile, LessonDraft],
         synchronize: configService.get('database.synchronize'),
         logging: configService.get('database.logging'),
       }),
@@ -74,6 +78,7 @@ import { TestsModule } from './modules/tests/tests.module';
     AiPromptsModule,
     AiAssistantModule,
     InteractionResultsModule,
+    InteractionDataModule,
     LessonDraftsModule,
     TestsModule,
   ],

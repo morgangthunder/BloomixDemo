@@ -26,3 +26,4 @@ JOIN content_sources cs ON cs.id = ldl.content_source_id
 WHERE ldl.lesson_id = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'
   AND ldl.content_source_id = '26e022ab-56d4-452a-9621-5f32d457eb83';
 
+

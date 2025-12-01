@@ -1,0 +1,822 @@
+﻿<div class="interaction-builder">
+      <!-- Header -->
+      <header class="builder-header">
+        <button (click)="goBack()" class="btn-icon" title="Back">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+          </svg>
+        </button>
+        <h1>Interaction Builder</h1>
+        <div class="header-actions">
+          <button (click)="resetToLastWorking()" 
+                  class="btn-secondary" 
+                  [disabled]="!hasLastWorking" 
+                  title="Reset to last working version">
+            ðŸ”„ Reset
+          </button>
+          <button (click)="saveInteraction()" 
+                  [disabled]="saving" 
+                  title="Save all changes"
+                  class="btn-save-header">
+            {{ saving ? 'â³ Saving...' : 'ðŸ’¾ SAVE' }}
+          </button>
+        </div>
+      </header>
+
+      <div class="builder-layout">
+        <!-- Sidebar: Interaction Library -->
+        <aside class="interaction-library" [class.mobile-hidden]="sidebarHidden">
+          <div class="library-header">
+            <h2>Interactions</h2>
+            <button (click)="createNew()" class="btn-small btn-primary">+ New</button>
+          </div>
+
+          <!-- Search & Filter -->
+          <div class="library-filters">
+            <div class="search-box">
+              <svg class="search-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+              </svg>
+              <input type="text" 
+                     [(ngModel)]="searchQuery" 
+                     (ngModelChange)="filterInteractions()"
+                     placeholder="Search interactions..." />
+              <button *ngIf="searchQuery" (click)="searchQuery = ''; filterInteractions()" class="clear-search">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+                  <path d="M14 1.41L12.59 0L7 5.59L1.41 0L0 1.41L5.59 7L0 12.59L1.41 14L7 8.41L12.59 14L14 12.59L8.41 7L14 1.41Z"/>
+                </svg>
+              </button>
+            </div>
+
+            <div class="type-filter">
+              <select [(ngModel)]="typeFilter" (ngModelChange)="filterInteractions()">
+                <option value="">All Types</option>
+                <option value="html">ðŸŒ HTML</option>
+                <option value="pixijs">ðŸŽ® PixiJS</option>
+                <option value="iframe">ðŸ–¼ï¸ iFrame</option>
+                <option value="legacy">ðŸ“¦ Legacy</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="interactions-list">
+            <div *ngFor="let interaction of filteredInteractions" 
+                 class="interaction-item"
+                 [class.active]="currentInteraction?.id === interaction.id"
+                 (click)="loadInteraction(interaction)">
+              <div class="interaction-icon">
+                <span *ngIf="interaction.interactionTypeCategory === 'html'">ðŸŒ</span>
+                <span *ngIf="interaction.interactionTypeCategory === 'pixijs'">ðŸŽ®</span>
+                <span *ngIf="interaction.interactionTypeCategory === 'iframe'">ðŸ–¼ï¸</span>
+                <span *ngIf="!interaction.interactionTypeCategory">ðŸ“¦</span>
+              </div>
+              <div class="interaction-info">
+                <div class="interaction-name">{{interaction.name}}</div>
+                <div class="interaction-type">{{getTypeLabel(interaction.interactionTypeCategory)}}</div>
+              </div>
+            </div>
+
+            <div *ngIf="filteredInteractions.length === 0 && interactions.length > 0" class="empty-state">
+              No interactions match your filter.
+            </div>
+
+            <div *ngIf="interactions.length === 0" class="empty-state">
+              No interactions yet. Click "New" to create one.
+            </div>
+          </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="builder-main">
+          <div class="editor-container" [class.no-interaction]="!currentInteraction">
+            <!-- Tabs -->
+            <div class="editor-tabs-main">
+              <button class="sidebar-toggle mobile-only" (click)="toggleSidebar()">
+                {{ sidebarHidden ? 'ðŸ“š Interactions' : 'ðŸ“š Hide' }}
+              </button>
+              <button [class.active]="activeTab === 'settings'" 
+                      (click)="switchTab('settings')">âš™ï¸ Settings</button>
+              <button [class.active]="activeTab === 'code'" 
+                      (click)="switchTab('code')">ðŸ’» Code</button>
+              <button [class.active]="activeTab === 'config'" 
+                      (click)="switchTab('config')">ðŸ”§ Config</button>
+              <button [class.active]="activeTab === 'sample'" 
+                      (click)="switchTab('sample')">ðŸ“‹ Sample</button>
+              <button [class.active]="activeTab === 'preview'" 
+                      (click)="switchTab('preview')">ðŸ‘ï¸ Preview</button>
+              <button [class.active]="activeTab === 'ai'" 
+                      (click)="switchTab('ai')">ðŸ¤– AI</button>
+              <button [class.active]="activeTab === 'data'" 
+                      (click)="switchTab('data')">ðŸ’¾ Data Storage</button>
+            </div>
+
+            <!-- Tab Content Container - Scrollable -->
+            <div class="tab-content-wrapper">
+              <!-- Empty State -->
+              <div *ngIf="!currentInteraction" class="empty-builder-inline">
+                <div class="empty-icon">ðŸŽ¯</div>
+                <h2>Select an interaction to edit</h2>
+                <p>Or create a new one to get started</p>
+              </div>
+
+
+              <!-- Settings Tab -->
+              <div *ngIf="isTabActive('settings') && currentInteraction" class="tab-content">
+                <div class="info-section">
+                <h3>Basic Information</h3>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Interaction ID *</label>
+                    <input type="text" [(ngModel)]="currentInteraction!.id" 
+                           (ngModelChange)="markChanged()"
+                           [disabled]="!isNewInteraction"
+                           placeholder="e.g., my-custom-interaction" />
+                    <small class="hint">Unique identifier (cannot be changed after creation)</small>
+                  </div>
+                  <div class="form-group">
+                    <label>Name *</label>
+                    <input type="text" [(ngModel)]="currentInteraction!.name" 
+                           (ngModelChange)="markChanged()"
+                           placeholder="e.g., Drag and Drop Sorting" />
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label>Description *</label>
+                  <textarea [(ngModel)]="currentInteraction!.description" 
+                            (ngModelChange)="markChanged()"
+                            rows="2"
+                            placeholder="Describe what this interaction does"></textarea>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Interaction Type *</label>
+                    <select [(ngModel)]="currentInteraction!.interactionTypeCategory" 
+                            [disabled]="!isNewInteraction"
+                            (ngModelChange)="onTypeChange()">
+                      <option value="">Select type...</option>
+                      <option value="html">ðŸŒ HTML (Custom HTML/CSS/JS)</option>
+                      <option value="pixijs">ðŸŽ® PixiJS (TypeScript Game/Animation)</option>
+                      <option value="iframe">ðŸ–¼ï¸ iFrame (External Embed)</option>
+                    </select>
+                    <small class="hint">Cannot be changed after creation</small>
+                  </div>
+                  <div class="form-group">
+                    <label>TEACH Stage Category</label>
+                    <select [(ngModel)]="currentInteraction!.category" (ngModelChange)="markChanged()">
+                      <option value="">Optional...</option>
+                      <option value="tease-trigger">Tease - Trigger</option>
+                      <option value="explore-experiment">Explore - Experiment</option>
+                      <option value="absorb-show">Absorb - Show</option>
+                      <option value="cultivate-practice">Cultivate - Practice</option>
+                      <option value="hone-apply">Hone - Apply</option>
+                  </select>
+                </div>
+                </div>
+                </div>
+                </div>
+
+              <!-- Settings Actions -->
+              <div class="settings-actions">
+                <button (click)="resetToLastWorking('settings')" 
+                        class="btn-reset-inline" 
+                        [disabled]="!hasLastWorking || saving"
+                        title="Reset to last working version">
+                  ðŸ”„ Reset
+                </button>
+                <button (click)="saveInteraction()" class="btn-save-inline" [disabled]="saving">
+                  {{ saving ? 'â³ Saving...' : 'ðŸ’¾ Save' }}
+                </button>
+              </div>
+              </div>
+
+              <!-- Code Tab -->
+              <div *ngIf="isTabActive('code') && currentInteraction" class="tab-content">
+                <div class="code-section">
+                  <div class="section-header">
+                    <h3>Interaction Code</h3>
+                    <p class="hint">Define the actual code that runs this interaction</p>
+                  </div>
+
+
+                <!-- HTML Type Code Editor -->
+                <div *ngIf="currentInteraction?.interactionTypeCategory === 'html'" class="html-editor">
+                  <div class="editor-subtabs">
+                    <button [class.active]="activeCodeTab === 'html'" 
+                            (click)="activeCodeTab = 'html'">HTML</button>
+                    <button [class.active]="activeCodeTab === 'css'" 
+                            (click)="activeCodeTab = 'css'">CSS</button>
+                    <button [class.active]="activeCodeTab === 'js'" 
+                            (click)="activeCodeTab = 'js'">JavaScript</button>
+                  </div>
+
+                  <div class="code-editor-container">
+                    <textarea *ngIf="activeCodeTab === 'html'"
+                              [(ngModel)]="currentInteraction!.htmlCode"
+                              (ngModelChange)="markChanged()"
+                              class="code-textarea"
+                              placeholder="<div>Your HTML here</div>"
+                              spellcheck="false"></textarea>
+
+                    <textarea *ngIf="activeCodeTab === 'css'"
+                              [(ngModel)]="currentInteraction!.cssCode"
+                              (ngModelChange)="markChanged()"
+                              class="code-textarea"
+                              placeholder=".your-class { color: blue; }"
+                              spellcheck="false"></textarea>
+
+                    <textarea *ngIf="activeCodeTab === 'js'"
+                              [(ngModel)]="currentInteraction!.jsCode"
+                              (ngModelChange)="markChanged()"
+                              class="code-textarea"
+                              placeholder="// Your JavaScript code"
+                              spellcheck="false"></textarea>
+                  </div>
+                </div>
+
+                <!-- PixiJS Type Code Editor -->
+                <div *ngIf="currentInteraction?.interactionTypeCategory === 'pixijs'" class="pixijs-editor">
+                  <p class="editor-note">
+                    ðŸ’¡ For PixiJS interactions, write a single TypeScript/JavaScript file that exports your interaction.
+                  </p>
+                  <div class="code-editor-container">
+                    <textarea [(ngModel)]="currentInteraction!.jsCode"
+                              (ngModelChange)="markChanged()"
+                              class="code-textarea"
+                              placeholder="// PixiJS TypeScript code"
+                              spellcheck="false"></textarea>
+                  </div>
+                </div>
+
+                <!-- iFrame Type Configuration -->
+                <div *ngIf="currentInteraction?.interactionTypeCategory === 'iframe'" class="iframe-config">
+                  <div class="form-group">
+                    <label>iFrame URL *</label>
+                    <input type="url" 
+                           [(ngModel)]="currentInteraction!.iframeUrl"
+                           (ngModelChange)="markChanged()"
+                           placeholder="https://example.com/embed" />
+                    <small class="hint">The URL to embed in an iframe</small>
+                  </div>
+
+                  <div class="form-group">
+                    <label>iFrame Configuration (JSON)</label>
+                    <textarea [(ngModel)]="iframeConfigText"
+                              (ngModelChange)="onIframeConfigChange()"
+                              class="code-textarea"
+                              rows="6"
+                              placeholder="iFrame configuration JSON"
+                              spellcheck="false"></textarea>
+                    <small class="hint">Optional: width, height, allow permissions, etc.</small>
+                  </div>
+
+                  <!-- Screenshot Trigger Options -->
+                  <div class="form-group">
+                    <label>Screenshot Triggers</label>
+                    <small class="hint">Select when to automatically capture screenshots for AI guidance</small>
+                    <div class="checkbox-group">
+                      <label class="checkbox-label">
+                        <input type="checkbox" 
+                               [checked]="getScreenshotTrigger('iframeLoad')"
+                               (change)="toggleScreenshotTrigger('iframeLoad', $event)"
+                               [disabled]="!currentInteraction?.iframeConfig" />
+                        <span>On iframe load (initial page load)</span>
+                      </label>
+                      <label class="checkbox-label">
+                        <input type="checkbox" 
+                               [checked]="getScreenshotTrigger('iframeUrlChange')"
+                               (change)="toggleScreenshotTrigger('iframeUrlChange', $event)"
+                               [disabled]="!currentInteraction?.iframeConfig" />
+                        <span>On URL change (navigation within iframe)</span>
+                      </label>
+                      <label class="checkbox-label">
+                        <input type="checkbox" 
+                               [checked]="getScreenshotTrigger('postMessage')"
+                               (change)="toggleScreenshotTrigger('postMessage', $event)"
+                               [disabled]="!currentInteraction?.iframeConfig" />
+                        <span>On postMessage (if iframed site sends messages)</span>
+                      </label>
+                      <label class="checkbox-label">
+                        <input type="checkbox" 
+                               [checked]="getScreenshotTrigger('scriptBlockComplete')"
+                               (change)="toggleScreenshotTrigger('scriptBlockComplete', $event)"
+                               [disabled]="!currentInteraction?.iframeConfig" />
+                        <span>On script block completion (after teacher narration)</span>
+                      </label>
+                      <label class="checkbox-label">
+                        <input type="checkbox" 
+                               [checked]="getScreenshotTrigger('periodic')"
+                               (change)="toggleScreenshotTrigger('periodic', $event)"
+                               [disabled]="!currentInteraction?.iframeConfig" />
+                        <span>Periodic screenshots</span>
+                        <input *ngIf="getScreenshotTrigger('periodic')" 
+                               type="number" 
+                               [value]="getPeriodicInterval()"
+                               (change)="setPeriodicInterval($event)"
+                               min="5" 
+                               max="300" 
+                               class="interval-input"
+                               placeholder="30" />
+                        <span class="hint-inline">seconds</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <!-- Document Upload -->
+                  <div class="form-group">
+                    <label>Reference Document (Optional)</label>
+                    <small class="hint">Upload a document (PDF, DOCX, TXT) to provide context for AI guidance. This document will be included in all screenshot-triggered AI queries.</small>
+                    <div class="file-upload-area">
+                      <input type="file" 
+                             #fileInput
+                             (change)="onDocumentUpload($event)"
+                             accept=".pdf,.docx,.txt,.doc"
+                             class="file-input"
+                             [disabled]="uploadingDocument" />
+                      <div *ngIf="!currentInteraction?.iframeDocumentUrl && !uploadingDocument" class="upload-prompt">
+                        <button type="button" (click)="fileInput.click()" class="btn-secondary btn-small">
+                          ðŸ“„ Choose Document
+                        </button>
+                        <span class="hint">Max 10MB. PDF, DOCX, or TXT</span>
+                      </div>
+                      <div *ngIf="uploadingDocument" class="upload-status">
+                        <span>â³ Uploading...</span>
+                      </div>
+                      <div *ngIf="currentInteraction?.iframeDocumentUrl && !uploadingDocument" class="uploaded-file">
+                        <span class="file-name">ðŸ“„ {{ getDocumentFileName() }}</span>
+                        <button type="button" (click)="removeDocument()" class="btn-remove" title="Remove document">
+                          âœ•
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div *ngIf="!currentInteraction?.interactionTypeCategory" class="no-type-selected">
+                  <p>âš ï¸ Please select an interaction type in the Settings tab first.</p>
+                </div>
+
+                <!-- Test Button and Save -->
+                <div *ngIf="currentInteraction?.interactionTypeCategory" class="code-actions">
+                  <button (click)="testCode()" class="btn-test" [disabled]="testing">
+                    {{ testing ? 'â³ Testing...' : 'ðŸ§ª Test Code' }}
+                  </button>
+                  <button (click)="resetToLastWorking('code')" 
+                          class="btn-reset-inline" 
+                          [disabled]="!hasLastWorking || saving"
+                          title="Reset to last working version">
+                    ðŸ”„ Reset
+                  </button>
+                  <button (click)="saveInteraction()" class="btn-save-inline" [disabled]="saving">
+                    {{ saving ? 'â³ Saving...' : 'ðŸ’¾ Save' }}
+                  </button>
+                </div>
+                <div *ngIf="testResult" class="test-result" [class.success]="testResult.success" [class.error]="!testResult.success">
+                  <button (click)="testResult = null" class="close-test-result" title="Close">âœ•</button>
+                  <div class="result-icon">{{ testResult.success ? 'âœ…' : 'âŒ' }}</div>
+                  <div class="result-content">
+                    <div class="result-message">{{ testResult.message }}</div>
+                    <pre *ngIf="testResult.error" class="error-details">{{testResult.error}}</pre>
+                  </div>
+                </div>
+                </div>
+              </div>
+
+              <!-- Config Schema Tab -->
+              <div *ngIf="isTabActive('config') && currentInteraction" class="tab-content">
+                <div class="config-schema-section">
+                  <div class="section-header">
+                    <h3>Configuration Schema</h3>
+                    <p class="hint">Define what lesson-builders can configure when using this interaction</p>
+                  </div>
+
+                <div class="form-group">
+                  <label>Config Schema (JSON)</label>
+                  <textarea [(ngModel)]="configSchemaText"
+                            (ngModelChange)="onConfigSchemaChange()"
+                            class="code-textarea"
+                            rows="20"
+                            placeholder="Example JSON schema for configuration"
+                            spellcheck="false"></textarea>
+                  <small class="hint">This defines the Configure modal that lesson-builders will see</small>
+                </div>
+
+                <div *ngIf="configSchemaError" class="error-message">
+                  âš ï¸ Invalid JSON: {{configSchemaError}}
+                </div>
+
+                <div class="config-actions">
+                  <button (click)="showConfigModal()" class="btn-secondary" [disabled]="!currentInteraction?.configSchema">
+                    ðŸ‘ï¸ Preview Config Modal
+                  </button>
+                  <button (click)="testConfig()" class="btn-test-inline" [disabled]="testingConfig || !currentInteraction">
+                    {{ testingConfig ? 'â³ Testing...' : 'ðŸ§ª Test Config' }}
+                  </button>
+                  <button (click)="resetToLastWorking('config')" 
+                          class="btn-reset-inline" 
+                          [disabled]="!hasLastWorking || saving"
+                          title="Reset to last working version">
+                    ðŸ”„ Reset
+                  </button>
+                  <button (click)="saveInteraction()" class="btn-save-inline" [disabled]="saving || configSchemaError">
+                    {{ saving ? 'â³ Saving...' : 'ðŸ’¾ Save' }}
+                  </button>
+                </div>
+                <div *ngIf="testConfigResult" class="test-result" [class.success]="testConfigResult.success" [class.error]="!testConfigResult.success">
+                  <button (click)="testConfigResult = null" class="close-test-result" title="Close">âœ•</button>
+                  <span *ngIf="testConfigResult.success">âœ…</span>
+                  <span *ngIf="!testConfigResult.success">âŒ</span>
+                  <span>{{ testConfigResult.message }}</span>
+                  <div *ngIf="testConfigResult.error" class="test-error-detail">{{ testConfigResult.error }}</div>
+                </div>
+                </div>
+              </div>
+
+              <!-- Sample Data Tab -->
+              <div *ngIf="isTabActive('sample') && currentInteraction" class="tab-content">
+                <div class="sample-data-section">
+                  <div class="section-header">
+                    <h3>Sample Data</h3>
+                    <p class="hint">Provide sample JSON data to test your interaction in the Preview tab</p>
+                  </div>
+
+                <div class="form-group">
+                  <label>Sample Input Data (JSON)</label>
+                  <textarea [(ngModel)]="sampleDataText"
+                            (ngModelChange)="onSampleDataChange()"
+                            class="code-textarea"
+                            rows="20"
+                            placeholder="Example JSON data for testing"
+                            spellcheck="false"></textarea>
+                  <small class="hint">This data will be passed to your interaction for testing</small>
+                </div>
+
+                <div *ngIf="sampleDataError" class="error-message">
+                  âš ï¸ Invalid JSON: {{sampleDataError}}
+                </div>
+
+                <div class="sample-actions">
+                  <button (click)="testSampleData()" class="btn-test-inline" [disabled]="testingSample || !currentInteraction">
+                    {{ testingSample ? 'â³ Testing...' : 'ðŸ§ª Test Sample Data' }}
+                  </button>
+                  <button (click)="resetToLastWorking('sample')" 
+                          class="btn-reset-inline" 
+                          [disabled]="!hasLastWorking || saving"
+                          title="Reset to last working version">
+                    ðŸ”„ Reset
+                  </button>
+                  <button (click)="saveInteraction()" class="btn-save-inline" [disabled]="saving || sampleDataError">
+                    {{ saving ? 'â³ Saving...' : 'ðŸ’¾ Save' }}
+                  </button>
+                </div>
+                <div *ngIf="testSampleResult" class="test-result" [class.success]="testSampleResult.success" [class.error]="!testSampleResult.success">
+                  <button (click)="testSampleResult = null" class="close-test-result" title="Close">âœ•</button>
+                  <span *ngIf="testSampleResult.success">âœ…</span>
+                  <span *ngIf="!testSampleResult.success">âŒ</span>
+                  <span>{{ testSampleResult.message }}</span>
+                  <div *ngIf="testSampleResult.error" class="test-error-detail">{{ testSampleResult.error }}</div>
+                </div>
+                </div>
+              </div>
+
+              <!-- Preview Tab -->
+              <!-- AI Tab -->
+              <div *ngIf="isTabActive('ai') && currentInteraction" class="tab-content">
+                <div class="ai-config-section">
+                  <div class="section-header">
+                    <h3>AI Teacher Integration</h3>
+                    <p class="hint">Configure how this interaction integrates with the AI Teacher</p>
+                  </div>
+
+                  <!-- Custom Prompt Template -->
+                  <div class="form-group">
+                    <label>Custom Prompt Template</label>
+                    <p class="hint">Additional instructions for the AI Teacher when responding to events from this interaction. This is appended to the base system prompt and interaction context.</p>
+                    <textarea 
+                      [(ngModel)]="aiPromptTemplateText"
+                      (ngModelChange)="onAIPromptTemplateChange()"
+                      rows="8"
+                      placeholder="Example:&#10;When a student selects an incorrect answer, provide a hint that guides them toward the correct understanding without giving away the answer directly.&#10;&#10;If the student is struggling, break down the concept into smaller steps."></textarea>
+                  </div>
+
+                  <!-- Event Handlers -->
+                  <div class="form-group">
+                    <label>Event Handlers (JSON)</label>
+                    <p class="hint">Configure which events trigger LLM responses and how. Format: JSON object with event types as keys.</p>
+                    <textarea 
+                      [(ngModel)]="aiEventHandlersText"
+                      (ngModelChange)="onAIEventHandlersChange()"
+                      rows="10"
+                      placeholder="Define event handlers in JSON format"></textarea>
+                    <div *ngIf="aiEventHandlersError" class="error-message">{{ aiEventHandlersError }}</div>
+                  </div>
+
+                  <!-- Response Actions -->
+                  <div class="form-group">
+                    <label>Response Actions (JSON)</label>
+                    <p class="hint">Define which action types this interaction can execute from AI responses. Format: JSON object with actionTypes array and defaultFormat.</p>
+                    <textarea 
+                      [(ngModel)]="aiResponseActionsText"
+                      (ngModelChange)="onAIResponseActionsChange()"
+                      rows="6"
+                      placeholder="Define response actions in JSON format"></textarea>
+                    <div *ngIf="aiResponseActionsError" class="error-message">{{ aiResponseActionsError }}</div>
+                  </div>
+
+                  <div class="info-box">
+                    <h4>ðŸ“š SDK Quick Reference</h4>
+                    <p>Interactions can emit events using the SDK. See SDK documentation for code examples.</p>
+                    <p class="hint">ðŸ“š SDK documentation is available in the codebase at: <code>Upora/frontend/src/app/core/services/INTERACTION_AI_SDK_QUICK_REFERENCE.md</code></p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Data Storage Tab -->
+              <div *ngIf="isTabActive('data') && currentInteraction" class="tab-content">
+                <div class="data-storage-section">
+                  <div class="section-header">
+                    <h3>Data Storage Schemas</h3>
+                    <p class="hint">Define what data should be stored when students interact with this interaction type</p>
+                  </div>
+
+                  <!-- Instance Data Schema -->
+                  <div class="form-group">
+                    <label>Instance Data Schema (JSON)</label>
+                    <p class="hint">
+                      Define what anonymous data to capture per interaction instance (stored separately from user accounts). 
+                      This data is accessible to interaction builders and super-admins for analytics.
+                    </p>
+                    <textarea 
+                      [(ngModel)]="instanceDataSchemaText"
+                      (ngModelChange)="onInstanceDataSchemaChange()"
+                      rows="12"
+                      placeholder='Define fields for instance data (JSON format)'></textarea>
+                    <div *ngIf="instanceDataSchemaError" class="error-message">{{ instanceDataSchemaError }}</div>
+                    <p class="hint">
+                      <strong>Field Types:</strong> string, number, boolean, array, object<br>
+                      <strong>Access:</strong> Use <code>aiSDK.saveInstanceData(data)</code> in your interaction code<br>
+                      <strong>View:</strong> Use <code>aiSDK.getInstanceDataHistory()</code> (builders/admins only)
+                    </p>
+                  </div>
+
+                  <!-- User Progress Schema -->
+                  <div class="form-group">
+                    <label>User Progress Schema (JSON)</label>
+                    <p class="hint">
+                      Define optional custom fields for user progress (beyond required fields: stage/substage IDs, timestamps, attempts, completed).
+                      Required fields are automatically tracked.
+                    </p>
+                    <textarea 
+                      [(ngModel)]="userProgressSchemaText"
+                      (ngModelChange)="onUserProgressSchemaChange()"
+                      rows="12"
+                      placeholder='Define custom fields for user progress (JSON format)'></textarea>
+                    <div *ngIf="userProgressSchemaError" class="error-message">{{ userProgressSchemaError }}</div>
+                    <p class="hint">
+                      <strong>Field Types:</strong> string, number, boolean, array, object<br>
+                      <strong>Access:</strong> Use <code>aiSDK.saveUserProgress({ customData: {...} })</code> in your interaction code<br>
+                      <strong>View:</strong> Use <code>aiSDK.getUserProgress()</code> to get current user's progress
+                    </p>
+                  </div>
+
+                  <div class="info-box">
+                    <h4>ðŸ“š Data Storage Quick Reference</h4>
+                    <p><strong>Instance Data (Anonymous):</strong></p>
+                    <p class="hint">Use aiSDK.saveInstanceData() and aiSDK.getInstanceDataHistory()</p>
+                    <p><strong>User Progress (Per-User):</strong></p>
+                    <p class="hint">Use aiSDK.saveUserProgress(), aiSDK.getUserProgress(), aiSDK.markCompleted(), aiSDK.incrementAttempts()</p>
+                    <p><strong>User Public Profile:</strong></p>
+                    <p class="hint">Use aiSDK.getUserPublicProfile(userId)</p>
+                  </div>
+                </div>
+              </div>
+
+              <div *ngIf="isTabActive('preview') && currentInteraction" class="tab-content preview-tab-content">
+                <div class="preview-section">
+                  <div class="section-header">
+                    <h3>Live Preview</h3>
+                    <p class="hint">See how your interaction looks with the sample data</p>
+                    <button (click)="refreshPreview()" class="btn-refresh">
+                      ðŸ”„ Refresh Preview
+                    </button>
+                  </div>
+
+                  <div class="preview-container" [attr.data-preview-key]="previewKey">
+                    <!-- HTML Preview (use Blob URL for better script execution) -->
+                    <!-- Force iframe recreation by using previewKey in *ngIf condition -->
+                    <div *ngIf="(currentInteraction?.interactionTypeCategory === 'html') && currentInteraction?.htmlCode && previewKey" 
+                         class="html-preview">
+                      <iframe #previewIframe 
+                              [src]="getHtmlPreviewBlobUrl()" 
+                              [attr.data-key]="previewKey"
+                              class="preview-iframe"
+                              frameborder="0"
+                              sandbox="allow-scripts allow-same-origin"></iframe>
+                    </div>
+
+                    <!-- iFrame Preview (use URL from sample data directly) -->
+                    <div *ngIf="(currentInteraction?.interactionTypeCategory === 'iframe') && getIframePreviewUrl()" class="html-preview">
+                      <iframe #previewIframe 
+                              [src]="getSafeIframePreviewUrl()" 
+                              [attr.data-preview-key]="previewKey"
+                              class="preview-iframe"
+                              frameborder="0"
+                              [style.width]="getIframeWidth()"
+                              [style.height]="getIframeHeight()"></iframe>
+                    </div>
+
+                  <!-- iFrame Preview Placeholder (if no URL yet) -->
+                  <div *ngIf="(currentInteraction?.interactionTypeCategory === 'iframe') && !getIframePreviewUrl()" class="iframe-preview-placeholder">
+                    <div class="placeholder-content">
+                      <span class="placeholder-icon">ðŸ–¼ï¸</span>
+                      <h4>iFrame Preview</h4>
+                      <p>Add sample data with a URL in the Sample Data tab to see a preview.</p>
+                    </div>
+                  </div>
+
+                  <!-- PixiJS Preview (use Blob URL) -->
+                  <!-- Force iframe recreation by using previewKey in *ngIf condition -->
+                  <div *ngIf="(currentInteraction?.interactionTypeCategory === 'pixijs') && currentInteraction?.htmlCode && previewKey" 
+                       class="html-preview">
+                    <iframe #previewIframe 
+                            [src]="getHtmlPreviewBlobUrl()" 
+                            [attr.data-key]="previewKey"
+                            class="preview-iframe"
+                            frameborder="0"
+                            sandbox="allow-scripts allow-same-origin"></iframe>
+                  </div>
+
+                  <!-- PixiJS Preview Placeholder (if no code yet) -->
+                  <div *ngIf="(currentInteraction?.interactionTypeCategory === 'pixijs') && !currentInteraction?.htmlCode" class="pixijs-preview-placeholder">
+                    <div class="placeholder-content">
+                      <span class="placeholder-icon">ðŸŽ®</span>
+                      <h4>PixiJS Preview</h4>
+                      <p>Add HTML/CSS/JS code in the Code tab to see a preview.</p>
+                    </div>
+                  </div>
+
+                  <!-- Fallback: Use Angular component for true-false-selection if no HTML code -->
+                  <div *ngIf="(currentInteraction?.id === 'true-false-selection') && !currentInteraction?.htmlCode && currentInteraction?.sampleData" class="interaction-preview">
+                    <app-true-false-selection 
+                      [data]="currentInteraction?.sampleData"
+                      (interactionComplete)="onPreviewComplete($event)">
+                    </app-true-false-selection>
+                  </div>
+
+                  <!-- No Preview Available -->
+                  <div *ngIf="!canShowPreview()" class="no-preview">
+                    <div class="placeholder-content">
+                      <span class="placeholder-icon">ðŸ‘ï¸</span>
+                      <h4>No Preview Available</h4>
+                      <p *ngIf="!currentInteraction?.sampleData">Add sample data in the "Sample Data" tab to see a preview.</p>
+                      <p *ngIf="!currentInteraction?.interactionTypeCategory">Select an interaction type in Settings.</p>
+                      <p *ngIf="currentInteraction?.interactionTypeCategory === 'html' && !currentInteraction?.htmlCode">Add HTML code in the Code tab.</p>
+                      <p *ngIf="currentInteraction?.interactionTypeCategory === 'iframe' && !currentInteraction?.iframeUrl">Add an iframe URL in the Code tab.</p>
+                    </div>
+                  </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+
+      <!-- AI Assistant (Floating) -->
+      <div class="ai-assistant-widget" 
+           [class.minimized]="aiMinimized" 
+           [class.hidden]="aiHidden">
+        <div *ngIf="aiMinimized" class="ai-icon-minimized" (click)="aiMinimized = false">
+          <div class="avatar">ðŸ”§</div>
+          <div *ngIf="aiTyping" class="speaking-indicator">...</div>
+        </div>
+
+        <div *ngIf="!aiMinimized" class="ai-card">
+          <div class="ai-header">
+            <div class="ai-avatar">
+              <span class="avatar-emoji">ðŸ”§</span>
+            </div>
+            <div class="ai-title">AI Builder Assistant</div>
+            <div class="header-controls">
+              <button class="control-btn" (click)="aiMinimized = true" title="Minimize">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <rect x="3" y="7" width="10" height="2" rx="1"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="chat-history" #aiChatHistory>
+            <div *ngIf="aiMessages.length === 0" class="no-messages">
+              <span *ngIf="!currentInteraction" class="muted-text warning-text">âš ï¸ An interaction must be selected to use this assistant</span>
+              <span *ngIf="currentInteraction" class="muted-text">Ask me anything about building interactions!</span>
+            </div>
+            <div *ngFor="let msg of aiMessages; let i = index" 
+                 [class.user-message]="msg.role === 'user'"
+                 [class.ai-message]="msg.role === 'assistant'"
+                 class="message"
+                 [attr.data-message-index]="i">
+              <div class="message-content">
+                <div class="message-icon">
+                  <span *ngIf="msg.role === 'user'">ðŸ‘¤</span>
+                  <span *ngIf="msg.role !== 'user'">ðŸ”§</span>
+                </div>
+                <div class="message-text">
+                  <div class="message-text-content">{{ msg.content }}</div>
+                  <!-- Suggested Changes Summary -->
+                  <div *ngIf="msg.role === 'assistant' && msg.suggestedChanges && !msg.accepted" 
+                       class="suggested-changes">
+                    <div class="changes-summary">
+                      <span class="changes-icon">âœ¨</span>
+                      <span class="changes-text">{{ getChangesSummary(msg.suggestedChanges) }}</span>
+                    </div>
+                    <button (click)="acceptSuggestedChanges(i)" 
+                            class="accept-changes-btn"
+                            title="Accept and apply these changes">
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/>
+                      </svg>
+                      Accept Changes
+                    </button>
+                  </div>
+                  <!-- Accepted indicator -->
+                  <div *ngIf="msg.role === 'assistant' && msg.accepted" 
+                       class="changes-accepted">
+                    <span class="accepted-icon">âœ…</span>
+                    <span class="accepted-text">Changes applied</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div *ngIf="aiTyping" class="ai-message message">
+              <div class="message-content">
+                <div class="message-icon">ðŸ”§</div>
+                <div class="message-text typing-indicator">
+                  <span></span><span></span><span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="chat-input-container">
+            <textarea 
+              [(ngModel)]="aiInput"
+              (keydown.enter)="onAiEnter($any($event))"
+              [placeholder]="getAiInputPlaceholder()"
+              [disabled]="!currentInteraction"
+              maxlength="2000"
+              rows="2"></textarea>
+            <div *ngIf="aiInput.length >= 1900" class="char-count-warning">
+              <span>{{ aiInput.length }}</span>/2000
+            </div>
+            <button (click)="sendAiMessage()" [disabled]="!currentInteraction || !aiInput.trim() || aiTyping" class="send-btn">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M2 10l16-8-8 16-2-8-6-0z"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Shared Configure Modal Component -->
+      <!-- Config Preview Modal -->
+      <app-interaction-configure-modal
+        [isOpen]="showingConfigModal"
+        [interactionType]="currentInteraction?.id || ''"
+        [interactionName]="currentInteraction?.name || 'Interaction'"
+        [configSchema]="currentInteraction?.configSchema"
+        [sampleData]="currentInteraction?.sampleData"
+        [initialConfig]="configModalInitialConfig"
+        [interactionCategory]="currentInteraction?.interactionTypeCategory || ''"
+        [htmlCode]="currentInteraction?.htmlCode || ''"
+        [cssCode]="currentInteraction?.cssCode || ''"
+        [jsCode]="currentInteraction?.jsCode || ''"
+        [isBuilderMode]="true"
+        (closed)="closeConfigModal()"
+        (saved)="saveConfigFromModal($event)">
+      </app-interaction-configure-modal>
+
+      <!-- Success Snackbar -->
+      <div *ngIf="showSnackbar" class="snackbar">
+        {{ snackbarMessage }}
+      </div>
+    </div>
+  </div>
+  </div>
+  </div>
+  </div>
+  </div>
+  </div>
+  </div>
+  </div>
+  </div>
+  </div>
+  </div>
+  </div>
+  </div>
+  </div>
+  </div>
+  </div>
+  </div>
+</div>
