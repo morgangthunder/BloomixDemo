@@ -79,17 +79,31 @@ describe('Interaction Data Endpoints (SDK Tests)', () => {
 
       const mockSaved = {
         id: 'instance-1',
-        ...dto,
+        lessonId: dto.lessonId,
+        stageId: dto.stageId,
+        substageId: dto.substageId,
+        interactionTypeId: dto.interactionTypeId,
+        processedContentId: dto.processedContentId,
+        instanceData: dto.instanceData,
         createdAt: new Date(),
       };
 
       // Mock interaction type lookup (no schema validation)
       mockInteractionTypeRepository.findOne.mockResolvedValue(null);
-      mockInstanceDataRepository.create.mockReturnValue(mockSaved);
-      mockInstanceDataRepository.save.mockResolvedValue(mockSaved);
+      // create() should return the entity object
+      mockInstanceDataRepository.create.mockImplementation((data) => ({
+        ...data,
+        id: 'instance-1',
+        createdAt: new Date(),
+      }));
+      // save() should return the saved entity
+      mockInstanceDataRepository.save.mockImplementation((entity) => Promise.resolve(entity));
 
       await service.saveInstanceData(dto);
 
+      expect(mockInteractionTypeRepository.findOne).toHaveBeenCalledWith({
+        where: { id: dto.interactionTypeId },
+      });
       expect(mockInstanceDataRepository.create).toHaveBeenCalled();
       expect(mockInstanceDataRepository.save).toHaveBeenCalled();
     });
@@ -394,8 +408,9 @@ describe('Interaction Data Endpoints (SDK Tests)', () => {
       const result = await service.getUserPublicProfile('user-1');
 
       // No profile found is a valid response, not an error
-      expect(result).toBeNull();
       // This test passes - no profile is a valid state
+      expect(result).toBeNull();
+      expect(mockPublicProfileRepository.findOne).toHaveBeenCalled();
     });
   });
 

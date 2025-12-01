@@ -73,10 +73,399 @@ export class CreateSDKTestHTMLInteraction1734500003000 implements MigrationInter
   transform: translateX(2px);
 }`;
 
-    const jsCode = `// SDK Test HTML Interaction
-// This is a placeholder - the full test code is in: Upora/backend/scripts/sdk-test-html-full-code.js
-// Please copy the full JavaScript code from that file into this interaction via the interaction builder UI
-console.log('SDK Test HTML Interaction - Please copy full code from sdk-test-html-full-code.js');`;
+    const jsCode = `(function() {
+  console.log("[SDK Test HTML] Starting initialization...");
+  
+  // Wait for DOM to be ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initTestApp);
+  } else {
+    setTimeout(initTestApp, 10);
+  }
+})();
+
+// Include createIframeAISDK function (same as PixiJS version)
+const createIframeAISDK = () => {
+  let subscriptionId = null;
+  let requestCounter = 0;
+
+  const generateRequestId = () => \`req-\${Date.now()}-\${++requestCounter}\`;
+  const generateSubscriptionId = () => \`sub-\${Date.now()}-\${Math.random()}\`;
+
+  const sendMessage = (type, data, callback) => {
+    const requestId = generateRequestId();
+    const message = { type, requestId, ...data };
+
+    if (callback) {
+      const listener = (event) => {
+        if (event.data.requestId === requestId) {
+          window.removeEventListener("message", listener);
+          callback(event.data);
+        }
+      };
+      window.addEventListener("message", listener);
+    }
+
+    window.parent.postMessage(message, "*");
+  };
+
+  return {
+    emitEvent: (event, processedContentId) => {
+      sendMessage("ai-sdk-emit-event", { event, processedContentId });
+    },
+    updateState: (key, value) => {
+      sendMessage("ai-sdk-update-state", { key, value });
+    },
+    getState: (callback) => {
+      sendMessage("ai-sdk-get-state", {}, (response) => {
+        callback(response.state);
+      });
+    },
+    onResponse: (callback) => {
+      subscriptionId = generateSubscriptionId();
+      sendMessage("ai-sdk-subscribe", { subscriptionId }, () => {
+        const listener = (event) => {
+          if (event.data.type === "ai-sdk-response" && event.data.subscriptionId === subscriptionId) {
+            callback(event.data.response);
+          }
+        };
+        window.addEventListener("message", listener);
+        return () => {
+          window.removeEventListener("message", listener);
+          sendMessage("ai-sdk-unsubscribe", { subscriptionId });
+        };
+      });
+    },
+    isReady: (callback) => {
+      const listener = (event) => {
+        if (event.data.type === "ai-sdk-ready") {
+          window.removeEventListener("message", listener);
+          callback(true);
+        }
+      };
+      window.addEventListener("message", listener);
+    },
+    minimizeChatUI: () => {
+      sendMessage("ai-sdk-minimize-chat-ui", {});
+    },
+    showChatUI: () => {
+      sendMessage("ai-sdk-show-chat-ui", {});
+    },
+    activateFullscreen: () => {
+      sendMessage("ai-sdk-activate-fullscreen", {});
+    },
+    deactivateFullscreen: () => {
+      sendMessage("ai-sdk-deactivate-fullscreen", {});
+    },
+    postToChat: (content, role, showInWidget) => {
+      sendMessage("ai-sdk-post-to-chat", { content, role, showInWidget });
+    },
+    showScript: (script, autoPlay) => {
+      sendMessage("ai-sdk-show-script", { script, autoPlay });
+    },
+    showSnack: (content, duration, hideFromChatUI, callback) => {
+      sendMessage("ai-sdk-show-snack", { content, duration, hideFromChatUI: hideFromChatUI || false }, (response) => {
+        if (callback && response.snackId) {
+          callback(response.snackId);
+        }
+      });
+    },
+    hideSnack: () => {
+      sendMessage("ai-sdk-hide-snack", {});
+    },
+    saveInstanceData: (data, callback) => {
+      sendMessage("ai-sdk-save-instance-data", { data }, (response) => {
+        if (callback) {
+          callback(response.success, response.error);
+        }
+      });
+    },
+    getInstanceDataHistory: (filters, callback) => {
+      sendMessage("ai-sdk-get-instance-data-history", { filters }, (response) => {
+        if (callback) {
+          callback(response.data, response.error);
+        }
+      });
+    },
+    saveUserProgress: (data, callback) => {
+      sendMessage("ai-sdk-save-user-progress", { data }, (response) => {
+        if (callback) {
+          callback(response.progress, response.error);
+        }
+      });
+    },
+    getUserProgress: (callback) => {
+      sendMessage("ai-sdk-get-user-progress", {}, (response) => {
+        if (callback) {
+          callback(response.progress, response.error);
+        }
+      });
+    },
+    markCompleted: (callback) => {
+      sendMessage("ai-sdk-mark-completed", {}, (response) => {
+        if (callback) {
+          callback(response.progress, response.error);
+        }
+      });
+    },
+    incrementAttempts: (callback) => {
+      sendMessage("ai-sdk-increment-attempts", {}, (response) => {
+        if (callback) {
+          callback(response.progress, response.error);
+        }
+      });
+    },
+    getUserPublicProfile: (userId, callback) => {
+      sendMessage("ai-sdk-get-user-public-profile", { userId }, (response) => {
+        if (callback) {
+          callback(response.profile, response.error);
+        }
+      });
+    },
+  };
+};
+
+let aiSDK = null;
+let statusText = null;
+let buttonsContainer = null;
+
+function updateStatus(message, color = "#ffffff") {
+  if (statusText) {
+    statusText.textContent = message;
+    statusText.style.color = color;
+  }
+  console.log("[SDK Test HTML]", message);
+}
+
+function createButton(text, onClick) {
+  const button = document.createElement("button");
+  button.className = "test-button";
+  button.textContent = text;
+  button.onclick = onClick;
+  if (buttonsContainer) {
+    buttonsContainer.appendChild(button);
+  }
+  return button;
+}
+
+function initTestApp() {
+  console.log("[SDK Test HTML] Initializing app...");
+  
+  // Get or create container elements
+  buttonsContainer = document.getElementById("sdk-test-buttons");
+  statusText = document.getElementById("status-text");
+  
+  if (!buttonsContainer) {
+    console.error("[SDK Test HTML] Buttons container not found!");
+    return;
+  }
+
+  // Initialize SDK
+  aiSDK = createIframeAISDK();
+  
+  // Check if we're in preview mode (no parent window or parent is same origin)
+  const isPreviewMode = !window.parent || window.parent === window;
+  
+  if (isPreviewMode) {
+    updateStatus("Preview Mode - SDK will work when added to a lesson", "#ffff00");
+    // In preview, we can still show buttons but SDK won't work
+  } else {
+    updateStatus("SDK Test Interaction Loaded. Waiting for SDK ready...", "#ffff00");
+    
+    // Wait for SDK ready
+    aiSDK.isReady((ready) => {
+      if (ready) {
+        updateStatus("SDK Ready! All methods available.", "#00ff00");
+      }
+    });
+  }
+
+  // Core Methods Section
+  const coreLabel = document.createElement("div");
+  coreLabel.className = "section-label";
+  coreLabel.textContent = "CORE METHODS";
+  buttonsContainer.appendChild(coreLabel);
+
+  createButton("Emit Event", () => {
+    aiSDK.emitEvent({
+      type: "user-selection",
+      data: { test: true, timestamp: Date.now() },
+      requiresLLMResponse: true,
+    });
+    updateStatus("Event emitted", "#00ff00");
+  });
+
+  createButton("Update State", () => {
+    aiSDK.updateState("testKey", { value: Math.random(), timestamp: Date.now() });
+    updateStatus("State updated", "#00ff00");
+  });
+
+  createButton("Get State", () => {
+    aiSDK.getState((state) => {
+      updateStatus("State: " + JSON.stringify(state).substring(0, 50), "#00ff00");
+    });
+  });
+
+  // UI Control Methods Section
+  const uiLabel = document.createElement("div");
+  uiLabel.className = "section-label";
+  uiLabel.textContent = "UI CONTROL METHODS";
+  buttonsContainer.appendChild(uiLabel);
+
+  createButton("Minimize Chat UI", () => {
+    aiSDK.minimizeChatUI();
+    updateStatus("Chat UI minimized", "#00ff00");
+  });
+
+  createButton("Show Chat UI", () => {
+    aiSDK.showChatUI();
+    updateStatus("Chat UI shown", "#00ff00");
+  });
+
+  createButton("Activate Fullscreen", () => {
+    aiSDK.activateFullscreen();
+    updateStatus("Fullscreen activated", "#00ff00");
+  });
+
+  createButton("Deactivate Fullscreen", () => {
+    aiSDK.deactivateFullscreen();
+    updateStatus("Fullscreen deactivated", "#00ff00");
+  });
+
+  createButton("Post to Chat", () => {
+    const testMessage = "Test message from SDK Test interaction! This is a dummy message to test the postToChat functionality.";
+    aiSDK.postToChat(testMessage, "assistant", true);
+    updateStatus("Posted to chat: " + testMessage.substring(0, 30) + "...", "#00ff00");
+  });
+
+  createButton("Show Script", () => {
+    const testScript = "This is a test script block from the SDK Test interaction. It demonstrates the showScript functionality.";
+    aiSDK.showScript(testScript, true);
+    updateStatus("Script shown: " + testScript.substring(0, 30) + "...", "#00ff00");
+  });
+
+  createButton("Show Snack (5s)", () => {
+    aiSDK.showSnack("Test snack message! (also posts to chat)", 5000, false, (snackId) => {
+      updateStatus("Snack shown: " + snackId, "#00ff00");
+    });
+  });
+
+  createButton("Show Snack (no chat)", () => {
+    aiSDK.showSnack("Test snack message! (hidden from chat)", 5000, true, (snackId) => {
+      updateStatus("Snack shown (no chat): " + snackId, "#00ff00");
+    });
+  });
+
+  createButton("Hide Snack", () => {
+    aiSDK.hideSnack();
+    updateStatus("Snack hidden", "#00ff00");
+  });
+
+  // Data Storage Methods Section
+  const dataLabel = document.createElement("div");
+  dataLabel.className = "section-label";
+  dataLabel.textContent = "DATA STORAGE METHODS";
+  buttonsContainer.appendChild(dataLabel);
+
+  createButton("Save Instance Data", () => {
+    aiSDK.saveInstanceData(
+      {
+        testValue: Math.random(),
+        timestamp: Date.now(),
+        testArray: [1, 2, 3],
+      },
+      (success, error) => {
+        if (success) {
+          updateStatus("Instance data saved", "#00ff00");
+        } else {
+          updateStatus("Error: " + error, "#ff0000");
+        }
+      }
+    );
+  });
+
+  createButton("Get Instance Data History", () => {
+    aiSDK.getInstanceDataHistory(
+      { limit: 10 },
+      (data, error) => {
+        if (data) {
+          updateStatus("History: " + data.length + " records", "#00ff00");
+        } else {
+          updateStatus("Error: " + error, "#ff0000");
+        }
+      }
+    );
+  });
+
+  createButton("Save User Progress", () => {
+    aiSDK.saveUserProgress(
+      {
+        score: Math.floor(Math.random() * 100),
+        completed: false,
+        customData: {
+          testField: "test value",
+          testNumber: 42,
+        },
+      },
+      (progress, error) => {
+        if (progress) {
+          updateStatus("Progress saved. Attempts: " + progress.attempts, "#00ff00");
+        } else {
+          updateStatus("Error: " + error, "#ff0000");
+        }
+      }
+    );
+  });
+
+  createButton("Get User Progress", () => {
+    aiSDK.getUserProgress((progress, error) => {
+      if (progress) {
+        updateStatus(
+          "Progress: Attempts=" + progress.attempts + ", Completed=" + progress.completed,
+          "#00ff00"
+        );
+      } else if (error) {
+        updateStatus("Error: " + error, "#ff0000");
+      } else {
+        updateStatus("No progress found", "#ffff00");
+      }
+    });
+  });
+
+  createButton("Mark Completed", () => {
+    aiSDK.markCompleted((progress, error) => {
+      if (progress) {
+        updateStatus("Marked as completed", "#00ff00");
+      } else {
+        updateStatus("Error: " + error, "#ff0000");
+      }
+    });
+  });
+
+  createButton("Increment Attempts", () => {
+    aiSDK.incrementAttempts((progress, error) => {
+      if (progress) {
+        updateStatus("Attempts: " + progress.attempts, "#00ff00");
+      } else {
+        updateStatus("Error: " + error, "#ff0000");
+      }
+    });
+  });
+
+  createButton("Get User Public Profile", () => {
+    aiSDK.getUserPublicProfile(undefined, (profile, error) => {
+      if (profile) {
+        updateStatus("Profile: " + (profile.displayName || "No name"), "#00ff00");
+      } else if (error) {
+        updateStatus("Error: " + error, "#ff0000");
+      } else {
+        updateStatus("No profile found (this is OK)", "#ffff00");
+      }
+    });
+  });
+
+  console.log("[SDK Test HTML] All buttons created");
+}`;
 
     await queryRunner.query(`
       INSERT INTO interaction_types (
