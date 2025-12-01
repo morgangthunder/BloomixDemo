@@ -203,16 +203,25 @@ function initTestApp() {
     return;
   }
 
+  // Calculate initial height - will be updated after all buttons are created
+  // Start with a minimum height, will expand based on content
+  const initialHeight = Math.max(window.innerHeight, 600);
+  
   // Create PixiJS app
   const app = new PIXI.Application({
     width: Math.max(window.innerWidth, 800),
-    height: Math.max(window.innerHeight, 600),
+    height: initialHeight,
     backgroundColor: 0x0f0f23,
     antialias: true,
     autoDensity: true,
     resolution: window.devicePixelRatio || 1,
   });
   container.appendChild(app.view);
+  
+  // Make container scrollable
+  container.style.overflow = 'auto';
+  container.style.width = '100%';
+  container.style.height = '100%';
   
   console.log("[SDK Test] PixiJS app created, size:", app.screen.width, "x", app.screen.height);
 
@@ -522,15 +531,23 @@ function initTestApp() {
   statusTextInitialized = true; // Now allow status text to be created
   updateStatus("SDK Test Interaction Loaded. Waiting for SDK ready...", 0xffff00);
 
+  // Resize canvas to fit all content (add extra space for status text and padding)
+  const contentHeight = statusYPos + 100; // Add 100px for status text and padding
+  const minHeight = Math.max(window.innerHeight, 600);
+  const finalHeight = Math.max(contentHeight, minHeight);
+  app.renderer.resize(Math.max(window.innerWidth, 800), finalHeight);
+  console.log("[SDK Test] Canvas resized to fit content:", Math.max(window.innerWidth, 800), "x", finalHeight);
+
   // Handle window resize
   window.addEventListener("resize", () => {
     const newWidth = Math.max(window.innerWidth, 800);
-    const newHeight = Math.max(window.innerHeight, 600);
-    app.renderer.resize(newWidth, newHeight);
+    // Keep height based on content, but ensure minimum
+    const contentBasedHeight = Math.max(statusYPos + 100, Math.max(window.innerHeight, 600));
+    app.renderer.resize(newWidth, contentBasedHeight);
     if (statusText) {
       statusText.style.wordWrapWidth = newWidth - 40;
     }
-    console.log("[SDK Test] Resized to:", newWidth, "x", newHeight);
+    console.log("[SDK Test] Resized to:", newWidth, "x", contentBasedHeight);
   });
 
   // Set up SDK ready callbacks now that status text is initialized

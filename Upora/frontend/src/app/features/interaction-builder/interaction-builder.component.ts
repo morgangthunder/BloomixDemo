@@ -1265,11 +1265,14 @@ interface ChatMessage {
       margin-bottom: 2rem; /* Add spacing below preview */
     }
 
-    /* PixiJS preview iframe specifically - make it fit screen better */
+    /* PixiJS preview iframe specifically - make it fit screen better and scrollable */
     .preview-container .html-preview iframe.preview-iframe {
       max-height: calc(100vh - 320px);
+      min-height: 400px;
       height: calc(100vh - 320px);
       width: 100%;
+      border: 1px solid #333;
+      overflow: auto;
     }
 
     .section-header {
