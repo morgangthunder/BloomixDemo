@@ -206,12 +206,15 @@ export interface ChatMessage {
     .teacher-card {
       width: 400px;
       max-width: calc(100vw - 4rem);
+      max-height: calc(100vh - 4rem);
       background: #000000;
       border: 2px solid #ff3b3f;
       border-radius: 16px;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
       overflow: hidden;
       animation: slideUp 0.3s ease;
+      display: flex;
+      flex-direction: column;
     }
 
     @keyframes slideUp {
@@ -233,6 +236,7 @@ export interface ChatMessage {
       padding: 1rem;
       background: #1a1a1a;
       border-bottom: 1px solid #333333;
+      flex-shrink: 0;
     }
 
     .teacher-avatar {
@@ -304,10 +308,12 @@ export interface ChatMessage {
       padding: 1rem;
       background: #1a1a1a;
       border-bottom: 1px solid #333333;
-      max-height: 200px;
+      max-height: 150px;
+      min-height: 0;
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      flex-shrink: 0;
     }
 
     .script-header {
@@ -376,8 +382,8 @@ export interface ChatMessage {
     /* Chat History */
     .chat-history {
       padding: 1rem;
-      min-height: 200px;
-      max-height: 350px;
+      min-height: 0;
+      flex: 1;
       overflow-y: auto;
       background: #0a0a0a;
     }
@@ -478,6 +484,7 @@ export interface ChatMessage {
       border-top: 1px solid #333333;
       background: #0a0a0a;
       position: relative;
+      flex-shrink: 0;
     }
 
     .char-count-warning {
