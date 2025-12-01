@@ -91,20 +91,28 @@ describe('Interaction Data Endpoints (SDK Tests)', () => {
       // Mock interaction type lookup (no schema validation)
       mockInteractionTypeRepository.findOne.mockResolvedValue(null);
       // create() should return the entity object
-      mockInstanceDataRepository.create.mockImplementation((data) => ({
-        ...data,
+      const createdEntity = {
+        ...dto,
         id: 'instance-1',
         createdAt: new Date(),
-      }));
-      // save() should return the saved entity
-      mockInstanceDataRepository.save.mockImplementation((entity) => Promise.resolve(entity));
+      };
+      mockInstanceDataRepository.create.mockReturnValue(createdEntity);
+      // save() should return the saved entity (as a promise)
+      mockInstanceDataRepository.save.mockResolvedValue(createdEntity);
 
       await service.saveInstanceData(dto);
 
       expect(mockInteractionTypeRepository.findOne).toHaveBeenCalledWith({
         where: { id: dto.interactionTypeId },
       });
-      expect(mockInstanceDataRepository.create).toHaveBeenCalled();
+      expect(mockInstanceDataRepository.create).toHaveBeenCalledWith({
+        lessonId: dto.lessonId,
+        stageId: dto.stageId,
+        substageId: dto.substageId,
+        interactionTypeId: dto.interactionTypeId,
+        processedContentId: dto.processedContentId,
+        instanceData: dto.instanceData,
+      });
       expect(mockInstanceDataRepository.save).toHaveBeenCalled();
     });
 
