@@ -644,6 +644,7 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy, Aft
   @Output() raiseHandClicked = new EventEmitter<void>();
   @Output() scriptClosed = new EventEmitter<void>();
   @Output() messageAdded = new EventEmitter<ChatMessage>();
+  @Output() widgetOpened = new EventEmitter<void>();
 
   // Public methods for programmatic control
   /**
@@ -680,6 +681,7 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy, Aft
   openWidget(): void {
     this.isMinimized = false;
     this.isHidden = false;
+    this.widgetOpened.emit();
   }
 
   @ViewChild('chatHistory') chatHistory?: ElementRef<HTMLDivElement>;
@@ -822,6 +824,7 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy, Aft
 
   restore() {
     this.isMinimized = false;
+    this.widgetOpened.emit();
   }
 
   close() {

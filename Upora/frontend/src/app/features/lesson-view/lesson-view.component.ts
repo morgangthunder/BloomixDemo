@@ -191,6 +191,8 @@ import { SnackMessageComponent } from '../../shared/components/snack-message/sna
                 class="interaction-iframe"
                 frameborder="0"
                 sandbox="allow-scripts allow-same-origin"
+                <!-- Note: Both allow-scripts and allow-same-origin are required for interaction iframes to function properly.
+                     This warning is expected and safe for our use case where we control the content being loaded. -->
                 (load)="onInteractionIframeLoad()"
                 style="width: 100%; min-height: 600px; max-height: 90vh; border: none; overflow: auto;"></iframe>
             </div>
@@ -351,7 +353,7 @@ import { SnackMessageComponent } from '../../shared/components/snack-message/sna
         (touchstart)="startFabDrag($event)"
         [title]="isFullscreen ? 'Hold to drag' : 'Open AI Teacher'">
         <span class="fab-icon">🎓</span>
-        <span *ngIf="chatMessages.length > 0" class="fab-badge">{{ chatMessages.length }}</span>
+        <span *ngIf="unreadMessageCount > 0" class="fab-badge">{{ unreadMessageCount }}</span>
       </div>
 
       <!-- Floating Teacher Widget -->
@@ -372,7 +374,8 @@ import { SnackMessageComponent } from '../../shared/components/snack-message/sna
         (scriptClosed)="onScriptClosed()"
         (sendChat)="sendChatMessage($event)"
         (raiseHandClicked)="raiseHand()"
-        (messageAdded)="onWidgetMessageAdded($event)">
+        (messageAdded)="onWidgetMessageAdded($event)"
+        (widgetOpened)="onWidgetOpened()">
       </app-floating-teacher-widget>
 
       <!-- Snack Message Component -->
@@ -911,6 +914,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   isTimeoutFallback = false; // Track if current message is a timeout fallback
   generalResponseTimeout: any = null; // Timeout for general "no reply" fallback (20 seconds)
   isSendingMessage = false; // Prevent duplicate message sends
+  unreadMessageCount = 0; // Track unread messages (messages received while widget is minimized/closed)
+  private lastReadMessageCount = 0; // Track last read message count when widget was open
   
   // Teacher Script
   currentTeacherScript: ScriptBlock | null = null;
@@ -1007,8 +1012,22 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     });
 
     this.wsService.messages$.pipe(takeUntil(this.destroy$)).subscribe(messages => {
+      const previousMessageCount = this.chatMessages.length;
       this.chatMessages = messages;
       console.log('[LessonView] Chat messages updated:', messages.length);
+      
+      // Track unread messages (messages received while widget is minimized/closed)
+      if (messages.length > previousMessageCount) {
+        const newMessageCount = messages.length - previousMessageCount;
+        // If widget is hidden or minimized, increment unread count
+        if (this.teacherWidgetHidden || (this.teacherWidget && this.teacherWidget.isMinimized)) {
+          this.unreadMessageCount += newMessageCount;
+          console.log('[LessonView] 📬 Unread messages:', this.unreadMessageCount);
+        } else {
+          // Widget is open, update last read count
+          this.lastReadMessageCount = messages.length;
+        }
+      }
       
       // Clear screenshot timeout if we received an assistant response
       const lastMessage = messages[messages.length - 1];
@@ -2204,6 +2223,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   onTeacherClosed() {
     console.log('[LessonView] Teacher widget minimized');
     this.teacherWidgetHidden = true;
+    // Update last read count when widget is closed
+    this.lastReadMessageCount = this.chatMessages.length;
   }
 
   /**
@@ -2550,6 +2571,25 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // Add message to parent's chatMessages array
     this.chatMessages = [...this.chatMessages, chatMessage];
     console.log('[LessonView] ✅ Message added from widget:', message.content.substring(0, 50));
+    
+    // Track unread messages (messages received while widget is minimized/closed)
+    if (this.teacherWidgetHidden || (this.teacherWidget && this.teacherWidget.isMinimized)) {
+      this.unreadMessageCount++;
+      console.log('[LessonView] 📬 Unread messages:', this.unreadMessageCount);
+    } else {
+      // Widget is open, update last read count
+      this.lastReadMessageCount = this.chatMessages.length;
+    }
+  }
+
+  /**
+   * Handle widget opened event (from widget's restore/openWidget methods)
+   */
+  onWidgetOpened() {
+    // Reset unread count when widget is opened
+    this.unreadMessageCount = 0;
+    this.lastReadMessageCount = this.chatMessages.length;
+    console.log('[LessonView] ✅ Widget opened - unread count reset');
   }
 
   /**
@@ -2557,6 +2597,12 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    */
   toggleTeacherWidget() {
     this.teacherWidgetHidden = !this.teacherWidgetHidden;
+    // Reset unread count when opening widget
+    if (!this.teacherWidgetHidden) {
+      this.unreadMessageCount = 0;
+      this.lastReadMessageCount = this.chatMessages.length;
+      console.log('[LessonView] ✅ Widget opened - unread count reset');
+    }
   }
 
   /**
@@ -2874,6 +2920,9 @@ ${jsCode}
     console.log('[LessonView] Playing teacher script:', script.text.substring(0, 50) + '...');
     this.currentTeacherScript = script;
     this.teacherWidgetHidden = false; // Auto-show when script plays
+    // Reset unread count when widget is auto-shown
+    this.unreadMessageCount = 0;
+    this.lastReadMessageCount = this.chatMessages.length;
     
     // Use scriptBlock parameter if provided, otherwise use script object itself
     const block = scriptBlock || script;
@@ -2911,7 +2960,10 @@ ${jsCode}
     // Open chat UI if configured
     if ((block.openChatUI || (script as any).openChatUI) && this.teacherWidget) {
       this.teacherWidget.openWidget();
-      console.log('[LessonView] ✅ Opening chat UI');
+      // Reset unread count when chat UI is opened
+      this.unreadMessageCount = 0;
+      this.lastReadMessageCount = this.chatMessages.length;
+      console.log('[LessonView] ✅ Opening chat UI - unread count reset');
     }
     
     // Minimize chat UI if configured
