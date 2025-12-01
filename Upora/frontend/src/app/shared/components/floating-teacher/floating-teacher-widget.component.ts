@@ -206,7 +206,7 @@ export interface ChatMessage {
     .teacher-card {
       width: 400px;
       max-width: calc(100vw - 4rem);
-      max-height: calc(100vh - 4rem);
+      max-height: calc(100vh - 6rem);
       background: #000000;
       border: 2px solid #ff3b3f;
       border-radius: 16px;

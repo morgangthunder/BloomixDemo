@@ -8,7 +8,7 @@ import { environment } from './environments/environment';
 // ========================================
 // Version is read from package.json at build time
 // This will be replaced by the build process or read dynamically
-const FRONTEND_VERSION = '0.1.56'; // Fixed chat UI height constraints to prevent input field being pushed off screen
+const FRONTEND_VERSION = '0.1.57'; // Reduced chat window max-height and auto-load first sub-stage on stage expand
 const CACHE_BUST_ID = `v${FRONTEND_VERSION}-${Math.random().toString(36).substr(2, 9)}`;
 console.log('');
 console.log('═══════════════════════════════════════════════════════════');

@@ -1462,10 +1462,19 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   }
 
   toggleStage(stageId: number) {
-    if (this.expandedStages.has(stageId)) {
+    const wasExpanded = this.expandedStages.has(stageId);
+    
+    if (wasExpanded) {
       this.expandedStages.delete(stageId);
     } else {
       this.expandedStages.add(stageId);
+      
+      // If expanding, load the first sub-stage of this stage
+      const stage = this.lessonStages.find(s => s.id === stageId);
+      if (stage && stage.subStages && stage.subStages.length > 0) {
+        const firstSubStage = stage.subStages[0];
+        this.selectSubStage(stageId, firstSubStage.id);
+      }
     }
   }
 
