@@ -97,8 +97,14 @@ const createIframeAISDK = () => {
     minimizeChatUI: () => {
       sendMessage("ai-sdk-minimize-chat-ui", {});
     },
+    showChatUI: () => {
+      sendMessage("ai-sdk-show-chat-ui", {});
+    },
     activateFullscreen: () => {
       sendMessage("ai-sdk-activate-fullscreen", {});
+    },
+    deactivateFullscreen: () => {
+      sendMessage("ai-sdk-deactivate-fullscreen", {});
     },
     postToChat: (content, role = "assistant", openChat = false) => {
       sendMessage("ai-sdk-post-to-chat", { content, role, openChat });
@@ -106,8 +112,8 @@ const createIframeAISDK = () => {
     showScript: (text, openChat = false) => {
       sendMessage("ai-sdk-show-script", { text, openChat });
     },
-    showSnack: (content, duration, callback) => {
-      sendMessage("ai-sdk-show-snack", { content, duration }, (response) => {
+    showSnack: (content, duration, hideFromChatUI, callback) => {
+      sendMessage("ai-sdk-show-snack", { content, duration, hideFromChatUI: hideFromChatUI || false }, (response) => {
         if (callback && response.snackId) {
           callback(response.snackId);
         }
@@ -218,39 +224,37 @@ function initTestApp() {
   const isPreviewMode = !window.parent || window.parent === window || 
     (window.parent.location && window.parent.location.href.includes('blob:'));
 
-  if (isPreviewMode) {
-    // In preview mode, SDK won't be ready, so just mark it as ready for UI purposes
-    console.log("[SDK Test] Preview mode detected - SDK features will be limited");
-    sdkReady = true;
-    updateStatus("Preview Mode - SDK features limited (full functionality in lesson view)", 0xffff00);
-  } else {
-    // In lesson view, wait for SDK to be ready
-    aiSDK.isReady((ready) => {
-      sdkReady = ready;
-      updateStatus("SDK Ready: " + ready, ready ? 0x00ff00 : 0xff0000);
-    });
+  // Note: SDK ready callbacks will be set up after buttons are created
+  // so that updateStatus can properly display messages
 
-    // Subscribe to AI responses
-    aiSDK.onResponse((response) => {
-      updateStatus("AI Response: " + (response.response || "No text"), 0x00d4ff);
-      console.log("AI Response:", response);
-    });
-  }
-
-  // UI Elements
-  const statusText = new PIXI.Text("Initializing...", {
-    fontSize: 16,
-    fill: 0xffffff,
-    wordWrap: true,
-    wordWrapWidth: window.innerWidth - 40,
-  });
-  statusText.x = 20;
-  statusText.y = 20;
-  app.stage.addChild(statusText);
+  // Status text will be positioned below all buttons
+  let statusText = null;
+  let statusYPos = 0;
+  let statusTextInitialized = false;
 
   function updateStatus(message, color = 0xffffff) {
-    statusText.text = message;
-    statusText.style.fill = color;
+    if (!statusTextInitialized) {
+      // Don't create status text until statusYPos is set (after all buttons)
+      // Just log for now
+      console.log("[SDK Test] " + message);
+      return;
+    }
+    
+    if (!statusText) {
+      // Create status text after buttons are created
+      statusText = new PIXI.Text(message, {
+        fontSize: 14,
+        fill: color,
+        wordWrap: true,
+        wordWrapWidth: window.innerWidth - 40,
+      });
+      statusText.x = 20;
+      statusText.y = statusYPos;
+      app.stage.addChild(statusText);
+    } else {
+      statusText.text = message;
+      statusText.style.fill = color;
+    }
     console.log("[SDK Test] " + message);
   }
 
@@ -360,24 +364,42 @@ function initTestApp() {
     updateStatus("Chat UI minimized", 0x00ff00);
   });
 
+  createButton("Show Chat UI", () => {
+    aiSDK.showChatUI();
+    updateStatus("Chat UI shown", 0x00ff00);
+  });
+
   createButton("Activate Fullscreen", () => {
     aiSDK.activateFullscreen();
     updateStatus("Fullscreen activated", 0x00ff00);
   });
 
+  createButton("Deactivate Fullscreen", () => {
+    aiSDK.deactivateFullscreen();
+    updateStatus("Fullscreen deactivated", 0x00ff00);
+  });
+
   createButton("Post to Chat", () => {
-    aiSDK.postToChat("Test message from SDK Test interaction!", "assistant", false);
-    updateStatus("Posted to chat", 0x00ff00);
+    const testMessage = "Test message from SDK Test interaction! This is a dummy message to test the postToChat functionality.";
+    aiSDK.postToChat(testMessage, "assistant", true);
+    updateStatus("Posted to chat: " + testMessage.substring(0, 30) + "...", 0x00ff00);
   });
 
   createButton("Show Script", () => {
-    aiSDK.showScript("This is a test script block from the SDK Test interaction.", false);
-    updateStatus("Script shown", 0x00ff00);
+    const testScript = "This is a test script block from the SDK Test interaction. It demonstrates the showScript functionality.";
+    aiSDK.showScript(testScript, true);
+    updateStatus("Script shown: " + testScript.substring(0, 30) + "...", 0x00ff00);
   });
 
   createButton("Show Snack (5s)", () => {
-    aiSDK.showSnack("Test snack message!", 5000, (snackId) => {
+    aiSDK.showSnack("Test snack message! (also posts to chat)", 5000, false, (snackId) => {
       updateStatus("Snack shown: " + snackId, 0x00ff00);
+    });
+  });
+
+  createButton("Show Snack (no chat)", () => {
+    aiSDK.showSnack("Test snack message! (hidden from chat)", 5000, true, (snackId) => {
+      updateStatus("Snack shown (no chat): " + snackId, 0x00ff00);
     });
   });
 
@@ -495,25 +517,46 @@ function initTestApp() {
     });
   });
 
+  // Position status text below all buttons
+  statusYPos = yPos + 20;
+  statusTextInitialized = true; // Now allow status text to be created
+  updateStatus("SDK Test Interaction Loaded. Waiting for SDK ready...", 0xffff00);
+
   // Handle window resize
   window.addEventListener("resize", () => {
     const newWidth = Math.max(window.innerWidth, 800);
     const newHeight = Math.max(window.innerHeight, 600);
     app.renderer.resize(newWidth, newHeight);
-    statusText.style.wordWrapWidth = newWidth - 40;
+    if (statusText) {
+      statusText.style.wordWrapWidth = newWidth - 40;
+    }
     console.log("[SDK Test] Resized to:", newWidth, "x", newHeight);
   });
+
+  // Set up SDK ready callbacks now that status text is initialized
+  if (!isPreviewMode) {
+    // In lesson view, wait for SDK to be ready
+    aiSDK.isReady((ready) => {
+      sdkReady = ready;
+      updateStatus("SDK Ready: " + ready, ready ? 0x00ff00 : 0xff0000);
+    });
+
+    // Subscribe to AI responses
+    aiSDK.onResponse((response) => {
+      updateStatus("AI Response: " + (response.response || "No text"), 0x00d4ff);
+      console.log("AI Response:", response);
+    });
+  } else {
+    // In preview mode, SDK won't be ready, so just mark it as ready for UI purposes
+    console.log("[SDK Test] Preview mode detected - SDK features will be limited");
+    sdkReady = true;
+    updateStatus("Preview Mode - SDK features limited (full functionality in lesson view)", 0xffff00);
+  }
 
   // Force initial render
   app.render();
   console.log("[SDK Test] Total buttons created, final yPos:", yPos);
   console.log("[SDK Test] App stage children count:", app.stage.children.length);
-  
-  if (!isPreviewMode) {
-    updateStatus("SDK Test Interaction Loaded. Waiting for SDK ready...", 0xffff00);
-  } else {
-    updateStatus("SDK Test Interaction Loaded (Preview Mode - buttons may not work)", 0x00d4ff);
-  }
   
   // Log all created elements for debugging
   setTimeout(() => {

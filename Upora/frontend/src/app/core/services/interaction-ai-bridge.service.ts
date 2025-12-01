@@ -131,10 +131,26 @@ export class InteractionAIBridgeService {
         });
         break;
 
+      case 'ai-sdk-show-chat-ui':
+        this.aiSDK.showChatUI();
+        this.sendToIframe(sourceWindow, {
+          type: 'ai-sdk-show-chat-ui-ack',
+          requestId: message.requestId,
+        });
+        break;
+
       case 'ai-sdk-activate-fullscreen':
         this.aiSDK.activateFullscreen();
         this.sendToIframe(sourceWindow, {
           type: 'ai-sdk-activate-fullscreen-ack',
+          requestId: message.requestId,
+        });
+        break;
+
+      case 'ai-sdk-deactivate-fullscreen':
+        this.aiSDK.deactivateFullscreen();
+        this.sendToIframe(sourceWindow, {
+          type: 'ai-sdk-deactivate-fullscreen-ack',
           requestId: message.requestId,
         });
         break;
@@ -156,7 +172,7 @@ export class InteractionAIBridgeService {
         break;
 
       case 'ai-sdk-show-snack':
-        const snackId = this.aiSDK.showSnack(message.content, message.duration);
+        const snackId = this.aiSDK.showSnack(message.content, message.duration, message.hideFromChatUI || false);
         this.sendToIframe(sourceWindow, {
           type: 'ai-sdk-show-snack-ack',
           snackId,
@@ -420,8 +436,16 @@ export const createIframeAISDK = () => {
       sendMessage('ai-sdk-minimize-chat-ui', {});
     },
 
+    showChatUI: () => {
+      sendMessage('ai-sdk-show-chat-ui', {});
+    },
+
     activateFullscreen: () => {
       sendMessage('ai-sdk-activate-fullscreen', {});
+    },
+
+    deactivateFullscreen: () => {
+      sendMessage('ai-sdk-deactivate-fullscreen', {});
     },
 
     postToChat: (content: string, role: 'user' | 'assistant' | 'error' = 'assistant', openChat: boolean = false) => {
@@ -432,8 +456,8 @@ export const createIframeAISDK = () => {
       sendMessage('ai-sdk-show-script', { text, openChat });
     },
 
-    showSnack: (content: string, duration?: number, callback?: (snackId: string) => void) => {
-      sendMessage('ai-sdk-show-snack', { content, duration }, (response) => {
+    showSnack: (content: string, duration?: number, hideFromChatUI: boolean = false, callback?: (snackId: string) => void) => {
+      sendMessage('ai-sdk-show-snack', { content, duration, hideFromChatUI }, (response) => {
         if (callback && response.snackId) {
           callback(response.snackId);
         }

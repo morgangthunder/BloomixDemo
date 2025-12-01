@@ -491,6 +491,14 @@ interface ChatMessage {
                   <div class="section-header">
                     <h3>Sample Data</h3>
                     <p class="hint">Provide sample JSON data to test your interaction in the Preview tab</p>
+                    <div *ngIf="currentInteraction?.interactionTypeCategory === 'pixijs' || currentInteraction?.interactionTypeCategory === 'html'" class="info-box" style="background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.3); border-radius: 8px; padding: 12px; margin-top: 12px;">
+                      <p style="margin: 0; color: #00d4ff; font-size: 13px;">
+                        <strong>📋 Sample Data Purpose:</strong> This sample data is used for testing your interaction in the Preview tab and defines the format that content analysis LLM prompts will use to construct input for interaction instances. 
+                        <br><br>
+                        <strong>📋 Processed Content in Lessons:</strong> When a lesson-builder adds processed content to a substage, that processed content will <strong>replace</strong> this sample data in actual lesson instances. 
+                        The processed content should be a JSON object in the same format as this sample data, accessible via <code>window.interactionData</code> in your interaction code.
+                      </p>
+                    </div>
                   </div>
 
                 <div class="form-group">
@@ -501,7 +509,7 @@ interface ChatMessage {
                             rows="20"
                             placeholder="Example JSON data for testing"
                             spellcheck="false"></textarea>
-                  <small class="hint">This data will be passed to your interaction for testing</small>
+                  <small class="hint">This data is used for testing in the Preview tab and defines the format for content analysis LLM prompts. In actual lesson instances, processed content (if present) will replace this sample data.</small>
                 </div>
 
                 <div *ngIf="sampleDataError" class="error-message">
@@ -3209,9 +3217,14 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
       return this.sanitizer.bypassSecurityTrustResourceUrl('about:blank');
     }
 
-    // Always create a new blob URL to ensure fresh content (don't reuse)
-    // Clean up old blob URL if it exists
-    if (this.currentBlobUrl) {
+    // Check if we already have a cached blob URL for the current preview key
+    if (this.currentBlobUrl && this.currentBlobUrlKey === this.previewKey) {
+      // Reuse existing blob URL to prevent flickering
+      return this.currentBlobUrl;
+    }
+
+    // Clean up old blob URL if it exists and key has changed
+    if (this.currentBlobUrl && this.currentBlobUrlKey !== this.previewKey) {
       const oldUrl = (this.currentBlobUrl as any).changingThisBreaksApplicationSecurity;
       if (oldUrl && oldUrl.startsWith('blob:')) {
         URL.revokeObjectURL(oldUrl);

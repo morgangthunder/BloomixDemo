@@ -5,6 +5,7 @@ import { Router, ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { IonContent } from '@ionic/angular/standalone';
 import { HttpClient } from '@angular/common/http';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { LessonService } from '../../core/services/lesson.service';
 import { WebSocketService, ChatMessage } from '../../core/services/websocket.service';
 import { ScreenshotStorageService } from '../../core/services/screenshot-storage.service';
@@ -17,7 +18,7 @@ import { Lesson, Stage, SubStage } from '../../core/models/lesson.model';
 import { environment } from '../../../environments/environment';
 import { DEFAULT_LESSON_ID, isDefaultLessonId } from '../../core/constants/default-lesson-id';
 import { TrueFalseSelectionComponent } from '../interactions/true-false-selection/true-false-selection.component';
-import { FloatingTeacherWidgetComponent, ScriptBlock } from '../../shared/components/floating-teacher/floating-teacher-widget.component';
+import { FloatingTeacherWidgetComponent, ScriptBlock, ChatMessage as WidgetChatMessage } from '../../shared/components/floating-teacher/floating-teacher-widget.component';
 import { SnackMessageComponent } from '../../shared/components/snack-message/snack-message.component';
 
 @Component({
@@ -181,6 +182,27 @@ import { SnackMessageComponent } from '../../shared/components/snack-message/sna
               </app-true-false-selection>
             </div>
 
+            <!-- PixiJS/HTML/iframe Interactions -->
+            <div *ngIf="!isLoadingInteraction && interactionBuild && interactionBlobUrl && !interactionError" class="interaction-build-container">
+              <iframe 
+                #interactionIframe
+                [src]="interactionBlobUrl" 
+                [attr.data-key]="interactionPreviewKey"
+                class="interaction-iframe"
+                frameborder="0"
+                sandbox="allow-scripts allow-same-origin"
+                (load)="onInteractionIframeLoad()"
+                style="width: 100%; min-height: 600px; border: none;"></iframe>
+            </div>
+
+            <!-- Error message for missing/invalid processed content -->
+            <div *ngIf="!isLoadingInteraction && interactionError" class="bg-red-900/20 border-2 border-red-500 rounded-lg p-8 text-center">
+              <div class="text-red-400 text-2xl mb-4">⚠️</div>
+              <h3 class="text-red-400 text-xl font-bold mb-2">Interaction Data Error</h3>
+              <p class="text-red-300">{{ interactionError }}</p>
+              <p class="text-red-200 text-sm mt-4">Please contact the lesson creator or administrator to fix this issue.</p>
+            </div>
+
             <!-- Score Display (after completion) -->
             <div *ngIf="interactionScore !== null" class="mt-6 bg-brand-black rounded-lg p-6">
               <div class="flex items-center justify-between">
@@ -220,7 +242,7 @@ import { SnackMessageComponent } from '../../shared/components/snack-message/sna
             </div>
 
             <!-- Fallback for no interaction data -->
-            <div *ngIf="!isLoadingInteraction && !interactionData && !getEmbeddedInteraction()" class="bg-brand-black rounded-lg aspect-video flex items-center justify-center text-brand-gray">
+            <div *ngIf="!isLoadingInteraction && !interactionData && !getEmbeddedInteraction() && !interactionBuild" class="bg-brand-black rounded-lg aspect-video flex items-center justify-center text-brand-gray">
               <div class="text-center">
                 <p class="text-xl mb-4">Content for "{{ activeSubStage.title }}"</p>
                 <p class="text-sm text-gray-500">{{ activeSubStage.title }}</p>
@@ -349,7 +371,8 @@ import { SnackMessageComponent } from '../../shared/components/snack-message/sna
         (closed)="onTeacherClosed()"
         (scriptClosed)="onScriptClosed()"
         (sendChat)="sendChatMessage($event)"
-        (raiseHandClicked)="raiseHand()">
+        (raiseHandClicked)="raiseHand()"
+        (messageAdded)="onWidgetMessageAdded($event)">
       </app-floating-teacher-widget>
 
       <!-- Snack Message Component -->
@@ -919,10 +942,17 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   normalizedEmbeddedInteractionData: any = null;
   isLoadingInteraction = false;
   
+  // Interaction build (for PixiJS/HTML/iframe interactions)
+  interactionBuild: any = null;
+  interactionBlobUrl: SafeResourceUrl | null = null;
+  interactionPreviewKey = 0;
+  interactionError: string | null = null;
+  
   private destroy$ = new Subject<void>();
   private processedOutputsCache = new Map<string, any[]>();
   
   @ViewChild('teacherWidget') teacherWidget?: FloatingTeacherWidgetComponent;
+  @ViewChild('interactionIframe', { static: false }) interactionIframe?: any;
 
   constructor(
     private lessonService: LessonService,
@@ -933,7 +963,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     private screenshotStorage: ScreenshotStorageService,
     private interactionAISDK: InteractionAISDK,
     private bridgeService: InteractionAIBridgeService,
-    private snackService: SnackMessageService
+    private snackService: SnackMessageService,
+    private sanitizer: DomSanitizer
   ) {}
 
   ngOnInit() {
@@ -1058,6 +1089,71 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // Setup mouse listeners for resize
     window.addEventListener('mousemove', this.handleMouseMove.bind(this));
     window.addEventListener('mouseup', this.handleMouseUp.bind(this));
+    
+    // Listen for fullscreen requests from interactions
+    window.addEventListener('interaction-request-fullscreen', this.handleInteractionFullscreenRequest.bind(this) as EventListener);
+  }
+  
+  /**
+   * Handle fullscreen request from interaction SDK
+   */
+  private handleInteractionFullscreenRequest(event: Event) {
+    const customEvent = event as CustomEvent;
+    const action = customEvent.detail?.action || 'activate';
+    console.log('[LessonView] Fullscreen requested by interaction SDK, action:', action);
+    
+    if (action === 'deactivate') {
+      if (this.isFullscreen) {
+        this.toggleFullscreen();
+      }
+    } else {
+      // activate (default)
+      if (!this.isFullscreen) {
+        this.toggleFullscreen();
+      }
+    }
+  }
+  
+  /**
+   * Handle iframe load event
+   */
+  onInteractionIframeLoad() {
+    console.log('[LessonView] Interaction iframe loaded');
+    
+    // Check if config has "goFullscreenOnLoad" option
+    const config = (this.activeSubStage as any)?.interaction?.config || {};
+    if (config.goFullscreenOnLoad === true && !this.isFullscreen) {
+      console.log('[LessonView] Config requests fullscreen on load');
+      setTimeout(() => {
+        this.toggleFullscreen();
+      }, 300); // Small delay to ensure iframe is fully rendered
+    }
+    
+    // Send SDK ready message after iframe is loaded
+    setTimeout(() => {
+      this.sendSDKReadyToIframe();
+    }, 100);
+  }
+  
+  /**
+   * Send SDK ready message to iframe after it's loaded
+   */
+  private sendSDKReadyToIframe() {
+    const iframes = document.querySelectorAll('iframe.interaction-iframe');
+    iframes.forEach((iframe) => {
+      const htmlIframe = iframe as HTMLIFrameElement;
+      if (htmlIframe.contentWindow) {
+        const interaction = this.activeSubStage?.interaction || (this.activeSubStage as any)?.interactionType;
+        const interactionId = interaction?.type || interaction?.id || interaction;
+        htmlIframe.contentWindow.postMessage({
+          type: 'ai-sdk-ready',
+          lessonId: this.lesson?.id,
+          substageId: String(this.activeSubStageId),
+          interactionId: interactionId
+        }, '*');
+        console.log('[LessonView] ✅ Sent SDK ready message to iframe');
+      }
+    });
   }
 
   /**
@@ -1308,6 +1404,17 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // It will be cleared when needed or replaced by the next screenshot
     
     console.log('[LessonView] ✅ Screenshot state cleared');
+    
+    // Clean up interaction blob URL
+    if (this.interactionBlobUrl) {
+      const url = (this.interactionBlobUrl as any).changingThisBreaksApplicationSecurity;
+      if (url && url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+        console.log('[LessonView] ✅ Revoked interaction blob URL');
+      }
+      this.interactionBlobUrl = null;
+    }
+    
     // Clean up fullscreen class
     document.body.classList.remove('fullscreen-active');
     
@@ -1330,6 +1437,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
     window.removeEventListener('mousemove', this.handleMouseMove.bind(this));
     window.removeEventListener('mouseup', this.handleMouseUp.bind(this));
+    window.removeEventListener('interaction-request-fullscreen', this.handleInteractionFullscreenRequest.bind(this) as EventListener);
   }
 
   toggleStage(stageId: number) {
@@ -1633,10 +1741,97 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     this.interactionScore = null;
     this.normalizedInteractionData = null;
     this.normalizedEmbeddedInteractionData = null;
+    this.interactionBuild = null;
+    this.interactionBlobUrl = null;
+    this.interactionError = null;
     
     const subStage = this.activeSubStage;
     if (!subStage) {
       console.warn('[LessonView] No active sub-stage to load interaction data for');
+      return;
+    }
+
+    // Get interaction type from sub-stage
+    const interaction = subStage.interaction || (subStage as any).interactionType;
+    const interactionTypeId = interaction?.type || interaction?.id || interaction;
+    
+    // Check if this is a PixiJS/HTML/iframe interaction (not true-false-selection)
+    // These interactions use builds, but can also use processed outputs
+    if (interactionTypeId && interactionTypeId !== 'true-false-selection') {
+      console.log('[LessonView] Loading interaction build for type:', interactionTypeId);
+      this.isLoadingInteraction = true;
+      
+      // Fetch interaction build from API
+      this.http.get(`${environment.apiUrl}/interaction-types/${interactionTypeId}`)
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: (build: any) => {
+            console.log('[LessonView] ✅ Loaded interaction build:', build.id);
+            this.interactionBuild = build;
+            
+            // Check for processed output (PixiJS/HTML interactions can use processed outputs, but it's optional)
+            const processedContentId = this.normalizeContentOutputId(
+              subStage.contentOutputId || (subStage.interaction as any)?.contentOutputId
+            );
+            
+            if (!processedContentId) {
+              // No processed content - use sample data (no error, interactions can work without processed content)
+              console.log('[LessonView] ℹ️ No processed content found, using sample data from interaction build');
+              this.interactionPreviewKey++; // Force iframe recreation
+              this.createInteractionBlobUrl();
+              this.isLoadingInteraction = false;
+              
+              // Send SDK ready message after iframe is created
+              setTimeout(() => {
+                this.sendSDKReadyToIframe();
+              }, 500);
+              return;
+            }
+            
+            // Processed content ID exists - fetch it (if it fails, show error since it was expected)
+            this.http.get(`${environment.apiUrl}/lesson-editor/processed-outputs/${processedContentId}`)
+              .pipe(takeUntil(this.destroy$))
+              .subscribe({
+                next: (output: any) => {
+                  console.log('[LessonView] ✅ Loaded processed output for interaction:', processedContentId);
+                  
+                  // Validate processed output has data
+                  const processedData = output.outputData;
+                  if (!processedData || typeof processedData !== 'object' || Object.keys(processedData).length === 0) {
+                    console.error('[LessonView] ❌ Processed output has no data or invalid format');
+                    this.interactionError = 'The processed content for this interaction is empty or invalid. The processed content must be a valid JSON object with data. Please regenerate the processed content from the content source.';
+                    this.isLoadingInteraction = false;
+                    return;
+                  }
+                  
+                  // Use processed content (replace sample data)
+                  this.interactionBuild = { ...build, sampleData: processedData };
+                  this.interactionPreviewKey++; // Force iframe recreation
+                  this.createInteractionBlobUrl();
+                  this.isLoadingInteraction = false;
+                  
+                  // Send SDK ready message after iframe is created
+                  setTimeout(() => {
+                    this.sendSDKReadyToIframe();
+                  }, 500);
+                },
+                error: (error) => {
+                  console.error('[LessonView] ❌ Failed to load processed output:', error);
+                  // Only show error if processed content was expected (contentOutputId was set)
+                  if (error.status === 404) {
+                    this.interactionError = 'Processed content not found. A processed content ID was associated with this interaction, but the content could not be found. Please ensure processed content has been generated and is correctly associated with this substage.';
+                  } else {
+                    this.interactionError = `Failed to load processed content: ${error.message || 'Unknown error'}. Please check the processed content configuration.`;
+                  }
+                  this.isLoadingInteraction = false;
+                }
+              });
+          },
+          error: (error) => {
+            console.error('[LessonView] ❌ Failed to load interaction build:', error);
+            this.isLoadingInteraction = false;
+          }
+        });
       return;
     }
 
@@ -2260,6 +2455,22 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Handle message added from widget (when SDK calls postToChat)
+   */
+  onWidgetMessageAdded(message: WidgetChatMessage) {
+    // Convert widget's ChatMessage (optional timestamp) to websocket's ChatMessage (required timestamp)
+    const chatMessage: ChatMessage = {
+      role: message.role,
+      content: message.content,
+      timestamp: message.timestamp || new Date(),
+      isError: message.isError
+    };
+    // Add message to parent's chatMessages array
+    this.chatMessages = [...this.chatMessages, chatMessage];
+    console.log('[LessonView] ✅ Message added from widget:', message.content.substring(0, 50));
+  }
+
+  /**
    * Toggle teacher widget visibility
    */
   toggleTeacherWidget() {
@@ -2410,6 +2621,121 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  /**
+   * Create blob URL for interaction build (PixiJS/HTML/iframe)
+   */
+  private createInteractionBlobUrl() {
+    if (!this.interactionBuild) {
+      this.interactionBlobUrl = null;
+      return;
+    }
+
+    // Clean up old blob URL if it exists
+    if (this.interactionBlobUrl) {
+      const oldUrl = (this.interactionBlobUrl as any).changingThisBreaksApplicationSecurity;
+      if (oldUrl && oldUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(oldUrl);
+      }
+    }
+
+    // Get interaction config from sub-stage (lesson-builder configured values)
+    const config = (this.activeSubStage as any)?.interaction?.config || {};
+    const sampleData = this.interactionBuild.sampleData || {};
+
+    // Create HTML document
+    const htmlDoc = this.createInteractionHtmlDoc(this.interactionBuild, config, sampleData);
+    
+    // Create blob URL
+    const blob = new Blob([htmlDoc], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    this.interactionBlobUrl = this.sanitizer.bypassSecurityTrustResourceUrl(url);
+    
+    console.log('[LessonView] ✅ Created blob URL for interaction:', this.interactionBuild.id);
+  }
+
+  /**
+   * Create HTML document for interaction build
+   */
+  private createInteractionHtmlDoc(build: any, config: any, sampleData: any): string {
+    const category = build.interactionTypeCategory;
+    
+    if (category === 'iframe') {
+      // For iframe interactions, return a simple HTML that loads the iframe URL
+      const iframeUrl = build.iframeUrl || sampleData.url || '';
+      return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { margin: 0; padding: 0; overflow: hidden; }
+    iframe { width: 100%; height: 100vh; border: none; }
+  </style>
+</head>
+<body>
+  <iframe src="${iframeUrl}" frameborder="0" allowfullscreen></iframe>
+</body>
+</html>`;
+    }
+
+    // For HTML and PixiJS interactions, create full HTML document
+    const htmlCode = (build.htmlCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
+    const cssCode = (build.cssCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
+    let jsCode = (build.jsCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
+    
+    // Inject interaction data and config
+    const sampleDataJson = JSON.stringify(sampleData);
+    const configJson = JSON.stringify(config);
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { margin: 0; padding: 0; }
+${cssCode}
+  </style>
+</head>
+<body>
+${htmlCode}
+  <script type="text/javascript">
+    (function() {
+      try {
+        var dataStr = ${JSON.stringify(sampleDataJson)};
+        var configStr = ${JSON.stringify(configJson)};
+        window.interactionData = JSON.parse(dataStr);
+        window.interactionConfig = JSON.parse(configStr);
+        console.log("[Interaction] Data injected:", window.interactionData);
+        console.log("[Interaction] Config injected:", window.interactionConfig);
+      } catch (e) {
+        console.error("[Interaction] Error setting data:", e);
+        window.interactionData = {};
+        window.interactionConfig = {};
+      }
+    })();
+  </script>
+  <script type="text/javascript">
+    try {
+      if (!window.interactionData) {
+        console.error("[Interaction] ERROR: window.interactionData is not set!");
+        document.body.innerHTML = '<div style="padding: 20px; color: red;"><h3>Error: Interaction data not available</h3></div>';
+      } else {
+        console.log("[Interaction] About to run JS code");
+${jsCode}
+      }
+    } catch (e) {
+      console.error("[Interaction] Error in script:", e);
+      var errorDiv = document.createElement("div");
+      errorDiv.style.cssText = "padding: 20px; color: red; background: #1a1a1a; border: 2px solid red; margin: 20px;";
+      errorDiv.innerHTML = "<h3>Error in interaction code:</h3><pre style=\\"white-space: pre-wrap;\\">" + e.name + ": " + e.message + "\\n\\n" + (e.stack || "") + "</pre>";
+      document.body.appendChild(errorDiv);
+    }
+  </script>
+</body>
+</html>`;
   }
 
   /**

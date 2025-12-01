@@ -30,8 +30,8 @@ console.log('SDK Test Interaction - Please copy full code from sdk-test-pixijs-f
         '<div id="pixi-container"></div>',
         'body { margin: 0; padding: 0; background: #0f0f23; overflow: hidden; } #pixi-container { width: 100vw; height: 100vh; }',
         $1,
-        '{"fields": []}',
-        '{}',
+        '{"fields": [{"key": "goFullscreenOnLoad", "type": "boolean", "label": "Go to fullscreen on load", "default": false, "description": "Automatically activate fullscreen mode when the interaction loads"}]}',
+        '{"message": "Sample data for SDK test interaction. When using processed content, the processed output data will be merged with this sample data.", "processedContentFormat": "Processed content should be a JSON object that will be merged with the sample data. Common fields include: data, content, metadata, etc."}',
         '{"fields": [{"name": "testValue", "type": "number", "required": false, "description": "Test numeric value"}, {"name": "timestamp", "type": "number", "required": false, "description": "Timestamp of test"}, {"name": "testArray", "type": "array", "required": false, "description": "Test array"}]}',
         '{"customFields": [{"name": "testField", "type": "string", "required": false, "description": "Test string field"}, {"name": "testNumber", "type": "number", "required": false, "description": "Test number field"}]}',
         true

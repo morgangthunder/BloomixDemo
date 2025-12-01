@@ -610,6 +610,7 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy, Aft
   @Output() sendChat = new EventEmitter<string>();
   @Output() raiseHandClicked = new EventEmitter<void>();
   @Output() scriptClosed = new EventEmitter<void>();
+  @Output() messageAdded = new EventEmitter<ChatMessage>();
 
   // Public methods for programmatic control
   /**
@@ -621,7 +622,10 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy, Aft
       content,
       timestamp: new Date(),
     };
+    // Update local array
     this.chatMessages = [...this.chatMessages, message];
+    // Emit event to parent so it can update its own array
+    this.messageAdded.emit(message);
     this.scrollToBottom();
   }
 

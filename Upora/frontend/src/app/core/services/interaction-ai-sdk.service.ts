@@ -77,6 +77,9 @@ export interface PublicProfile {
   sharePreferences: boolean;
 }
 
+@Injectable({
+  providedIn: 'root',
+})
 export class InteractionAISDK {
   private snackService = inject(SnackMessageService);
   private http = inject(HttpClient);
@@ -196,16 +199,39 @@ export class InteractionAISDK {
   }
 
   /**
+   * Show/restore the chat UI (if minimized or hidden)
+   */
+  showChatUI(): void {
+    if (this.teacherWidgetRef) {
+      this.teacherWidgetRef.openWidget();
+      console.log('[InteractionAISDK] ✅ Showed chat UI');
+    } else {
+      console.warn('[InteractionAISDK] ⚠️ Teacher widget reference not available');
+    }
+  }
+
+  /**
    * Activate fullscreen mode
    */
   activateFullscreen(): void {
     // Access the lesson view component through a service or event
     // For now, we'll use a custom event that the lesson view can listen to
     const event = new CustomEvent('interaction-request-fullscreen', {
-      detail: { source: 'interaction-sdk' }
+      detail: { source: 'interaction-sdk', action: 'activate' }
     });
     window.dispatchEvent(event);
     console.log('[InteractionAISDK] ✅ Dispatched fullscreen activation event');
+  }
+
+  /**
+   * Deactivate fullscreen mode
+   */
+  deactivateFullscreen(): void {
+    const event = new CustomEvent('interaction-request-fullscreen', {
+      detail: { source: 'interaction-sdk', action: 'deactivate' }
+    });
+    window.dispatchEvent(event);
+    console.log('[InteractionAISDK] ✅ Dispatched fullscreen deactivation event');
   }
 
   /**
@@ -219,9 +245,12 @@ export class InteractionAISDK {
       if (openChat) {
         this.teacherWidgetRef.openWidget();
       }
+      // Use addChatMessage which will update the widget's chatMessages
+      // Note: This modifies the @Input() array, which should work since we create a new array
       this.teacherWidgetRef.addChatMessage(content, role);
+      console.log('[InteractionAISDK] ✅ Posted message to chat:', content.substring(0, 50));
     } else {
-      console.warn('[InteractionAISDK] Teacher widget reference not set, cannot post to chat');
+      console.warn('[InteractionAISDK] ⚠️ Teacher widget reference not set, cannot post to chat');
     }
   }
 
@@ -245,9 +274,17 @@ export class InteractionAISDK {
    * Show a snack message (temporary notification)
    * @param content Message text
    * @param duration Duration in milliseconds (undefined = until manually closed or replaced)
+   * @param hideFromChatUI If true, don't post to chat UI (default: false, posts to chat by default)
    */
-  showSnack(content: string, duration?: number): string {
-    return this.snackService.show(content, duration);
+  showSnack(content: string, duration?: number, hideFromChatUI: boolean = false): string {
+    const snackId = this.snackService.show(content, duration);
+    
+    // By default, also post to chat UI unless hideFromChatUI is true
+    if (!hideFromChatUI && this.teacherWidgetRef) {
+      this.postToChat(content, 'assistant', false);
+    }
+    
+    return snackId;
   }
 
   /**

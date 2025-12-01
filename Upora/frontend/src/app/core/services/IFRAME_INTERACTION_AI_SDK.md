@@ -233,12 +233,78 @@ Minimize the AI Teacher chat widget.
 aiSDK.minimizeChatUI();
 ```
 
+### `showChatUI()`
+Show/restore the AI Teacher chat widget (if minimized or hidden).
+
+**Example:**
+```javascript
+aiSDK.showChatUI();
+```
+
 ### `activateFullscreen()`
 Activate fullscreen mode for the lesson view.
 
 **Example:**
 ```javascript
 aiSDK.activateFullscreen();
+```
+
+### `deactivateFullscreen()`
+Deactivate fullscreen mode for the lesson view.
+
+**Example:**
+```javascript
+aiSDK.deactivateFullscreen();
+```
+
+### `postToChat(content, role?, openChat?)`
+Post a message to the AI Teacher chat UI.
+
+**Parameters:**
+- `content` (string): Message text
+- `role` ('user' | 'assistant' | 'error', default: 'assistant'): Message role
+- `openChat` (boolean, default: false): If true, opens/restores the chat widget if minimized
+
+**Example:**
+```javascript
+aiSDK.postToChat("Hello from the interaction!", "assistant", true);
+```
+
+### `showScript(text, openChat?)`
+Show a script block in the teacher widget.
+
+**Parameters:**
+- `text` (string): Script text to display
+- `openChat` (boolean, default: false): If true, opens/restores the chat widget if minimized
+
+**Example:**
+```javascript
+aiSDK.showScript("This is a script block that will be displayed in the teacher widget.", true);
+```
+
+### `showSnack(content, duration?, hideFromChatUI?)`
+Show a snack message (temporary notification). **By default, snack messages are also posted to the chat UI** unless `hideFromChatUI` is set to `true`.
+
+**Parameters:**
+- `content` (string): Message text
+- `duration` (number, optional): Duration in milliseconds (undefined = until manually closed or replaced)
+- `hideFromChatUI` (boolean, default: false): If true, don't post to chat UI (snack only)
+
+**Example:**
+```javascript
+// Show snack that also posts to chat (default behavior)
+aiSDK.showSnack("Great job!", 5000);
+
+// Show snack without posting to chat
+aiSDK.showSnack("Quick notification", 3000, true);
+```
+
+### `hideSnack()`
+Hide the current snack message.
+
+**Example:**
+```javascript
+aiSDK.hideSnack();
 ```
 
 ## Data Storage Methods

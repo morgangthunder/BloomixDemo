@@ -914,10 +914,16 @@ aiSDK.isReady((ready) => {
 - \`aiSDK.onResponse(callback)\` - Receive AI responses
 - \`aiSDK.onAction(type, callback)\` - Handle specific actions
 
+**UI Control Methods:**
+- \`aiSDK.minimizeChatUI()\` - Minimize the chat widget
+- \`aiSDK.showChatUI()\` - Show/restore the chat widget (if minimized)
+- \`aiSDK.activateFullscreen()\` - Activate fullscreen mode
+- \`aiSDK.deactivateFullscreen()\` - Deactivate fullscreen mode
+
 **Display Methods:**
 - \`aiSDK.postToChat(content, role, openChat)\` - Post message to chat UI
 - \`aiSDK.showScript(text, openChat)\` - Display as script block
-- \`aiSDK.showSnack(content, duration)\` - Show snack message (returns message ID)
+- \`aiSDK.showSnack(content, duration, hideFromChatUI)\` - Show snack message (returns message ID). **By default, snack messages are also posted to chat UI** unless \`hideFromChatUI\` is \`true\`
 - \`aiSDK.hideSnack()\` - Hide current snack message
 
 **Standard Events:** \`user-selection\`, \`user-input\`, \`hint-request\`, \`interaction-submit\`, \`interaction-complete\`
@@ -1004,10 +1010,16 @@ aiSDK.isReady((ready) => {
 - \`aiSDK.onResponse(callback)\` - Receive AI responses
 - \`aiSDK.onAction(type, callback)\` - Handle specific actions
 
+**UI Control Methods:**
+- \`aiSDK.minimizeChatUI()\` - Minimize the chat widget
+- \`aiSDK.showChatUI()\` - Show/restore the chat widget (if minimized)
+- \`aiSDK.activateFullscreen()\` - Activate fullscreen mode
+- \`aiSDK.deactivateFullscreen()\` - Deactivate fullscreen mode
+
 **Display Methods:**
 - \`aiSDK.postToChat(content, role, openChat)\` - Post message to chat UI
 - \`aiSDK.showScript(text, openChat)\` - Display as script block
-- \`aiSDK.showSnack(content, duration)\` - Show snack message (returns message ID)
+- \`aiSDK.showSnack(content, duration, hideFromChatUI)\` - Show snack message (returns message ID). **By default, snack messages are also posted to chat UI** unless \`hideFromChatUI\` is \`true\`
 - \`aiSDK.hideSnack()\` - Hide current snack message
 
 **Standard Events:** \`user-selection\`, \`progress-update\`, \`score-change\`, \`interaction-complete\`
@@ -1094,10 +1106,16 @@ aiSDK.isReady((ready) => {
 - \`aiSDK.onResponse(callback)\` - Receive AI responses
 - \`aiSDK.onAction(type, callback)\` - Handle specific actions
 
+**UI Control Methods:**
+- \`aiSDK.minimizeChatUI()\` - Minimize the chat widget
+- \`aiSDK.showChatUI()\` - Show/restore the chat widget (if minimized)
+- \`aiSDK.activateFullscreen()\` - Activate fullscreen mode
+- \`aiSDK.deactivateFullscreen()\` - Deactivate fullscreen mode
+
 **Display Methods:**
 - \`aiSDK.postToChat(content, role, openChat)\` - Post message to chat UI
 - \`aiSDK.showScript(text, openChat)\` - Display as script block
-- \`aiSDK.showSnack(content, duration)\` - Show snack message (returns message ID)
+- \`aiSDK.showSnack(content, duration, hideFromChatUI)\` - Show snack message (returns message ID). **By default, snack messages are also posted to chat UI** unless \`hideFromChatUI\` is \`true\`
 - \`aiSDK.hideSnack()\` - Hide current snack message
 
 **Standard Events:** \`user-selection\`, \`progress-update\`, \`hint-request\`, \`explanation-request\`

@@ -4,7 +4,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 // Read version from package.json
-let BACKEND_VERSION = '0.1.12'; // Default fallback
+let BACKEND_VERSION = '0.1.14'; // Default fallback
 console.log(`🔍 [AppController VERSION DEBUG] __dirname: ${__dirname}`);
 console.log(`🔍 [AppController VERSION DEBUG] process.cwd(): ${process.cwd()}`);
 
