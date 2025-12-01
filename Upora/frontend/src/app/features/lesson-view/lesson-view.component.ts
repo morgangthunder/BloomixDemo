@@ -192,7 +192,7 @@ import { SnackMessageComponent } from '../../shared/components/snack-message/sna
                 frameborder="0"
                 sandbox="allow-scripts allow-same-origin"
                 (load)="onInteractionIframeLoad()"
-                style="width: 100%; min-height: 600px; border: none;"></iframe>
+                style="width: 100%; min-height: 600px; max-height: 90vh; border: none; overflow: auto;"></iframe>
             </div>
 
             <!-- Error message for missing/invalid processed content -->
@@ -2673,7 +2673,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { margin: 0; padding: 0; overflow: hidden; }
+    html, body { margin: 0; padding: 0; height: auto; min-height: 100%; overflow-y: auto; overflow-x: hidden; }
+    body { width: 100%; }
     iframe { width: 100%; height: 100vh; border: none; }
   </style>
 </head>
@@ -2703,7 +2704,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { margin: 0; padding: 0; }
+    html, body { margin: 0; padding: 0; height: auto; min-height: 100%; overflow-y: auto; overflow-x: hidden; }
+    body { width: 100%; }
 ${cssCode}
   </style>
 </head>
