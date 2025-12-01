@@ -672,10 +672,10 @@ interface ChatMessage {
                               sandbox="allow-scripts allow-same-origin"></iframe>
                     </div>
 
-                    <!-- iFrame Preview (use URL from sample data directly) -->
-                    <div *ngIf="(currentInteraction?.interactionTypeCategory === 'iframe') && getIframePreviewUrl()" class="html-preview">
+                    <!-- iFrame Preview (use overlay wrapper if useOverlay is enabled, otherwise use URL directly) -->
+                    <div *ngIf="(currentInteraction?.interactionTypeCategory === 'iframe') && (getIframePreviewUrl() || getIframeConfigValue('useOverlay'))" class="html-preview">
                       <iframe #previewIframe 
-                              [src]="getSafeIframePreviewUrl()" 
+                              [src]="getIframeConfigValue('useOverlay') ? getIframeOverlayPreviewBlobUrl() : getSafeIframePreviewUrl()" 
                               [attr.data-preview-key]="previewKey"
                               class="preview-iframe"
                               frameborder="0"
@@ -3395,6 +3395,265 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   getSafeIframePreviewUrl(): SafeResourceUrl {
     const url = this.getIframePreviewUrl();
     return this.sanitizer.bypassSecurityTrustResourceUrl(url);
+  }
+
+  getIframeOverlayPreviewBlobUrl(): SafeResourceUrl {
+    if (!this.currentInteraction) {
+      return this.sanitizer.bypassSecurityTrustResourceUrl('about:blank');
+    }
+
+    // Check if we already have a cached blob URL for the current preview key
+    if (this.currentIframeOverlayBlobUrl && this.currentIframeOverlayBlobUrlKey === this.previewKey) {
+      return this.currentIframeOverlayBlobUrl;
+    }
+
+    // Clean up old blob URL if it exists and key has changed
+    if (this.currentIframeOverlayBlobUrl && this.currentIframeOverlayBlobUrlKey !== this.previewKey) {
+      const oldUrl = (this.currentIframeOverlayBlobUrl as any).changingThisBreaksApplicationSecurity;
+      if (oldUrl && oldUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(oldUrl);
+      }
+    }
+
+    // Get iframe URL
+    const iframeUrl = this.getIframePreviewUrl() || 'https://en.wikipedia.org/wiki/Main_Page';
+    
+    // Get overlay code
+    const htmlCode = (this.currentInteraction.htmlCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
+    const cssCode = (this.currentInteraction.cssCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
+    const jsCode = (this.currentInteraction.jsCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
+    
+    // Get sample data and config
+    const sampleData = this.currentInteraction.sampleData || {};
+    const sampleDataJson = JSON.stringify(sampleData);
+    const configDefaults: any = {};
+    if (this.currentInteraction.configSchema && this.currentInteraction.configSchema.fields) {
+      this.currentInteraction.configSchema.fields.forEach((field: any) => {
+        if (field.default !== undefined) {
+          configDefaults[field.key] = field.default;
+        }
+      });
+    }
+    const configJson = JSON.stringify({ ...configDefaults, iframeUrl });
+    
+    // Escape code for template literal injection
+    const escapedHtml = htmlCode ? htmlCode.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${') : '';
+    const escapedCss = cssCode ? cssCode.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${') : '';
+    const escapedJs = jsCode ? jsCode.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${') : '';
+    
+    // Create overlay wrapper HTML (same structure as lesson-view)
+    const htmlDoc = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>iFrame Overlay Preview</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      margin: 0;
+      padding: 0;
+      background: #0f0f23;
+      color: #ffffff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      overflow: hidden;
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+    
+    #iframe-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+    
+    #iframe-container iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+    
+    #button-overlay {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 320px;
+      max-height: 100vh;
+      background: rgba(15, 15, 35, 0.95);
+      border-left: 2px solid rgba(0, 212, 255, 0.3);
+      z-index: 10;
+      overflow-y: auto;
+      padding: 20px;
+      box-shadow: -4px 0 12px rgba(0, 0, 0, 0.5);
+    }
+    
+    #overlay-content {
+      width: 100%;
+    }
+    
+    #toggle-overlay {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 50px;
+      height: 50px;
+      background: rgba(0, 212, 255, 0.2);
+      border: 2px solid rgba(0, 212, 255, 0.5);
+      border-radius: 50%;
+      color: #00d4ff;
+      font-size: 24px;
+      cursor: pointer;
+      z-index: 11;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+    
+    #toggle-overlay:hover {
+      background: rgba(0, 212, 255, 0.3);
+      border-color: #00d4ff;
+      transform: scale(1.1);
+    }
+    
+    #button-overlay.hidden {
+      transform: translateX(100%);
+    }
+    
+    #button-overlay::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    #button-overlay::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 3px;
+    }
+    
+    #button-overlay::-webkit-scrollbar-thumb {
+      background: rgba(0, 212, 255, 0.3);
+      border-radius: 3px;
+    }
+    
+    #button-overlay::-webkit-scrollbar-thumb:hover {
+      background: rgba(0, 212, 255, 0.5);
+    }
+${escapedCss}
+  </style>
+</head>
+<body>
+  <div id="iframe-container">
+    <iframe id="external-iframe" src="${this.escapeHtml(iframeUrl)}" frameborder="0" allowfullscreen></iframe>
+  </div>
+  
+  <button id="toggle-overlay" title="Toggle Overlay Panel">⚙</button>
+  
+  <div id="button-overlay">
+    <div id="overlay-content">
+${escapedHtml || '<div>No overlay content</div>'}
+    </div>
+  </div>
+
+  <script type="text/javascript">
+    // Inject interaction data and config
+    window.interactionData = ${sampleDataJson};
+    window.interactionConfig = ${configJson};
+    
+    // Provide createIframeAISDK helper function for builder's code (preview mode - limited functionality)
+    const createIframeAISDK = () => {
+      console.log("[Preview] createIframeAISDK called - preview mode, limited functionality");
+      return {
+        emitEvent: (event, processedContentId) => { console.log("[Preview] emitEvent:", event); },
+        updateState: (key, value) => { console.log("[Preview] updateState:", key, value); },
+        getState: (callback) => { callback({}); },
+        onResponse: (callback) => { return () => {}; },
+        isReady: (callback) => { callback(true); },
+        minimizeChatUI: () => { console.log("[Preview] minimizeChatUI"); },
+        showChatUI: () => { console.log("[Preview] showChatUI"); },
+        activateFullscreen: () => { console.log("[Preview] activateFullscreen"); },
+        deactivateFullscreen: () => { console.log("[Preview] deactivateFullscreen"); },
+        postToChat: (content, role, showInWidget) => { console.log("[Preview] postToChat:", content); },
+        showScript: (script, autoPlay) => { console.log("[Preview] showScript:", script); },
+        showSnack: (content, duration, hideFromChatUI, callback) => { console.log("[Preview] showSnack:", content); if (callback) callback("preview-snack-id"); },
+        hideSnack: () => { console.log("[Preview] hideSnack"); },
+        saveInstanceData: (data, callback) => { console.log("[Preview] saveInstanceData:", data); if (callback) callback(true, null); },
+        getInstanceDataHistory: (filters, callback) => { console.log("[Preview] getInstanceDataHistory:", filters); if (callback) callback([], null); },
+        saveUserProgress: (data, callback) => { console.log("[Preview] saveUserProgress:", data); if (callback) callback(null, "Preview mode"); },
+        getUserProgress: (callback) => { console.log("[Preview] getUserProgress"); if (callback) callback(null, "Preview mode"); },
+        markCompleted: (callback) => { console.log("[Preview] markCompleted"); if (callback) callback(null, "Preview mode"); },
+        incrementAttempts: (callback) => { console.log("[Preview] incrementAttempts"); if (callback) callback(null, "Preview mode"); },
+        getUserPublicProfile: (userId, callback) => { console.log("[Preview] getUserPublicProfile:", userId); if (callback) callback(null, "Preview mode"); },
+      };
+    };
+    
+    // Custom overlay code from builder
+    (function() {
+      // Initialize overlay toggle
+      const toggleButton = document.getElementById("toggle-overlay");
+      const buttonOverlay = document.getElementById("button-overlay");
+      
+      if (toggleButton && buttonOverlay) {
+        toggleButton.onclick = () => {
+          buttonOverlay.classList.toggle("hidden");
+          toggleButton.textContent = buttonOverlay.classList.contains("hidden") ? "⚙" : "✕";
+        };
+      }
+      
+      // Load external iframe URL
+      const externalIframe = document.getElementById("external-iframe");
+      if (externalIframe) {
+        const iframeUrl = (window.interactionConfig && window.interactionConfig.iframeUrl) || 
+                          (window.interactionData && window.interactionData.url) ||
+                          'https://en.wikipedia.org/wiki/Main_Page';
+        externalIframe.src = iframeUrl;
+        console.log("[iFrame Overlay Preview] Loading external URL:", iframeUrl);
+      }
+      
+      // Wait for DOM to be ready, then run builder's code
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+          try {
+${escapedJs ? escapedJs.split('\n').map(line => '            ' + line).join('\n') : '            // No JavaScript code provided'}
+          } catch (e) {
+            console.error("[iFrame Overlay Preview] Error in builder's JavaScript:", e);
+          }
+        });
+      } else {
+        setTimeout(() => {
+          try {
+${escapedJs ? escapedJs.split('\n').map(line => '            ' + line).join('\n') : '            // No JavaScript code provided'}
+          } catch (e) {
+            console.error("[iFrame Overlay Preview] Error in builder's JavaScript:", e);
+          }
+        }, 10);
+      }
+    })();
+  </script>
+</body>
+</html>`;
+
+    // Create a Blob from the HTML string
+    const blob = new Blob([htmlDoc], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    
+    // Store and return
+    this.currentIframeOverlayBlobUrl = this.sanitizer.bypassSecurityTrustResourceUrl(url);
+    this.currentIframeOverlayBlobUrlKey = this.previewKey;
+    return this.currentIframeOverlayBlobUrl;
+  }
+
+  private escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   getIframeWidth(): string {
