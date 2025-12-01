@@ -708,6 +708,12 @@ export class TestsComponent implements OnInit, OnDestroy {
         path: 'lesson-data-persistence',
         description: 'Ensures all editable lesson data (objectives, outcomes, structure) is stored in drafts and works with pending changes toggle',
         tests: []
+      },
+      {
+        name: 'AI Teacher SDK - Interaction Data Endpoints',
+        path: 'interaction-data-endpoints',
+        description: 'Tests all SDK methods for interaction data storage, user progress tracking, and public profiles (matches functionality tested by pixijs-test-sdk interaction)',
+        tests: []
       }
     ];
   }
@@ -1103,6 +1109,21 @@ export class TestsComponent implements OnInit, OnDestroy {
         'should handle empty objectives arrays',
         'should handle missing objectives field gracefully',
         'should preserve data types correctly'
+      ],
+      'interaction-data-endpoints': [
+        'should save instance data successfully',
+        'should get instance data history with filters',
+        'should allow students to access their own instance data history',
+        'should save user progress successfully',
+        'should get user progress',
+        'should mark interaction as completed',
+        'should create progress if not found when marking completed',
+        'should increment attempts',
+        'should create progress if not found when incrementing attempts',
+        'should get user public profile',
+        'should return null if profile not found',
+        'should validate required fields for saveInstanceData',
+        'should validate required fields for saveUserProgress'
       ]
     };
     return testMap[path] || [];
