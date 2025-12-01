@@ -1272,7 +1272,13 @@ interface ChatMessage {
       height: calc(100vh - 320px);
       width: 100%;
       border: 1px solid #333;
-      overflow: auto;
+      display: block;
+    }
+    
+    /* Ensure the iframe content can scroll */
+    .preview-container .html-preview {
+      overflow: hidden;
+      position: relative;
     }
 
     .section-header {
@@ -3141,7 +3147,8 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
       '  <meta charset="UTF-8">\n' +
       '  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
       '  <style>\n' +
-      '    body { margin: 0; padding: 0; }\n' +
+      '    html, body { margin: 0; padding: 0; height: auto; min-height: 100%; overflow-y: auto; overflow-x: hidden; }\n' +
+      '    body { width: 100%; }\n' +
       (this.currentInteraction.cssCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '') + '\n' +
       '  </style>\n' +
       '</head>\n' +

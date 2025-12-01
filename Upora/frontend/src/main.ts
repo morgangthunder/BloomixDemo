@@ -8,7 +8,7 @@ import { environment } from './environments/environment';
 // ========================================
 // Version is read from package.json at build time
 // This will be replaced by the build process or read dynamically
-const FRONTEND_VERSION = '0.1.49'; // Added showChatUI, hideFromChatUI flag for snacks, snack messages post to chat by default
+const FRONTEND_VERSION = '0.1.50'; // Fixed preview scrolling for SDK test interaction
 const CACHE_BUST_ID = `v${FRONTEND_VERSION}-${Math.random().toString(36).substr(2, 9)}`;
 console.log('');
 console.log('═══════════════════════════════════════════════════════════');
