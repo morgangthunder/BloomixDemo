@@ -3036,7 +3036,7 @@ ${escapedHtml || '<div>No overlay content</div>'}
     
     // Provide createIframeAISDK helper function for builder's code
     // Only declare if it doesn't already exist (builder's code might provide it)
-    if (typeof createIframeAISDK === 'undefined') {
+    if (typeof window.createIframeAISDK === 'undefined') {
       window.createIframeAISDK = () => {
       let subscriptionId = null;
       let requestCounter = 0;
