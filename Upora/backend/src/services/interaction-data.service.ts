@@ -94,9 +94,10 @@ export class InteractionDataService {
 
     // TODO: Implement proper permission check
     // For now, allow if user is super-admin or interaction-builder
+    // Also allow students to access their own data (for testing and transparency)
     // In production, check if user created this interaction type
-    if (userRole !== 'super-admin' && userRole !== 'interaction-builder') {
-      throw new ForbiddenException('Only interaction builders and super-admins can access instance data history');
+    if (userRole !== 'super-admin' && userRole !== 'interaction-builder' && userRole !== 'student') {
+      throw new ForbiddenException('Only interaction builders, super-admins, and students can access instance data history');
     }
 
     const query = this.instanceDataRepo

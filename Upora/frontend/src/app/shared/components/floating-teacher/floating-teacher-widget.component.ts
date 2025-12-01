@@ -304,6 +304,10 @@ export interface ChatMessage {
       padding: 1rem;
       background: #1a1a1a;
       border-bottom: 1px solid #333333;
+      max-height: 200px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
     }
 
     .script-header {
@@ -311,6 +315,7 @@ export interface ChatMessage {
       justify-content: space-between;
       align-items: center;
       margin-bottom: 0.5rem;
+      flex-shrink: 0;
     }
 
     .script-label {
@@ -345,6 +350,27 @@ export interface ChatMessage {
       line-height: 1.5;
       color: #ffffff;
       white-space: pre-wrap;
+      overflow-y: auto;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .script-text::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .script-text::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 3px;
+    }
+
+    .script-text::-webkit-scrollbar-thumb {
+      background: rgba(0, 212, 255, 0.3);
+      border-radius: 3px;
+    }
+
+    .script-text::-webkit-scrollbar-thumb:hover {
+      background: rgba(0, 212, 255, 0.5);
     }
 
     /* Chat History */

@@ -1318,8 +1318,29 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     console.log('[LessonView] First stage:', JSON.stringify(this.lessonStages[0], null, 2).substring(0, 800));
     console.log('[LessonView] First substage full:', JSON.stringify(this.lessonStages[0]?.subStages?.[0], null, 2));
     
-    // Auto-select first stage and substage if available
-    if (this.lessonStages.length > 0) {
+    // Try to restore saved state from localStorage
+    const savedState = this.getSavedLessonState(lesson.id.toString());
+    let restored = false;
+    
+    if (savedState && savedState.stageId && savedState.subStageId) {
+      // Find the saved stage and substage
+      const savedStage = this.lessonStages.find(s => String(s.id) === String(savedState.stageId));
+      if (savedStage) {
+        const savedSubStage = savedStage.subStages?.find(ss => String(ss.id) === String(savedState.subStageId));
+        if (savedSubStage) {
+          this.activeStageId = savedStage.id;
+          this.activeSubStageId = savedSubStage.id;
+          this.expandedStages.add(savedStage.id);
+          this.updateActiveSubStage();
+          this.loadInteractionData();
+          restored = true;
+          console.log('[LessonView] ✅ Restored saved state:', savedState);
+        }
+      }
+    }
+    
+    // If no saved state or restore failed, auto-select first stage and substage
+    if (!restored && this.lessonStages.length > 0) {
       const firstStage = this.lessonStages[0];
       this.activeStageId = firstStage.id;
       this.expandedStages.add(firstStage.id);
@@ -1453,6 +1474,11 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     this.activeSubStageId = subStageId;
     this.isMobileNavOpen = false;
     
+    // Save state to localStorage
+    if (this.lesson) {
+      this.saveLessonState(this.lesson.id.toString(), stageId, subStageId);
+    }
+    
     // Mark stage as viewed
     this.lessonStages = this.lessonStages.map(stage =>
       stage.id === stageId ? { ...stage, viewed: true } : stage
@@ -1472,6 +1498,44 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         estimatedDuration: 15
       }, null);
     }
+  }
+
+  /**
+   * Save lesson state to localStorage
+   */
+  private saveLessonState(lessonId: string, stageId: string | number, subStageId: string | number) {
+    try {
+      const state = {
+        lessonId,
+        stageId: String(stageId),
+        subStageId: String(subStageId),
+        timestamp: Date.now()
+      };
+      localStorage.setItem(`lesson-state-${lessonId}`, JSON.stringify(state));
+      console.log('[LessonView] 💾 Saved lesson state:', state);
+    } catch (error) {
+      console.warn('[LessonView] Failed to save lesson state:', error);
+    }
+  }
+
+  /**
+   * Get saved lesson state from localStorage
+   */
+  private getSavedLessonState(lessonId: string): { stageId: string; subStageId: string } | null {
+    try {
+      const saved = localStorage.getItem(`lesson-state-${lessonId}`);
+      if (saved) {
+        const state = JSON.parse(saved);
+        // Only restore if saved within last 7 days
+        const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
+        if (Date.now() - state.timestamp < maxAge) {
+          return { stageId: state.stageId, subStageId: state.subStageId };
+        }
+      }
+    } catch (error) {
+      console.warn('[LessonView] Failed to get saved lesson state:', error);
+    }
+    return null;
   }
 
   private updateActiveSubStage() {
