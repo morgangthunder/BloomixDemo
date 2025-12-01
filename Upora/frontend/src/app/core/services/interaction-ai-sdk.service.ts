@@ -346,7 +346,7 @@ export class InteractionAISDK {
           interactionTypeId: this.currentInteractionTypeId,
           processedContentId: this.currentProcessedContentId,
           instanceData: data,
-        })
+        }, { headers: this.getHeaders() })
       );
       console.log('[InteractionAISDK] ✅ Instance data saved');
     } catch (error: any) {
