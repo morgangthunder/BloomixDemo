@@ -2676,6 +2676,21 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     html, body { margin: 0; padding: 0; height: auto; min-height: 100%; overflow-y: auto; overflow-x: hidden; }
     body { width: 100%; }
     iframe { width: 100%; height: 100vh; border: none; }
+    /* Dark scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(0, 212, 255, 0.3);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(0, 212, 255, 0.5);
+    }
   </style>
 </head>
 <body>
@@ -2706,6 +2721,21 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   <style>
     html, body { margin: 0; padding: 0; height: auto; min-height: 100%; overflow-y: auto; overflow-x: hidden; }
     body { width: 100%; }
+    /* Dark scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(0, 212, 255, 0.3);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(0, 212, 255, 0.5);
+    }
 ${cssCode}
   </style>
 </head>
