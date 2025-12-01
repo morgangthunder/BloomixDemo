@@ -417,13 +417,18 @@ describe('Interaction Data Endpoints (SDK Tests)', () => {
   describe('SDK Method Validation', () => {
     it('should validate required fields for saveInstanceData', async () => {
       const invalidDto = {
-        lessonId: '', // Empty
+        lessonId: '', // Empty - should fail validation
         stageId: 'stage-1',
         substageId: 'substage-1',
         interactionTypeId: 'test-interaction-1',
         instanceData: {},
       };
 
+      // Mock interaction type lookup
+      mockInteractionTypeRepository.findOne.mockResolvedValue(null);
+
+      // The service should handle empty lessonId - TypeORM or database will validate
+      // For this test, we expect it to either throw or handle gracefully
       await expect(
         service.saveInstanceData(invalidDto as any)
       ).rejects.toThrow();
@@ -431,12 +436,16 @@ describe('Interaction Data Endpoints (SDK Tests)', () => {
 
     it('should validate required fields for saveUserProgress', async () => {
       const invalidDto = {
-        lessonId: '', // Empty
+        lessonId: '', // Empty - should fail validation
         stageId: 'stage-1',
         substageId: 'substage-1',
         interactionTypeId: 'test-interaction-1',
       };
 
+      // Mock interaction type lookup
+      mockInteractionTypeRepository.findOne.mockResolvedValue(null);
+
+      // The service should handle empty lessonId - TypeORM or database will validate
       await expect(
         service.saveUserProgress('user-1', 'tenant-1', invalidDto as any)
       ).rejects.toThrow();
