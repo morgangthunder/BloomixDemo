@@ -3656,7 +3656,7 @@ ${escapedCss}
       
       // Check if overlay mode is enabled in iframeConfig
       const iframeConfig = build.iframeConfig || {};
-      const useOverlay = iframeConfig.useOverlay === true || build.id === 'sdk-test-iframe';
+      const useOverlay = iframeConfig.useOverlay === true;
       
       if (useOverlay) {
         // Overlay mode: use wrapper with custom HTML/CSS/JS code from builder
@@ -3664,7 +3664,7 @@ ${escapedCss}
         const cssCode = (build.cssCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
         const jsCode = (build.jsCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
         
-        return this.createIframeWrapperWithOverlay(iframeUrl, configJson, sampleDataJson, htmlCode, cssCode, jsCode, build.id === 'sdk-test-iframe');
+        return this.createIframeWrapperWithOverlay(iframeUrl, configJson, sampleDataJson, htmlCode, cssCode, jsCode, false);
       } else {
         // Simple wrapper for regular iframe interactions
         return `<!DOCTYPE html>
