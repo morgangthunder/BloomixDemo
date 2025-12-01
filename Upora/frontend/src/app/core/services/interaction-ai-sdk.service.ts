@@ -193,6 +193,12 @@ export class InteractionAISDK {
    * Minimize the chat UI
    */
   minimizeChatUI(): void {
+    // Dispatch event to request widget to be shown (if hidden)
+    const showEvent = new CustomEvent('interaction-request-show-widget', {
+      detail: { source: 'interaction-sdk', action: 'minimize' }
+    });
+    window.dispatchEvent(showEvent);
+    
     if (this.teacherWidgetRef) {
       this.teacherWidgetRef.minimize();
       console.log('[InteractionAISDK] ✅ Minimized chat UI');
@@ -205,12 +211,21 @@ export class InteractionAISDK {
    * Show/restore the chat UI (if minimized or hidden)
    */
   showChatUI(): void {
-    if (this.teacherWidgetRef) {
-      this.teacherWidgetRef.openWidget();
-      console.log('[InteractionAISDK] ✅ Showed chat UI');
-    } else {
-      console.warn('[InteractionAISDK] ⚠️ Teacher widget reference not available');
-    }
+    // Dispatch event to request widget to be shown (if hidden)
+    const showEvent = new CustomEvent('interaction-request-show-widget', {
+      detail: { source: 'interaction-sdk', action: 'show' }
+    });
+    window.dispatchEvent(showEvent);
+    
+    // Wait a moment for widget to be shown, then call openWidget
+    setTimeout(() => {
+      if (this.teacherWidgetRef) {
+        this.teacherWidgetRef.openWidget();
+        console.log('[InteractionAISDK] ✅ Showed chat UI');
+      } else {
+        console.warn('[InteractionAISDK] ⚠️ Teacher widget reference not available after show request');
+      }
+    }, 100);
   }
 
   /**
