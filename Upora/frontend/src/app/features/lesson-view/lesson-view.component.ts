@@ -3595,22 +3595,34 @@ ${escapedHtml || '<div>No overlay content</div>'}
       }
       
       // Wait for DOM to be ready, then run builder's code
+      // The builder's code may have its own DOM ready checks, so we run it directly
+      // but ensure the overlay elements exist first
+      const runBuilderCode = () => {
+        try {
+          // Ensure elements exist
+          if (!document.getElementById("overlay-content")) {
+            console.error("[iFrame Overlay] overlay-content element not found!");
+            return;
+          }
+          
+          // Run the builder's JavaScript code
+${escapedJs ? escapedJs.split('\n').map(line => '          ' + line).join('\n') : '          // No JavaScript code provided'}
+        } catch (e) {
+          console.error("[iFrame Overlay] Error in builder's JavaScript:", e);
+          console.error("[iFrame Overlay] Error stack:", e.stack);
+          // Show error in overlay
+          const overlayContent = document.getElementById("overlay-content");
+          if (overlayContent) {
+            overlayContent.innerHTML = '<div style="color: red; padding: 20px;"><h3>Error in overlay code:</h3><pre style="white-space: pre-wrap;">' + e.message + '</pre></div>';
+          }
+        }
+      };
+      
       if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-          try {
-${escapedJs ? escapedJs.split('\n').map(line => '            ' + line).join('\n') : '            // No JavaScript code provided'}
-          } catch (e) {
-            console.error("[iFrame Overlay] Error in builder's JavaScript:", e);
-          }
-        });
+        document.addEventListener('DOMContentLoaded', runBuilderCode);
       } else {
-        setTimeout(() => {
-          try {
-${escapedJs ? escapedJs.split('\n').map(line => '            ' + line).join('\n') : '            // No JavaScript code provided'}
-          } catch (e) {
-            console.error("[iFrame Overlay] Error in builder's JavaScript:", e);
-          }
-        }, 10);
+        // DOM already ready, but wait a bit for elements to be fully rendered
+        setTimeout(runBuilderCode, 100);
       }
     })();`}
   </script>
