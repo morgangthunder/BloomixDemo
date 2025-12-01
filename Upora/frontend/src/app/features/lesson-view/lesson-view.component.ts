@@ -1111,8 +1111,29 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     
     // Listen for fullscreen requests from interactions
     window.addEventListener('interaction-request-fullscreen', this.handleInteractionFullscreenRequest.bind(this) as EventListener);
+    // Listen for widget show requests from interactions
+    window.addEventListener('interaction-request-show-widget', this.handleInteractionShowWidgetRequest.bind(this) as EventListener);
   }
   
+  /**
+   * Handle widget show request from interaction SDK
+   */
+  private handleInteractionShowWidgetRequest(event: CustomEvent) {
+    // Show the widget if it's hidden
+    if (this.teacherWidgetHidden) {
+      this.teacherWidgetHidden = false;
+      console.log('[LessonView] ✅ Widget shown via SDK request');
+      
+      // Ensure widget reference is set after showing
+      setTimeout(() => {
+        if (this.teacherWidget) {
+          this.interactionAISDK.setTeacherWidgetRef(this.teacherWidget);
+          console.log('[LessonView] ✅ Teacher widget reference set after show request');
+        }
+      }, 100);
+    }
+  }
+
   /**
    * Handle fullscreen request from interaction SDK
    */
