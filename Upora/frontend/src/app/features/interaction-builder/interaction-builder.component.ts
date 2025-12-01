@@ -2714,7 +2714,8 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     this.markChanged();
     // Reset type-specific fields when type changes
     if (this.currentInteraction) {
-      if (this.currentInteraction.interactionTypeCategory !== 'html') {
+      // HTML and iframe interactions can both use HTML/CSS code (iframe for overlay)
+      if (this.currentInteraction.interactionTypeCategory !== 'html' && this.currentInteraction.interactionTypeCategory !== 'iframe') {
         this.currentInteraction.htmlCode = undefined;
         this.currentInteraction.cssCode = undefined;
       }
@@ -2723,8 +2724,9 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
         this.currentInteraction.iframeConfig = undefined;
         this.iframeConfigText = '';
       }
-      if (this.currentInteraction.interactionTypeCategory !== 'pixijs') {
-        // PixiJS uses jsCode
+      // PixiJS and iframe interactions can both use JS code (iframe for overlay)
+      if (this.currentInteraction.interactionTypeCategory !== 'pixijs' && this.currentInteraction.interactionTypeCategory !== 'iframe') {
+        this.currentInteraction.jsCode = undefined;
       }
     }
   }
