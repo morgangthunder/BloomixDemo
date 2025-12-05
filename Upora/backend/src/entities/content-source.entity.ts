@@ -10,7 +10,7 @@ export class ContentSource {
   tenantId: string;
 
   @Column({ type: 'varchar', length: 50 })
-  type: 'url' | 'pdf' | 'image' | 'api' | 'text';
+  type: 'url' | 'pdf' | 'image' | 'api' | 'text' | 'media';
 
   @Column({ name: 'source_url', type: 'text', nullable: true })
   sourceUrl: string;

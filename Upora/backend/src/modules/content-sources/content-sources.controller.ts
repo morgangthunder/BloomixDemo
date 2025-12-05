@@ -252,7 +252,7 @@ export class ContentSourcesController {
 
   @Post('upload-file')
   @UseInterceptors(FileInterceptor('file', {
-    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
+    limits: { fileSize: 500 * 1024 * 1024 }, // 500MB max (for media files)
   }))
   @HttpCode(HttpStatus.CREATED)
   async uploadFile(
@@ -267,7 +267,12 @@ export class ContentSourcesController {
       throw new BadRequestException('No file provided');
     }
 
-    // Validate file type
+    // Handle media file uploads
+    if (type === 'media') {
+      return this.uploadMediaFile(file, title, metadataStr, tenantId, userId);
+    }
+
+    // Validate file type for non-media files
     const allowedMimeTypes = [
       'application/pdf',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -315,6 +320,73 @@ export class ContentSourcesController {
       contentSourceId: contentSource.id,
       filePath: url,
       fileName,
+      contentSource,
+    };
+  }
+
+  /**
+   * Upload media file (video or audio)
+   */
+  private async uploadMediaFile(
+    file: any,
+    title: string | undefined,
+    metadataStr: string | undefined,
+    tenantId: string,
+    userId: string,
+  ) {
+    // Validate media file type
+    const isVideo = file.mimetype.startsWith('video/');
+    const isAudio = file.mimetype.startsWith('audio/');
+
+    if (!isVideo && !isAudio) {
+      throw new BadRequestException('Invalid media file type. Only video and audio files are allowed.');
+    }
+
+    // Validate file size (500MB max)
+    const maxFileSize = 500 * 1024 * 1024; // 500MB
+    if (file.size > maxFileSize) {
+      throw new BadRequestException(`File size exceeds maximum limit of ${maxFileSize / (1024 * 1024)}MB`);
+    }
+
+    // Save file
+    const { url, fileName } = await this.fileStorageService.saveFile(file, 'media');
+
+    // Parse metadata
+    let metadata: any = {};
+    if (metadataStr) {
+      try {
+        metadata = typeof metadataStr === 'string' ? JSON.parse(metadataStr) : metadataStr;
+      } catch (e) {
+        console.warn('[ContentSourcesController] Failed to parse metadata:', e);
+      }
+    }
+
+    // Extract basic metadata (duration will be extracted during processing)
+    const mediaType = isVideo ? 'video' : 'audio';
+    metadata = {
+      ...metadata,
+      originalFileName: fileName,
+      mimeType: file.mimetype,
+      fileSize: file.size,
+      mediaType,
+      uploadedVia: 'media-upload',
+    };
+
+    // Create content source
+    const contentSource = await this.contentSourcesService.create({
+      type: 'media',
+      filePath: url,
+      title: title || `Uploaded: ${fileName}`,
+      metadata,
+    }, tenantId, userId);
+
+    return {
+      id: contentSource.id,
+      contentSourceId: contentSource.id,
+      filePath: url,
+      fileName,
+      mediaType,
+      fileSize: file.size,
       contentSource,
     };
   }

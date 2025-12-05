@@ -9,6 +9,7 @@ import { YouTubeService } from '../../services/youtube.service';
 import { ContentAnalyzerModule } from '../../services/content-analyzer.module';
 import { AutoPopulatorModule } from '../../services/auto-populator.module';
 import { FileStorageService } from '../../services/file-storage.service';
+import { MediaMetadataService } from '../../services/media-metadata.service';
 
 @Module({
   imports: [
@@ -17,7 +18,7 @@ import { FileStorageService } from '../../services/file-storage.service';
     AutoPopulatorModule,
   ],
   controllers: [ContentSourcesController],
-  providers: [ContentSourcesService, YouTubeService, FileStorageService],
+  providers: [ContentSourcesService, YouTubeService, FileStorageService, MediaMetadataService],
   exports: [ContentSourcesService],
 })
 export class ContentSourcesModule {}

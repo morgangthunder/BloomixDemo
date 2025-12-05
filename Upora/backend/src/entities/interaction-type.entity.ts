@@ -24,7 +24,7 @@ export class InteractionType {
   pixiRenderer: string; // Component name (e.g., 'FragmentBuilderComponent')
 
   @Column('varchar', { name: 'interaction_type_category', nullable: true })
-  interactionTypeCategory: string; // 'html' | 'pixijs' | 'iframe'
+  interactionTypeCategory: string; // 'html' | 'pixijs' | 'iframe' | 'uploaded-media'
 
   @Column('text', { name: 'html_code', nullable: true })
   htmlCode: string; // HTML code for HTML interactions
@@ -117,6 +117,15 @@ export class InteractionType {
       description?: string;
     }>;
   } | null; // Schema defining optional custom fields for user progress (beyond required fields)
+
+  @Column('jsonb', { name: 'media_config', nullable: true })
+  mediaConfig: {
+    autoplay?: boolean;
+    loop?: boolean;
+    muted?: boolean;
+    controls?: boolean;
+    preload?: 'none' | 'metadata' | 'auto';
+  } | null; // Media-specific configuration for uploaded-media interactions
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

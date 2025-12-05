@@ -1,8 +1,8 @@
 import { IsString, IsOptional, IsEnum, IsObject, ValidateIf } from 'class-validator';
 
 export class CreateContentSourceDto {
-  @IsEnum(['url', 'pdf', 'image', 'api', 'text'])
-  type: 'url' | 'pdf' | 'image' | 'api' | 'text';
+  @IsEnum(['url', 'pdf', 'image', 'api', 'text', 'media'])
+  type: 'url' | 'pdf' | 'image' | 'api' | 'text' | 'media';
 
   @IsOptional()
   @IsString()

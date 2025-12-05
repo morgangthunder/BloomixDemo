@@ -7,6 +7,8 @@ import { ProcessedContentOutput } from '../../entities/processed-content-output.
 import { WeaviateService } from '../../services/weaviate.service';
 import { YouTubeService } from '../../services/youtube.service';
 import { ContentAnalyzerService } from '../../services/content-analyzer.service';
+import { MediaMetadataService } from '../../services/media-metadata.service';
+import { FileStorageService } from '../../services/file-storage.service';
 import { CreateContentSourceDto } from './dto/create-content-source.dto';
 import { UpdateContentSourceDto } from './dto/update-content-source.dto';
 import { SearchContentDto } from './dto/search-content.dto';
@@ -25,6 +27,8 @@ export class ContentSourcesService {
     private weaviateService: WeaviateService,
     private youtubeService: YouTubeService,
     private contentAnalyzerService: ContentAnalyzerService,
+    private mediaMetadataService: MediaMetadataService,
+    private fileStorageService: FileStorageService,
   ) {}
 
   /**
@@ -208,6 +212,12 @@ export class ContentSourcesService {
           processingError = new Error('Processing returned null or undefined');
           this.logger.error(`[ContentSources] ❌ ${processingError.message}`);
         }
+      } else if (contentSource.type === 'media') {
+        // Handle media file processing
+        this.logger.log(`[ContentSources] 🎬 Auto-processing media file: ${contentSource.id}`);
+        await this.processMediaFile(contentSource, approvedBy);
+        processedOutputCreated = true;
+        this.logger.log(`[ContentSources] ✅ Media file processed successfully`);
       } else {
         // For all other content types, use standard content analysis
         this.logger.log(`[ContentSources] 🔍 Auto-processing content source: ${contentSource.id} (type: ${contentSource.type})`);
@@ -495,6 +505,67 @@ export class ContentSourcesService {
   async unlinkFromLesson(lessonId: string, contentSourceId: string): Promise<void> {
     await this.lessonDataLinksRepository.delete({ lessonId, contentSourceId });
     this.logger.log(`Unlinked content ${contentSourceId} from lesson ${lessonId}`);
+  }
+
+  /**
+   * Process media file (video or audio)
+   * Extracts metadata and creates processed output
+   */
+  private async processMediaFile(contentSource: ContentSource, approvedBy: string): Promise<void> {
+    if (!contentSource.filePath) {
+      throw new Error('Media file path is missing');
+    }
+
+    // Get media type from metadata
+    const mediaType = contentSource.metadata?.mediaType as 'video' | 'audio';
+    if (!mediaType || (mediaType !== 'video' && mediaType !== 'audio')) {
+      throw new Error('Invalid or missing media type in metadata');
+    }
+
+    // Get file path (convert URL to file system path)
+    const urlPath = contentSource.filePath.replace('/uploads/', '');
+    const uploadDir = process.env.UPLOAD_DIR || './uploads';
+    const filePath = require('path').join(uploadDir, urlPath);
+
+    // Extract metadata
+    const metadata = await this.mediaMetadataService.extractMetadata(filePath, mediaType);
+
+    // Update content source metadata with extracted info
+    contentSource.metadata = {
+      ...contentSource.metadata,
+      ...metadata,
+    };
+    await this.contentSourcesRepository.save(contentSource);
+
+    // Create processed output
+    const processedOutput = this.processedContentRepository.create({
+      lessonId: '00000000-0000-0000-0000-000000000000', // Placeholder - will be linked to lessons later
+      contentSourceId: contentSource.id,
+      outputName: contentSource.title || contentSource.metadata?.originalFileName || 'Media File',
+      outputType: 'uploaded-media',
+      outputData: {
+        mediaFileUrl: contentSource.filePath,
+        mediaFileName: contentSource.metadata?.originalFileName || 'unknown',
+        mediaFileType: mediaType,
+        mediaFileSize: metadata.fileSize,
+        mediaFileDuration: metadata.duration,
+        mediaMetadata: {
+          codec: metadata.codec,
+          bitrate: metadata.bitrate,
+          width: metadata.width,
+          height: metadata.height,
+          fps: metadata.fps,
+          sampleRate: metadata.sampleRate,
+          channels: metadata.channels,
+        },
+        // Transcription will be added later (async processing)
+        transcription: null,
+      },
+      createdBy: approvedBy,
+    });
+
+    await this.processedContentRepository.save(processedOutput);
+    this.logger.log(`✅ Created processed output for media file: ${processedOutput.id}`);
   }
 
   /**

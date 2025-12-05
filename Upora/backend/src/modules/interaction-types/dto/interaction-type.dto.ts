@@ -8,8 +8,8 @@ export class CreateInteractionTypeDto {
   name: string;
 
   @IsString()
-  @IsIn(['html', 'pixijs', 'iframe'])
-  interactionTypeCategory: 'html' | 'pixijs' | 'iframe';
+  @IsIn(['html', 'pixijs', 'iframe', 'uploaded-media'])
+  interactionTypeCategory: 'html' | 'pixijs' | 'iframe' | 'uploaded-media';
 
   @IsOptional()
   @IsString()
@@ -102,8 +102,8 @@ export class UpdateInteractionTypeDto {
 
   @IsOptional()
   @IsString()
-  @IsIn(['html', 'pixijs', 'iframe'])
-  interactionTypeCategory?: 'html' | 'pixijs' | 'iframe';
+  @IsIn(['html', 'pixijs', 'iframe', 'uploaded-media'])
+  interactionTypeCategory?: 'html' | 'pixijs' | 'iframe' | 'uploaded-media';
 
   @IsOptional()
   @IsString()
