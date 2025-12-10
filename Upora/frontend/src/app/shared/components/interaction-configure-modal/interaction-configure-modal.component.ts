@@ -6,14 +6,15 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { TrueFalseSelectionComponent } from '../../../features/interactions/true-false-selection/true-false-selection.component';
 import { ContentSourceService } from '../../../core/services/content-source.service';
+import { MediaContentSelectorComponent } from '../media-content-selector/media-content-selector.component';
 import { environment } from '../../../../environments/environment';
 
 @Component({
   selector: 'app-interaction-configure-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, TrueFalseSelectionComponent],
+  imports: [CommonModule, FormsModule, TrueFalseSelectionComponent, MediaContentSelectorComponent],
   template: `
-    <div *ngIf="isOpen" class="modal-overlay-fullscreen" (click)="close()">
+    <div *ngIf="isOpen" class="modal-overlay-fullscreen" (click)="close()" style="z-index: 999999 !important; position: fixed !important;">
       <div class="modal-container-fullscreen" (click)="$event.stopPropagation()">
         <div class="modal-header-sticky">
           <h2>⚙️ {{interactionName || 'Interaction'}} Configuration</h2>
@@ -39,7 +40,18 @@ import { environment } from '../../../../environments/environment';
         <div class="modal-body-scrollable">
           <!-- Configure Tab -->
           <div *ngIf="activeTab === 'configure'" class="config-section">
-            <div class="form-group processed-content-selector">
+            <!-- Media Content Selector (for uploaded-media interactions) -->
+            <div *ngIf="interactionCategory === 'uploaded-media'" class="form-group processed-content-selector">
+              <label>🎬 Media Content</label>
+              <div class="config-value">
+                <span class="value">{{selectedMediaName || 'None selected'}}</span>
+                <button type="button" class="btn-small" style="margin-left: 12px;" (click)="openMediaSelector()">{{selectedMediaId ? 'Change Media' : 'Select Media'}}</button>
+              </div>
+              <p class="hint">Choose approved media content (video or audio) to use for this interaction.</p>
+            </div>
+
+            <!-- Generic Processed Content Selector (for other interaction types) -->
+            <div *ngIf="interactionCategory !== 'uploaded-media'" class="form-group processed-content-selector">
               <label>Processed Content</label>
               <div class="config-value">
                 <span class="value">{{selectedContentOutputName || 'None selected'}}</span>
@@ -260,8 +272,8 @@ import { environment } from '../../../../environments/environment';
                 <p>⚠️ No sample data provided for preview</p>
               </div>
               
-              <!-- HTML/PixiJS/iFrame Preview -->
-              <div *ngIf="previewData && (interactionCategory === 'html' || interactionCategory === 'pixijs' || interactionCategory === 'iframe') && htmlCode" 
+              <!-- HTML/PixiJS/iFrame/Media Player Preview -->
+              <div *ngIf="previewData && (interactionCategory === 'html' || interactionCategory === 'pixijs' || interactionCategory === 'iframe' || interactionCategory === 'uploaded-media') && htmlCode" 
                    class="iframe-preview-container">
                 <iframe 
                   [src]="getInteractionPreviewBlobUrlSafe()"
@@ -271,13 +283,13 @@ import { environment } from '../../../../environments/environment';
               
               <!-- True/False Selection Preview (legacy component-based preview) -->
               <app-true-false-selection
-                *ngIf="previewData && interactionType === 'true-false-selection' && interactionCategory !== 'html' && interactionCategory !== 'pixijs' && interactionCategory !== 'iframe'"
+                *ngIf="previewData && interactionType === 'true-false-selection' && interactionCategory !== 'html' && interactionCategory !== 'pixijs' && interactionCategory !== 'iframe' && interactionCategory !== 'uploaded-media'"
                 [data]="previewData"
                 (interactionComplete)="onPreviewComplete($event)">
               </app-true-false-selection>
               
               <!-- Placeholder for other types -->
-              <div *ngIf="previewData && interactionType && interactionCategory !== 'html' && interactionCategory !== 'pixijs' && interactionCategory !== 'iframe' && interactionType !== 'true-false-selection'" 
+              <div *ngIf="previewData && interactionType && interactionCategory !== 'html' && interactionCategory !== 'pixijs' && interactionCategory !== 'iframe' && interactionCategory !== 'uploaded-media' && interactionType !== 'true-false-selection'" 
                    class="preview-placeholder">
                 <p>Preview for {{interactionType}} ({{interactionCategory}}) not yet implemented</p>
                 <pre>{{previewDataJson}}</pre>
@@ -285,6 +297,13 @@ import { environment } from '../../../../environments/environment';
             </div>
           </div>
         </div>
+
+        <!-- Media Content Selector Modal -->
+        <app-media-content-selector
+          [isOpen]="showMediaSelector"
+          (close)="closeMediaSelector()"
+          (selected)="onMediaSelected($event)">
+        </app-media-content-selector>
 
         <div class="modal-footer-sticky">
           <button (click)="close()" class="btn-secondary">Cancel</button>
@@ -302,16 +321,16 @@ import { environment } from '../../../../environments/environment';
   `,
   styles: [`
     .modal-overlay-fullscreen {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.95);
-      z-index: 10000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      background: rgba(0, 0, 0, 0.95) !important;
+      z-index: 99999 !important; /* Match other modals like media-content-selector */
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
       animation: fadeIn 0.2s ease;
     }
 
@@ -321,6 +340,8 @@ import { environment } from '../../../../environments/environment';
     }
 
     .modal-container-fullscreen {
+      z-index: 100000 !important; /* Even higher than overlay */
+      position: relative !important;
       background: #1a1a1a;
       border: 1px solid #333;
       border-radius: 1rem;
@@ -841,16 +862,56 @@ export class InteractionConfigureModalComponent implements OnChanges {
   initialConfigSnapshot: any = {}; // Store initial config to detect changes
   previewData: any = null;
   currentBlobUrl: SafeResourceUrl | null = null;
+  currentBlobUrlKey: string = '';
 
   iframeGuideDocFile: File | null = null;
   uploadingDocument = false;
   processingWebpage = false;
+
+  // Media content selector
+  showMediaSelector = false;
+  selectedMediaId: string | null = null;
+  selectedMediaName = '';
 
   constructor(
     private domSanitizer: DomSanitizer,
     private http: HttpClient,
     private contentSourceService: ContentSourceService
   ) {}
+
+  openMediaSelector() {
+    this.showMediaSelector = true;
+  }
+
+  closeMediaSelector() {
+    this.showMediaSelector = false;
+  }
+
+  onMediaSelected(processedContentId: string) {
+    console.log('[ConfigModal] 🎬 Media selected:', processedContentId);
+    this.selectedMediaId = processedContentId;
+    
+    // Fetch media details to display name
+    this.http.get<any>(`${environment.apiUrl}/lesson-editor/processed-outputs/${processedContentId}`)
+      .subscribe({
+        next: (media) => {
+          this.selectedMediaName = media.outputName || media.contentSource?.title || 'Selected Media';
+          console.log('[ConfigModal] ✅ Media name set:', this.selectedMediaName);
+        },
+        error: (err) => {
+          console.error('[ConfigModal] ❌ Failed to fetch media details:', err);
+          this.selectedMediaName = 'Selected Media';
+        }
+      });
+    
+    // Update config with selected media
+    if (this.config) {
+      this.config.contentOutputId = processedContentId;
+    }
+    
+    this.closeMediaSelector();
+    this.onConfigChange();
+  }
 
   get configSchemaJson(): string {
     return this.configSchema ? JSON.stringify(this.configSchema, null, 2) : 'No config schema defined';
@@ -884,6 +945,30 @@ export class InteractionConfigureModalComponent implements OnChanges {
       
       // Store initial config snapshot for change detection (deep copy)
       this.initialConfigSnapshot = JSON.parse(JSON.stringify(this.config));
+      
+      // Initialize selectedMediaId from config if present
+      if (this.config && this.config.contentOutputId) {
+        this.selectedMediaId = this.config.contentOutputId;
+        console.log('[ConfigModal] 🎬 Initialized selectedMediaId from config:', this.selectedMediaId);
+        // Fetch media name if not already set
+        if (!this.selectedMediaName) {
+          this.http.get<any>(`${environment.apiUrl}/lesson-editor/processed-outputs/${this.config.contentOutputId}`)
+            .subscribe({
+              next: (media) => {
+                this.selectedMediaName = media.outputName || media.contentSource?.title || 'Selected Media';
+                console.log('[ConfigModal] ✅ Media name loaded from config:', this.selectedMediaName);
+              },
+              error: (err) => {
+                console.error('[ConfigModal] ❌ Failed to fetch media details:', err);
+              }
+            });
+        }
+      } else {
+        // Clear selectedMediaId if not in config
+        this.selectedMediaId = null;
+        this.selectedMediaName = '';
+        console.log('[ConfigModal] ⚠️ No media in config, cleared selectedMediaId');
+      }
       
       // Merge sample data with config for preview
       this.previewData = {
@@ -988,13 +1073,26 @@ export class InteractionConfigureModalComponent implements OnChanges {
     const header = document.querySelector('app-header');
     if (header) {
       (header as HTMLElement).style.display = 'none';
+      (header as HTMLElement).style.zIndex = '-1';
     }
     
     // Also hide any page-specific headers
     const builderHeader = document.querySelector('.builder-header, .editor-header');
     if (builderHeader) {
       (builderHeader as HTMLElement).style.display = 'none';
+      (builderHeader as HTMLElement).style.zIndex = '-1';
     }
+    
+    // Hide all Ionic headers and toolbars
+    const ionHeaders = document.querySelectorAll('ion-header, ion-toolbar, ion-nav');
+    ionHeaders.forEach((el: any) => {
+      if (el) {
+        el.style.display = 'none';
+        el.style.zIndex = '-1';
+        el.style.position = 'absolute';
+        el.style.top = '-9999px';
+      }
+    });
     
     document.body.style.overflow = 'hidden';
   }
@@ -1004,6 +1102,7 @@ export class InteractionConfigureModalComponent implements OnChanges {
     const header = document.querySelector('app-header');
     if (header) {
       (header as HTMLElement).style.display = '';
+      (header as HTMLElement).style.zIndex = '';
     }
     
     // Restore page-specific headers
@@ -1011,6 +1110,15 @@ export class InteractionConfigureModalComponent implements OnChanges {
     if (builderHeader) {
       (builderHeader as HTMLElement).style.display = 'flex';
     }
+    
+    // Restore ion-header and ion-toolbar elements
+    const ionHeaders = document.querySelectorAll('ion-header, ion-toolbar');
+    ionHeaders.forEach((el: any) => {
+      if (el) {
+        el.style.display = '';
+        el.style.zIndex = '';
+      }
+    });
     
     document.body.style.overflow = 'auto';
   }
@@ -1045,6 +1153,16 @@ export class InteractionConfigureModalComponent implements OnChanges {
     console.log('[ConfigModal] 🎬 Generating preview blob URL...');
     console.log('[ConfigModal] Category:', this.interactionCategory);
     console.log('[ConfigModal] Has HTML:', !!this.htmlCode);
+    console.log('[ConfigModal] Config contentOutputId:', this.config?.contentOutputId);
+    console.log('[ConfigModal] SelectedMediaId:', this.selectedMediaId);
+    
+    // Invalidate cache if config has changed
+    if (this.currentBlobUrl) {
+      const cacheKey = `${this.interactionCategory}-${this.config?.contentOutputId || this.selectedMediaId || 'none'}-${this.htmlCode?.substring(0, 50) || 'none'}`;
+      if (this.currentBlobUrlKey !== cacheKey) {
+        this.currentBlobUrl = null;
+      }
+    }
     console.log('[ConfigModal] Has CSS:', !!this.cssCode);
     console.log('[ConfigModal] Has JS:', !!this.jsCode);
     
@@ -1084,34 +1202,134 @@ export class InteractionConfigureModalComponent implements OnChanges {
     console.log('[ConfigModal] 📋 Sample data for injection:', sampleDataJson.substring(0, 100) + '...');
     console.log('[ConfigModal] ⚙️ Config for injection:', configJson);
 
-    const htmlDoc = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body { margin: 0; padding: 0; }
-    ${this.cssCode || ''}
-  </style>
-</head>
-<body>
-  ${this.htmlCode || ''}
-  <script>
-    // Set interaction data FIRST
-    window.interactionData = ${sampleDataJson};
-    console.log('[Interaction] 🎯 Data injected:', window.interactionData);
-
-    // Set interaction config
-    window.interactionConfig = ${configJson};
-    console.log('[Interaction] ⚙️ Config injected:', window.interactionConfig);
-
-    // Then run the interaction code
-    ${this.jsCode || ''}
-  </script>
-</body>
-</html>
-    `;
+    // Use string concatenation - don't escape for template literals since we're not using them
+    // For HTML and CSS, use directly; for JS, use JSON.stringify to safely embed
+    const escapedCss = this.cssCode || '';
+    const escapedHtml = this.htmlCode || '';
+    const jsCodeForPreview = this.jsCode || '';
+    
+    // For uploaded-media, we need to generate a media player preview similar to interaction builder
+    let htmlDoc = '';
+    if (this.interactionCategory === 'uploaded-media') {
+      // Get media URL from config or selectedMediaId
+      let mediaUrl = '';
+      let mediaType = 'video';
+      const mediaId = this.config?.contentOutputId || this.selectedMediaId;
+      if (mediaId) {
+        // environment.apiUrl is 'http://localhost:3000/api', so we need to add '/content-sources' after '/api'
+        mediaUrl = environment.apiUrl + '/content-sources/processed-content/' + mediaId + '/file';
+        console.log('[ConfigModal] 🎬 Using media URL from mediaId:', mediaId, 'URL:', mediaUrl);
+      } else {
+        // Don't use default video - show placeholder instead
+        console.log('[ConfigModal] ⚠️ No media selected, will show placeholder');
+        mediaUrl = ''; // Empty URL will show placeholder
+      }
+      if (this.config?.mediaType) {
+        mediaType = this.config.mediaType;
+      }
+      
+      // Get display mode from config (default to section)
+      const displayMode = normalizedConfig.displayMode || 'section';
+      const sectionHeight = normalizedConfig.sectionHeight || 'auto';
+      const sectionMinHeight = normalizedConfig.sectionMinHeight || '200px';
+      const sectionMaxHeight = normalizedConfig.sectionMaxHeight || 'none';
+      
+      // Determine MIME type from file extension or mediaType
+      let mimeType = 'video/mp4'; // Default
+      if (mediaUrl) {
+        const urlLower = mediaUrl.toLowerCase();
+        if (urlLower.includes('.webm')) mimeType = 'video/webm';
+        else if (urlLower.includes('.ogv')) mimeType = 'video/ogg';
+        else if (urlLower.includes('.mp3')) mimeType = 'audio/mpeg';
+        else if (urlLower.includes('.wav')) mimeType = 'audio/wav';
+        else if (urlLower.includes('.ogg') || urlLower.includes('.oga')) mimeType = 'audio/ogg';
+        else if (mediaType === 'audio') mimeType = 'audio/mpeg';
+        else mimeType = 'video/mp4';
+      }
+      
+      const mediaPlayerHtml = mediaUrl 
+        ? (mediaType === 'video' 
+          ? '<video id="media-player" controls crossorigin="anonymous" preload="metadata" playsinline style="width: 100%; height: auto; max-height: 70vh; object-fit: contain;"><source src="' + mediaUrl.replace(/"/g, '&quot;') + '" type="' + mimeType + '">Your browser does not support the video tag.</video>'
+          : '<audio id="media-player" controls crossorigin="anonymous" preload="metadata" style="width: 100%;"><source src="' + mediaUrl.replace(/"/g, '&quot;') + '" type="' + mimeType + '">Your browser does not support the audio tag.</audio>')
+        : '<div style="padding: 40px; text-align: center; color: #999; background: rgba(0,0,0,0.3); border: 2px dashed #444; border-radius: 8px; margin: 20px;"><p style="font-size: 16px; margin-bottom: 10px;">⚠️ No media selected</p><p style="font-size: 12px;">Select a media file in the Configure tab to preview</p></div>';
+      
+      const overlayContent = escapedHtml.trim() || '<div style="padding: 20px; color: #999; text-align: center;">No SDK test buttons configured</div>';
+      
+      htmlDoc = '<!DOCTYPE html>\n' +
+'<html>\n' +
+'<head>\n' +
+'  <meta charset="UTF-8">\n' +
+'  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
+'  <style>\n' +
+'    * { margin: 0; padding: 0; box-sizing: border-box; }\n' +
+'    body { margin: 0; padding: 0; background: #0f0f23; color: #ffffff; font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; ' +
+(displayMode === 'overlay' 
+  ? 'overflow: hidden; position: relative; width: 100vw; height: 100vh;'
+  : 'display: flex; flex-direction: column; height: 100vh; overflow-y: auto;') + ' }\n' +
+'    #media-container { ' +
+(displayMode === 'overlay'
+  ? 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; display: flex; align-items: center; justify-content: center; background: #000;'
+  : 'flex: 0 0 auto; width: 100%; display: flex; align-items: center; justify-content: center; background: #000; padding: 10px; min-height: 200px; order: 1;') + ' }\n' +
+'    #media-container video, #media-container audio { max-width: 100%;' +
+(displayMode === 'overlay' ? ' max-height: 100%; z-index: 1;' : ' width: 100%; height: auto;') + ' }\n' +
+'    #overlay-container { ' +
+(displayMode === 'overlay'
+  ? 'position: absolute; bottom: 0; left: 0; right: 0; z-index: 100; pointer-events: none; max-height: 40%; overflow-y: auto; background: rgba(15, 15, 35, 0.95); padding: 20px; }\n' +
+    '    #overlay-container > * { pointer-events: auto; }\n' +
+    '    #media-container video::-webkit-media-controls-panel { z-index: 50 !important; pointer-events: auto !important; }\n'
+  : 'flex: 1 1 auto; width: 100%; overflow-y: auto; background: rgba(15, 15, 35, 0.95); padding: 20px; height: ' + sectionHeight + '; min-height: ' + sectionMinHeight + ';' + (sectionMaxHeight !== 'none' ? ' max-height: ' + sectionMaxHeight + ';' : '') + ' order: 2; position: relative !important; z-index: 1 !important; }\n') +
+'    @media (max-width: 768px) { ' +
+(displayMode === 'overlay'
+  ? '#overlay-container { padding: 15px; max-height: 50%; }'
+  : '#media-container { min-height: 150px; padding: 5px; } #overlay-container { padding: 15px; min-height: 150px; }') + ' }\n' +
+'    @media (min-width: 769px) and (max-width: 1024px) { ' +
+(displayMode === 'overlay'
+  ? '#overlay-container { max-height: 45%; }'
+  : '#media-container { min-height: 250px; } #overlay-container { min-height: 250px; }') + ' }\n' +
+'    @media (min-width: 1025px) { ' +
+(displayMode === 'overlay'
+  ? '#overlay-container { max-height: 40%; }'
+  : '#media-container { min-height: 300px; } #overlay-container { min-height: 300px; }') + ' }\n' +
+escapedCss + '\n' +
+'  </style>\n' +
+'</head>\n' +
+'<body>\n' +
+'  <div id="media-container">\n' +
+mediaPlayerHtml + '\n' +
+'  </div>\n' +
+'  <div id="overlay-container">\n' +
+overlayContent + '\n' +
+'  </div>\n' +
+'  <script>\n' +
+'    window.interactionData = ' + sampleDataJson + ';\n' +
+'    window.interactionConfig = ' + configJson + ';\n' +
+'    const createIframeAISDK = function() { var mediaPlayer = document.getElementById("media-player"); return { emitEvent: function() {}, updateState: function() {}, getState: function(cb) { if (cb) cb({}); }, onResponse: function() { return function() {}; }, isReady: function(cb) { if (cb) cb(true); }, minimizeChatUI: function() {}, showChatUI: function() {}, activateFullscreen: function() {}, deactivateFullscreen: function() {}, postToChat: function() {}, showScript: function() {}, showSnack: function() {}, hideSnack: function() {}, saveInstanceData: function(d, cb) { if (cb) cb(true, null); }, getInstanceDataHistory: function(f, cb) { if (cb) cb([], null); }, saveUserProgress: function(d, cb) { if (cb) cb(null, "Preview"); }, getUserProgress: function(cb) { if (cb) cb(null, "Preview"); }, markCompleted: function(cb) { if (cb) cb(null, "Preview"); }, incrementAttempts: function(cb) { if (cb) cb(null, "Preview"); }, getUserPublicProfile: function(u, cb) { if (cb) cb(null, "Preview"); }, playMedia: function(cb) { if (mediaPlayer) { const playPromise = mediaPlayer.play(); if (playPromise !== undefined) { playPromise.then(function() { console.log("[Preview] playMedia success"); if (cb) cb(true, null); }).catch(function(e) { console.error("[Preview] playMedia error:", e); if (cb) cb(false, e.message); }); } else { if (cb) cb(true, null); } } else if (cb) { cb(false, "Media player not available"); } }, pauseMedia: function() { if (mediaPlayer) { mediaPlayer.pause(); console.log("[Preview] pauseMedia"); } }, seekMedia: function(t) { if (mediaPlayer) { mediaPlayer.currentTime = t; console.log("[Preview] seekMedia:", t); } }, setMediaVolume: function(v) { if (mediaPlayer) { mediaPlayer.volume = v; console.log("[Preview] setMediaVolume:", v); } }, getMediaCurrentTime: function(cb) { if (mediaPlayer && cb) cb(mediaPlayer.currentTime); }, getMediaDuration: function(cb) { if (mediaPlayer && cb) cb(mediaPlayer.duration || 0); }, isMediaPlaying: function(cb) { if (mediaPlayer && cb) cb(!mediaPlayer.paused); }, showOverlayHtml: function() { var overlay = document.getElementById("overlay-container"); if (overlay) { overlay.classList.remove("media-playing"); console.log("[Preview] showOverlayHtml"); } }, hideOverlayHtml: function() { var overlay = document.getElementById("overlay-container"); if (overlay) { overlay.classList.add("media-playing"); console.log("[Preview] hideOverlayHtml"); } } }; };\n' +
+'    (function() { var userJsCode = ' + JSON.stringify(jsCodeForPreview || '// No JavaScript code provided') + '; var executeCode = function() { try { eval(userJsCode); } catch (e) { console.error("[Preview] Error:", e); } }; var codeExecuted = false; var executeOnce = function() { if (!codeExecuted) { codeExecuted = true; executeCode(); } }; var mediaPlayer = document.getElementById("media-player"); if (mediaPlayer && (mediaPlayer.tagName === "VIDEO" || mediaPlayer.tagName === "AUDIO")) { mediaPlayer.addEventListener("loadedmetadata", function() { console.log("[ConfigModal Preview] Media metadata loaded"); executeOnce(); }); mediaPlayer.addEventListener("error", function(e) { console.error("[ConfigModal Preview] Media load error:", e); executeOnce(); }); if (mediaPlayer.readyState >= 1) { executeOnce(); } else { setTimeout(executeOnce, 2000); } } else { if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", executeOnce); } else { setTimeout(executeOnce, 10); } } })();\n' +
+'  </script>\n' +
+'</body>\n' +
+'</html>';
+    } else {
+      // For other categories, use the existing preview generation
+      htmlDoc = '<!DOCTYPE html>\n' +
+'<html>\n' +
+'<head>\n' +
+'  <meta charset="UTF-8">\n' +
+'  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
+'  <style>\n' +
+'    body { margin: 0; padding: 0; }\n' +
+escapedCss + '\n' +
+'  </style>\n' +
+'</head>\n' +
+'<body>\n' +
+escapedHtml + '\n' +
+'  <script>\n' +
+'    window.interactionData = ' + sampleDataJson + ';\n' +
+'    window.interactionConfig = ' + configJson + ';\n' +
+'    (function() { var userJsCode = ' + JSON.stringify(jsCodeForPreview || '// No JavaScript code provided') + '; var executeCode = function() { try { eval(userJsCode); } catch (e) { console.error("[Preview] Error:", e); } }; if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", executeCode); } else { setTimeout(executeCode, 10); } })();\n' +
+'  </script>\n' +
+'</body>\n' +
+'</html>';
+    }
 
     console.log('[ConfigModal] ✅ Complete HTML document generated');
     console.log('[ConfigModal] 📄 HTML Document Length:', htmlDoc.length);
@@ -1127,8 +1345,26 @@ export class InteractionConfigureModalComponent implements OnChanges {
         URL.revokeObjectURL(oldUrl);
       }
     }
+    // Create cache key for this preview
+    const cacheKey = `${this.interactionCategory}-${this.config?.contentOutputId || this.selectedMediaId || 'none'}-${this.htmlCode?.substring(0, 50) || 'none'}`;
+    
+    // Use cached blob URL if available and key matches
+    if (this.currentBlobUrl && this.currentBlobUrlKey === cacheKey) {
+      console.log('[ConfigModal] ♻️ Using cached preview blob URL');
+      return this.currentBlobUrl;
+    }
+    
+    // Revoke old blob URL if it exists
+    if (this.currentBlobUrl) {
+      const oldUrl = (this.currentBlobUrl as any).changingThisBreaksApplicationSecurity;
+      if (oldUrl && oldUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(oldUrl);
+      }
+    }
+    
     this.currentBlobUrl = this.domSanitizer.bypassSecurityTrustResourceUrl(url);
-    console.log('[ConfigModal] 🔗 Created blob URL:', url);
+    this.currentBlobUrlKey = cacheKey;
+    console.log('[ConfigModal] 🆕 Created new preview blob URL with key:', cacheKey);
     return this.currentBlobUrl;
   }
 
@@ -1385,11 +1621,15 @@ export class InteractionConfigureModalComponent implements OnChanges {
     // Update initial snapshot after successful save
     this.initialConfigSnapshot = JSON.parse(JSON.stringify(this.config));
     
-    // Emit saved event but don't close modal - let parent component handle it if needed
+    // Emit saved event with the full config including contentOutputId
+    console.log('[ConfigModal] 💾 Saving config with contentOutputId:', this.config.contentOutputId);
     this.saved.emit(this.config);
     
     // Show success message
     console.log('[ConfigModal] ✅ Configuration saved successfully');
+    
+    // Close modal after save
+    this.close();
   }
 }
 

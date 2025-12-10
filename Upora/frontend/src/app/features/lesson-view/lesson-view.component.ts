@@ -20,11 +20,12 @@ import { DEFAULT_LESSON_ID, isDefaultLessonId } from '../../core/constants/defau
 import { TrueFalseSelectionComponent } from '../interactions/true-false-selection/true-false-selection.component';
 import { FloatingTeacherWidgetComponent, ScriptBlock, ChatMessage as WidgetChatMessage } from '../../shared/components/floating-teacher/floating-teacher-widget.component';
 import { SnackMessageComponent } from '../../shared/components/snack-message/snack-message.component';
+import { MediaPlayerComponent } from '../../shared/components/media-player/media-player.component';
 
 @Component({
   selector: 'app-lesson-view',
   standalone: true,
-  imports: [CommonModule, FormsModule, IonContent, TrueFalseSelectionComponent, FloatingTeacherWidgetComponent, SnackMessageComponent],
+  imports: [CommonModule, FormsModule, IonContent, TrueFalseSelectionComponent, FloatingTeacherWidgetComponent, SnackMessageComponent, MediaPlayerComponent],
   template: `
     <div class="bg-brand-dark text-white overflow-hidden flex flex-col md:flex-row lesson-view-wrapper" [class.fullscreen-active]="isFullscreen">
       <!-- Mobile overlay -->
@@ -182,8 +183,27 @@ import { SnackMessageComponent } from '../../shared/components/snack-message/sna
               </app-true-false-selection>
             </div>
 
+            <!-- Uploaded Media Interactions -->
+            <div *ngIf="!isLoadingInteraction && interactionBuild?.interactionTypeCategory === 'uploaded-media' && mediaPlayerData && !interactionError" class="media-interaction-container">
+              <app-media-player
+                #mediaPlayer
+                [mediaUrl]="mediaPlayerData.mediaUrl"
+                [mediaType]="mediaPlayerData.mediaType"
+                [config]="mediaPlayerData.config"
+                [overlayHtml]="mediaPlayerData.overlayHtml"
+                [overlayCss]="mediaPlayerData.overlayCss"
+                [overlayJs]="mediaPlayerData.overlayJs"
+                (mediaLoaded)="onMediaLoaded($event)"
+                (timeUpdate)="onMediaTimeUpdate($event)"
+                (playEvent)="onMediaPlay()"
+                (pauseEvent)="onMediaPause()"
+                (endedEvent)="onMediaEnded()"
+                (errorEvent)="onMediaError($event)">
+              </app-media-player>
+            </div>
+
             <!-- PixiJS/HTML/iframe Interactions -->
-            <div *ngIf="!isLoadingInteraction && interactionBuild && interactionBlobUrl && !interactionError" class="interaction-build-container">
+            <div *ngIf="!isLoadingInteraction && interactionBuild && interactionBuild?.interactionTypeCategory !== 'uploaded-media' && interactionBlobUrl && !interactionError" class="interaction-build-container">
               <!-- Note: Both allow-scripts and allow-same-origin are required for interaction iframes to function properly.
                    The browser warning about escaping sandboxing is expected and safe for our use case where we control the content being loaded. -->
               <iframe 
@@ -333,8 +353,29 @@ import { SnackMessageComponent } from '../../shared/components/snack-message/sna
               </svg>
             </button>
             <div class="script-progress-info">
-              <span *ngIf="!showTimer" class="script-title">{{ currentTeacherScript?.text?.substring(0, 40) || 'Ready to teach' }}{{ (currentTeacherScript?.text?.length || 0) > 40 ? '...' : '' }}</span>
-              <span *ngIf="showTimer" class="timer-display">⏱️ {{ formatTime(elapsedSeconds) }}</span>
+              <!-- Show volume control when media player is present or TTS is active, but hide when timer is shown -->
+              <div *ngIf="((mediaPlayerRef && mediaPlayerData) || isTTSActive) && !showTimer" class="volume-control-container">
+                <label for="volume-slider" class="volume-label">🔊</label>
+                <input 
+                  type="range" 
+                  id="volume-slider"
+                  class="volume-slider"
+                  min="0" 
+                  max="1" 
+                  step="0.01"
+                  [value]="mediaVolume"
+                  (input)="onVolumeChange($event)"
+                  title="Volume: {{ Math.round(mediaVolume * 100) }}%"
+                />
+                <span class="volume-value">{{ Math.round(mediaVolume * 100) }}%</span>
+              </div>
+              <!-- Show script text when no media player and no TTS -->
+              <ng-container *ngIf="!(mediaPlayerRef && mediaPlayerData) && !isTTSActive">
+                <span *ngIf="!showTimer" class="script-title">{{ currentTeacherScript?.text?.substring(0, 40) || 'Ready to teach' }}{{ (currentTeacherScript?.text?.length || 0) > 40 ? '...' : '' }}</span>
+                <span *ngIf="showTimer" class="timer-display">⏱️ {{ formatTime(elapsedSeconds) }}</span>
+              </ng-container>
+              <!-- Show timer when timer is enabled (even if media player is present) -->
+              <span *ngIf="showTimer && ((mediaPlayerRef && mediaPlayerData) || isTTSActive)" class="timer-display">⏱️ {{ formatTime(elapsedSeconds) }}</span>
             </div>
           </div>
 
@@ -600,6 +641,70 @@ import { SnackMessageComponent } from '../../shared/components/snack-message/sna
       text-overflow: ellipsis;
       display: block;
       text-align: center;
+    }
+
+    .volume-control-container {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      justify-content: center;
+      min-width: 150px;
+    }
+
+    .volume-label {
+      font-size: 1.25rem;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .volume-slider {
+      flex: 1;
+      min-width: 80px;
+      height: 4px;
+      background: #333333;
+      border-radius: 2px;
+      outline: none;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    .volume-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      background: #ff3b3f;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .volume-slider::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+      background: #ff6b6f;
+    }
+
+    .volume-slider::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      background: #ff3b3f;
+      border-radius: 50%;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+
+    .volume-slider::-moz-range-thumb:hover {
+      transform: scale(1.2);
+      background: #ff6b6f;
+    }
+
+    .volume-value {
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.7);
+      min-width: 35px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
     }
 
     /* Fullscreen Mode */
@@ -953,6 +1058,21 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   interactionPreviewKey = 0;
   interactionError: string | null = null;
   
+  // Media player properties (for uploaded-media interactions)
+  mediaPlayerData: {
+    mediaUrl: string;
+    mediaType: 'video' | 'audio';
+    config: any;
+    overlayHtml: string;
+    overlayCss: string;
+    overlayJs: string;
+  } | null = null;
+  @ViewChild('mediaPlayer') mediaPlayerRef?: MediaPlayerComponent;
+  
+  mediaVolume = 1.0; // Default volume (0.0 to 1.0)
+  isTTSActive = false; // Will be true when TTS is integrated
+  Math = Math; // Expose Math to template
+  
   private destroy$ = new Subject<void>();
   private processedOutputsCache = new Map<string, any[]>();
   
@@ -975,6 +1095,33 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   ngOnInit() {
     console.log('[LessonView] ngOnInit called');
     console.log('[LessonView] enableWebSockets:', environment.enableWebSockets);
+    
+    // Listen for volume changes from SDK
+    window.addEventListener('interaction-media-volume-changed', ((e: CustomEvent) => {
+      if (e.detail?.volume !== undefined) {
+        this.mediaVolume = e.detail.volume;
+        console.log('[LessonView] 🔊 Volume updated from SDK:', this.mediaVolume);
+      }
+    }) as EventListener);
+    
+    // Listen for show/hide overlay HTML events
+    window.addEventListener('interaction-show-overlay-html', (() => {
+      // Show overlay by removing media-playing class
+      const overlayContainer = document.querySelector('.overlay-container');
+      if (overlayContainer) {
+        overlayContainer.classList.remove('media-playing');
+        console.log('[LessonView] ✅ Overlay HTML shown');
+      }
+    }) as EventListener);
+    
+    window.addEventListener('interaction-hide-overlay-html', (() => {
+      // Hide overlay by adding media-playing class
+      const overlayContainer = document.querySelector('.overlay-container');
+      if (overlayContainer) {
+        overlayContainer.classList.add('media-playing');
+        console.log('[LessonView] ✅ Overlay HTML hidden');
+      }
+    }) as EventListener);
     
     // Start timer immediately when lesson loads (always running in background)
     console.log('[LessonView] 🚀 Starting timer on lesson load');
@@ -1455,6 +1602,11 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     console.log('[LessonView] 🧹 Cleaning up lesson view resources...');
     
+    // Remove event listeners
+    window.removeEventListener('interaction-media-volume-changed', ((e: CustomEvent) => {}) as EventListener);
+    window.removeEventListener('interaction-show-overlay-html', (() => {}) as EventListener);
+    window.removeEventListener('interaction-hide-overlay-html', (() => {}) as EventListener);
+    
     // Clear screenshot timeout if it exists
     if (this.screenshotTimeout) {
       clearTimeout(this.screenshotTimeout);
@@ -1535,6 +1687,15 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   }
 
   selectSubStage(stageId: string | number, subStageId: string | number) {
+    // Pause media player if switching substages
+    if (this.mediaPlayerRef && this.mediaPlayerRef.isPlaying()) {
+      this.mediaPlayerRef.pause();
+      console.log('[LessonView] ⏸ Media player paused on substage switch');
+    }
+    
+    // Pause script playback
+    this.isScriptPlaying = false;
+    
     this.activeStageId = stageId;
     this.activeSubStageId = subStageId;
     this.isMobileNavOpen = false;
@@ -1554,6 +1715,12 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // Load interaction data if available
     this.loadInteractionData();
     
+    // Check if this is a media player interaction and if autoplay is disabled
+    const isMediaInteraction = this.interactionBuild?.interactionTypeCategory === 'uploaded-media';
+    const mediaConfig = this.interactionBuild?.mediaConfig || {};
+    const instanceConfig = this.activeSubStage?.interaction?.config || {};
+    const shouldAutoplay = instanceConfig.autoplay ?? mediaConfig.autoplay ?? false;
+    
     // Play teacher script if available (or demo script for testing)
     // TODO: Get script from activeSubStage.script.before
     if (this.activeSubStage) {
@@ -1562,6 +1729,16 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         text: `Welcome to ${this.activeSubStage.title || 'this sub-stage'}! Let me explain what we'll be learning here. This is a demonstration of the AI teacher script system. In production, these scripts will be defined in the lesson data and can be edited by lesson builders.`,
         estimatedDuration: 15
       }, null);
+      
+      // If media interaction and autoplay is false, pause the lesson after a short delay
+      if (isMediaInteraction && !shouldAutoplay) {
+        setTimeout(() => {
+          if (this.isScriptPlaying) {
+            this.onTeacherPause();
+            console.log('[LessonView] ⏸ Lesson paused because media autoplay is disabled');
+          }
+        }, 500);
+      }
     }
   }
 
@@ -1674,6 +1851,67 @@ export class LessonViewComponent implements OnInit, OnDestroy {
             }, 500);
           }
         }, 100);
+        
+        // Set media player reference for uploaded-media interactions
+        if (this.interactionBuild?.interactionTypeCategory === 'uploaded-media') {
+          setTimeout(() => {
+            if (this.mediaPlayerRef) {
+              this.interactionAISDK.setMediaPlayerRef(this.mediaPlayerRef);
+              console.log('[LessonView] ✅ Media player reference set for SDK');
+              
+              // Check for autoplay when sub-stage is selected
+              const shouldAutoplay = this.mediaPlayerData?.config?.autoplay ?? false;
+              if (shouldAutoplay && !this.mediaPlayerRef.isPlaying()) {
+                // If lesson isn't playing, start it first
+                if (!this.isScriptPlaying) {
+                  console.log('[LessonView] ▶️ Starting lesson (autoplay enabled on sub-stage select)');
+                  this.onTeacherPlay();
+                }
+                
+                // Then start media
+                setTimeout(() => {
+                  if (this.mediaPlayerRef && !this.mediaPlayerRef.isPlaying()) {
+                    try {
+                      this.mediaPlayerRef.play();
+                      console.log('[LessonView] ▶️ Media started automatically (autoplay on sub-stage select)');
+                    } catch (error) {
+                      console.log('[LessonView] ℹ️ Autoplay blocked by browser:', error);
+                    }
+                  }
+                }, 200);
+              }
+            } else {
+              // Retry if media player not ready yet
+              setTimeout(() => {
+                if (this.mediaPlayerRef) {
+                  this.interactionAISDK.setMediaPlayerRef(this.mediaPlayerRef);
+                  console.log('[LessonView] ✅ Media player reference set for SDK (retry)');
+                  
+                  // Check for autoplay on retry
+                  const shouldAutoplay = this.mediaPlayerData?.config?.autoplay ?? false;
+                  if (shouldAutoplay && !this.mediaPlayerRef.isPlaying()) {
+                    if (!this.isScriptPlaying) {
+                      this.onTeacherPlay();
+                    }
+                    setTimeout(() => {
+                      if (this.mediaPlayerRef && !this.mediaPlayerRef.isPlaying()) {
+                        try {
+                          this.mediaPlayerRef.play();
+                          console.log('[LessonView] ▶️ Media started automatically (autoplay on retry)');
+                        } catch (error) {
+                          console.log('[LessonView] ℹ️ Autoplay blocked by browser:', error);
+                        }
+                      }
+                    }, 200);
+                  }
+                } else {
+                  console.warn('[LessonView] ⚠️ Media player not available after retry');
+                }
+              }, 500);
+            }
+          }, 100);
+        }
+        
         console.log('[LessonView] ✅ Initialized AI SDK for interaction:', interactionId, 'processedContentId:', processedContentId);
       } else {
         // Clear SDK context if no interaction
@@ -1901,86 +2139,36 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     const interaction = subStage.interaction || (subStage as any).interactionType;
     const interactionTypeId = interaction?.type || interaction?.id || interaction;
     
-    // Check if this is a PixiJS/HTML/iframe interaction (not true-false-selection)
-    // These interactions use builds, but can also use processed outputs
+    // Check if this is an uploaded-media interaction
     if (interactionTypeId && interactionTypeId !== 'true-false-selection') {
-      console.log('[LessonView] Loading interaction build for type:', interactionTypeId);
-      this.isLoadingInteraction = true;
-      
-      // Fetch interaction build from API (with cache-busting to ensure we get latest code)
+      // First, fetch the interaction build to check its category
       const cacheBuster = `?t=${Date.now()}`;
       this.http.get(`${environment.apiUrl}/interaction-types/${interactionTypeId}${cacheBuster}`)
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: (build: any) => {
-            console.log('[LessonView] ✅ Loaded interaction build:', build.id);
-            console.log('[LessonView] 📝 JS code length:', build.jsCode?.length || 0);
-            console.log('[LessonView] 📝 JS code includes "Show Snack":', build.jsCode?.includes('Show Snack') || false);
-            this.interactionBuild = build;
-            
-            // Check for processed output (PixiJS/HTML interactions can use processed outputs, but it's optional)
-            const processedContentId = this.normalizeContentOutputId(
-              subStage.contentOutputId || (subStage.interaction as any)?.contentOutputId
-            );
-            
-            if (!processedContentId) {
-              // No processed content - use sample data (no error, interactions can work without processed content)
-              console.log('[LessonView] ℹ️ No processed content found, using sample data from interaction build');
-              this.interactionPreviewKey++; // Force iframe recreation
-              this.createInteractionBlobUrl();
-              this.isLoadingInteraction = false;
-              
-              // Send SDK ready message after iframe is created
-              setTimeout(() => {
-                this.sendSDKReadyToIframe();
-              }, 500);
+            // Check if this is an uploaded-media interaction
+            if (build.interactionTypeCategory === 'uploaded-media') {
+              this.loadMediaPlayerData(build, subStage);
               return;
             }
             
-            // Processed content ID exists - fetch it (if it fails, show error since it was expected)
-            this.http.get(`${environment.apiUrl}/lesson-editor/processed-outputs/${processedContentId}`)
-              .pipe(takeUntil(this.destroy$))
-              .subscribe({
-                next: (output: any) => {
-                  console.log('[LessonView] ✅ Loaded processed output for interaction:', processedContentId);
-                  
-                  // Validate processed output has data
-                  const processedData = output.outputData;
-                  if (!processedData || typeof processedData !== 'object' || Object.keys(processedData).length === 0) {
-                    console.error('[LessonView] ❌ Processed output has no data or invalid format');
-                    this.interactionError = 'The processed content for this interaction is empty or invalid. The processed content must be a valid JSON object with data. Please regenerate the processed content from the content source.';
-                    this.isLoadingInteraction = false;
-                    return;
-                  }
-                  
-                  // Use processed content (replace sample data)
-                  this.interactionBuild = { ...build, sampleData: processedData };
-                  this.interactionPreviewKey++; // Force iframe recreation
-                  this.createInteractionBlobUrl();
-                  this.isLoadingInteraction = false;
-                  
-                  // Send SDK ready message after iframe is created
-                  setTimeout(() => {
-                    this.sendSDKReadyToIframe();
-                  }, 500);
-                },
-                error: (error) => {
-                  console.error('[LessonView] ❌ Failed to load processed output:', error);
-                  // Only show error if processed content was expected (contentOutputId was set)
-                  if (error.status === 404) {
-                    this.interactionError = 'Processed content not found. A processed content ID was associated with this interaction, but the content could not be found. Please ensure processed content has been generated and is correctly associated with this substage.';
-                  } else {
-                    this.interactionError = `Failed to load processed content: ${error.message || 'Unknown error'}. Please check the processed content configuration.`;
-                  }
-                  this.isLoadingInteraction = false;
-                }
-              });
+            // Otherwise, continue with normal PixiJS/HTML/iframe loading
+            this.loadPixiJSHTMLIframeInteraction(build, subStage);
           },
           error: (error) => {
             console.error('[LessonView] ❌ Failed to load interaction build:', error);
             this.isLoadingInteraction = false;
           }
         });
+      return;
+    }
+    
+    // Legacy check for PixiJS/HTML/iframe (for backward compatibility)
+    if (interactionTypeId && interactionTypeId !== 'true-false-selection') {
+      console.log('[LessonView] Loading interaction build for type:', interactionTypeId);
+      this.isLoadingInteraction = true;
+      this.loadPixiJSHTMLIframeInteraction(null, subStage);
       return;
     }
 
@@ -2125,6 +2313,175 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       });
   }
 
+  // Helper method to load PixiJS/HTML/iframe interactions
+  private loadPixiJSHTMLIframeInteraction(build: any | null, subStage: SubStage) {
+    const interaction = subStage.interaction || (subStage as any).interactionType;
+    const interactionTypeId = interaction?.type || interaction?.id || interaction;
+    
+    if (!build) {
+        // Fetch interaction build from API (with cache-busting to ensure we get latest code)
+        const cacheBuster = `?t=${Date.now()}`;
+        this.http.get(`${environment.apiUrl}/interaction-types/${interactionTypeId}${cacheBuster}`)
+          .pipe(takeUntil(this.destroy$))
+          .subscribe({
+            next: (fetchedBuild: any) => {
+              this.loadPixiJSHTMLIframeInteraction(fetchedBuild, subStage);
+            },
+            error: (error) => {
+              console.error('[LessonView] ❌ Failed to load interaction build:', error);
+              this.isLoadingInteraction = false;
+            }
+          });
+        return;
+      }
+      
+      console.log('[LessonView] ✅ Loaded interaction build:', build.id);
+      console.log('[LessonView] 📝 JS code length:', build.jsCode?.length || 0);
+      console.log('[LessonView] 📝 JS code includes "Show Snack":', build.jsCode?.includes('Show Snack') || false);
+      this.interactionBuild = build;
+      
+      // Check for processed output (PixiJS/HTML interactions can use processed outputs, but it's optional)
+      const processedContentId = this.normalizeContentOutputId(
+        subStage.contentOutputId || (subStage.interaction as any)?.contentOutputId
+      );
+      
+      if (!processedContentId) {
+        // No processed content - use sample data (no error, interactions can work without processed content)
+        console.log('[LessonView] ℹ️ No processed content found, using sample data from interaction build');
+        this.interactionPreviewKey++; // Force iframe recreation
+        this.createInteractionBlobUrl();
+        this.isLoadingInteraction = false;
+        
+        // Send SDK ready message after iframe is created
+        setTimeout(() => {
+          this.sendSDKReadyToIframe();
+        }, 500);
+        return;
+      }
+      
+      // Processed content ID exists - fetch it (if it fails, show error since it was expected)
+      this.http.get(`${environment.apiUrl}/lesson-editor/processed-outputs/${processedContentId}`)
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: (output: any) => {
+            console.log('[LessonView] ✅ Loaded processed output for interaction:', processedContentId);
+            
+            // Validate processed output has data
+            const processedData = output.outputData;
+            if (!processedData || typeof processedData !== 'object' || Object.keys(processedData).length === 0) {
+              console.error('[LessonView] ❌ Processed output has no data or invalid format');
+              this.interactionError = 'The processed content for this interaction is empty or invalid. The processed content must be a valid JSON object with data. Please regenerate the processed content from the content source.';
+              this.isLoadingInteraction = false;
+              return;
+            }
+            
+            // Use processed content (replace sample data)
+            this.interactionBuild = { ...build, sampleData: processedData };
+            this.interactionPreviewKey++; // Force iframe recreation
+            this.createInteractionBlobUrl();
+            this.isLoadingInteraction = false;
+            
+            // Send SDK ready message after iframe is created
+            setTimeout(() => {
+              this.sendSDKReadyToIframe();
+            }, 500);
+          },
+          error: (error) => {
+            console.error('[LessonView] ❌ Failed to load processed output:', error);
+            // Only show error if processed content was expected (contentOutputId was set)
+            if (error.status === 404) {
+              this.interactionError = 'Processed content not found. A processed content ID was associated with this interaction, but the content could not be found. Please ensure processed content has been generated and is correctly associated with this substage.';
+            } else {
+              this.interactionError = `Failed to load processed content: ${error.message || 'Unknown error'}. Please check the processed content configuration.`;
+            }
+            this.isLoadingInteraction = false;
+          }
+        });
+  }
+
+  // Helper method to load media player data for uploaded-media interactions
+  private loadMediaPlayerData(build: any, subStage: SubStage) {
+    console.log('[LessonView] 🎬 Loading media player data for uploaded-media interaction');
+    this.isLoadingInteraction = true;
+    this.mediaPlayerData = null;
+    this.interactionBuild = build; // Store build for reference
+    
+    // Get processed content ID from config
+    const processedContentId = this.normalizeContentOutputId(
+      subStage.contentOutputId || (subStage.interaction as any)?.contentOutputId || (subStage.interaction as any)?.config?.contentOutputId
+    );
+    
+    if (!processedContentId) {
+      console.warn('[LessonView] ❌ No processed content ID found for uploaded-media interaction');
+      this.interactionError = 'No media content selected for this interaction. Please select media content in the lesson editor.';
+      this.isLoadingInteraction = false;
+      return;
+    }
+    
+    // Fetch processed output (which contains media file URL and metadata)
+    this.http.get(`${environment.apiUrl}/lesson-editor/processed-outputs/${processedContentId}`)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (output: any) => {
+          console.log('[LessonView] ✅ Loaded processed output for media:', processedContentId);
+          
+          // Extract media data from processed output
+          const outputData = output.outputData || {};
+          const mediaType = outputData.mediaFileType || outputData.mediaType || 'video';
+          
+          // Use the processed content endpoint to serve the media file
+          // This ensures proper MIME type headers and file serving
+          const fullMediaUrl = `${environment.apiUrl}/content-sources/processed-content/${processedContentId}/file`;
+          
+          console.log('[LessonView] 🎬 Constructed media URL:', fullMediaUrl);
+          console.log('[LessonView] 🎬 Media type:', mediaType);
+          
+          // Get media config from interaction build or use defaults
+          const mediaConfig = build.mediaConfig || {};
+          const config = subStage.interaction?.config || {};
+          
+          // Extract overlay code from interaction build
+          const overlayHtml = build.htmlCode || '';
+          const overlayCss = build.cssCode || '';
+          const overlayJs = build.jsCode || '';
+          
+          this.mediaPlayerData = {
+            mediaUrl: fullMediaUrl,
+            mediaType: mediaType as 'video' | 'audio',
+            config: {
+              autoplay: config.autoplay ?? mediaConfig.autoplay ?? false,
+              loop: config.loop ?? mediaConfig.loop ?? false,
+              showControls: config.showControls ?? mediaConfig.showControls ?? false, // Default: hide controls
+              defaultVolume: config.defaultVolume ?? mediaConfig.defaultVolume ?? 1,
+              startTime: config.startTime,
+              endTime: config.endTime,
+              hideOverlayDuringPlayback: config.hideOverlayDuringPlayback ?? mediaConfig.hideOverlayDuringPlayback ?? true, // Default: hide overlay during playback
+            },
+            overlayHtml,
+            overlayCss,
+            overlayJs,
+          };
+          
+          console.log('[LessonView] ✅ Media player data loaded:', {
+            mediaUrl: fullMediaUrl,
+            mediaType,
+            hasOverlay: !!(overlayHtml || overlayCss || overlayJs),
+          });
+          
+          this.isLoadingInteraction = false;
+        },
+        error: (error) => {
+          console.error('[LessonView] ❌ Failed to load processed output for media:', error);
+          if (error.status === 404) {
+            this.interactionError = 'Media content not found. The processed content associated with this interaction could not be found.';
+          } else {
+            this.interactionError = `Failed to load media content: ${error.message || 'Unknown error'}`;
+          }
+          this.isLoadingInteraction = false;
+        }
+      });
+  }
+
   /**
    * Handle interaction completion with score
    */
@@ -2204,6 +2561,13 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     this.activeSubStage = null;
     this.currentTeacherScript = null;
     this.isScriptPlaying = false;
+    
+    // Pause media player if active
+    if (this.mediaPlayerRef && this.mediaPlayerRef.isPlaying()) {
+      this.mediaPlayerRef.pause();
+      console.log('[LessonView] ⏸ Media player paused at end of lesson');
+    }
+    
     console.log('[LessonView] Showing end of lesson screen');
   }
   
@@ -2213,6 +2577,20 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   restartLesson() {
     console.log('[LessonView] Restarting lesson');
     this.elapsedSeconds = 0; // Reset timer
+    this.isScriptPlaying = false;
+    
+    // Pause and reset media player if active
+    if (this.mediaPlayerRef) {
+      if (this.mediaPlayerRef.isPlaying()) {
+        this.mediaPlayerRef.pause();
+      }
+      // Seek to beginning if media is loaded
+      try {
+        this.mediaPlayerRef.seekTo(0);
+      } catch (e) {
+        // Media might not be loaded yet, ignore
+      }
+    }
     
     // Restart from first stage
     if (this.lessonStages.length > 0) {
@@ -2228,6 +2606,134 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Media Player Event Handlers
+   */
+  onMediaLoaded(event: { duration: number; width?: number; height?: number }) {
+    console.log('[LessonView] 🎬 Media loaded:', event);
+    
+    // Set media player reference for SDK now that media is loaded
+    if (this.mediaPlayerRef) {
+      this.interactionAISDK.setMediaPlayerRef(this.mediaPlayerRef);
+      console.log('[LessonView] ✅ Media player reference set for SDK (onMediaLoaded)');
+    }
+    
+    // Initialize volume from media player config if available
+    if (this.mediaPlayerData?.config?.defaultVolume !== undefined) {
+      this.mediaVolume = this.mediaPlayerData.config.defaultVolume;
+      // Apply to media player
+      if (this.mediaPlayerRef) {
+        this.mediaPlayerRef.setVolume(this.mediaVolume);
+      }
+    }
+    
+    // If media should autoplay, start media (and lesson if needed)
+    const shouldAutoplay = this.mediaPlayerData?.config?.autoplay ?? false;
+    if (shouldAutoplay && this.mediaPlayerRef) {
+      setTimeout(() => {
+        if (this.mediaPlayerRef && !this.mediaPlayerRef.isPlaying()) {
+          // If lesson isn't playing, start it first
+          if (!this.isScriptPlaying) {
+            console.log('[LessonView] ▶️ Starting lesson (autoplay enabled but lesson paused)');
+            this.onTeacherPlay();
+          }
+          
+          // Then start media
+          try {
+            this.mediaPlayerRef.play();
+            console.log('[LessonView] ▶️ Media started automatically (autoplay enabled)');
+          } catch (error) {
+            // Browser autoplay restrictions - this is expected and normal
+            console.log('[LessonView] ℹ️ Autoplay blocked by browser (user interaction required):', error);
+          }
+        }
+      }, 100);
+    } else if (this.isScriptPlaying && this.mediaPlayerRef) {
+      // If lesson is playing but autoplay is disabled, try to start media anyway
+      // (user might have manually started the lesson)
+      setTimeout(() => {
+        if (this.mediaPlayerRef && !this.mediaPlayerRef.isPlaying()) {
+          try {
+            this.mediaPlayerRef.play();
+            console.log('[LessonView] ▶️ Media started (lesson playing)');
+          } catch (error) {
+            console.log('[LessonView] ℹ️ Media play blocked:', error);
+          }
+        }
+      }, 100);
+    }
+  }
+  
+  onVolumeChange(event: Event) {
+    const target = event.target as HTMLInputElement;
+    const newVolume = parseFloat(target.value);
+    this.mediaVolume = newVolume;
+    
+    // Apply to media player if available
+    if (this.mediaPlayerRef) {
+      this.mediaPlayerRef.setVolume(this.mediaVolume);
+    }
+    
+    // TODO: When TTS is integrated, also apply volume to TTS here
+    // if (this.isTTSActive) {
+    //   this.ttsService.setVolume(this.mediaVolume);
+    // }
+    
+    console.log('[LessonView] 🔊 Volume changed to:', Math.round(this.mediaVolume * 100) + '%');
+  }
+
+  onMediaTimeUpdate(currentTime: number) {
+    // Sync lesson elapsed time with media current time for uploaded-media interactions
+    // This allows the lesson timer to reflect media playback progress
+    if (this.interactionBuild?.interactionTypeCategory === 'uploaded-media' && this.isScriptPlaying) {
+      // Update elapsed seconds to match media time (rounded to nearest second)
+      this.elapsedSeconds = Math.floor(currentTime);
+    }
+  }
+
+  onMediaPlay() {
+    console.log('[LessonView] ▶️ Media playing');
+    // Sync script play state with media
+    if (!this.isScriptPlaying) {
+      this.isScriptPlaying = true;
+      // Start timer if needed
+      if (this.timerInterval) {
+        // Timer already running
+      }
+    }
+  }
+
+  onMediaPause() {
+    console.log('[LessonView] ⏸ Media paused');
+    // Sync script pause state with media
+    if (this.isScriptPlaying) {
+      this.isScriptPlaying = false;
+      // Timer will pause automatically (stops incrementing)
+    }
+  }
+
+  onMediaEnded() {
+    console.log('[LessonView] ✅ Media ended');
+    // Auto-advance to next substage when media ends
+    this.moveToNextSubStage();
+  }
+
+  onMediaError(errorMessage: string) {
+    console.error('[LessonView] ❌ Media error:', errorMessage);
+    console.error('[LessonView] Media URL:', this.mediaPlayerData?.mediaUrl);
+    console.error('[LessonView] Media Type:', this.mediaPlayerData?.mediaType);
+    console.error('[LessonView] Media Config:', this.mediaPlayerData?.config);
+    
+    // Check if it's a network/CORS issue
+    if (errorMessage.includes('Network') || errorMessage.includes('CORS')) {
+      this.interactionError = `Media playback error: ${errorMessage}. Please check that the media file is accessible and CORS is properly configured.`;
+    } else if (errorMessage.includes('Format') || errorMessage.includes('decode')) {
+      this.interactionError = `Media playback error: ${errorMessage}. The media file may be corrupted, in an unsupported format, or the MIME type may be incorrect. Please check the file format and try re-uploading.`;
+    } else {
+      this.interactionError = `Media playback error: ${errorMessage}`;
+    }
+  }
+
+  /**
    * Teacher Widget Handlers
    */
   onTeacherPlay() {
@@ -2235,6 +2741,22 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     console.log('[LessonView] Timer interval active:', !!this.timerInterval);
     console.log('[LessonView] Current elapsed:', this.elapsedSeconds);
     this.isScriptPlaying = true;
+    
+    // If media player is active, play it too
+    if (this.mediaPlayerRef && this.interactionBuild?.interactionTypeCategory === 'uploaded-media') {
+      // Wait a bit for media to be ready if needed
+      setTimeout(() => {
+        if (this.mediaPlayerRef && !this.mediaPlayerRef.isPlaying()) {
+          try {
+            this.mediaPlayerRef.play();
+            console.log('[LessonView] ▶️ Media player started via script play');
+          } catch (error) {
+            console.warn('[LessonView] ⚠️ Could not play media (may not be ready yet):', error);
+          }
+        }
+      }, 100);
+    }
+    
     // Timer will now increment (if visible)
     // TODO: Integrate TTS here when ready
     // Script stays visible until user closes or new script starts
@@ -2243,6 +2765,15 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   onTeacherPause() {
     console.log('[LessonView] ⏸ PAUSE - Setting isScriptPlaying = false');
     this.isScriptPlaying = false;
+    
+    // If media player is active, pause it too
+    if (this.mediaPlayerRef && this.interactionBuild?.interactionTypeCategory === 'uploaded-media') {
+      if (this.mediaPlayerRef.isPlaying()) {
+        this.mediaPlayerRef.pause();
+        console.log('[LessonView] ⏸ Media player paused via script pause');
+      }
+    }
+    
     // Timer will now pause (stops incrementing)
   }
 
@@ -2250,6 +2781,14 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     console.log('[LessonView] Teacher script skipped');
     this.isScriptPlaying = false;
     this.currentTeacherScript = null;
+    
+    // If media player is active, pause it when script is skipped
+    if (this.mediaPlayerRef && this.interactionBuild?.interactionTypeCategory === 'uploaded-media') {
+      if (this.mediaPlayerRef.isPlaying()) {
+        this.mediaPlayerRef.pause();
+        console.log('[LessonView] ⏸ Media player paused via script skip');
+      }
+    }
   }
 
   onScriptClosed() {
@@ -2746,7 +3285,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     setTimeout(() => {
       this.fabDidMove = false;
     }, 200);
-  }
+  };
 
   /**
    * Toggle fullscreen mode
@@ -3173,6 +3712,50 @@ ${escapedHtml || '<div>No overlay content</div>'}
               callback(response.profile, response.error);
             }
           });
+        },
+        // Media Control Methods
+        playMedia: (callback) => {
+          sendMessage("ai-sdk-play-media", {}, (response) => {
+            if (callback) {
+              callback(response.success, response.error);
+            }
+          });
+        },
+        pauseMedia: () => {
+          sendMessage("ai-sdk-pause-media", {});
+        },
+        seekMedia: (time) => {
+          sendMessage("ai-sdk-seek-media", { time });
+        },
+        setMediaVolume: (volume) => {
+          sendMessage("ai-sdk-set-media-volume", { volume });
+        },
+        getMediaCurrentTime: (callback) => {
+          sendMessage("ai-sdk-get-media-current-time", {}, (response) => {
+            if (callback) {
+              callback(response.currentTime);
+            }
+          });
+        },
+        getMediaDuration: (callback) => {
+          sendMessage("ai-sdk-get-media-duration", {}, (response) => {
+            if (callback) {
+              callback(response.duration);
+            }
+          });
+        },
+        isMediaPlaying: (callback) => {
+          sendMessage("ai-sdk-is-media-playing", {}, (response) => {
+            if (callback) {
+              callback(response.isPlaying);
+            }
+          });
+        },
+        showOverlayHtml: () => {
+          sendMessage("ai-sdk-show-overlay-html", {});
+        },
+        hideOverlayHtml: () => {
+          sendMessage("ai-sdk-hide-overlay-html", {});
         },
       };
     };

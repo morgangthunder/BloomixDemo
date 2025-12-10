@@ -12,6 +12,8 @@ import { FileStorageService } from '../../services/file-storage.service';
 import { CreateContentSourceDto } from './dto/create-content-source.dto';
 import { UpdateContentSourceDto } from './dto/update-content-source.dto';
 import { SearchContentDto } from './dto/search-content.dto';
+import * as path from 'path';
+import * as fs from 'fs';
 
 @Injectable()
 export class ContentSourcesService {
@@ -325,6 +327,108 @@ export class ContentSourcesService {
   }
 
   /**
+   * Get file path for processed content
+   */
+  async getProcessedContentFilePath(processedContentId: string): Promise<string | null> {
+    try {
+      const processedOutput = await this.processedContentRepository.findOne({
+        where: { id: processedContentId },
+      });
+
+      if (!processedOutput || !processedOutput.outputData) {
+        return null;
+      }
+
+      const outputData = processedOutput.outputData as any;
+      let fileUrl = outputData.filePath || outputData.mediaFileUrl;
+
+      if (!fileUrl) {
+        this.logger.warn(`[getProcessedContentFilePath] No filePath or mediaFileUrl in outputData for ${processedContentId}`);
+        return null;
+      }
+
+      this.logger.log(`[getProcessedContentFilePath] Original fileUrl from DB: ${fileUrl}`);
+
+      // Check if it's a cloud storage URL (S3/MinIO)
+      if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
+        // Cloud storage - return URL as-is (controller will handle streaming)
+        this.logger.log(`[getProcessedContentFilePath] Cloud storage URL detected: ${fileUrl}`);
+        return fileUrl;
+      }
+
+      // Local storage - resolve file path
+      let filePath = fileUrl;
+
+      // Strip leading /uploads/ or uploads/ if present (path might be stored as /uploads/media/file.mp4)
+      const originalFilePath = filePath;
+      filePath = filePath.replace(/^\/?uploads\//, '');
+      if (filePath !== originalFilePath) {
+        this.logger.log(`[getProcessedContentFilePath] Stripped /uploads/ prefix: ${filePath}`);
+      }
+
+      // If it's already an absolute path, return it
+      if (path.isAbsolute(filePath)) {
+        if (fs.existsSync(filePath)) {
+          return filePath;
+        }
+      }
+
+      // Try to resolve relative paths using FileStorageService
+      const fileSystemPath = this.fileStorageService.getFilePath(fileUrl);
+      if (fileSystemPath) {
+        // Ensure it's an absolute path
+        const absolutePath = path.isAbsolute(fileSystemPath) 
+          ? fileSystemPath 
+          : path.resolve(process.cwd(), fileSystemPath);
+        
+        if (fs.existsSync(absolutePath)) {
+          this.logger.log(`[getProcessedContentFilePath] ✅ Found file via FileStorageService: ${absolutePath}`);
+          return absolutePath;
+        }
+      }
+
+      // Fallback: Try alternative paths (for backward compatibility)
+      const uploadDir = process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads');
+      this.logger.log(`[getProcessedContentFilePath] Using uploadDir: ${uploadDir}`);
+      
+      // Try with uploadDir first
+      const resolvedPath = path.resolve(uploadDir, filePath);
+      this.logger.log(`[getProcessedContentFilePath] Trying path: ${resolvedPath} (exists: ${fs.existsSync(resolvedPath)})`);
+      if (fs.existsSync(resolvedPath)) {
+        this.logger.log(`[getProcessedContentFilePath] ✅ Found file at: ${resolvedPath}`);
+        return resolvedPath;
+      }
+
+      // Try alternative paths (including with /uploads/ prefix stripped)
+      const altPaths = [
+        path.resolve(uploadDir, 'media', filePath), // Try media subdirectory
+        path.resolve(process.cwd(), 'uploads', filePath),
+        path.resolve(process.cwd(), 'uploads', 'media', filePath),
+        path.resolve(__dirname, '../../..', 'uploads', filePath),
+        path.resolve(__dirname, '../../..', 'uploads', 'media', filePath),
+        path.resolve('/app', 'uploads', filePath),
+        path.resolve('/app', 'uploads', 'media', filePath),
+        path.resolve('/app', filePath), // Try absolute path as-is
+      ];
+
+      this.logger.log(`[getProcessedContentFilePath] Trying ${altPaths.length} alternative paths...`);
+      for (const altPath of altPaths) {
+        this.logger.log(`[getProcessedContentFilePath] Trying: ${altPath} (exists: ${fs.existsSync(altPath)})`);
+        if (fs.existsSync(altPath)) {
+          this.logger.log(`[getProcessedContentFilePath] ✅ Found file at alternative path: ${altPath}`);
+          return altPath;
+        }
+      }
+
+      this.logger.warn(`[getProcessedContentFilePath] File not found for processed content ${processedContentId}: ${fileUrl}`);
+      return null;
+    } catch (error) {
+      this.logger.error(`[getProcessedContentFilePath] Error getting file path for processed content ${processedContentId}:`, error);
+      return null;
+    }
+  }
+
+  /**
    * Get lessons that use this content source
    */
   async getLessonsForContentSource(contentSourceId: string): Promise<Array<{ id: string; title: string }>> {
@@ -523,9 +627,66 @@ export class ContentSourcesService {
     }
 
     // Get file path (convert URL to file system path)
-    const urlPath = contentSource.filePath.replace('/uploads/', '');
+    // Handle both /uploads/... and uploads/... formats
+    let urlPath = contentSource.filePath;
+    if (urlPath.startsWith('/uploads/')) {
+      urlPath = urlPath.replace('/uploads/', '');
+    } else if (urlPath.startsWith('uploads/')) {
+      urlPath = urlPath.replace('uploads/', '');
+    }
     const uploadDir = process.env.UPLOAD_DIR || './uploads';
-    const filePath = require('path').join(uploadDir, urlPath);
+    const path = require('path');
+    const filePath = path.resolve(uploadDir, urlPath);
+    
+    // Log for debugging
+    this.logger.log(`[processMediaFile] Original filePath: ${contentSource.filePath}`);
+    this.logger.log(`[processMediaFile] Upload directory: ${uploadDir}`);
+    this.logger.log(`[processMediaFile] URL path: ${urlPath}`);
+    this.logger.log(`[processMediaFile] Resolved filePath: ${filePath}`);
+    
+    // Check if file exists
+    const fs = require('fs');
+    if (!fs.existsSync(filePath)) {
+      // Try alternative paths
+      const altPaths = [
+        path.join(process.cwd(), uploadDir, urlPath),
+        path.join(__dirname, '../../..', uploadDir, urlPath),
+        path.join('/app', uploadDir, urlPath),
+      ];
+      
+      this.logger.error(`[processMediaFile] File not found at: ${filePath}`);
+      this.logger.log(`[processMediaFile] Trying alternative paths...`);
+      
+      let foundPath = null;
+      for (const altPath of altPaths) {
+        this.logger.log(`[processMediaFile] Checking: ${altPath}`);
+        if (fs.existsSync(altPath)) {
+          foundPath = altPath;
+          this.logger.log(`[processMediaFile] ✅ File found at: ${altPath}`);
+          break;
+        }
+      }
+      
+      if (!foundPath) {
+        this.logger.error(`[processMediaFile] File not found in any location`);
+        throw new Error(`Media file not found. Original path: ${contentSource.filePath}, Resolved: ${filePath}. Please ensure the file was uploaded correctly.`);
+      }
+      
+      // Use the found path
+      return this.processMediaFileWithPath(contentSource, approvedBy, foundPath, mediaType, urlPath);
+    }
+    
+    return this.processMediaFileWithPath(contentSource, approvedBy, filePath, mediaType, urlPath);
+  }
+
+  private async processMediaFileWithPath(
+    contentSource: ContentSource,
+    approvedBy: string,
+    filePath: string,
+    mediaType: 'video' | 'audio',
+    urlPath: string, // Relative path for storage (e.g., "media/filename.mp4")
+  ): Promise<void> {
+    const path = require('path');
 
     // Extract metadata
     const metadata = await this.mediaMetadataService.extractMetadata(filePath, mediaType);
@@ -544,7 +705,8 @@ export class ContentSourcesService {
       outputName: contentSource.title || contentSource.metadata?.originalFileName || 'Media File',
       outputType: 'uploaded-media',
       outputData: {
-        mediaFileUrl: contentSource.filePath,
+        filePath: urlPath || ('media/' + path.basename(filePath)), // Store relative path (e.g., "media/8786ddce-d6e3-44f4-8c36-096474cd2cdc.mp4")
+        mediaFileUrl: contentSource.filePath, // Keep original for reference
         mediaFileName: contentSource.metadata?.originalFileName || 'unknown',
         mediaFileType: mediaType,
         mediaFileSize: metadata.fileSize,

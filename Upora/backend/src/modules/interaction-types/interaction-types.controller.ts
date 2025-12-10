@@ -36,7 +36,9 @@ export class InteractionTypesController {
   ) {
     // TODO: Add super-admin role check
     // Remove fields that shouldn't be updated
-    const { id: bodyId, createdAt, updatedAt, ...updateData } = dto;
+    const { id: bodyId, createdAt, updatedAt, contentOutputId, ...updateData } = dto;
+    // contentOutputId is for interaction instances, not interaction types
+    // It's used for testing in the builder but shouldn't be saved to the type
     return this.interactionTypesService.update(id, updateData);
   }
 

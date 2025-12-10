@@ -316,6 +316,104 @@ export class InteractionAIBridgeService {
           });
         break;
 
+      // Media Control Methods (for uploaded-media interactions)
+      case 'ai-sdk-play-media':
+        this.aiSDK.playMedia()
+          .then(() => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-play-media-ack',
+              success: true,
+              requestId: message.requestId,
+            });
+          })
+          .catch((error) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-play-media-ack',
+              success: false,
+              error: error.message,
+              requestId: message.requestId,
+            });
+          });
+        break;
+
+      case 'ai-sdk-pause-media':
+        this.aiSDK.pauseMedia();
+        this.sendToIframe(sourceWindow, {
+          type: 'ai-sdk-pause-media-ack',
+          requestId: message.requestId,
+        });
+        break;
+
+      case 'ai-sdk-seek-media':
+        this.aiSDK.seekMedia(message.time);
+        this.sendToIframe(sourceWindow, {
+          type: 'ai-sdk-seek-media-ack',
+          requestId: message.requestId,
+        });
+        break;
+
+      case 'ai-sdk-set-media-volume':
+        this.aiSDK.setMediaVolume(message.volume);
+        this.sendToIframe(sourceWindow, {
+          type: 'ai-sdk-set-media-volume-ack',
+          requestId: message.requestId,
+        });
+        break;
+
+      case 'ai-sdk-get-media-current-time':
+        const currentTime = this.aiSDK.getMediaCurrentTime();
+        this.sendToIframe(sourceWindow, {
+          type: 'ai-sdk-get-media-current-time-ack',
+          currentTime,
+          requestId: message.requestId,
+        });
+        break;
+
+      case 'ai-sdk-get-media-duration':
+        const duration = this.aiSDK.getMediaDuration();
+        this.sendToIframe(sourceWindow, {
+          type: 'ai-sdk-get-media-duration-ack',
+          duration,
+          requestId: message.requestId,
+        });
+        break;
+
+      case 'ai-sdk-is-media-playing':
+        const isPlaying = this.aiSDK.isMediaPlaying();
+        this.sendToIframe(sourceWindow, {
+          type: 'ai-sdk-is-media-playing-ack',
+          isPlaying,
+          requestId: message.requestId,
+        });
+        break;
+
+      case 'ai-sdk-show-overlay-html':
+        this.aiSDK.showOverlayHtml();
+        this.sendToIframe(sourceWindow, {
+          type: 'ai-sdk-show-overlay-html-ack',
+          requestId: message.requestId,
+        });
+        break;
+
+      case 'ai-sdk-hide-overlay-html':
+        console.log('[AIBridge] 📢 Received ai-sdk-hide-overlay-html message');
+        this.aiSDK.hideOverlayHtml();
+        this.sendToIframe(sourceWindow, {
+          type: 'ai-sdk-hide-overlay-html-ack',
+          requestId: message.requestId,
+        });
+        break;
+
+      case 'ai-sdk-show-overlay-html-ack':
+      case 'ai-sdk-hide-overlay-html-ack':
+      case 'ai-sdk-pause-media-ack':
+      case 'ai-sdk-play-media-ack':
+      case 'ai-sdk-seek-media-ack':
+      case 'ai-sdk-set-media-volume-ack':
+        // Acknowledgment messages - no action needed, just log
+        console.log('[AIBridge] ✅ Received acknowledgment:', message.type);
+        break;
+
       default:
         console.warn('[AIBridge] Unknown message type:', message.type);
     }

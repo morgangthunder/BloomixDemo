@@ -15,7 +15,9 @@ import {
   UploadedFile,
   BadRequestException,
   NotFoundException,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ContentSourcesService } from './content-sources.service';
 import { CreateContentSourceDto } from './dto/create-content-source.dto';
@@ -196,6 +198,66 @@ export class ContentSourcesController {
       return { lessons };
     } catch (error) {
       console.error('[ContentSourcesController] ❌ Error getting lessons for content source:', error);
+      throw error;
+    }
+  }
+
+  @Get('processed-content/:id/file')
+  async getProcessedContentFile(
+    @Param('id', ParseUUIDPipe) processedContentId: string,
+    @Res() res: Response,
+  ) {
+    try {
+      console.log(
+        '[ContentSourcesController] 🎬 Request for processed content file:',
+        processedContentId,
+      );
+      const filePathOrUrl =
+        await this.contentSourcesService.getProcessedContentFilePath(
+          processedContentId,
+        );
+      console.log('[ContentSourcesController] 🎬 Resolved file path/URL:', filePathOrUrl);
+      if (!filePathOrUrl) {
+        console.error(
+          '[ContentSourcesController] ❌ File path not found for processed content:',
+          processedContentId,
+        );
+        throw new NotFoundException('Media file not found for this processed content');
+      }
+
+      // Check if it's a cloud storage URL (S3/MinIO)
+      if (filePathOrUrl.startsWith('http://') || filePathOrUrl.startsWith('https://')) {
+        // For cloud storage, get a signed URL or redirect
+        const signedUrl = await this.fileStorageService.getSignedUrl(filePathOrUrl);
+        if (signedUrl) {
+          // Redirect to signed URL
+          return res.redirect(signedUrl);
+        } else {
+          // If no signed URL support, redirect to original URL
+          return res.redirect(filePathOrUrl);
+        }
+      }
+
+      // Local storage - serve file directly
+      // Set proper headers for media files to allow playback
+      const ext = filePathOrUrl.split('.').pop()?.toLowerCase();
+      let contentType = 'video/mp4'; // Default
+      if (ext === 'mp4') contentType = 'video/mp4';
+      else if (ext === 'webm') contentType = 'video/webm';
+      else if (ext === 'ogv') contentType = 'video/ogg';
+      else if (ext === 'mp3') contentType = 'audio/mpeg';
+      else if (ext === 'wav') contentType = 'audio/wav';
+      else if (ext === 'ogg' || ext === 'oga') contentType = 'audio/ogg';
+      
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Access-Control-Allow-Origin', '*'); // Allow CORS for media playback
+      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Range');
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
+      return res.sendFile(filePathOrUrl);
+    } catch (error) {
+      console.error('[ContentSourcesController] ❌ Error serving processed content file:', error);
       throw error;
     }
   }

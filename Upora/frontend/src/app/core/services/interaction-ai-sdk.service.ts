@@ -84,6 +84,7 @@ export class InteractionAISDK {
   private snackService = inject(SnackMessageService);
   private http = inject(HttpClient);
   private teacherWidgetRef: any = null; // Reference to FloatingTeacherWidgetComponent
+  private mediaPlayerRef: any = null; // Reference to MediaPlayerComponent
 
   // Current interaction context (set by lesson-view component)
   private currentLessonId: string | null = null;
@@ -103,6 +104,14 @@ export class InteractionAISDK {
    */
   setTeacherWidgetRef(widget: any): void {
     this.teacherWidgetRef = widget;
+  }
+
+  /**
+   * Set reference to media player component for media control
+   * Called by lesson-view component for uploaded-media interactions
+   */
+  setMediaPlayerRef(player: any): void {
+    this.mediaPlayerRef = player;
   }
 
   /**
@@ -571,6 +580,190 @@ export class InteractionAISDK {
     } catch (error: any) {
       console.error('[InteractionAISDK] ❌ Failed to get user public profile:', error);
       return null;
+    }
+  }
+
+  // ========================================
+  // Media Control Methods (for uploaded-media interactions)
+  // ========================================
+
+  /**
+   * Play the media player
+   * @returns Promise that resolves when play starts, or rejects if media player not available
+   */
+  playMedia(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.mediaPlayerRef) {
+        console.warn('[InteractionAISDK] ⚠️ Media player reference not set, cannot play media');
+        reject(new Error('Media player not available'));
+        return;
+      }
+      
+      try {
+        this.mediaPlayerRef.play();
+        console.log('[InteractionAISDK] ▶️ Media play requested');
+        resolve();
+      } catch (error: any) {
+        console.error('[InteractionAISDK] ❌ Error playing media:', error);
+        reject(error);
+      }
+    });
+  }
+
+  /**
+   * Pause the media player
+   */
+  pauseMedia(): void {
+    if (!this.mediaPlayerRef) {
+      console.warn('[InteractionAISDK] ⚠️ Media player reference not set, cannot pause media');
+      return;
+    }
+    
+    try {
+      this.mediaPlayerRef.pause();
+      console.log('[InteractionAISDK] ⏸ Media pause requested');
+    } catch (error: any) {
+      console.error('[InteractionAISDK] ❌ Error pausing media:', error);
+    }
+  }
+
+  /**
+   * Seek to a specific time in the media
+   * @param time Time in seconds
+   */
+  seekMedia(time: number): void {
+    if (!this.mediaPlayerRef) {
+      console.warn('[InteractionAISDK] ⚠️ Media player reference not set, cannot seek media');
+      return;
+    }
+    
+    try {
+      this.mediaPlayerRef.seekTo(time);
+      console.log('[InteractionAISDK] ⏩ Media seek requested to:', time, 'seconds');
+    } catch (error: any) {
+      console.error('[InteractionAISDK] ❌ Error seeking media:', error);
+    }
+  }
+
+  /**
+   * Set media volume
+   * @param volume Volume level (0.0 to 1.0)
+   */
+  setMediaVolume(volume: number): void {
+    if (!this.mediaPlayerRef) {
+      console.warn('[InteractionAISDK] ⚠️ Media player reference not set, cannot set volume');
+      return;
+    }
+    
+    try {
+      const clampedVolume = Math.max(0, Math.min(1, volume));
+      this.mediaPlayerRef.setVolume(clampedVolume);
+      console.log('[InteractionAISDK] 🔊 Media volume set to:', clampedVolume);
+      
+      // Emit event to update lesson view's volume slider
+      const volumeEvent = new CustomEvent('interaction-media-volume-changed', {
+        detail: { volume: clampedVolume }
+      });
+      window.dispatchEvent(volumeEvent);
+    } catch (error: any) {
+      console.error('[InteractionAISDK] ❌ Error setting media volume:', error);
+    }
+  }
+
+  /**
+   * Get current playback time
+   * @returns Current time in seconds, or 0 if media player not available
+   */
+  getMediaCurrentTime(): number {
+    if (!this.mediaPlayerRef) {
+      console.warn('[InteractionAISDK] ⚠️ Media player reference not set, cannot get current time');
+      return 0;
+    }
+    
+    try {
+      return this.mediaPlayerRef.getCurrentTime();
+    } catch (error: any) {
+      console.error('[InteractionAISDK] ❌ Error getting current time:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Get media duration
+   * @returns Duration in seconds, or 0 if media player not available
+   */
+  getMediaDuration(): number {
+    if (!this.mediaPlayerRef) {
+      console.warn('[InteractionAISDK] ⚠️ Media player reference not set, cannot get duration');
+      return 0;
+    }
+    
+    try {
+      return this.mediaPlayerRef.getDuration();
+    } catch (error: any) {
+      console.error('[InteractionAISDK] ❌ Error getting duration:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Check if media is currently playing
+   * @returns true if playing, false otherwise
+   */
+  isMediaPlaying(): boolean {
+    if (!this.mediaPlayerRef) {
+      return false;
+    }
+    
+    try {
+      return this.mediaPlayerRef.isPlaying();
+    } catch (error: any) {
+      console.error('[InteractionAISDK] ❌ Error checking play state:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Show overlay HTML content (for media player interactions)
+   * Makes the overlay visible if it was hidden
+   */
+  showOverlayHtml(): void {
+    if (!this.mediaPlayerRef) {
+      console.warn('[InteractionAISDK] ⚠️ Media player reference not set, cannot show overlay');
+      return;
+    }
+    
+    try {
+      // Dispatch event to show overlay
+      const showEvent = new CustomEvent('interaction-show-overlay-html', {
+        detail: { source: 'interaction-sdk' }
+      });
+      window.dispatchEvent(showEvent);
+      console.log('[InteractionAISDK] ✅ Show overlay HTML requested');
+    } catch (error: any) {
+      console.error('[InteractionAISDK] ❌ Error showing overlay:', error);
+    }
+  }
+
+  /**
+   * Hide overlay HTML content (for media player interactions)
+   * Hides text content but keeps buttons visible
+   */
+  hideOverlayHtml(): void {
+    if (!this.mediaPlayerRef) {
+      console.warn('[InteractionAISDK] ⚠️ Media player reference not set, cannot hide overlay');
+      return;
+    }
+    
+    try {
+      // Dispatch event to hide overlay
+      const hideEvent = new CustomEvent('interaction-hide-overlay-html', {
+        detail: { source: 'interaction-sdk' }
+      });
+      window.dispatchEvent(hideEvent);
+      console.log('[InteractionAISDK] ✅ Hide overlay HTML requested');
+    } catch (error: any) {
+      console.error('[InteractionAISDK] ❌ Error hiding overlay:', error);
     }
   }
 }

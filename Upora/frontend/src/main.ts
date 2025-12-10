@@ -8,15 +8,17 @@ import { environment } from './environments/environment';
 // ========================================
 // Version is read from package.json at build time
 // This will be replaced by the build process or read dynamically
-const FRONTEND_VERSION = '0.1.67'; // Fixed showChatUI/minimizeChatUI to show widget if hidden
+const FRONTEND_VERSION = '0.1.80'; // Added hideOverlayDuringPlayback configurable setting
 const CACHE_BUST_ID = `v${FRONTEND_VERSION}-${Math.random().toString(36).substr(2, 9)}`;
 console.log('');
 console.log('═══════════════════════════════════════════════════════════');
 console.log(`🔥🔥🔥 FRONTEND VERSION ${FRONTEND_VERSION} LOADED 🔥🔥🔥`);
-console.log(`✅ Fixed invalid placeholder ID handling in lesson view`);
-console.log(`✅ Backend now queries processed outputs via content sources`);
-console.log(`✅ Improved matching logic for processed content`);
-console.log(`✅ Removed verbose console logging`);
+console.log(`✅ Phase 4: SDK media control methods complete`);
+console.log(`✅ Fixed compilation errors for uploaded-media interactions`);
+console.log(`✅ Added playMedia, pauseMedia, seekMedia, setMediaVolume methods`);
+console.log(`✅ Added getMediaCurrentTime, getMediaDuration, isMediaPlaying methods`);
+console.log(`✅ Bridge service handles media control messages from iframes`);
+console.log(`✅ Lesson timer syncs with media playback time`);
 console.log(`📅 Timestamp: ${new Date().toISOString()}`);
 console.log(`🆔 Cache Bust ID: ${CACHE_BUST_ID}`);
 console.log('═══════════════════════════════════════════════════════════');

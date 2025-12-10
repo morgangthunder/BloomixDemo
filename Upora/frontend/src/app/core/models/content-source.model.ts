@@ -1,7 +1,7 @@
 export interface ContentSource {
   id: string;
   tenantId: string;
-  type: 'url' | 'pdf' | 'image' | 'api' | 'text';
+  type: 'url' | 'pdf' | 'image' | 'api' | 'text' | 'media';
   sourceUrl?: string;
   filePath?: string;
   title?: string;

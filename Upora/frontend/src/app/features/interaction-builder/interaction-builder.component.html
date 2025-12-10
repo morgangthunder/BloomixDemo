@@ -159,6 +159,7 @@
                       <option value="html">ðŸŒ HTML (Custom HTML/CSS/JS)</option>
                       <option value="pixijs">ðŸŽ® PixiJS (TypeScript Game/Animation)</option>
                       <option value="iframe">ðŸ–¼ï¸ iFrame (External Embed)</option>
+                      <option value="uploaded-media"> Media Player</option>
                     </select>
                     <small class="hint">Cannot be changed after creation</small>
                   </div>
@@ -175,7 +176,59 @@
                 </div>
                 </div>
                 </div>
-                </div>
+
+                <!-- Media Player Configuration (for uploaded-media type) -->
+                <ng-container *ngIf="currentInteraction?.interactionTypeCategory === 'uploaded-media'">
+                  <div class="info-section" style="margin-top: 30px;">
+                    <h3>Media Player Configuration</h3>
+                    
+                    <div class="form-group">
+                      <label>Display Mode</label>
+                      <select [(ngModel)]="displayMode" (ngModelChange)="onDisplayModeChange()" class="form-control">
+                        <option value="section">Section Below Player</option>
+                        <option value="overlay">Overlay on Player</option>
+                      </select>
+                      <small class="hint">Choose how the HTML/CSS/JS content is displayed: as a section below the media player, or as an overlay on top of it.</small>
+                    </div>
+
+                    <div class="form-group">
+                      <label>
+                        <input type="checkbox" [(ngModel)]="showPlayerControls" (ngModelChange)="onShowPlayerControlsChange()" />
+                        Show Player Controls
+                      </label>
+                      <small class="hint">When enabled, native video/audio controls will be visible. When disabled, controls will be hidden and the player can be controlled via lesson-viewer controls.</small>
+                    </div>
+
+                    <div class="form-group">
+                      <label>
+                        <input type="checkbox" [(ngModel)]="hideOverlayDuringPlayback" (ngModelChange)="onHideOverlayDuringPlaybackChange()" />
+                        Hide HTML Content During Playback
+                      </label>
+                      <small class="hint">When enabled, text content (headers, paragraphs) in the overlay will be hidden when media is playing, but buttons and interactive elements will remain visible. When disabled, all overlay content stays visible during playback.</small>
+                    </div>
+
+                    <div *ngIf="displayMode === 'section'" class="form-row">
+                      <div class="form-group">
+                        <label>Section Height</label>
+                        <input type="text" [(ngModel)]="sectionHeight" (ngModelChange)="onSectionSizingChange()" 
+                               class="form-control" placeholder="auto" />
+                        <small class="hint">Height of the section (e.g., "auto", "300px", "50vh"). Default: "auto"</small>
+                      </div>
+                      <div class="form-group">
+                        <label>Section Min Height</label>
+                        <input type="text" [(ngModel)]="sectionMinHeight" (ngModelChange)="onSectionSizingChange()" 
+                               class="form-control" placeholder="200px" />
+                        <small class="hint">Minimum height (e.g., "200px", "150px"). Default: "200px"</small>
+                      </div>
+                      <div class="form-group">
+                        <label>Section Max Height</label>
+                        <input type="text" [(ngModel)]="sectionMaxHeight" (ngModelChange)="onSectionSizingChange()" 
+                               class="form-control" placeholder="none" />
+                        <small class="hint">Maximum height (e.g., "500px", "50vh", "none"). Default: "none"</small>
+                      </div>
+                    </div>
+                  </div>
+                </ng-container>
 
               <!-- Settings Actions -->
               <div class="settings-actions">

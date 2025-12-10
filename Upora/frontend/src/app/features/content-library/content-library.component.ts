@@ -9,6 +9,7 @@ import { ContentProcessorModalComponent } from '../../shared/components/content-
 import { AddTextContentModalComponent } from '../../shared/components/add-text-content-modal/add-text-content-modal.component';
 import { AddImageModalComponent } from '../../shared/components/add-image-modal/add-image-modal.component';
 import { AddPdfModalComponent } from '../../shared/components/add-pdf-modal/add-pdf-modal.component';
+import { AddMediaModalComponent } from '../../shared/components/add-media-modal/add-media-modal.component';
 import { ApprovalQueueModalComponent } from '../../shared/components/approval-queue-modal/approval-queue-modal.component';
 import { ContentSourceViewModalComponent } from '../../shared/components/content-source-view-modal/content-source-view-modal.component';
 import { ProcessedContentService, ProcessedContentItem } from '../../core/services/processed-content.service';
@@ -28,6 +29,7 @@ import { DEFAULT_LESSON_ID, isDefaultLessonId } from '../../core/constants/defau
     AddTextContentModalComponent,
     AddImageModalComponent,
     AddPdfModalComponent,
+    AddMediaModalComponent,
     ApprovalQueueModalComponent,
     ContentSourceViewModalComponent
   ],
@@ -63,6 +65,7 @@ import { DEFAULT_LESSON_ID, isDefaultLessonId } from '../../core/constants/defau
               <button (click)="openPdfModal()" class="menu-item-btn">📄 Upload PDF</button>
               <button (click)="openTextModal()" class="menu-item-btn">📝 Add Text Content</button>
               <button (click)="openImageModal()" class="menu-item-btn">🖼️ Upload Image</button>
+              <button (click)="openMediaModal()" class="menu-item-btn">🎬 Upload Media (Video/Audio)</button>
             </div>
             <div class="add-menu-section separator">
               <h4>Browse Existing</h4>
@@ -99,6 +102,7 @@ import { DEFAULT_LESSON_ID, isDefaultLessonId } from '../../core/constants/defau
             <option value="pdf">PDFs</option>
             <option value="image">Images</option>
             <option value="text">Text</option>
+            <option value="media">Media</option>
           </select>
           
           <select [(ngModel)]="filterStatus" (ngModelChange)="applyFilters()" class="filter-select">
@@ -270,6 +274,12 @@ import { DEFAULT_LESSON_ID, isDefaultLessonId } from '../../core/constants/defau
         (close)="closeImageModal()"
         (contentAdded)="onContentAdded($event)">
       </app-add-image-modal>
+
+      <app-add-media-modal
+        [isOpen]="showMediaModal"
+        (close)="closeMediaModal()"
+        (contentAdded)="onContentAdded($event)">
+      </app-add-media-modal>
 
       <app-approval-queue-modal
         [isOpen]="showApprovalModal"
@@ -1460,6 +1470,7 @@ export class ContentLibraryComponent implements OnInit, OnDestroy {
   showPdfModal = false;
   showTextModal = false;
   showImageModal = false;
+  showMediaModal = false;
   showApprovalModal = false;
   viewingContent: ContentSource | null = null;
 
@@ -1605,6 +1616,11 @@ export class ContentLibraryComponent implements OnInit, OnDestroy {
     this.showImageModal = true;
   }
 
+  openMediaModal() {
+    this.closeAddMenu();
+    this.showMediaModal = true;
+  }
+
   openApprovalModal() {
     this.closeAddMenu();
     this.showApprovalModal = true;
@@ -1627,6 +1643,10 @@ export class ContentLibraryComponent implements OnInit, OnDestroy {
     this.showImageModal = false;
   }
 
+  closeMediaModal() {
+    this.showMediaModal = false;
+  }
+
   closeApprovalModal() {
     this.showApprovalModal = false;
   }
@@ -1647,17 +1667,33 @@ export class ContentLibraryComponent implements OnInit, OnDestroy {
   async onContentAdded(contentData: any) {
     console.log('[ContentLibrary] 📥 Adding content:', contentData);
     try {
-      const created = await this.contentSourceService.createContentSource(contentData);
-      console.log('[ContentLibrary] ✅ Content source created:', created);
-      
-      // Show success toast
-      this.toastService.success(
-        `✓ Content source "${created.title}" added successfully! Pending approval.`,
-        4000
-      );
-      
-      await this.loadContent();
-      await this.loadPendingCount();
+      // Check if content source already exists (from media upload endpoint)
+      if (contentData.id && contentData.type === 'media') {
+        // Media upload endpoint already created the content source
+        console.log('[ContentLibrary] ✅ Content source already created by upload endpoint:', contentData.id);
+        
+        // Show success toast
+        this.toastService.success(
+          `✓ Media file "${contentData.title || 'uploaded'}" uploaded successfully! Pending approval.`,
+          4000
+        );
+        
+        await this.loadContent();
+        await this.loadPendingCount();
+      } else {
+        // For other content types, create via API
+        const created = await this.contentSourceService.createContentSource(contentData);
+        console.log('[ContentLibrary] ✅ Content source created:', created);
+        
+        // Show success toast
+        this.toastService.success(
+          `✓ Content source "${created.title}" added successfully! Pending approval.`,
+          4000
+        );
+        
+        await this.loadContent();
+        await this.loadPendingCount();
+      }
     } catch (error: any) {
       console.error('[ContentLibrary] ❌ Failed to create content:', error);
       console.error('[ContentLibrary] Error details:', {

@@ -11,12 +11,13 @@ import { takeUntil } from 'rxjs/operators';
 // Import the true-false selection component for preview
 import { TrueFalseSelectionComponent } from '../interactions/true-false-selection/true-false-selection.component';
 import { InteractionConfigureModalComponent } from '../../shared/components/interaction-configure-modal/interaction-configure-modal.component';
+import { MediaContentSelectorComponent } from '../../shared/components/media-content-selector/media-content-selector.component';
 
 interface InteractionType {
   id: string;
   name: string;
   description: string;
-  interactionTypeCategory?: 'html' | 'pixijs' | 'iframe';
+  interactionTypeCategory?: 'html' | 'pixijs' | 'iframe' | 'uploaded-media';
   htmlCode?: string;
   cssCode?: string;
   jsCode?: string;
@@ -31,6 +32,8 @@ interface InteractionType {
   generationPrompt?: string;
   configSchema?: any; // New: defines what lesson-builders can configure
   sampleData?: any; // New: sample JSON for preview
+  mediaConfig?: any; // Media player configuration (autoplay, loop, etc.)
+  contentOutputId?: string; // Selected processed content ID for media
 }
 
 interface SuggestedChanges {
@@ -51,7 +54,7 @@ interface ChatMessage {
 @Component({
   selector: 'app-interaction-builder',
   standalone: true,
-  imports: [CommonModule, FormsModule, TrueFalseSelectionComponent, InteractionConfigureModalComponent],
+  imports: [CommonModule, FormsModule, TrueFalseSelectionComponent, InteractionConfigureModalComponent, MediaContentSelectorComponent],
   template: `
     <div class="interaction-builder">
       <!-- Header -->
@@ -70,7 +73,7 @@ interface ChatMessage {
             🔄 Reset
           </button>
           <button (click)="saveInteraction()" 
-                  [disabled]="saving" 
+                  [disabled]="!hasChanges || saving" 
                   title="Save all changes"
                   class="btn-save-header">
             {{ saving ? '⏳ Saving...' : '💾 SAVE' }}
@@ -105,10 +108,11 @@ interface ChatMessage {
 
             <div class="type-filter">
               <select [(ngModel)]="typeFilter" (ngModelChange)="filterInteractions()">
-                <option value="">All Types</option>
+                <option value="">All Categories</option>
                 <option value="html">🌐 HTML</option>
                 <option value="pixijs">🎮 PixiJS</option>
                 <option value="iframe">🖼️ iFrame</option>
+                <option value="uploaded-media">🎬 Media Player</option>
                 <option value="legacy">📦 Legacy</option>
               </select>
             </div>
@@ -123,6 +127,7 @@ interface ChatMessage {
                 <span *ngIf="interaction.interactionTypeCategory === 'html'">🌐</span>
                 <span *ngIf="interaction.interactionTypeCategory === 'pixijs'">🎮</span>
                 <span *ngIf="interaction.interactionTypeCategory === 'iframe'">🖼️</span>
+                <span *ngIf="interaction.interactionTypeCategory === 'uploaded-media'">🎬</span>
                 <span *ngIf="!interaction.interactionTypeCategory">📦</span>
               </div>
               <div class="interaction-info">
@@ -212,6 +217,7 @@ interface ChatMessage {
                       <option value="html">🌐 HTML (Custom HTML/CSS/JS)</option>
                       <option value="pixijs">🎮 PixiJS (TypeScript Game/Animation)</option>
                       <option value="iframe">🖼️ iFrame (External Embed)</option>
+                      <option value="uploaded-media">🎬 Media Player (Video/Audio)</option>
                     </select>
                     <small class="hint">Cannot be changed after creation</small>
                   </div>
@@ -229,6 +235,72 @@ interface ChatMessage {
                 </div>
                 </div>
 
+                <!-- Media Content Selector (for uploaded-media interactions) -->
+                <div *ngIf="currentInteraction?.interactionTypeCategory === 'uploaded-media'" class="info-section" style="margin-top: 24px;">
+                  <h3>Media Content</h3>
+                  <div class="form-group">
+                    <label>Selected Media</label>
+                    <div class="config-value">
+                      <span class="value">{{selectedMediaName || 'None selected'}}</span>
+                      <button type="button" class="btn btn-primary" style="margin-left: 12px;" (click)="openMediaSelector()">{{selectedMediaId ? 'Change Media' : 'Select Media'}}</button>
+                    </div>
+                    <p class="hint">Choose approved media content to use for testing this interaction. Lesson-builders will select media when adding this interaction to lessons.</p>
+                  </div>
+                </div>
+
+                <!-- Media Player Configuration (for uploaded-media type) -->
+                <ng-container *ngIf="currentInteraction?.interactionTypeCategory === 'uploaded-media'">
+                  <div class="info-section" style="margin-top: 30px;">
+                    <h3>Media Player Configuration</h3>
+                    
+                    <div class="form-group">
+                      <label>Display Mode</label>
+                      <select [(ngModel)]="displayMode" (ngModelChange)="onDisplayModeChange()" class="form-control">
+                        <option value="section">Section Below Player</option>
+                        <option value="overlay">Overlay on Player</option>
+                      </select>
+                      <small class="hint">Choose how the HTML/CSS/JS content is displayed: as a section below the media player, or as an overlay on top of it.</small>
+                    </div>
+
+                    <div class="form-group">
+                      <label>
+                        <input type="checkbox" [(ngModel)]="showPlayerControls" (ngModelChange)="onShowPlayerControlsChange()" />
+                        Show Player Controls
+                      </label>
+                      <small class="hint">When enabled, native video/audio controls will be visible. When disabled, controls will be hidden and the player can be controlled via lesson-viewer controls.</small>
+                    </div>
+
+                    <div class="form-group">
+                      <label>
+                        <input type="checkbox" [(ngModel)]="hideOverlayDuringPlayback" (ngModelChange)="onHideOverlayDuringPlaybackChange()" />
+                        Hide HTML Content During Playback
+                      </label>
+                      <small class="hint">When enabled, text content (headers, paragraphs) in the overlay will be hidden when media is playing, but buttons and interactive elements will remain visible. When disabled, all overlay content stays visible during playback.</small>
+                    </div>
+
+                    <div *ngIf="displayMode === 'section'" class="form-row">
+                      <div class="form-group">
+                        <label>Section Height</label>
+                        <input type="text" [(ngModel)]="sectionHeight" (ngModelChange)="onSectionSizingChange()" 
+                               class="form-control" placeholder="auto" />
+                        <small class="hint">Height of the section (e.g., "auto", "300px", "50vh"). Default: "auto"</small>
+                      </div>
+                      <div class="form-group">
+                        <label>Section Min Height</label>
+                        <input type="text" [(ngModel)]="sectionMinHeight" (ngModelChange)="onSectionSizingChange()" 
+                               class="form-control" placeholder="200px" />
+                        <small class="hint">Minimum height (e.g., "200px", "150px"). Default: "200px"</small>
+                      </div>
+                      <div class="form-group">
+                        <label>Section Max Height</label>
+                        <input type="text" [(ngModel)]="sectionMaxHeight" (ngModelChange)="onSectionSizingChange()" 
+                               class="form-control" placeholder="none" />
+                        <small class="hint">Maximum height (e.g., "500px", "50vh", "none"). Default: "none"</small>
+                      </div>
+                    </div>
+                  </div>
+                </ng-container>
+
               <!-- Settings Actions -->
               <div class="settings-actions">
                 <button (click)="resetToLastWorking('settings')" 
@@ -237,7 +309,7 @@ interface ChatMessage {
                         title="Reset to last working version">
                   🔄 Reset
                 </button>
-                <button (click)="saveInteraction()" class="btn-save-inline" [disabled]="saving">
+                <button (click)="saveInteraction()" class="btn-save-inline" [disabled]="!hasChanges || saving">
                   {{ saving ? '⏳ Saving...' : '💾 Save' }}
                 </button>
               </div>
@@ -459,6 +531,85 @@ interface ChatMessage {
                   </div>
                 </div>
 
+                <!-- Media Player Type Configuration -->
+                <div *ngIf="currentInteraction?.interactionTypeCategory === 'uploaded-media'" class="media-player-config">
+                  <!-- Processed Content Selector -->
+                  <div class="form-group">
+                    <label>Processed Content Source</label>
+                    <div class="config-value">
+                      <span class="value">{{selectedMediaName || 'None selected'}}</span>
+                      <button type="button" class="btn btn-primary" style="margin-left: 12px;" (click)="openMediaSelector()">{{selectedMediaId ? 'Change Media' : 'Select Media'}}</button>
+                    </div>
+                    <small class="hint">Select approved media content (video or audio) to use for this interaction. This will be available as processed content when the interaction is used in lessons.</small>
+                  </div>
+
+                  <!-- Media Config JSON -->
+                  <div class="form-group">
+                    <label>Media Configuration (JSON)</label>
+                    <textarea [(ngModel)]="mediaConfigText"
+                              (ngModelChange)="onMediaConfigChange()"
+                              class="code-textarea"
+                              rows="6"
+                              placeholder='{"autoplay": false, "loop": false, "showControls": true, "defaultVolume": 1.0}'
+                              spellcheck="false"></textarea>
+                    <small class="hint">Configure media player behavior: autoplay, loop, showControls, defaultVolume (0.0 to 1.0), startTime, endTime, etc.</small>
+                  </div>
+
+                  <!-- Overlay Code Section -->
+                  <div class="form-group">
+                    <div class="info-section">
+                      <h4>🎨 Overlay Code</h4>
+                      <p>Add custom HTML/CSS/JS code that will appear in an overlay panel at the bottom of the media player. This allows you to add interactive elements, buttons, or UI controls that work with the AI Teacher SDK.</p>
+                      <p><strong>Use the HTML, CSS, and JavaScript tabs below to add your overlay content.</strong></p>
+                    </div>
+                  </div>
+
+                  <!-- HTML/CSS/JS Code Editors for Overlay -->
+                  <div class="overlay-code-editor">
+                    <div class="editor-subtabs">
+                      <button [class.active]="activeCodeTab === 'html'" 
+                              (click)="activeCodeTab = 'html'">HTML</button>
+                      <button [class.active]="activeCodeTab === 'css'" 
+                              (click)="activeCodeTab = 'css'">CSS</button>
+                      <button [class.active]="activeCodeTab === 'js'" 
+                              (click)="activeCodeTab = 'js'">JavaScript</button>
+                    </div>
+
+                    <div class="code-editor-container">
+                      <textarea *ngIf="activeCodeTab === 'html'"
+                                [(ngModel)]="currentInteraction!.htmlCode"
+                                (ngModelChange)="markChanged()"
+                                class="code-textarea"
+                                placeholder='<div id="media-overlay">Your overlay HTML here</div>'
+                                spellcheck="false"></textarea>
+
+                      <textarea *ngIf="activeCodeTab === 'css'"
+                                [(ngModel)]="currentInteraction!.cssCode"
+                                (ngModelChange)="markChanged()"
+                                class="code-textarea"
+                                placeholder="#media-overlay { position: absolute; bottom: 0; }"
+                                spellcheck="false"></textarea>
+
+                      <textarea *ngIf="activeCodeTab === 'js'"
+                                [(ngModel)]="currentInteraction!.jsCode"
+                                (ngModelChange)="markChanged()"
+                                class="code-textarea"
+                                placeholder="// Your overlay JavaScript code&#10;// Use createIframeAISDK() to access the AI Teacher SDK&#10;// Media control methods: playMedia(), pauseMedia(), seekMedia(time), etc."
+                                spellcheck="false"></textarea>
+                    </div>
+                    <div class="editor-note">
+                      <p>💡 <strong>Media Player Overlay Code Tips:</strong></p>
+                      <ul>
+                        <li>Your HTML will be injected into the media player overlay container</li>
+                        <li>Your CSS will be scoped to the overlay panel</li>
+                        <li>Your JavaScript can use the AI Teacher SDK with media control methods</li>
+                        <li>The overlay panel is positioned at the bottom of the media player by default</li>
+                        <li>Media control methods: <code>playMedia()</code>, <code>pauseMedia()</code>, <code>seekMedia(time)</code>, <code>setMediaVolume(volume)</code>, <code>getMediaCurrentTime()</code>, <code>getMediaDuration()</code>, <code>isMediaPlaying()</code></li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
                 <div *ngIf="!currentInteraction?.interactionTypeCategory" class="no-type-selected">
                   <p>⚠️ Please select an interaction type in the Settings tab first.</p>
                 </div>
@@ -474,7 +625,7 @@ interface ChatMessage {
                           title="Reset to last working version">
                     🔄 Reset
                   </button>
-                  <button (click)="saveInteraction()" class="btn-save-inline" [disabled]="saving">
+                  <button (click)="saveInteraction()" class="btn-save-inline" [disabled]="!hasChanges || saving">
                     {{ saving ? '⏳ Saving...' : '💾 Save' }}
                   </button>
                 </div>
@@ -713,6 +864,28 @@ interface ChatMessage {
                     </div>
                   </div>
 
+                  <!-- Media Player Preview (use overlay wrapper similar to iframe) -->
+                  <div *ngIf="(currentInteraction?.interactionTypeCategory === 'uploaded-media') && previewKey" 
+                       class="html-preview media-player-preview">
+                    <iframe #previewIframe 
+                            [src]="getMediaPlayerPreviewBlobUrl()" 
+                            [attr.data-preview-key]="previewKey"
+                            class="preview-iframe"
+                            frameborder="0"
+                            style="width: 100%; height: calc(100vh - 320px); min-height: 400px; max-height: calc(100vh - 320px);"
+                            sandbox="allow-scripts allow-same-origin"></iframe>
+                  </div>
+
+                  <!-- Media Player Preview Placeholder (if no overlay code yet) -->
+                  <div *ngIf="(currentInteraction?.interactionTypeCategory === 'uploaded-media') && !currentInteraction?.htmlCode" class="media-player-preview-placeholder">
+                    <div class="placeholder-content">
+                      <span class="placeholder-icon">🎬</span>
+                      <h4>Media Player Preview</h4>
+                      <p>Add overlay HTML/CSS/JS code in the Code tab to see a preview.</p>
+                      <p *ngIf="!selectedMediaId" style="margin-top: 10px; color: #ffaa00;">⚠️ Select a media file in the Code tab to test with actual media.</p>
+                    </div>
+                  </div>
+
                   <!-- Fallback: Use Angular component for true-false-selection if no HTML code -->
                   <div *ngIf="(currentInteraction?.id === 'true-false-selection') && !currentInteraction?.htmlCode && currentInteraction?.sampleData" class="interaction-preview">
                     <app-true-false-selection 
@@ -730,6 +903,7 @@ interface ChatMessage {
                       <p *ngIf="!currentInteraction?.interactionTypeCategory">Select an interaction type in Settings.</p>
                       <p *ngIf="currentInteraction?.interactionTypeCategory === 'html' && !currentInteraction?.htmlCode">Add HTML code in the Code tab.</p>
                       <p *ngIf="currentInteraction?.interactionTypeCategory === 'iframe' && !currentInteraction?.iframeUrl">Add an iframe URL in the Code tab.</p>
+                      <p *ngIf="currentInteraction?.interactionTypeCategory === 'uploaded-media' && !currentInteraction?.htmlCode">Add overlay HTML/CSS/JS code in the Code tab.</p>
                     </div>
                   </div>
                   </div>
@@ -850,6 +1024,13 @@ interface ChatMessage {
         (closed)="closeConfigModal()"
         (saved)="saveConfigFromModal($event)">
       </app-interaction-configure-modal>
+
+      <!-- Media Content Selector Modal -->
+      <app-media-content-selector
+        [isOpen]="showMediaSelector"
+        (close)="closeMediaSelector()"
+        (selected)="onMediaSelected($event)">
+      </app-media-content-selector>
 
       <!-- Success Snackbar -->
       <div *ngIf="showSnackbar" class="snackbar">
@@ -1320,19 +1501,23 @@ interface ChatMessage {
     }
 
     /* PixiJS preview iframe specifically - make it fit screen better and scrollable */
-    .preview-container .html-preview iframe.preview-iframe {
+    .preview-container .html-preview iframe.preview-iframe,
+    .preview-container .media-player-preview iframe.preview-iframe {
       max-height: calc(100vh - 320px);
       min-height: 400px;
       height: calc(100vh - 320px);
       width: 100%;
       border: 1px solid #333;
       display: block;
+      overflow: auto !important;
     }
     
     /* Ensure the iframe content can scroll */
-    .preview-container .html-preview {
-      overflow: hidden;
+    .preview-container .html-preview,
+    .preview-container .media-player-preview {
+      overflow: visible;
       position: relative;
+      height: 100%;
     }
 
     .section-header {
@@ -2529,6 +2714,7 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
 
   // JSON text fields (for editing)
   iframeConfigText = '';
+  mediaConfigText = '';
   uploadingDocument = false;
   
   // AI configuration fields
@@ -2536,6 +2722,17 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   aiEventHandlersText = '';
   aiResponseActionsText = '';
   aiEventHandlersError = '';
+
+  // Media content selector
+  showMediaSelector = false;
+  selectedMediaId: string | null = null;
+  selectedMediaName = '';
+  displayMode: 'overlay' | 'section' = 'section';
+  sectionHeight = 'auto';
+  sectionMinHeight = '200px';
+  sectionMaxHeight = 'none';
+  showPlayerControls = false; // Default: hide controls
+  hideOverlayDuringPlayback = true; // Default: hide overlay content during playback
   aiResponseActionsError = '';
   configSchemaText = '';
   sampleDataText = '';
@@ -2574,6 +2771,8 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   private currentBlobUrlKey: number | null = null;
   private currentIframeOverlayBlobUrl: SafeResourceUrl | null = null;
   private currentIframeOverlayBlobUrlKey: number | null = null;
+  private currentMediaPlayerBlobUrl: SafeResourceUrl | null = null;
+  private currentMediaPlayerBlobUrlKey: number | null = null;
 
   // Snackbar
   showSnackbar = false;
@@ -2652,8 +2851,46 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     }
 
     console.log('[InteractionBuilder] 📥 Loading interaction:', interaction.id);
+    console.log('[InteractionBuilder] 🔍 Interaction category:', interaction.interactionTypeCategory);
+    console.log('[InteractionBuilder] 🔍 Full interaction object:', JSON.stringify(interaction, null, 2));
 
     this.currentInteraction = { ...interaction };
+    
+    // Ensure interactionTypeCategory is set correctly (handle potential mapping issues)
+    if (this.currentInteraction && !this.currentInteraction.interactionTypeCategory && (interaction as any).interaction_type_category) {
+      this.currentInteraction.interactionTypeCategory = (interaction as any).interaction_type_category;
+      console.log('[InteractionBuilder] 🔧 Fixed interactionTypeCategory from interaction_type_category:', this.currentInteraction.interactionTypeCategory);
+    }
+    
+    // Also check for snake_case version from API
+    if (this.currentInteraction && !this.currentInteraction.interactionTypeCategory && (interaction as any).interactionTypeCategory === undefined) {
+      const snakeCase = (interaction as any).interaction_type_category;
+      const camelCase = (interaction as any).interactionTypeCategory;
+      console.log('[InteractionBuilder] 🔍 Checking field names - snake_case:', snakeCase, 'camelCase:', camelCase);
+      if (snakeCase) {
+        this.currentInteraction.interactionTypeCategory = snakeCase;
+        console.log('[InteractionBuilder] 🔧 Set interactionTypeCategory from snake_case:', this.currentInteraction.interactionTypeCategory);
+      }
+    }
+    
+    console.log('[InteractionBuilder] ✅ Final currentInteraction.interactionTypeCategory:', this.currentInteraction.interactionTypeCategory);
+    console.log('[InteractionBuilder] 🔍 Will Display Mode section show?', this.currentInteraction?.interactionTypeCategory === 'uploaded-media');
+    console.log('[InteractionBuilder] 🔍 Active tab:', this.activeTab);
+    console.log('[InteractionBuilder] 🔍 Is settings tab active?', this.isTabActive('settings'));
+    console.log('[InteractionBuilder] 🔍 currentInteraction object:', JSON.stringify({
+      id: this.currentInteraction?.id,
+      category: this.currentInteraction?.interactionTypeCategory,
+      hasMediaConfig: !!(this.currentInteraction as any)?.mediaConfig,
+      mediaConfig: (this.currentInteraction as any)?.mediaConfig
+    }));
+    
+    // Force change detection for Display Mode section
+    if (this.currentInteraction?.interactionTypeCategory === 'uploaded-media') {
+      console.log('[InteractionBuilder] ✅ Uploaded-media category detected - Display Mode section should be visible');
+    } else {
+      console.warn('[InteractionBuilder] ⚠️ NOT uploaded-media category - Display Mode section will be hidden');
+      console.warn('[InteractionBuilder] ⚠️ Current category:', this.currentInteraction?.interactionTypeCategory);
+    }
     this.isNewInteraction = false;
     this.hasChanges = false;
     this.activeTab = 'settings';
@@ -2661,8 +2898,79 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
 
     // Load JSON fields into text areas
     this.iframeConfigText = interaction.iframeConfig ? JSON.stringify(interaction.iframeConfig, null, 2) : '';
+    this.mediaConfigText = (interaction as any).mediaConfig ? JSON.stringify((interaction as any).mediaConfig, null, 2) : '';
+    
+    // Load display mode and section sizing from mediaConfig
+    if ((interaction as any).mediaConfig) {
+      this.displayMode = (interaction as any).mediaConfig.displayMode || 'section';
+      this.sectionHeight = (interaction as any).mediaConfig.sectionHeight || 'auto';
+      this.sectionMinHeight = (interaction as any).mediaConfig.sectionMinHeight || '200px';
+      this.sectionMaxHeight = (interaction as any).mediaConfig.sectionMaxHeight || 'none';
+      this.showPlayerControls = (interaction as any).mediaConfig.showPlayerControls ?? false; // Default to false
+      this.hideOverlayDuringPlayback = (interaction as any).mediaConfig.hideOverlayDuringPlayback ?? true; // Default to true
+    } else {
+      // Initialize with defaults if no mediaConfig
+      this.displayMode = 'section';
+      this.sectionHeight = 'auto';
+      this.sectionMinHeight = '200px';
+      this.sectionMaxHeight = 'none';
+      this.showPlayerControls = false; // Default: hide controls
+      this.hideOverlayDuringPlayback = true; // Default: hide overlay during playback
+    }
+    
+    console.log('[InteractionBuilder] 🎛️ Display Mode initialized:', this.displayMode);
+    console.log('[InteractionBuilder] 🎛️ Section sizing:', {
+      height: this.sectionHeight,
+      minHeight: this.sectionMinHeight,
+      maxHeight: this.sectionMaxHeight
+    });
+    
+    // Load media selection if present
+    if ((interaction as any).mediaConfig?.testMediaContentId) {
+      this.selectedMediaId = (interaction as any).mediaConfig.testMediaContentId;
+      // Fetch media name if needed
+    }
     this.configSchemaText = interaction.configSchema ? JSON.stringify(interaction.configSchema, null, 2) : '';
     this.sampleDataText = interaction.sampleData ? JSON.stringify(interaction.sampleData, null, 2) : '';
+    
+    // Load media content selection
+    if (interaction.interactionTypeCategory === 'uploaded-media') {
+      // Check for testMediaContentId in mediaConfig (for builder testing)
+      const testMediaId = (interaction as any).mediaConfig?.testMediaContentId;
+      if (testMediaId) {
+        this.selectedMediaId = testMediaId;
+        // Fetch media name
+        this.http.get<any>(`${environment.apiUrl}/lesson-editor/processed-outputs/${testMediaId}`, {
+          headers: {
+            'x-tenant-id': environment.tenantId,
+            'x-user-id': environment.defaultUserId
+          }
+        })
+          .pipe(takeUntil(this.destroy$))
+          .subscribe({
+            next: (media) => {
+              this.selectedMediaName = media.outputName || media.contentSource?.title || 'Selected Media';
+              console.log('[InteractionBuilder] ✅ Media name loaded:', this.selectedMediaName);
+            },
+            error: (err) => {
+              console.error('[InteractionBuilder] ❌ Failed to fetch media details:', err);
+              // If 404, the processed content doesn't exist - clear the selection
+              if (err.status === 404) {
+                console.warn('[InteractionBuilder] ⚠️ Processed content not found, clearing selection');
+                this.selectedMediaId = null;
+                this.selectedMediaName = '';
+                // Clear from mediaConfig
+                if ((this.currentInteraction as any).mediaConfig) {
+                  delete (this.currentInteraction as any).mediaConfig.testMediaContentId;
+                  this.mediaConfigText = JSON.stringify((this.currentInteraction as any).mediaConfig, null, 2);
+                }
+              } else {
+                this.selectedMediaName = 'Selected Media';
+              }
+            }
+          });
+      }
+    }
     
     // Load AI configuration fields
     this.aiPromptTemplateText = (interaction as any).aiPromptTemplate || '';
@@ -2745,6 +3053,104 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     } catch (e: any) {
       // Keep as text for now, will validate on save
     }
+  }
+
+  onMediaConfigChange() {
+    this.markChanged();
+    if (!this.mediaConfigText.trim()) {
+      (this.currentInteraction as any).mediaConfig = undefined;
+      return;
+    }
+
+    try {
+      (this.currentInteraction as any).mediaConfig = JSON.parse(this.mediaConfigText);
+      // Update display mode and section sizing from parsed config
+      if ((this.currentInteraction as any).mediaConfig) {
+        this.displayMode = (this.currentInteraction as any).mediaConfig.displayMode || 'section';
+        this.sectionHeight = (this.currentInteraction as any).mediaConfig.sectionHeight || 'auto';
+        this.sectionMinHeight = (this.currentInteraction as any).mediaConfig.sectionMinHeight || '200px';
+        this.sectionMaxHeight = (this.currentInteraction as any).mediaConfig.sectionMaxHeight || 'none';
+      }
+    } catch (e: any) {
+      // Keep as text for now, will validate on save
+    }
+  }
+
+  onDisplayModeChange() {
+    this.markChanged();
+    if (!(this.currentInteraction as any).mediaConfig) {
+      (this.currentInteraction as any).mediaConfig = {};
+    }
+    (this.currentInteraction as any).mediaConfig.displayMode = this.displayMode;
+    this.updateMediaConfigText();
+    // Invalidate preview cache to force regeneration with new display mode
+    this.currentMediaPlayerBlobUrl = null;
+    this.currentMediaPlayerBlobUrlKey = null;
+    this.previewKey = Date.now();
+  }
+
+  onSectionSizingChange() {
+    this.markChanged();
+    if (!(this.currentInteraction as any).mediaConfig) {
+      (this.currentInteraction as any).mediaConfig = {};
+    }
+    (this.currentInteraction as any).mediaConfig.sectionHeight = this.sectionHeight;
+    (this.currentInteraction as any).mediaConfig.sectionMinHeight = this.sectionMinHeight;
+    (this.currentInteraction as any).mediaConfig.sectionMaxHeight = this.sectionMaxHeight;
+    this.updateMediaConfigText();
+    // Invalidate preview cache to force regeneration with new section sizing
+    if (this.displayMode === 'section') {
+      this.currentMediaPlayerBlobUrl = null;
+      this.currentMediaPlayerBlobUrlKey = null;
+      this.previewKey = Date.now();
+    }
+  }
+
+  onShowPlayerControlsChange() {
+    this.markChanged();
+    if (!(this.currentInteraction as any).mediaConfig) {
+      (this.currentInteraction as any).mediaConfig = {};
+    }
+    (this.currentInteraction as any).mediaConfig.showPlayerControls = this.showPlayerControls;
+    this.updateMediaConfigText();
+    // Invalidate preview cache to force regeneration with new controls setting
+    this.currentMediaPlayerBlobUrl = null;
+    this.currentMediaPlayerBlobUrlKey = null;
+    this.previewKey = Date.now();
+  }
+
+  onHideOverlayDuringPlaybackChange() {
+    this.markChanged();
+    if (!(this.currentInteraction as any).mediaConfig) {
+      (this.currentInteraction as any).mediaConfig = {};
+    }
+    (this.currentInteraction as any).mediaConfig.hideOverlayDuringPlayback = this.hideOverlayDuringPlayback;
+    this.updateMediaConfigText();
+    // Invalidate preview cache to force regeneration with new setting
+    this.currentMediaPlayerBlobUrl = null;
+    this.currentMediaPlayerBlobUrlKey = null;
+    this.previewKey = Date.now();
+  }
+
+  updateMediaConfigText() {
+    if ((this.currentInteraction as any).mediaConfig) {
+      this.mediaConfigText = JSON.stringify((this.currentInteraction as any).mediaConfig, null, 2);
+    }
+  }
+
+  getMediaConfigValue(key: string): any {
+    if (!(this.currentInteraction as any)?.mediaConfig) {
+      return undefined;
+    }
+    return (this.currentInteraction as any).mediaConfig[key];
+  }
+
+  onProcessedContentSelected(event: { processedContentId: string; name: string; }) {
+    console.log('[InteractionBuilder] 📦 Processed content selected:', event.processedContentId);
+    (this.currentInteraction as any).contentOutputId = event.processedContentId;
+    this.selectedMediaId = event.processedContentId;
+    this.selectedMediaName = event.name;
+    this.markChanged();
   }
 
   getIframeConfigValue(key: string): any {
@@ -3024,6 +3430,29 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     // Prepare save data with AI config
     const saveData: any = { ...this.currentInteraction };
     
+    // Remove fields that shouldn't be saved to interaction type
+    // contentOutputId is for interaction instances, not interaction types
+    // But for testing purposes, store it in mediaConfig as testMediaContentId
+    if (this.currentInteraction.interactionTypeCategory === 'uploaded-media') {
+      if (!saveData.mediaConfig) {
+        saveData.mediaConfig = {};
+      }
+      // Use selectedMediaId if available (from media selector), otherwise use contentOutputId
+      if (this.selectedMediaId) {
+        saveData.mediaConfig.testMediaContentId = this.selectedMediaId;
+      } else if ((this.currentInteraction as any).contentOutputId) {
+        saveData.mediaConfig.testMediaContentId = (this.currentInteraction as any).contentOutputId;
+      }
+      // Also save display mode, section sizing, and show controls setting
+      saveData.mediaConfig.displayMode = this.displayMode;
+      saveData.mediaConfig.sectionHeight = this.sectionHeight;
+      saveData.mediaConfig.sectionMinHeight = this.sectionMinHeight;
+      saveData.mediaConfig.sectionMaxHeight = this.sectionMaxHeight;
+      saveData.mediaConfig.showPlayerControls = this.showPlayerControls;
+      saveData.mediaConfig.hideOverlayDuringPlayback = this.hideOverlayDuringPlayback;
+    }
+    delete saveData.contentOutputId;
+    
     // Add AI configuration
     saveData.aiPromptTemplate = this.aiPromptTemplateText.trim() || null;
     saveData.aiEventHandlers = this.aiEventHandlersText.trim() ? JSON.parse(this.aiEventHandlersText) : null;
@@ -3050,8 +3479,45 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
           // Reload list
           this.loadInteractions();
           
-          // Update current
+          // Update current and reload all related data
           this.currentInteraction = saved;
+          
+          // Reload media selection if it's an uploaded-media interaction
+          if (saved.interactionTypeCategory === 'uploaded-media' && (saved as any).mediaConfig?.testMediaContentId) {
+            this.selectedMediaId = (saved as any).mediaConfig.testMediaContentId;
+            // Fetch media name
+            this.http.get<any>(`${environment.apiUrl}/lesson-editor/processed-outputs/${this.selectedMediaId}`, {
+              headers: {
+                'x-tenant-id': environment.tenantId,
+                'x-user-id': environment.defaultUserId
+              }
+            })
+              .pipe(takeUntil(this.destroy$))
+              .subscribe({
+                next: (media) => {
+                  this.selectedMediaName = media.outputName || media.contentSource?.title || 'Selected Media';
+                  console.log('[InteractionBuilder] ✅ Media name loaded after save:', this.selectedMediaName);
+                },
+                error: (err) => {
+                  console.error('[InteractionBuilder] ❌ Failed to fetch media details after save:', err);
+                  if (err.status === 404) {
+                    console.warn('[InteractionBuilder] ⚠️ Processed content not found, clearing selection');
+                    this.selectedMediaId = null;
+                    this.selectedMediaName = '';
+                  } else {
+                    this.selectedMediaName = 'Selected Media';
+                  }
+                }
+              });
+          }
+          
+          // Reload display mode and section sizing
+          if ((saved as any).mediaConfig) {
+            this.displayMode = (saved as any).mediaConfig.displayMode || 'section';
+            this.sectionHeight = (saved as any).mediaConfig.sectionHeight || 'auto';
+            this.sectionMinHeight = (saved as any).mediaConfig.sectionMinHeight || '200px';
+            this.sectionMaxHeight = (saved as any).mediaConfig.sectionMaxHeight || 'none';
+          }
           
           // Store as last working version when save succeeds (no errors)
           this.lastWorkingVersion = JSON.parse(JSON.stringify(saved));
@@ -3096,6 +3562,7 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
       case 'html': return 'HTML';
       case 'pixijs': return 'PixiJS';
       case 'iframe': return 'iFrame';
+      case 'uploaded-media': return 'Media Player';
       default: return 'Unknown';
     }
   }
@@ -3115,8 +3582,17 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
       return true;
     }
     
+    // Media Player interactions can show preview even without overlay code
+    if ((this.currentInteraction.interactionTypeCategory as any) === 'uploaded-media') {
+      return true;
+    }
+    
     if (this.currentInteraction.interactionTypeCategory === 'pixijs') {
       return true; // Show placeholder
+    }
+    
+    if ((this.currentInteraction.interactionTypeCategory as any) === 'uploaded-media' && this.currentInteraction.htmlCode) {
+      return true; // Show preview if overlay HTML code exists
     }
     
     return false;
@@ -3378,6 +3854,16 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
       this.currentIframeOverlayBlobUrl = null;
       this.currentIframeOverlayBlobUrlKey = null;
     }
+    // Revoke media player blob URL if it exists
+    if (this.currentMediaPlayerBlobUrl) {
+      const urlStr = (this.currentMediaPlayerBlobUrl as any).changingThisBreaksApplicationSecurity;
+      if (urlStr && urlStr.startsWith('blob:')) {
+        URL.revokeObjectURL(urlStr);
+        console.log('[Preview] 🗑️ Revoked current media player blob URL');
+      }
+      this.currentMediaPlayerBlobUrl = null;
+      this.currentMediaPlayerBlobUrlKey = null;
+    }
   }
 
   getHtmlPreviewSafeSrcDoc(): SafeHtml {
@@ -3603,6 +4089,30 @@ ${escapedHtml || '<div>No overlay content</div>'}
         markCompleted: (callback) => { console.log("[Preview] markCompleted"); if (callback) callback(null, "Preview mode"); },
         incrementAttempts: (callback) => { console.log("[Preview] incrementAttempts"); if (callback) callback(null, "Preview mode"); },
         getUserPublicProfile: (userId, callback) => { console.log("[Preview] getUserPublicProfile:", userId); if (callback) callback(null, "Preview mode"); },
+        // Media Control Methods
+        playMedia: (callback) => { console.log("[Preview] playMedia"); if (callback) callback(true, null); },
+        pauseMedia: () => { console.log("[Preview] pauseMedia"); },
+        seekMedia: (time) => { console.log("[Preview] seekMedia:", time); },
+        setMediaVolume: (volume) => { console.log("[Preview] setMediaVolume:", volume); },
+        getMediaCurrentTime: (callback) => { console.log("[Preview] getMediaCurrentTime"); if (callback) callback(0); },
+        getMediaDuration: (callback) => { console.log("[Preview] getMediaDuration"); if (callback) callback(0); },
+        isMediaPlaying: (callback) => { console.log("[Preview] isMediaPlaying"); if (callback) callback(false); },
+        showOverlayHtml: () => { 
+          console.log("[Preview] showOverlayHtml");
+          const overlayContainer = document.querySelector('.overlay-container');
+          if (overlayContainer) {
+            overlayContainer.classList.remove('media-playing');
+            console.log("[Preview] ✅ Overlay HTML shown");
+          }
+        },
+        hideOverlayHtml: () => { 
+          console.log("[Preview] hideOverlayHtml");
+          const overlayContainer = document.querySelector('.overlay-container');
+          if (overlayContainer) {
+            overlayContainer.classList.add('media-playing');
+            console.log("[Preview] ✅ Overlay HTML hidden");
+          }
+        },
       };
     };
     
@@ -3660,6 +4170,329 @@ ${escapedJs ? escapedJs.split('\n').map(line => '            ' + line).join('\n'
     this.currentIframeOverlayBlobUrl = this.sanitizer.bypassSecurityTrustResourceUrl(url);
     this.currentIframeOverlayBlobUrlKey = this.previewKey;
     return this.currentIframeOverlayBlobUrl;
+  }
+
+  getMediaPlayerPreviewBlobUrl(): SafeResourceUrl {
+    if (!this.currentInteraction) {
+      return this.sanitizer.bypassSecurityTrustResourceUrl('about:blank');
+    }
+
+    // Check if we already have a cached blob URL for the current preview key
+    if (this.currentMediaPlayerBlobUrl && this.currentMediaPlayerBlobUrlKey === this.previewKey) {
+      return this.currentMediaPlayerBlobUrl;
+    }
+
+    // Clean up old blob URL if it exists and key has changed
+    if (this.currentMediaPlayerBlobUrl && this.currentMediaPlayerBlobUrlKey !== this.previewKey) {
+      const oldUrl = (this.currentMediaPlayerBlobUrl as any).changingThisBreaksApplicationSecurity;
+      if (oldUrl && oldUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(oldUrl);
+      }
+    }
+
+    // Get overlay code
+    const htmlCode = (this.currentInteraction.htmlCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
+    const cssCode = (this.currentInteraction.cssCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
+    const jsCode = (this.currentInteraction.jsCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
+    
+    // Get sample data and config
+    const sampleData = this.currentInteraction.sampleData || {};
+    const sampleDataJson = JSON.stringify(sampleData);
+    const mediaConfig = (this.currentInteraction as any).mediaConfig || {};
+    // Use current displayMode value (from component property) instead of mediaConfig to ensure latest value
+    // This ensures the preview updates immediately when display mode changes, even before saving
+    const displayMode = this.displayMode || mediaConfig.displayMode || 'section';
+    // Also use current section sizing values from component properties for immediate updates
+    const sectionHeight = this.sectionHeight || mediaConfig.sectionHeight || 'auto';
+    const sectionMinHeight = this.sectionMinHeight || mediaConfig.sectionMinHeight || '200px';
+    const sectionMaxHeight = this.sectionMaxHeight || mediaConfig.sectionMaxHeight || 'none';
+    const showPlayerControls = this.showPlayerControls ?? mediaConfig.showPlayerControls ?? false;
+    const configDefaults: any = {};
+    if (this.currentInteraction.configSchema && this.currentInteraction.configSchema.fields) {
+      this.currentInteraction.configSchema.fields.forEach((field: any) => {
+        if (field.default !== undefined) {
+          configDefaults[field.key] = field.default;
+        }
+      });
+    }
+    const configJson = JSON.stringify({ ...configDefaults, ...mediaConfig });
+    
+    // For string concatenation, we don't need to escape for template literals
+    // But we do need to escape HTML special characters for safe insertion
+    const escapedHtml = htmlCode || '';
+    const escapedCss = cssCode || '';
+    const jsCodeForPreview = jsCode || '';
+    
+    // Get media URL from selected media or sample data
+    let mediaUrl = '';
+    let mediaType = 'video';
+    
+    // Check for selectedMediaId first (from builder's media selection)
+    if (this.selectedMediaId) {
+      // Use the processed content API endpoint to get the media file
+      // environment.apiUrl is 'http://localhost:3000/api', so we need to add '/content-sources' after '/api'
+      mediaUrl = environment.apiUrl + '/content-sources/processed-content/' + this.selectedMediaId + '/file';
+      console.log('[InteractionBuilder] 🎬 Using selectedMediaId:', this.selectedMediaId, 'URL:', mediaUrl);
+    } else if (sampleData && (sampleData as any).mediaUrl) {
+      mediaUrl = (sampleData as any).mediaUrl;
+      mediaType = (sampleData as any).mediaType || 'video';
+      console.log('[InteractionBuilder] 🎬 Using sample data mediaUrl:', mediaUrl);
+    } else {
+      // No media selected - show placeholder
+      console.log('[InteractionBuilder] ⚠️ No media selected, showing placeholder');
+    }
+    
+    // Determine media type from mediaConfig or sample data
+    if (mediaConfig && mediaConfig.mediaType) {
+      mediaType = mediaConfig.mediaType;
+    } else if (!sampleData || !(sampleData as any).mediaType) {
+      // Default to video if not specified
+      mediaType = 'video';
+    }
+    
+    // Determine MIME type from file extension or mediaType
+    let mimeType = 'video/mp4'; // Default
+    if (mediaUrl) {
+      const urlLower = mediaUrl.toLowerCase();
+      if (urlLower.includes('.webm')) mimeType = 'video/webm';
+      else if (urlLower.includes('.ogv')) mimeType = 'video/ogg';
+      else if (urlLower.includes('.mp3')) mimeType = 'audio/mpeg';
+      else if (urlLower.includes('.wav')) mimeType = 'audio/wav';
+      else if (urlLower.includes('.ogg') || urlLower.includes('.oga')) mimeType = 'audio/ogg';
+      else if (mediaType === 'audio') mimeType = 'audio/mpeg';
+      else mimeType = 'video/mp4';
+    }
+    
+    // Create media player preview HTML using string concatenation to avoid template literal issues
+    const controlsAttr = showPlayerControls ? ' controls' : '';
+    const mediaPlayerHtml = mediaUrl 
+      ? (mediaType === 'video' 
+        ? '<video id="media-player"' + controlsAttr + ' crossorigin="anonymous" preload="metadata" playsinline style="width: 100%; height: auto; max-height: 70vh; object-fit: contain;"><source src="' + this.escapeHtml(mediaUrl) + '" type="' + mimeType + '">Your browser does not support the video tag.</video>'
+        : '<audio id="media-player"' + controlsAttr + ' crossorigin="anonymous" preload="metadata" style="width: 100%;"><source src="' + this.escapeHtml(mediaUrl) + '" type="' + mimeType + '">Your browser does not support the audio tag.</audio>')
+      : '<div style="padding: 40px; text-align: center; color: #999; background: rgba(0,0,0,0.3); border: 2px dashed #444; border-radius: 8px; margin: 20px;"><p style="font-size: 16px; margin-bottom: 10px;">⚠️ No media selected</p><p style="font-size: 12px;">Select a media file in the Code tab to preview</p></div>';
+    
+    // Ensure overlay content is properly formatted
+    const overlayContent = escapedHtml.trim() || '<div style="padding: 20px; color: #999; text-align: center;">No SDK test buttons configured</div>';
+    
+    const htmlDoc = '<!DOCTYPE html>\n' +
+'<html lang="en">\n' +
+'<head>\n' +
+'  <meta charset="UTF-8">\n' +
+'  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
+'  <title>Media Player Preview</title>\n' +
+'  <style>\n' +
+'    * {\n' +
+'      margin: 0;\n' +
+'      padding: 0;\n' +
+'      box-sizing: border-box;\n' +
+'    }\n' +
+'    \n' +
+'    body {\n' +
+'      margin: 0;\n' +
+'      padding: 0;\n' +
+'      background: #0f0f23;\n' +
+'      color: #ffffff;\n' +
+'      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;\n' +
+(displayMode === 'overlay' 
+  ? '      overflow: hidden; position: relative; width: 100vw; height: 100vh;\n'
+  : '      display: flex; flex-direction: column; height: 100vh; overflow-y: auto; width: 100vw;\n') +
+'    }\n' +
+'    \n' +
+'    #media-container {\n' +
+(displayMode === 'overlay'
+  ? '      position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; display: flex; align-items: center; justify-content: center; background: #000;\n'
+  : '      flex: 0 0 auto; width: 100%; display: flex; align-items: center; justify-content: center; background: #000; padding: 10px; min-height: 200px; order: 1;\n') +
+'    }\n' +
+'    \n' +
+'    #media-container video,\n' +
+'    #media-container audio {\n' +
+'      max-width: 100%;\n' +
+(displayMode === 'overlay' ? '      max-height: 100%; z-index: 1;\n' : '      width: 100%; height: auto;\n') +
+'    }\n' +
+'    \n' +
+'    #overlay-container {\n' +
+(displayMode === 'overlay'
+  ? '      position: absolute; bottom: 0; left: 0; right: 0; z-index: 100; pointer-events: none; max-height: 40%; overflow-y: auto; background: rgba(15, 15, 35, 0.95); padding: 20px;\n' +
+    '    }\n' +
+    '    \n' +
+    '    #overlay-container > * {\n' +
+    '      pointer-events: auto;\n' +
+    '    }\n' +
+    '    \n' +
+    '    /* Ensure video controls are accessible but overlay is on top */\n' +
+    '    #media-container video::-webkit-media-controls-panel,\n' +
+    '    #media-container video::-webkit-media-controls-play-button,\n' +
+    '    #media-container video::-webkit-media-controls-timeline,\n' +
+    '    #media-container video::-webkit-media-controls-current-time-display,\n' +
+    '    #media-container video::-webkit-media-controls-time-remaining-display,\n' +
+    '    #media-container video::-webkit-media-controls-mute-button,\n' +
+    '    #media-container video::-webkit-media-controls-volume-slider,\n' +
+    '    #media-container video::-webkit-media-controls-fullscreen-button {\n' +
+    '      z-index: 50 !important;\n' +
+    '      pointer-events: auto !important;\n' +
+    '    }\n' +
+    '    \n' +
+    '    #media-container audio::-webkit-media-controls-panel {\n' +
+    '      z-index: 50 !important;\n' +
+    '      pointer-events: auto !important;\n' +
+    '    }\n'
+  : '      flex: 1 1 auto; width: 100%; overflow-y: auto; background: rgba(15, 15, 35, 0.95); padding: 20px; height: ' + sectionHeight + '; min-height: ' + sectionMinHeight + ';' + (sectionMaxHeight !== 'none' ? ' max-height: ' + sectionMaxHeight + ';' : '') + ' order: 2; position: relative !important; z-index: 1 !important;\n') +
+'    }\n' +
+'    \n' +
+'    /* Responsive design */\n' +
+'    @media (max-width: 768px) {\n' +
+(displayMode === 'overlay'
+  ? '      #overlay-container { padding: 15px; max-height: 50%; }\n'
+  : '      #media-container { min-height: 150px; padding: 5px; } #overlay-container { padding: 15px; min-height: 150px; }\n') +
+'    }\n' +
+'    \n' +
+'    @media (min-width: 769px) and (max-width: 1024px) {\n' +
+(displayMode === 'overlay'
+  ? '      #overlay-container { max-height: 45%; }\n'
+  : '      #media-container { min-height: 250px; } #overlay-container { min-height: 250px; }\n') +
+'    }\n' +
+'    \n' +
+'    @media (min-width: 1025px) {\n' +
+(displayMode === 'overlay'
+  ? '      #overlay-container { max-height: 40%; }\n'
+  : '      #media-container { min-height: 300px; } #overlay-container { min-height: 300px; }\n') +
+'    }\n' +
+escapedCss + '\n' +
+'  </style>\n' +
+'</head>\n' +
+'<body>\n' +
+'  <div id="media-container">\n' +
+mediaPlayerHtml + '\n' +
+'  </div>\n' +
+'  \n' +
+'  <div id="overlay-container">\n' +
+overlayContent + '\n' +
+'  </div>\n' +
+'\n' +
+'  <script type="text/javascript">\n' +
+'    // Inject interaction data and config\n' +
+'    window.interactionData = ' + sampleDataJson + ';\n' +
+'    window.interactionConfig = ' + configJson + ';\n' +
+'    \n' +
+'    // Provide createIframeAISDK helper function for builder\'s code (preview mode - limited functionality)\n' +
+'    const createIframeAISDK = () => {\n' +
+'      console.log("[Media Player Preview] createIframeAISDK called - preview mode, limited functionality");\n' +
+'      const mediaPlayer = document.getElementById("media-player");\n' +
+'      return {\n' +
+'        emitEvent: (event, processedContentId) => { console.log("[Preview] emitEvent:", event); },\n' +
+'        updateState: (key, value) => { console.log("[Preview] updateState:", key, value); },\n' +
+'        getState: (callback) => { callback({}); },\n' +
+'        onResponse: (callback) => { return () => {}; },\n' +
+'        isReady: (callback) => { callback(true); },\n' +
+'        minimizeChatUI: () => { console.log("[Preview] minimizeChatUI"); },\n' +
+'        showChatUI: () => { console.log("[Preview] showChatUI"); },\n' +
+'        activateFullscreen: () => { console.log("[Preview] activateFullscreen"); },\n' +
+'        deactivateFullscreen: () => { console.log("[Preview] deactivateFullscreen"); },\n' +
+'        postToChat: (content, role, showInWidget) => { console.log("[Preview] postToChat:", content); },\n' +
+'        showScript: (script, autoPlay) => { console.log("[Preview] showScript:", script); },\n' +
+'        showSnack: (content, duration, hideFromChatUI, callback) => { console.log("[Preview] showSnack:", content); if (callback) callback("preview-snack-id"); },\n' +
+'        hideSnack: () => { console.log("[Preview] hideSnack"); },\n' +
+'        saveInstanceData: (data, callback) => { console.log("[Preview] saveInstanceData:", data); if (callback) callback(true, null); },\n' +
+'        getInstanceDataHistory: (filters, callback) => { console.log("[Preview] getInstanceDataHistory:", filters); if (callback) callback([], null); },\n' +
+'        saveUserProgress: (data, callback) => { console.log("[Preview] saveUserProgress:", data); if (callback) callback(null, "Preview mode"); },\n' +
+'        getUserProgress: (callback) => { console.log("[Preview] getUserProgress"); if (callback) callback(null, "Preview mode"); },\n' +
+'        markCompleted: (callback) => { console.log("[Preview] markCompleted"); if (callback) callback(null, "Preview mode"); },\n' +
+'        incrementAttempts: (callback) => { console.log("[Preview] incrementAttempts"); if (callback) callback(null, "Preview mode"); },\n' +
+'        getUserPublicProfile: (userId, callback) => { console.log("[Preview] getUserPublicProfile:", userId); if (callback) callback(null, "Preview mode"); },\n' +
+'        // Media control methods (preview mode - limited)\n' +
+'        playMedia: (callback) => { \n' +
+'          if (mediaPlayer) { \n' +
+'            mediaPlayer.play().then(() => {\n' +
+'              console.log("[Preview] playMedia");\n' +
+'              if (callback) callback(true, null);\n' +
+'            }).catch((e) => {\n' +
+'              console.error("[Preview] playMedia error:", e);\n' +
+'              if (callback) callback(false, e.message);\n' +
+'            });\n' +
+'          } else if (callback) callback(false, "Media player not available");\n' +
+'        },\n' +
+'        pauseMedia: () => { \n' +
+'          if (mediaPlayer) mediaPlayer.pause();\n' +
+'          console.log("[Preview] pauseMedia");\n' +
+'        },\n' +
+'        seekMedia: (time) => { \n' +
+'          if (mediaPlayer) mediaPlayer.currentTime = time;\n' +
+'          console.log("[Preview] seekMedia:", time);\n' +
+'        },\n' +
+'        setMediaVolume: (volume) => { \n' +
+'          if (mediaPlayer) mediaPlayer.volume = volume;\n' +
+'          console.log("[Preview] setMediaVolume:", volume);\n' +
+'        },\n' +
+'        getMediaCurrentTime: (callback) => { \n' +
+'          if (mediaPlayer && callback) callback(mediaPlayer.currentTime);\n' +
+'        },\n' +
+'        getMediaDuration: (callback) => { \n' +
+'          if (mediaPlayer && callback) callback(mediaPlayer.duration || 0);\n' +
+'        },\n' +
+'        isMediaPlaying: (callback) => { \n' +
+'          if (mediaPlayer && callback) callback(!mediaPlayer.paused);\n' +
+'        },\n' +
+'      };\n' +
+'    };\n' +
+'    \n' +
+'    // Wait for media to load, then run builder\'s code\n' +
+'    (function() {\n' +
+'      var userJsCode = ' + JSON.stringify(jsCodeForPreview || '// No JavaScript code provided') + ';\n' +
+'      var executeCode = function() {\n' +
+'        try {\n' +
+'          eval(userJsCode);\n' +
+'        } catch (e) {\n' +
+'          console.error("[Media Player Preview] Error in builder\'s JavaScript:", e);\n' +
+'        }\n' +
+'      };\n' +
+'      \n' +
+'      // Wait for media player to be ready, but don\'t block if media fails\n' +
+'      var mediaPlayer = document.getElementById("media-player");\n' +
+'      var codeExecuted = false;\n' +
+'      var executeOnce = function() {\n' +
+'        if (!codeExecuted) {\n' +
+'          codeExecuted = true;\n' +
+'          executeCode();\n' +
+'        }\n' +
+'      };\n' +
+'      \n' +
+'      if (mediaPlayer && (mediaPlayer.tagName === "VIDEO" || mediaPlayer.tagName === "AUDIO")) {\n' +
+'        mediaPlayer.addEventListener("loadedmetadata", function() {\n' +
+'          console.log("[Media Player Preview] Media metadata loaded");\n' +
+'          executeOnce();\n' +
+'        });\n' +
+'        mediaPlayer.addEventListener("error", function(e) {\n' +
+'          console.error("[Media Player Preview] Media load error:", e);\n' +
+'          executeOnce(); // Still execute code even if media fails\n' +
+'        });\n' +
+'        // If metadata already loaded, execute immediately\n' +
+'        if (mediaPlayer.readyState >= 1) {\n' +
+'          executeOnce();\n' +
+'        } else {\n' +
+'          // Set timeout to execute code even if media never loads\n' +
+'          setTimeout(executeOnce, 2000);\n' +
+'        }\n' +
+'      } else {\n' +
+'        // No media player, execute immediately\n' +
+'        if (document.readyState === "loading") {\n' +
+'          document.addEventListener("DOMContentLoaded", executeOnce);\n' +
+'        } else {\n' +
+'          setTimeout(executeOnce, 10);\n' +
+'        }\n' +
+'      }\n' +
+'    })();\n' +
+'  </script>\n' +
+'</body>\n' +
+'</html>';
+
+    // Create a Blob from the HTML string
+    const blob = new Blob([htmlDoc], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    
+    // Store and return
+    this.currentMediaPlayerBlobUrl = this.sanitizer.bypassSecurityTrustResourceUrl(url);
+    this.currentMediaPlayerBlobUrlKey = this.previewKey;
+    return this.currentMediaPlayerBlobUrl;
   }
 
   private escapeHtml(text: string): string {
@@ -4089,26 +4922,36 @@ ${escapedJs ? escapedJs.split('\n').map(line => '            ' + line).join('\n'
           }
           
           // Check for syntax errors using Function constructor (safer than eval)
+          // We need to validate the syntax without executing
           try {
+            // Use Function constructor directly - it will throw SyntaxError if invalid
+            // We wrap in try-catch to handle the error properly
             new Function(jsCode);
             console.log('[Test] ✅ JavaScript syntax is valid');
           } catch (syntaxError: any) {
-            const errorMsg = syntaxError.message || 'Unknown syntax error';
-            const errorName = syntaxError.name || 'SyntaxError';
-            throw new Error(`JavaScript syntax error: ${errorName}: ${errorMsg}. This will prevent the code from executing in the preview.`);
+            // Only throw if it's a SyntaxError, not other errors
+            if (syntaxError instanceof SyntaxError || syntaxError.name === 'SyntaxError') {
+              const errorMsg = syntaxError.message || 'Unknown syntax error';
+              const errorName = syntaxError.name || 'SyntaxError';
+              throw new Error(`JavaScript syntax error: ${errorName}: ${errorMsg}. This will prevent the code from executing in the preview.`);
+            }
+            // Other errors (like ReferenceError) are OK for syntax validation
+            console.log('[Test] ⚠️ Non-syntax error during validation (OK):', syntaxError.message);
           }
           
           const sampleDataJson = JSON.stringify(sampleData);
-          const wrappedJs = `
-            (function() {
-              try {
-                window.interactionData = ${sampleDataJson};
-                ${jsCode}
-              } catch (e) {
-                throw new Error('Runtime error: ' + e.message);
-              }
-            })();
-          `;
+          // Use JSON.stringify to safely embed the JavaScript code
+          // This properly escapes all special characters including backticks and template literals
+          const jsCodeJson = JSON.stringify(jsCode);
+          const wrappedJs = '(function() {\n' +
+            '  try {\n' +
+            '    window.interactionData = ' + sampleDataJson + ';\n' +
+            '    var userCode = ' + jsCodeJson + ';\n' +
+            '    eval(userCode);\n' +
+            '  } catch (e) {\n' +
+            '    throw new Error("Runtime error: " + e.message);\n' +
+            '  }\n' +
+            '})();';
           const scriptEl = document.createElement('script');
           scriptEl.textContent = wrappedJs;
           testContainer.appendChild(scriptEl);
@@ -4239,12 +5082,195 @@ ${escapedJs ? escapedJs.split('\n').map(line => '            ' + line).join('\n'
       // but syntax/structure validation ensures it will work when loaded
       return { success: true };
 
+    } else if (this.currentInteraction.interactionTypeCategory === 'uploaded-media') {
+      // Media Player interactions use overlay HTML/CSS/JS similar to HTML interactions
+      if (!this.currentInteraction.htmlCode || this.currentInteraction.htmlCode.trim() === '') {
+        return { success: false, error: 'Overlay HTML code is required for Media Player interactions' };
+      }
+
+      // Validate HTML for common typos
+      const htmlCode = this.currentInteraction.htmlCode;
+      const typoPatterns = [
+        { pattern: /\bclas=/gi, error: 'HTML typo: "clas=" should be "class="' },
+        { pattern: /\bclasss=/gi, error: 'HTML typo: "classs=" should be "class="' },
+        { pattern: /cladss\s*=/gi, error: 'HTML typo: "cladss=" should be "class="' },
+        { pattern: /cldss\s*=/gi, error: 'HTML typo: "cldss=" should be "class="' },
+        { pattern: /cl[^a]ss\s*=/gi, error: 'HTML typo: Possible "class" typo detected (should be "class=")' },
+        { pattern: /\bclss=/gi, error: 'HTML typo: "clss=" should be "class="' },
+        { pattern: /\bide=/gi, error: 'HTML typo: "ide=" should be "id="' },
+        { pattern: /\bidd=/gi, error: 'HTML typo: "idd=" should be "id="' },
+        { pattern: /\bdiv\s+[^>]*[^c]lass=/gi, error: 'Possible spacing issue in "class=" attribute' }
+      ];
+
+      for (const {pattern, error} of typoPatterns) {
+        if (pattern.test(htmlCode)) {
+          return { success: false, error };
+        }
+      }
+
+      // Validate sample data is valid JSON
+      let sampleData = {};
+      if (this.sampleDataText.trim()) {
+        try {
+          sampleData = JSON.parse(this.sampleDataText);
+        } catch (jsonError: any) {
+          return { success: false, error: `Sample data JSON error: ${jsonError.message}` };
+        }
+      }
+
+      // Validate media config JSON if provided
+      if (this.mediaConfigText.trim()) {
+        try {
+          const mediaConfig = JSON.parse(this.mediaConfigText);
+          if (typeof mediaConfig !== 'object' || mediaConfig === null) {
+            return { success: false, error: 'Media Config must be a valid JSON object' };
+          }
+        } catch (configError: any) {
+          return { success: false, error: `Media Config JSON error: ${configError.message}` };
+        }
+      }
+
+      // ACTUAL TEST: Try to render overlay in hidden container
+      console.log('[Test] 🎬 Attempting to render Media Player overlay preview...');
+      const testContainer = document.createElement('div');
+      testContainer.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:800px;height:600px;';
+      document.body.appendChild(testContainer);
+
+      try {
+        // Add CSS
+        let testHtml = '';
+        if (this.currentInteraction.cssCode) {
+          testHtml += `<style>${this.currentInteraction.cssCode}</style>`;
+        }
+
+        // Add HTML
+        testHtml += this.currentInteraction.htmlCode;
+
+        // Inject and execute
+        testContainer.innerHTML = testHtml;
+
+        // Execute JavaScript with sample data
+        if (this.currentInteraction.jsCode) {
+          // First, validate JavaScript syntax BEFORE trying to execute
+          let jsCode = this.currentInteraction.jsCode;
+          
+          // Normalize line endings (CRLF -> LF, CR -> LF)
+          jsCode = jsCode.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+          
+          // Fix SQL-escaped single quotes ('' -> ') - SQL uses '' to represent a single quote
+          // This happens when code is stored in SQL string literals
+          // Replace all occurrences of '' with ' (this is safe because '' in SQL = ' in JavaScript)
+          jsCode = jsCode.replace(/''/g, "'");
+          
+          // Fix escaped template literals - handle both single and double escaping
+          // Pattern: \\` (double-escaped) should become ` (backtick)
+          // Pattern: \` (single-escaped) should become ` (backtick)
+          // Pattern: \\${ (double-escaped) should become ${ (template expression start)
+          // Pattern: \${ (single-escaped) should become ${ (template expression start)
+          jsCode = jsCode.replace(/\\\\`/g, '`'); // Double-escaped backtick
+          jsCode = jsCode.replace(/\\`/g, '`'); // Single-escaped backtick (after double-escaped is fixed)
+          jsCode = jsCode.replace(/\\\\\$\{/g, '${'); // Double-escaped template expression
+          jsCode = jsCode.replace(/\\\$\{/g, '${'); // Single-escaped template expression (after double-escaped is fixed)
+          
+          // Remove corrupted emoji characters and Unicode replacement characters
+          jsCode = jsCode.replace(/\?{2,}/g, '');
+          jsCode = jsCode.replace(/\uFFFD/g, '');
+          
+          // Check for characters that would break HTML string injection
+          if (jsCode.includes('</script>') && !jsCode.includes('\\/script>')) {
+            throw new Error('JavaScript contains unescaped "</script>" tag. Use "\\/script>" in strings instead.');
+          }
+          
+          // Check for syntax errors using Function constructor (safer than eval)
+          // First, log the code for debugging
+          console.log('[Test] 🔍 Validating JavaScript code (length:', jsCode.length, 'chars)');
+          console.log('[Test] 🔍 First 200 chars:', jsCode.substring(0, 200));
+          console.log('[Test] 🔍 Last 200 chars:', jsCode.substring(Math.max(0, jsCode.length - 200)));
+          
+          try {
+            // Try to parse as a script - wrap in IIFE to handle top-level code
+            const wrappedCode = '(function() {\n' + jsCode + '\n})();';
+            new Function(wrappedCode);
+            console.log('[Test] ✅ Media Player overlay JavaScript syntax is valid');
+          } catch (syntaxError: any) {
+            console.error('[Test] ❌ JavaScript syntax error details:', {
+              name: syntaxError.name,
+              message: syntaxError.message,
+              stack: syntaxError.stack
+            });
+            const errorMsg = syntaxError.message || 'Unknown syntax error';
+            const errorName = syntaxError.name || 'SyntaxError';
+            // Include more context in the error
+            // Try to extract line number from error message
+            const errorLineMatch = errorMsg.match(/line (\d+)/) || errorMsg.match(/at (\d+):(\d+)/);
+            if (errorLineMatch) {
+              const lineNum = parseInt(errorLineMatch[1]);
+              const lines = jsCode.split('\n');
+              const problemLine = lines[lineNum - 1] || 'unknown';
+              const contextStart = Math.max(0, lineNum - 3);
+              const contextEnd = Math.min(lines.length, lineNum + 2);
+              const context = lines.slice(contextStart, contextEnd).map((line, idx) => {
+                const actualLineNum = contextStart + idx + 1;
+                const marker = actualLineNum === lineNum ? '>>> ' : '    ';
+                return marker + actualLineNum + ': ' + line;
+              }).join('\n');
+              throw new Error(`JavaScript syntax error at line ${lineNum}: ${errorName}: ${errorMsg}\n\nProblem line:\n${problemLine}\n\nContext:\n${context}`);
+            }
+            // If no line number, show the problematic code section
+            // Also check if the code appears to be truncated
+            const codeLength = jsCode.length;
+            const lastChars = jsCode.substring(Math.max(0, codeLength - 500));
+            const isTruncated = jsCode.trim().endsWith('\\') || jsCode.trim().endsWith('`') || 
+                                (jsCode.match(/`/g) || []).length % 2 !== 0; // Odd number of backticks = incomplete template literal
+            
+            let errorDetails = `JavaScript syntax error: ${errorName}: ${errorMsg}\n\nCode length: ${codeLength} chars\nLast 500 chars:\n${lastChars}`;
+            if (isTruncated) {
+              errorDetails += '\n\n⚠️ WARNING: Code appears to be truncated or has incomplete template literals!';
+            }
+            errorDetails += '\n\nThis will prevent the code from executing in the preview.';
+            throw new Error(errorDetails);
+          }
+          
+          const sampleDataJson = JSON.stringify(sampleData);
+          // Use JSON.stringify to safely embed the JavaScript code
+          const jsCodeJson = JSON.stringify(jsCode);
+          const wrappedJs = '(function() {\n' +
+            '  try {\n' +
+            '    window.interactionData = ' + sampleDataJson + ';\n' +
+            '    var userCode = ' + jsCodeJson + ';\n' +
+            '    eval(userCode);\n' +
+            '  } catch (e) {\n' +
+            '    throw new Error("Runtime error: " + e.message);\n' +
+            '  }\n' +
+            '})();';
+          const scriptEl = document.createElement('script');
+          scriptEl.textContent = wrappedJs;
+          testContainer.appendChild(scriptEl);
+        }
+
+        // Small delay to catch async errors
+        setTimeout(() => {
+          if (document.body.contains(testContainer)) {
+            document.body.removeChild(testContainer);
+            console.log('[Test] 🧹 Cleaned up test container');
+          }
+        }, 100);
+
+        return { success: true };
+
+      } catch (renderError: any) {
+        if (document.body.contains(testContainer)) {
+          document.body.removeChild(testContainer);
+        }
+        return { success: false, error: renderError.message || 'Preview render failed' };
+      }
+
     } else {
       // Better error message - show what type was found
       const type = this.currentInteraction?.interactionTypeCategory || 'none';
       return { 
         success: false, 
-        error: `Unsupported interaction type: "${type}". Supported types: html, pixijs, iframe` 
+        error: `Unsupported interaction type: "${type}". Supported types: html, pixijs, iframe, uploaded-media` 
       };
     }
   }
@@ -4495,6 +5521,62 @@ ${escapedJs ? escapedJs.split('\n').map(line => '            ' + line).join('\n'
   closeConfigModal() {
     this.showingConfigModal = false;
     console.log('[InteractionBuilder] 🔒 Config modal closed');
+  }
+
+  openMediaSelector() {
+    this.showMediaSelector = true;
+  }
+
+  closeMediaSelector() {
+    this.showMediaSelector = false;
+  }
+
+  onMediaSelected(processedContentId: string) {
+    console.log('[InteractionBuilder] 🎬 Media selected:', processedContentId);
+    (this.currentInteraction as any).contentOutputId = processedContentId;
+    this.selectedMediaId = processedContentId;
+    
+    // Store in mediaConfig for persistence (for testing in builder)
+    if (!(this.currentInteraction as any).mediaConfig) {
+      (this.currentInteraction as any).mediaConfig = {};
+    }
+    (this.currentInteraction as any).mediaConfig.testMediaContentId = processedContentId;
+    
+    // Update mediaConfigText to reflect the change
+    this.mediaConfigText = JSON.stringify((this.currentInteraction as any).mediaConfig, null, 2);
+    
+    // Fetch media details to display name
+    this.http.get<any>(`${environment.apiUrl}/lesson-editor/processed-outputs/${processedContentId}`, {
+      headers: {
+        'x-tenant-id': environment.tenantId,
+        'x-user-id': environment.defaultUserId
+      }
+    })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (media) => {
+          this.selectedMediaName = media.outputName || media.contentSource?.title || 'Selected Media';
+          console.log('[InteractionBuilder] ✅ Media name set:', this.selectedMediaName);
+          this.markChanged();
+        },
+        error: (err) => {
+          console.error('[InteractionBuilder] ❌ Failed to fetch media details:', err);
+          // If 404, the processed content doesn't exist - clear the selection
+          if (err.status === 404) {
+            console.warn('[InteractionBuilder] ⚠️ Processed content not found, clearing selection');
+            this.selectedMediaId = null;
+            this.selectedMediaName = '';
+            // Clear from mediaConfig
+            if ((this.currentInteraction as any).mediaConfig) {
+              delete (this.currentInteraction as any).mediaConfig.testMediaContentId;
+              this.mediaConfigText = JSON.stringify((this.currentInteraction as any).mediaConfig, null, 2);
+            }
+          } else {
+            this.selectedMediaName = 'Selected Media';
+          }
+          this.markChanged();
+        }
+      });
   }
 
   saveConfigFromModal(config: any) {
