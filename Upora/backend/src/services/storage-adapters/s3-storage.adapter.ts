@@ -61,12 +61,18 @@ export class S3StorageAdapter implements IStorageAdapter, OnModuleInit {
     }
 
     this.bucket = process.env.S3_BUCKET || 'upora-uploads';
-    this.baseUrl = endpoint 
-      ? `${endpoint}/${this.bucket}` 
-      : `https://${this.bucket}.s3.${region}.amazonaws.com`;
+    
+    // For public URLs, use S3_PUBLIC_URL if set, otherwise construct from endpoint
+    // For MinIO, convert internal Docker hostname to localhost for frontend access
+    const publicUrl = process.env.S3_PUBLIC_URL || 
+      (endpoint 
+        ? endpoint.replace(/:\/\/minio:/, '://localhost:') // Convert minio:9000 to localhost:9000
+        : `https://${this.bucket}.s3.${region}.amazonaws.com`);
+    
+    this.baseUrl = `${publicUrl}/${this.bucket}`;
 
     this.s3Client = new S3Client({
-      endpoint: endpoint || undefined, // MinIO endpoint
+      endpoint: endpoint || undefined, // MinIO endpoint (internal Docker network)
       region,
       credentials: {
         accessKeyId,
@@ -76,6 +82,7 @@ export class S3StorageAdapter implements IStorageAdapter, OnModuleInit {
     });
 
     this.logger.log(`S3 Storage initialized: ${endpoint ? 'MinIO' : 'AWS S3'} - Bucket: ${this.bucket}`);
+    this.logger.log(`Public URL base: ${this.baseUrl}`);
   }
 
   async onModuleInit() {

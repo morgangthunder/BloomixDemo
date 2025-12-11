@@ -4,7 +4,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 // Read version from package.json
-let BACKEND_VERSION = '0.1.24'; // Fixed file path resolution for media files, improved alternative path checking
+let BACKEND_VERSION = '0.1.25'; // Switched to MinIO for file storage (S3-compatible)
 console.log(`🔍 [AppController VERSION DEBUG] __dirname: ${__dirname}`);
 console.log(`🔍 [AppController VERSION DEBUG] process.cwd(): ${process.cwd()}`);
 

@@ -340,7 +340,8 @@ export class ContentSourcesService {
       }
 
       const outputData = processedOutput.outputData as any;
-      let fileUrl = outputData.filePath || outputData.mediaFileUrl;
+      // Prefer mediaFileUrl (MinIO URL) over filePath (relative path)
+      let fileUrl = outputData.mediaFileUrl || outputData.filePath;
 
       if (!fileUrl) {
         this.logger.warn(`[getProcessedContentFilePath] No filePath or mediaFileUrl in outputData for ${processedContentId}`);
@@ -626,7 +627,54 @@ export class ContentSourcesService {
       throw new Error('Invalid or missing media type in metadata');
     }
 
-    // Get file path (convert URL to file system path)
+    // Check if filePath is a URL (MinIO/S3)
+    if (contentSource.filePath.startsWith('http://') || contentSource.filePath.startsWith('https://')) {
+      this.logger.log(`[processMediaFile] Detected MinIO/S3 URL: ${contentSource.filePath}`);
+      
+      // Download file from MinIO/S3 to temporary location
+      const os = require('os');
+      const path = require('path');
+      const fs = require('fs');
+      const tempDir = os.tmpdir();
+      const fileName = path.basename(contentSource.filePath.split('?')[0]); // Remove query params if any
+      const tempFilePath = path.join(tempDir, `upora-process-${Date.now()}-${fileName}`);
+      
+      try {
+        this.logger.log(`[processMediaFile] Downloading from MinIO to: ${tempFilePath}`);
+        const fileBuffer = await this.fileStorageService.readFile(contentSource.filePath);
+        fs.writeFileSync(tempFilePath, fileBuffer);
+        this.logger.log(`[processMediaFile] ✅ Downloaded file from MinIO`);
+        
+        // Extract relative path from URL for storage reference
+        const urlObj = new URL(contentSource.filePath);
+        const urlPath = urlObj.pathname.replace(/^\/upora-uploads\//, ''); // Remove bucket prefix
+        
+        // Process the temporary file
+        await this.processMediaFileWithPath(contentSource, approvedBy, tempFilePath, mediaType, urlPath);
+        
+        // Clean up temporary file
+        try {
+          fs.unlinkSync(tempFilePath);
+          this.logger.log(`[processMediaFile] ✅ Cleaned up temporary file`);
+        } catch (cleanupError) {
+          this.logger.warn(`[processMediaFile] ⚠️ Failed to clean up temporary file: ${cleanupError}`);
+        }
+      } catch (error: any) {
+        // Clean up on error
+        try {
+          if (fs.existsSync(tempFilePath)) {
+            fs.unlinkSync(tempFilePath);
+          }
+        } catch (cleanupError) {
+          // Ignore cleanup errors
+        }
+        this.logger.error(`[processMediaFile] ❌ Failed to download/process from MinIO: ${error.message}`);
+        throw new Error(`Failed to process media file from MinIO: ${error.message}`);
+      }
+      return;
+    }
+
+    // Get file path (convert URL to file system path) - Local storage
     // Handle both /uploads/... and uploads/... formats
     let urlPath = contentSource.filePath;
     if (urlPath.startsWith('/uploads/')) {
@@ -669,7 +717,14 @@ export class ContentSourcesService {
       
       if (!foundPath) {
         this.logger.error(`[processMediaFile] File not found in any location`);
-        throw new Error(`Media file not found. Original path: ${contentSource.filePath}, Resolved: ${filePath}. Please ensure the file was uploaded correctly.`);
+        // Check if this is a legacy local file path (not a URL) that might have been lost
+        // In this case, we'll provide a more helpful error message
+        const isLegacyLocalPath = !contentSource.filePath.startsWith('http://') && !contentSource.filePath.startsWith('https://');
+        if (isLegacyLocalPath) {
+          throw new Error(`Media file not found. This appears to be a legacy file uploaded before MinIO migration. The file at "${contentSource.filePath}" no longer exists. Please re-upload the file - it will be stored in MinIO.`);
+        } else {
+          throw new Error(`Media file not found. Original path: ${contentSource.filePath}, Resolved: ${filePath}. Please ensure the file was uploaded correctly.`);
+        }
       }
       
       // Use the found path

@@ -9,6 +9,7 @@ import {
   Headers,
   ParseUUIDPipe,
   Query,
+  BadRequestException,
 } from '@nestjs/common';
 import { LessonsService } from './lessons.service';
 import { LessonLoaderService } from './lesson-loader.service';
@@ -41,9 +42,14 @@ export class LessonsController {
 
   @Get(':id')
   findOne(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Headers('x-tenant-id') tenantId?: string,
   ) {
+    // Validate UUID format, but allow numeric IDs for backwards compatibility
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id) && !/^\d+$/.test(id)) {
+      throw new BadRequestException('Invalid lesson ID format. Expected UUID or numeric ID.');
+    }
     return this.lessonsService.findOne(id, tenantId);
   }
 

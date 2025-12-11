@@ -15,9 +15,10 @@ import {
   UploadedFile,
   BadRequestException,
   NotFoundException,
+  Req,
   Res,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ContentSourcesService } from './content-sources.service';
 import { CreateContentSourceDto } from './dto/create-content-source.dto';
@@ -205,6 +206,7 @@ export class ContentSourcesController {
   @Get('processed-content/:id/file')
   async getProcessedContentFile(
     @Param('id', ParseUUIDPipe) processedContentId: string,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
     try {
@@ -227,14 +229,136 @@ export class ContentSourcesController {
 
       // Check if it's a cloud storage URL (S3/MinIO)
       if (filePathOrUrl.startsWith('http://') || filePathOrUrl.startsWith('https://')) {
-        // For cloud storage, get a signed URL or redirect
-        const signedUrl = await this.fileStorageService.getSignedUrl(filePathOrUrl);
-        if (signedUrl) {
-          // Redirect to signed URL
-          return res.redirect(signedUrl);
-        } else {
-          // If no signed URL support, redirect to original URL
-          return res.redirect(filePathOrUrl);
+        // Proxy the file from MinIO/S3 through the backend to ensure proper headers and CORS
+        console.log('[ContentSourcesController] Proxying file from MinIO/S3:', filePathOrUrl);
+        
+        try {
+          // Check if file exists first
+          const fileExists = await this.fileStorageService.fileExists(filePathOrUrl);
+          if (!fileExists) {
+            throw new NotFoundException(`Media file not found in storage: ${filePathOrUrl}`);
+          }
+          
+          // Get file stream from MinIO/S3 using the adapter directly to get metadata
+          const adapter = (this.fileStorageService as any).adapter;
+          if (!adapter || !adapter.s3Client) {
+            throw new Error('S3 adapter not available');
+          }
+          
+          const { GetObjectCommand } = require('@aws-sdk/client-s3');
+          
+          // Extract key from URL
+          const urlObj = new URL(filePathOrUrl);
+          const key = urlObj.pathname.replace(/^\/upora-uploads\//, '');
+          const bucket = adapter.bucket || process.env.S3_BUCKET || 'upora-uploads';
+          
+          console.log(`[ContentSourcesController] Fetching from MinIO - Bucket: ${bucket}, Key: ${key}`);
+          
+          const getObjectCommand = new GetObjectCommand({
+            Bucket: bucket,
+            Key: key,
+          });
+          
+          const s3Response = await adapter.s3Client.send(getObjectCommand);
+          const fileStream = s3Response.Body;
+          const contentLength = s3Response.ContentLength;
+          const contentTypeFromS3 = s3Response.ContentType;
+          
+          console.log(`[ContentSourcesController] S3 Response - ContentLength: ${contentLength}, ContentType: ${contentTypeFromS3}`);
+          
+          // Determine content type (prefer S3 metadata, fallback to extension)
+          const ext = filePathOrUrl.split('.').pop()?.toLowerCase();
+          let contentType = contentTypeFromS3 || 'video/mp4';
+          if (!contentTypeFromS3) {
+            if (ext === 'mp4') contentType = 'video/mp4';
+            else if (ext === 'webm') contentType = 'video/webm';
+            else if (ext === 'ogv') contentType = 'video/ogg';
+            else if (ext === 'mp3') contentType = 'audio/mpeg';
+            else if (ext === 'wav') contentType = 'audio/wav';
+            else if (ext === 'ogg' || ext === 'oga') contentType = 'audio/ogg';
+          }
+          
+          // Set headers for media playback
+          res.setHeader('Content-Type', contentType);
+          if (contentLength) {
+            res.setHeader('Content-Length', contentLength.toString());
+          }
+          res.setHeader('Accept-Ranges', 'bytes');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+          res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Range');
+          res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
+          
+          // Handle range requests for video seeking
+          const range = req.headers.range;
+          if (range && contentLength) {
+            // Parse range header
+            const parts = range.replace(/bytes=/, '').split('-');
+            const start = parseInt(parts[0], 10);
+            const end = parts[1] ? parseInt(parts[1], 10) : contentLength - 1;
+            const chunkSize = (end - start) + 1;
+            
+            // Re-fetch with range from S3/MinIO
+            const { GetObjectCommand } = require('@aws-sdk/client-s3');
+            const rangeGetObjectCommand = new GetObjectCommand({
+              Bucket: bucket,
+              Key: key,
+              Range: `bytes=${start}-${end}`,
+            });
+            
+            try {
+              const rangeResponse = await adapter.s3Client.send(rangeGetObjectCommand);
+              const rangeStream = rangeResponse.Body;
+              
+              res.status(206);
+              res.setHeader('Content-Range', `bytes ${start}-${end}/${contentLength}`);
+              res.setHeader('Content-Length', chunkSize.toString());
+              
+              console.log(`[ContentSourcesController] Range request: ${start}-${end}/${contentLength} (streaming range from MinIO)`);
+              
+              // Handle range stream errors
+              rangeStream.on('error', (error: any) => {
+                console.error('[ContentSourcesController] ❌ Range stream error:', error);
+                if (!res.headersSent) {
+                  res.status(500).json({ error: 'Failed to stream media range', message: error.message });
+                } else {
+                  res.end();
+                }
+              });
+              
+              // Pipe the range stream to the response
+              rangeStream.pipe(res);
+              return;
+            } catch (rangeError: any) {
+              console.error('[ContentSourcesController] ❌ Range request failed, falling back to full stream:', rangeError);
+              // Fall through to stream full file
+            }
+          }
+          
+          // Handle stream errors
+          fileStream.on('error', (error: any) => {
+            console.error('[ContentSourcesController] ❌ Stream error:', error);
+            if (!res.headersSent) {
+              res.status(500).json({ error: 'Failed to stream media file', message: error.message });
+            } else {
+              res.end();
+            }
+          });
+          
+          // Handle stream end
+          fileStream.on('end', () => {
+            console.log('[ContentSourcesController] ✅ Stream ended successfully');
+          });
+          
+          // Pipe the file stream to the response
+          // Note: When using @Res(), we must handle the response manually
+          fileStream.pipe(res);
+          
+          // Return undefined to prevent NestJS from trying to send a response
+          return;
+        } catch (error: any) {
+          console.error('[ContentSourcesController] ❌ Error proxying file from MinIO/S3:', error);
+          throw new NotFoundException(`Failed to load media file: ${error.message}`);
         }
       }
 

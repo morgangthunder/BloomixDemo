@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 // html2canvas will be dynamically imported
 import { Router, ActivatedRoute } from '@angular/router';
@@ -354,7 +354,7 @@ import { MediaPlayerComponent } from '../../shared/components/media-player/media
             </button>
             <div class="script-progress-info">
               <!-- Show volume control when media player is present or TTS is active, but hide when timer is shown -->
-              <div *ngIf="((mediaPlayerRef && mediaPlayerData) || isTTSActive) && !showTimer" class="volume-control-container">
+              <div *ngIf="(isMediaPlayerReady || isTTSActive) && !showTimer" class="volume-control-container">
                 <label for="volume-slider" class="volume-label">🔊</label>
                 <input 
                   type="range" 
@@ -370,12 +370,12 @@ import { MediaPlayerComponent } from '../../shared/components/media-player/media
                 <span class="volume-value">{{ Math.round(mediaVolume * 100) }}%</span>
               </div>
               <!-- Show script text when no media player and no TTS -->
-              <ng-container *ngIf="!(mediaPlayerRef && mediaPlayerData) && !isTTSActive">
+              <ng-container *ngIf="!isMediaPlayerReady && !isTTSActive">
                 <span *ngIf="!showTimer" class="script-title">{{ currentTeacherScript?.text?.substring(0, 40) || 'Ready to teach' }}{{ (currentTeacherScript?.text?.length || 0) > 40 ? '...' : '' }}</span>
                 <span *ngIf="showTimer" class="timer-display">⏱️ {{ formatTime(elapsedSeconds) }}</span>
               </ng-container>
               <!-- Show timer when timer is enabled (even if media player is present) -->
-              <span *ngIf="showTimer && ((mediaPlayerRef && mediaPlayerData) || isTTSActive)" class="timer-display">⏱️ {{ formatTime(elapsedSeconds) }}</span>
+              <span *ngIf="showTimer && (isMediaPlayerReady || isTTSActive)" class="timer-display">⏱️ {{ formatTime(elapsedSeconds) }}</span>
             </div>
           </div>
 
@@ -1089,7 +1089,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     private interactionAISDK: InteractionAISDK,
     private bridgeService: InteractionAIBridgeService,
     private snackService: SnackMessageService,
-    private sanitizer: DomSanitizer
+    private sanitizer: DomSanitizer,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit() {
@@ -1127,9 +1128,12 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     console.log('[LessonView] 🚀 Starting timer on lesson load');
     this.startTimer();
     
-    // Auto-play lesson
-    this.isScriptPlaying = true;
-    console.log('[LessonView] 🎬 Auto-playing lesson');
+    // Auto-play lesson - defer to avoid change detection error
+    setTimeout(() => {
+      this.isScriptPlaying = true;
+      console.log('[LessonView] 🎬 Auto-playing lesson');
+      this.cdr.detectChanges();
+    }, 0);
     
     // Get lesson ID from route params
     this.route.params.subscribe(params => {
@@ -1693,8 +1697,11 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       console.log('[LessonView] ⏸ Media player paused on substage switch');
     }
     
-    // Pause script playback
-    this.isScriptPlaying = false;
+    // Pause script playback - defer to avoid change detection error
+    setTimeout(() => {
+      this.isScriptPlaying = false;
+      this.cdr.detectChanges();
+    }, 0);
     
     this.activeStageId = stageId;
     this.activeSubStageId = subStageId;
@@ -2404,6 +2411,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     console.log('[LessonView] 🎬 Loading media player data for uploaded-media interaction');
     this.isLoadingInteraction = true;
     this.mediaPlayerData = null;
+    this.isMediaPlayerReady = false; // Reset ready flag
     this.interactionBuild = build; // Store build for reference
     
     // Get processed content ID from config
@@ -2445,30 +2453,39 @@ export class LessonViewComponent implements OnInit, OnDestroy {
           const overlayCss = build.cssCode || '';
           const overlayJs = build.jsCode || '';
           
-          this.mediaPlayerData = {
-            mediaUrl: fullMediaUrl,
-            mediaType: mediaType as 'video' | 'audio',
-            config: {
-              autoplay: config.autoplay ?? mediaConfig.autoplay ?? false,
-              loop: config.loop ?? mediaConfig.loop ?? false,
-              showControls: config.showControls ?? mediaConfig.showControls ?? false, // Default: hide controls
-              defaultVolume: config.defaultVolume ?? mediaConfig.defaultVolume ?? 1,
-              startTime: config.startTime,
-              endTime: config.endTime,
-              hideOverlayDuringPlayback: config.hideOverlayDuringPlayback ?? mediaConfig.hideOverlayDuringPlayback ?? true, // Default: hide overlay during playback
-            },
-            overlayHtml,
-            overlayCss,
-            overlayJs,
-          };
-          
-          console.log('[LessonView] ✅ Media player data loaded:', {
-            mediaUrl: fullMediaUrl,
-            mediaType,
-            hasOverlay: !!(overlayHtml || overlayCss || overlayJs),
+          // Defer property updates to avoid ExpressionChangedAfterItHasBeenCheckedError
+          // Use queueMicrotask to ensure this runs after the current change detection cycle
+          queueMicrotask(() => {
+            this.mediaPlayerData = {
+              mediaUrl: fullMediaUrl,
+              mediaType: mediaType as 'video' | 'audio',
+              config: {
+                autoplay: config.autoplay ?? mediaConfig.autoplay ?? false,
+                loop: config.loop ?? mediaConfig.loop ?? false,
+                showControls: config.showControls ?? mediaConfig.showControls ?? false, // Default: hide controls
+                defaultVolume: config.defaultVolume ?? mediaConfig.defaultVolume ?? 1,
+                startTime: config.startTime,
+                endTime: config.endTime,
+                hideOverlayDuringPlayback: config.hideOverlayDuringPlayback ?? mediaConfig.hideOverlayDuringPlayback ?? true, // Default: hide overlay during playback
+              },
+              overlayHtml,
+              overlayCss,
+              overlayJs,
+            };
+            
+            console.log('[LessonView] ✅ Media player data loaded:', {
+              mediaUrl: fullMediaUrl,
+              mediaType,
+              hasOverlay: !!(overlayHtml || overlayCss || overlayJs),
+            });
+            
+            this.isLoadingInteraction = false;
+            // Update ready flag in next microtask to avoid change detection issues
+            queueMicrotask(() => {
+              this.isMediaPlayerReady = !!(this.mediaPlayerRef && this.mediaPlayerData);
+              this.cdr.markForCheck();
+            });
           });
-          
-          this.isLoadingInteraction = false;
         },
         error: (error) => {
           console.error('[LessonView] ❌ Failed to load processed output for media:', error);
@@ -2556,11 +2573,15 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    * Show end of lesson screen
    */
   showEndOfLesson() {
-    this.activeStageId = null;
-    this.activeSubStageId = null;
-    this.activeSubStage = null;
-    this.currentTeacherScript = null;
-    this.isScriptPlaying = false;
+    // Defer to avoid change detection error
+    setTimeout(() => {
+      this.activeStageId = null;
+      this.activeSubStageId = null;
+      this.activeSubStage = null;
+      this.currentTeacherScript = null;
+      this.isScriptPlaying = false;
+      this.cdr.detectChanges();
+    }, 0);
     
     // Pause media player if active
     if (this.mediaPlayerRef && this.mediaPlayerRef.isPlaying()) {
@@ -2577,7 +2598,11 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   restartLesson() {
     console.log('[LessonView] Restarting lesson');
     this.elapsedSeconds = 0; // Reset timer
-    this.isScriptPlaying = false;
+    // Defer to avoid change detection error
+    setTimeout(() => {
+      this.isScriptPlaying = false;
+      this.cdr.detectChanges();
+    }, 0);
     
     // Pause and reset media player if active
     if (this.mediaPlayerRef) {
@@ -2611,57 +2636,69 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   onMediaLoaded(event: { duration: number; width?: number; height?: number }) {
     console.log('[LessonView] 🎬 Media loaded:', event);
     
-    // Set media player reference for SDK now that media is loaded
-    if (this.mediaPlayerRef) {
-      this.interactionAISDK.setMediaPlayerRef(this.mediaPlayerRef);
-      console.log('[LessonView] ✅ Media player reference set for SDK (onMediaLoaded)');
-    }
-    
-    // Initialize volume from media player config if available
-    if (this.mediaPlayerData?.config?.defaultVolume !== undefined) {
-      this.mediaVolume = this.mediaPlayerData.config.defaultVolume;
-      // Apply to media player
+    // Defer property updates to avoid ExpressionChangedAfterItHasBeenCheckedError
+    // Use queueMicrotask to ensure this runs after the current change detection cycle
+    queueMicrotask(() => {
+      // Set media player reference for SDK now that media is loaded
       if (this.mediaPlayerRef) {
-        this.mediaPlayerRef.setVolume(this.mediaVolume);
+        this.interactionAISDK.setMediaPlayerRef(this.mediaPlayerRef);
+        console.log('[LessonView] ✅ Media player reference set for SDK (onMediaLoaded)');
       }
-    }
-    
-    // If media should autoplay, start media (and lesson if needed)
-    const shouldAutoplay = this.mediaPlayerData?.config?.autoplay ?? false;
-    if (shouldAutoplay && this.mediaPlayerRef) {
-      setTimeout(() => {
-        if (this.mediaPlayerRef && !this.mediaPlayerRef.isPlaying()) {
-          // If lesson isn't playing, start it first
-          if (!this.isScriptPlaying) {
-            console.log('[LessonView] ▶️ Starting lesson (autoplay enabled but lesson paused)');
-            this.onTeacherPlay();
-          }
-          
-          // Then start media
-          try {
-            this.mediaPlayerRef.play();
-            console.log('[LessonView] ▶️ Media started automatically (autoplay enabled)');
-          } catch (error) {
-            // Browser autoplay restrictions - this is expected and normal
-            console.log('[LessonView] ℹ️ Autoplay blocked by browser (user interaction required):', error);
-          }
+      
+      // Initialize volume from media player config if available
+      if (this.mediaPlayerData?.config?.defaultVolume !== undefined) {
+        this.mediaVolume = this.mediaPlayerData.config.defaultVolume;
+        // Apply to media player
+        if (this.mediaPlayerRef) {
+          this.mediaPlayerRef.setVolume(this.mediaVolume);
         }
-      }, 100);
-    } else if (this.isScriptPlaying && this.mediaPlayerRef) {
-      // If lesson is playing but autoplay is disabled, try to start media anyway
-      // (user might have manually started the lesson)
-      setTimeout(() => {
-        if (this.mediaPlayerRef && !this.mediaPlayerRef.isPlaying()) {
-          try {
-            this.mediaPlayerRef.play();
-            console.log('[LessonView] ▶️ Media started (lesson playing)');
-          } catch (error) {
-            console.log('[LessonView] ℹ️ Media play blocked:', error);
+      }
+      
+      // If media should autoplay, start media (and lesson if needed)
+      const shouldAutoplay = this.mediaPlayerData?.config?.autoplay ?? false;
+      if (shouldAutoplay && this.mediaPlayerRef) {
+        setTimeout(() => {
+          if (this.mediaPlayerRef && !this.mediaPlayerRef.isPlaying()) {
+            // If lesson isn't playing, start it first
+            if (!this.isScriptPlaying) {
+              console.log('[LessonView] ▶️ Starting lesson (autoplay enabled but lesson paused)');
+              this.onTeacherPlay();
+            }
+            
+            // Then start media
+            try {
+              this.mediaPlayerRef.play();
+              console.log('[LessonView] ▶️ Media started automatically (autoplay enabled)');
+            } catch (error) {
+              // Browser autoplay restrictions - this is expected and normal
+              console.log('[LessonView] ℹ️ Autoplay blocked by browser (user interaction required):', error);
+            }
           }
-        }
-      }, 100);
-    }
+        }, 100);
+      } else if (this.isScriptPlaying && this.mediaPlayerRef) {
+        // If lesson is playing but autoplay is disabled, try to start media anyway
+        // (user might have manually started the lesson)
+        setTimeout(() => {
+          if (this.mediaPlayerRef && !this.mediaPlayerRef.isPlaying()) {
+            try {
+              this.mediaPlayerRef.play();
+              console.log('[LessonView] ▶️ Media started (lesson playing)');
+            } catch (error) {
+              console.log('[LessonView] ℹ️ Media play blocked:', error);
+            }
+          }
+        }, 100);
+      }
+      // Update ready flag in next microtask to avoid change detection issues
+      queueMicrotask(() => {
+        this.isMediaPlayerReady = !!(this.mediaPlayerRef && this.mediaPlayerData);
+        this.cdr.markForCheck();
+      });
+    });
   }
+  
+  // Property to track if media player is ready (set explicitly to avoid change detection issues)
+  isMediaPlayerReady = false;
   
   onVolumeChange(event: Event) {
     const target = event.target as HTMLInputElement;
@@ -2692,23 +2729,31 @@ export class LessonViewComponent implements OnInit, OnDestroy {
 
   onMediaPlay() {
     console.log('[LessonView] ▶️ Media playing');
-    // Sync script play state with media
-    if (!this.isScriptPlaying) {
-      this.isScriptPlaying = true;
-      // Start timer if needed
-      if (this.timerInterval) {
-        // Timer already running
+    // Defer property updates to avoid ExpressionChangedAfterItHasBeenCheckedError
+    setTimeout(() => {
+      // Sync script play state with media
+      if (!this.isScriptPlaying) {
+        this.isScriptPlaying = true;
+        // Start timer if needed
+        if (this.timerInterval) {
+          // Timer already running
+        }
       }
-    }
+      this.cdr.detectChanges();
+    }, 0);
   }
 
   onMediaPause() {
     console.log('[LessonView] ⏸ Media paused');
-    // Sync script pause state with media
-    if (this.isScriptPlaying) {
-      this.isScriptPlaying = false;
-      // Timer will pause automatically (stops incrementing)
-    }
+    // Defer property updates to avoid ExpressionChangedAfterItHasBeenCheckedError
+    setTimeout(() => {
+      // Sync script pause state with media
+      if (this.isScriptPlaying) {
+        this.isScriptPlaying = false;
+        // Timer will pause automatically (stops incrementing)
+      }
+      this.cdr.detectChanges();
+    }, 0);
   }
 
   onMediaEnded() {
@@ -2740,7 +2785,11 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     console.log('[LessonView] ▶️ PLAY - Setting isScriptPlaying = true');
     console.log('[LessonView] Timer interval active:', !!this.timerInterval);
     console.log('[LessonView] Current elapsed:', this.elapsedSeconds);
-    this.isScriptPlaying = true;
+    // Defer to avoid change detection error
+    setTimeout(() => {
+      this.isScriptPlaying = true;
+      this.cdr.detectChanges();
+    }, 0);
     
     // If media player is active, play it too
     if (this.mediaPlayerRef && this.interactionBuild?.interactionTypeCategory === 'uploaded-media') {
@@ -2764,7 +2813,11 @@ export class LessonViewComponent implements OnInit, OnDestroy {
 
   onTeacherPause() {
     console.log('[LessonView] ⏸ PAUSE - Setting isScriptPlaying = false');
-    this.isScriptPlaying = false;
+    // Defer to avoid change detection error
+    setTimeout(() => {
+      this.isScriptPlaying = false;
+      this.cdr.detectChanges();
+    }, 0);
     
     // If media player is active, pause it too
     if (this.mediaPlayerRef && this.interactionBuild?.interactionTypeCategory === 'uploaded-media') {
@@ -2779,8 +2832,12 @@ export class LessonViewComponent implements OnInit, OnDestroy {
 
   onTeacherSkip() {
     console.log('[LessonView] Teacher script skipped');
-    this.isScriptPlaying = false;
-    this.currentTeacherScript = null;
+    // Defer to avoid change detection error
+    setTimeout(() => {
+      this.isScriptPlaying = false;
+      this.currentTeacherScript = null;
+      this.cdr.detectChanges();
+    }, 0);
     
     // If media player is active, pause it when script is skipped
     if (this.mediaPlayerRef && this.interactionBuild?.interactionTypeCategory === 'uploaded-media') {

@@ -41,10 +41,14 @@ services:
       - DATABASE_LOGGING=true
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - STORAGE_TYPE=s3
       - S3_ENDPOINT=http://minio:9000
-      - S3_ACCESS_KEY=minioadmin
-      - S3_SECRET_KEY=minioadmin
+      - S3_PUBLIC_URL=http://localhost:9000
+      - S3_REGION=us-east-1
+      - S3_ACCESS_KEY_ID=minioadmin
+      - S3_SECRET_ACCESS_KEY=minioadmin
       - S3_BUCKET=upora-uploads
+      - S3_USE_SSL=false
       - N8N_WEBHOOK_URL=http://n8n:5678/webhook
       - JWT_SECRET=dev-jwt-secret-change-in-production
       - COGNITO_REGION=us-east-1
@@ -60,7 +64,9 @@ services:
       - WEAVIATE_SCHEME=http
     volumes:
       - ./Upora/backend/src:/app/src
+      - ./Upora/backend/package.json:/app/package.json
       - ./Upora/lessons:/app/lessons
+      - ./Upora/uploads:/app/uploads
       - /app/node_modules
     depends_on:
       postgres:
@@ -149,6 +155,8 @@ services:
       /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin;
       /usr/bin/mc mb myminio/upora-uploads --ignore-existing;
       /usr/bin/mc policy set public myminio/upora-uploads;
+      /usr/bin/mc anonymous set public myminio/upora-uploads;
+      /usr/bin/mc anonymous set-json public myminio/upora-uploads;
       exit 0;
       "
 
