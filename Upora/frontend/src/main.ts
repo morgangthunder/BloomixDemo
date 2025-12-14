@@ -8,7 +8,7 @@ import { environment } from './environments/environment';
 // ========================================
 // Version is read from package.json at build time
 // This will be replaced by the build process or read dynamically
-const FRONTEND_VERSION = '0.1.88'; // Fixed iframe not showing in lesson view, changed teacher widget warning to info log
+const FRONTEND_VERSION = '0.1.89'; // Fixed iframe not showing in lesson view, changed teacher widget warning to info log
 const CACHE_BUST_ID = `v${FRONTEND_VERSION}-${Math.random().toString(36).substr(2, 9)}`;
 console.log('');
 console.log('═══════════════════════════════════════════════════════════');

@@ -3583,6 +3583,8 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
       }
       // Remove iframeUrl - it should come from sample data or instance config
       delete saveData.iframeUrl;
+      
+      console.log('[InteractionBuilder] 💾 Saving iframeConfig with overlayMode:', this.iframeOverlayMode, 'Full config:', JSON.stringify(saveData.iframeConfig, null, 2));
     }
     
     delete saveData.contentOutputId;
@@ -3606,6 +3608,9 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
       .subscribe({
         next: (saved) => {
           console.log('Saved interaction:', saved);
+          if (saved.interactionTypeCategory === 'iframe') {
+            console.log('[InteractionBuilder] ✅ Saved iframeConfig:', JSON.stringify((saved as any).iframeConfig, null, 2));
+          }
           this.hasChanges = false;
           this.saving = false;
           this.isNewInteraction = false;

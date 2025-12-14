@@ -214,18 +214,24 @@ import { MediaPlayerComponent } from '../../shared/components/media-player/media
             <!-- PixiJS/HTML/iframe Interactions -->
             <div *ngIf="!isLoadingInteraction && interactionBuild && interactionBuild?.interactionTypeCategory !== 'uploaded-media' && interactionBlobUrl && !interactionError" class="interaction-build-container">
               <!-- iFrame interactions -->
-              <!-- Note: The blob URL HTML handles its own overlay system (buttons on the right side) -->
-              <!-- The overlay mode setting controls how HTML/CSS/JS is displayed inside the blob URL HTML -->
-              <iframe 
-                *ngIf="interactionBuild?.interactionTypeCategory === 'iframe'"
-                #interactionIframe
-                [src]="interactionBlobUrl" 
-                [attr.data-key]="interactionPreviewKey"
-                class="interaction-iframe"
-                frameborder="0"
-                sandbox="allow-scripts allow-same-origin"
-                (load)="onInteractionIframeLoad()"
-                style="width: 100%; min-height: 600px; max-height: 90vh; border: none; display: block;"></iframe>
+              <div *ngIf="interactionBuild?.interactionTypeCategory === 'iframe'" class="iframe-interaction-wrapper">
+                <!-- iFrame - always visible -->
+                <iframe 
+                  #interactionIframe
+                  [src]="interactionBlobUrl" 
+                  [attr.data-key]="interactionPreviewKey"
+                  class="interaction-iframe"
+                  frameborder="0"
+                  sandbox="allow-scripts allow-same-origin"
+                  (load)="onInteractionIframeLoad()"
+                  style="width: 100%; min-height: 600px; max-height: 90vh; border: none; display: block;"></iframe>
+                
+                <!-- Section below iFrame (when overlayMode is 'section' and HTML/CSS/JS exists) -->
+                <div *ngIf="getIframeOverlayMode() === 'section' && (interactionBuild.htmlCode || interactionBuild.cssCode || interactionBuild.jsCode)" 
+                     class="interaction-section-below"
+                     style="width: 100%; margin-top: 20px; padding: 20px; background: rgba(255, 255, 255, 0.05); border-radius: 8px;"
+                     [innerHTML]="getSanitizedIframeSectionHtml()"></div>
+              </div>
               
               <!-- Regular iframe for non-iframe interactions (PixiJS/HTML) -->
               <iframe 
@@ -2435,6 +2441,11 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   private loadPixiJSHTMLIframeInteraction(build: any | null, subStage: SubStage) {
     const interaction = subStage.interaction || (subStage as any).interactionType;
     const interactionTypeId = interaction?.type || interaction?.id || interaction;
+    console.log('[LessonView] 🔍 Loading interaction for sub-stage:', {
+      interactionTypeId,
+      interaction,
+      subStageId: subStage.id
+    });
     
     if (!build) {
         // Fetch interaction build from API (with cache-busting to ensure we get latest code)
@@ -2443,6 +2454,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
           .pipe(takeUntil(this.destroy$))
           .subscribe({
             next: (fetchedBuild: any) => {
+              console.log('[LessonView] 📥 Fetched interaction build from API:', fetchedBuild.id);
+              console.log('[LessonView] 📥 Fetched iframeConfig:', JSON.stringify(fetchedBuild.iframeConfig, null, 2));
               this.loadPixiJSHTMLIframeInteraction(fetchedBuild, subStage);
             },
             error: (error) => {
@@ -2456,6 +2469,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       console.log('[LessonView] ✅ Loaded interaction build:', build.id);
       console.log('[LessonView] 📝 JS code length:', build.jsCode?.length || 0);
       console.log('[LessonView] 📝 JS code includes "Show Snack":', build.jsCode?.includes('Show Snack') || false);
+      console.log('[LessonView] 🎛️ iFrame overlayMode:', build.iframeConfig?.overlayMode || 'overlay (default)');
+      console.log('[LessonView] 🎛️ Full iframeConfig:', JSON.stringify(build.iframeConfig, null, 2));
       this.interactionBuild = build;
       
       // Check for processed output (PixiJS/HTML interactions can use processed outputs, but it's optional)
@@ -3661,6 +3676,11 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // Get interaction config from sub-stage (lesson-builder configured values)
     const config = (this.activeSubStage as any)?.interaction?.config || {};
     const sampleData = this.interactionBuild.sampleData || {};
+    
+    // Log overlayMode before creating HTML (for debugging)
+    if (this.interactionBuild.interactionTypeCategory === 'iframe') {
+      console.log('[LessonView] 🎛️ createInteractionBlobUrl - overlayMode:', this.interactionBuild.iframeConfig?.overlayMode, 'Full iframeConfig:', JSON.stringify(this.interactionBuild.iframeConfig, null, 2));
+    }
 
     // Create HTML document
     const htmlDoc = this.createInteractionHtmlDoc(this.interactionBuild, config, sampleData);
@@ -3671,6 +3691,19 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     this.interactionBlobUrl = this.sanitizer.bypassSecurityTrustResourceUrl(url);
     
     console.log('[LessonView] ✅ Created blob URL for interaction:', this.interactionBuild.id);
+    
+    // If overlayMode is 'section', inject the JavaScript separately after a delay
+    // This ensures the section element is rendered in the DOM before we inject the script
+    if (this.interactionBuild.interactionTypeCategory === 'iframe' && 
+        this.getIframeOverlayMode() === 'section' && 
+        this.interactionBuild.jsCode) {
+      // Use queueMicrotask + setTimeout to ensure Angular has finished rendering
+      queueMicrotask(() => {
+        setTimeout(() => {
+          this.injectIframeSectionScript(this.interactionBuild.jsCode);
+        }, 300); // Longer delay to ensure section is fully rendered
+      });
+    }
   }
 
   /**
@@ -4676,18 +4709,26 @@ ${escapedCss}
       const sampleDataJson = JSON.stringify(sampleData);
       const configJson = JSON.stringify({ ...config, iframeUrl });
       
-      // Check if there's HTML/CSS/JS code to display (always use overlay wrapper if code exists)
-      const hasOverlayCode = !!(build.htmlCode || build.cssCode || build.jsCode);
+      // Check overlay mode from iframeConfig
+      const overlayMode = build.iframeConfig?.overlayMode || 'overlay';
+      console.log('[LessonView] 🎛️ createInteractionHtmlDoc - overlayMode:', overlayMode, 'iframeConfig:', build.iframeConfig);
       
-      if (hasOverlayCode) {
-        // Overlay mode: use wrapper with custom HTML/CSS/JS code from builder
+      // Check if there's HTML/CSS/JS code to display
+      const hasOverlayCode = !!(build.htmlCode || build.cssCode || build.jsCode);
+      console.log('[LessonView] 🎛️ createInteractionHtmlDoc - hasOverlayCode:', hasOverlayCode);
+      
+      if (hasOverlayCode && overlayMode === 'overlay') {
+        console.log('[LessonView] 🎛️ Using overlay wrapper (overlayMode is overlay)');
+        // Overlay mode: use wrapper with custom HTML/CSS/JS code from builder (overlay on top)
         const htmlCode = (build.htmlCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
         const cssCode = (build.cssCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
         const jsCode = (build.jsCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
         
         return this.createIframeWrapperWithOverlay(iframeUrl, configJson, sampleDataJson, htmlCode, cssCode, jsCode, false);
       } else {
-        // Simple wrapper for regular iframe interactions
+        // Section mode OR no code: create simple iframe wrapper (no overlay in blob URL)
+        // When overlayMode is 'section', the HTML/CSS/JS will be rendered below the iframe in the template
+        console.log('[LessonView] 🎛️ Using simple iframe wrapper (overlayMode is section or no code)');
         return `<!DOCTYPE html>
 <html>
 <head>
@@ -4830,22 +4871,563 @@ ${jsCode}
     return this.sanitizer.bypassSecurityTrustHtml(fullHtml);
   }
 
+  private iframeSectionScriptElement: HTMLScriptElement | null = null;
+  private cachedIframeSectionHtml: any = null;
+  private cachedIframeSectionHtmlKey: string | null = null;
+
   /**
    * Get sanitized HTML for iFrame section below
    */
   getSanitizedIframeSectionHtml(): any {
     if (!this.interactionBuild || this.interactionBuild.interactionTypeCategory !== 'iframe') {
+      this.cachedIframeSectionHtml = null;
+      this.cachedIframeSectionHtmlKey = null;
       return '';
     }
-    const html = this.interactionBuild.htmlCode || '';
-    const css = this.interactionBuild.cssCode || '';
-    const js = this.interactionBuild.jsCode || '';
-    let fullHtml = css ? `<style>${css}</style>` : '';
-    fullHtml += html;
-    if (js) {
-      fullHtml += `<script>${js}</script>`;
+    
+    // Create a cache key based on the interaction build content
+    const cacheKey = `${this.interactionBuild.id || 'unknown'}-${this.interactionBuild.htmlCode?.substring(0, 50) || ''}-${this.interactionBuild.cssCode?.substring(0, 50) || ''}`;
+    
+    // Check if buttons already exist - if so, return cached HTML to prevent overwriting
+    // This prevents Angular's change detection from clearing dynamically created buttons
+    const sectionElement = document.querySelector('.interaction-section-below');
+    if (sectionElement) {
+      const buttonsContainer = sectionElement.querySelector('#sdk-test-buttons');
+      if (buttonsContainer && buttonsContainer.children.length > 0) {
+        // Buttons already exist, return cached HTML to prevent overwriting
+        if (this.cachedIframeSectionHtml && this.cachedIframeSectionHtmlKey === cacheKey) {
+          return this.cachedIframeSectionHtml;
+        }
+      }
     }
-    return this.sanitizer.bypassSecurityTrustHtml(fullHtml);
+    
+    // If cache key changed or no cache exists, regenerate
+    if (this.cachedIframeSectionHtmlKey !== cacheKey) {
+      const html = this.interactionBuild.htmlCode || '';
+      const css = this.interactionBuild.cssCode || '';
+      const js = this.interactionBuild.jsCode || '';
+      
+      // Check if this is an SDK test interaction (has initTestApp or sdk-test-buttons in JS)
+      const isSDKTest = js && (js.includes('initTestApp') || js.includes('sdk-test-buttons') || js.includes('SDK Test'));
+      
+      let fullHtml = css ? `<style>${css}</style>` : '';
+      
+      // If it's an SDK test, ensure the required structure elements exist
+      if (isSDKTest) {
+        // Add SDK test structure if not already in HTML
+        if (!html.includes('sdk-test-header') && !html.includes('sdk-test-buttons')) {
+          fullHtml += `
+            <div id="sdk-test-header">
+              <h1>AI Teacher SDK Test</h1>
+              <p id="status-text">Initializing...</p>
+            </div>
+            <div id="sdk-test-buttons"></div>
+          `;
+        }
+      }
+      
+      fullHtml += html;
+      
+      // Cache the sanitized HTML
+      this.cachedIframeSectionHtml = this.sanitizer.bypassSecurityTrustHtml(fullHtml);
+      this.cachedIframeSectionHtmlKey = cacheKey;
+    }
+    
+    // Don't include JS in innerHTML - we'll inject it separately after DOM is ready
+    // The script will be injected by createInteractionBlobUrl() after the view is rendered
+    // This ensures the section element exists in the DOM before we inject the script
+    
+    return this.cachedIframeSectionHtml;
+  }
+
+  /**
+   * Inject JavaScript into the iframe section below (similar to media player overlay script injection)
+   */
+  private injectIframeSectionScript(jsCode: string): void {
+    // Remove existing script if any
+    if (this.iframeSectionScriptElement) {
+      this.iframeSectionScriptElement.remove();
+      this.iframeSectionScriptElement = null;
+    }
+
+    // Retry logic to find section element and required elements
+    const tryInject = (attempt: number = 1, maxAttempts: number = 10) => {
+      const sectionElement = document.querySelector('.interaction-section-below');
+      if (!sectionElement) {
+        if (attempt < maxAttempts) {
+          console.log(`[LessonView] ⏳ Section not found yet, retrying... (${attempt}/${maxAttempts})`);
+          setTimeout(() => tryInject(attempt + 1, maxAttempts), 100 * attempt);
+          return;
+        } else {
+          console.warn('[LessonView] ⚠️ Interaction section below not found after max attempts, cannot inject script');
+          return;
+        }
+      }
+
+      // Verify required elements exist
+      const buttons = sectionElement.querySelector('#sdk-test-buttons');
+      const status = sectionElement.querySelector('#status-text');
+      if (!buttons || !status) {
+        if (attempt < maxAttempts) {
+          console.log(`[LessonView] ⏳ Required elements not found yet (buttons: ${!!buttons}, status: ${!!status}), retrying... (${attempt}/${maxAttempts})`);
+          setTimeout(() => tryInject(attempt + 1, maxAttempts), 100 * attempt);
+          return;
+        } else {
+          console.warn('[LessonView] ⚠️ Required elements (#sdk-test-buttons or #status-text) not found after max attempts');
+          return;
+        }
+      }
+
+      // Check if script was already injected successfully (buttons have children = script ran)
+      if (buttons.children.length > 0) {
+        console.log('[LessonView] ✅ Script already injected and executed (buttons exist)');
+        return;
+      }
+
+      // Check if script element already exists
+      if (this.iframeSectionScriptElement && sectionElement.contains(this.iframeSectionScriptElement)) {
+        console.log('[LessonView] ⏳ Script element already exists, waiting for execution...');
+        if (attempt < maxAttempts) {
+          setTimeout(() => tryInject(attempt + 1, maxAttempts), 200);
+          return;
+        }
+      }
+
+      // For section mode, use the simpler version without overlay-specific elements
+      // This is the clean version from sdk-test-iframe-document.html that doesn't reference overlay elements
+      const wrappedScript = `
+        (function() {
+          let aiSDK = null;
+          let statusText = null;
+          let buttonsContainer = null;
+
+          const createIframeAISDK = () => {
+            let subscriptionId = null;
+            let requestCounter = 0;
+
+            const generateRequestId = () => \`req-\${Date.now()}-\${++requestCounter}\`;
+            const generateSubscriptionId = () => \`sub-\${Date.now()}-\${Math.random()}\`;
+
+            const sendMessage = (type, data, callback) => {
+              const requestId = generateRequestId();
+              const message = { type, requestId, ...data };
+
+              if (callback) {
+                const listener = (event) => {
+                  if (event.data.requestId === requestId) {
+                    window.removeEventListener("message", listener);
+                    callback(event.data);
+                  }
+                };
+                window.addEventListener("message", listener);
+              }
+              window.parent.postMessage(message, "*");
+            };
+
+            return {
+              emitEvent: (event, processedContentId) => {
+                sendMessage("ai-sdk-emit-event", { event, processedContentId });
+              },
+              updateState: (key, value) => {
+                sendMessage("ai-sdk-update-state", { key, value });
+              },
+              getState: (callback) => {
+                sendMessage("ai-sdk-get-state", {}, (response) => {
+                  callback(response.state);
+                });
+              },
+              onResponse: (callback) => {
+                subscriptionId = generateSubscriptionId();
+                sendMessage("ai-sdk-subscribe", { subscriptionId }, () => {
+                  const listener = (event) => {
+                    if (event.data.type === "ai-sdk-response" && event.data.subscriptionId === subscriptionId) {
+                      callback(event.data.response);
+                    }
+                  };
+                  window.addEventListener("message", listener);
+                  return () => {
+                    window.removeEventListener("message", listener);
+                    sendMessage("ai-sdk-unsubscribe", { subscriptionId });
+                  };
+                });
+              },
+              isReady: (callback) => {
+                const listener = (event) => {
+                  if (event.data.type === "ai-sdk-ready") {
+                    window.removeEventListener("message", listener);
+                    callback(true);
+                  }
+                };
+                window.addEventListener("message", listener);
+              },
+              minimizeChatUI: () => {
+                sendMessage("ai-sdk-minimize-chat-ui", {});
+              },
+              showChatUI: () => {
+                sendMessage("ai-sdk-show-chat-ui", {});
+              },
+              activateFullscreen: () => {
+                sendMessage("ai-sdk-activate-fullscreen", {});
+              },
+              deactivateFullscreen: () => {
+                sendMessage("ai-sdk-deactivate-fullscreen", {});
+              },
+              postToChat: (content, role, showInWidget) => {
+                sendMessage("ai-sdk-post-to-chat", { content, role, showInWidget });
+              },
+              showScript: (script, autoPlay) => {
+                sendMessage("ai-sdk-show-script", { script, autoPlay });
+              },
+              showSnack: (content, duration, hideFromChatUI, callback) => {
+                sendMessage("ai-sdk-show-snack", { content, duration, hideFromChatUI: hideFromChatUI || false }, (response) => {
+                  if (callback && response.snackId) {
+                    callback(response.snackId);
+                  }
+                });
+              },
+              hideSnack: () => {
+                sendMessage("ai-sdk-hide-snack", {});
+              },
+              saveInstanceData: (data, callback) => {
+                sendMessage("ai-sdk-save-instance-data", { data }, (response) => {
+                  if (callback) {
+                    callback(response.success, response.error);
+                  }
+                });
+              },
+              getInstanceDataHistory: (filters, callback) => {
+                sendMessage("ai-sdk-get-instance-data-history", { filters }, (response) => {
+                  if (callback) {
+                    callback(response.data, response.error);
+                  }
+                });
+              },
+              saveUserProgress: (data, callback) => {
+                sendMessage("ai-sdk-save-user-progress", { data }, (response) => {
+                  if (callback) {
+                    callback(response.progress, response.error);
+                  }
+                });
+              },
+              getUserProgress: (callback) => {
+                sendMessage("ai-sdk-get-user-progress", {}, (response) => {
+                  if (callback) {
+                    callback(response.progress, response.error);
+                  }
+                });
+              },
+              markCompleted: (callback) => {
+                sendMessage("ai-sdk-mark-completed", {}, (response) => {
+                  if (callback) {
+                    callback(response.progress, response.error);
+                  }
+                });
+              },
+              incrementAttempts: (callback) => {
+                sendMessage("ai-sdk-increment-attempts", {}, (response) => {
+                  if (callback) {
+                    callback(response.progress, response.error);
+                  }
+                });
+              },
+              getUserPublicProfile: (userId, callback) => {
+                sendMessage("ai-sdk-get-user-public-profile", { userId }, (response) => {
+                  if (callback) {
+                    callback(response.profile, response.error);
+                  }
+                });
+              },
+            };
+          };
+
+          function updateStatus(message, color = "#ffffff") {
+            if (statusText) {
+              statusText.textContent = message;
+              statusText.style.color = color;
+            }
+            console.log("[SDK Test iFrame]", message);
+          }
+
+          function createButton(text, onClick) {
+            const button = document.createElement("button");
+            button.className = "test-button";
+            button.textContent = text;
+            button.onclick = onClick;
+            // Always try to get the container directly to avoid closure issues
+            const container = buttonsContainer || document.getElementById("sdk-test-buttons");
+            if (container) {
+              container.appendChild(button);
+              console.log("[SDK Test iFrame] ✅ Button appended:", text, "Container children:", container.children.length);
+            } else {
+              console.error("[SDK Test iFrame] ❌ Cannot append button - container not found!", text);
+            }
+            return button;
+          }
+
+          function initTestApp() {
+            console.log("[SDK Test iFrame] Initializing app...");
+            
+            // Verify elements are set (they should be set by checkAndRun)
+            if (!buttonsContainer || !statusText) {
+              console.error("[SDK Test iFrame] Required elements not found!", { container: !!buttonsContainer, status: !!statusText });
+              // Try to re-fetch as fallback
+              buttonsContainer = document.getElementById("sdk-test-buttons");
+              statusText = document.getElementById("status-text");
+              if (!buttonsContainer || !statusText) {
+                console.error("[SDK Test iFrame] Still not found after re-fetch!");
+                return;
+              }
+            }
+
+            aiSDK = createIframeAISDK();
+            
+            const isPreviewMode = !window.parent || window.parent === window;
+            
+            if (isPreviewMode) {
+              updateStatus("Preview Mode - SDK will work when added to a lesson", "#ffff00");
+            } else {
+              updateStatus("SDK Test Interaction Loaded. Waiting for SDK ready...", "#ffff00");
+              
+              aiSDK.isReady((ready) => {
+                if (ready) {
+                  updateStatus("SDK Ready! All methods available.", "#00ff00");
+                }
+              });
+            }
+
+            const coreLabel = document.createElement("div");
+            coreLabel.className = "section-label";
+            coreLabel.textContent = "CORE METHODS";
+            buttonsContainer.appendChild(coreLabel);
+
+            createButton("Emit Event", () => {
+              aiSDK.emitEvent({
+                type: "user-selection",
+                data: { test: true, timestamp: Date.now() },
+                requiresLLMResponse: true,
+              });
+              updateStatus("Event emitted", "#00ff00");
+            });
+
+            createButton("Update State", () => {
+              aiSDK.updateState("testKey", { value: Math.random(), timestamp: Date.now() });
+              updateStatus("State updated", "#00ff00");
+            });
+
+            createButton("Get State", () => {
+              aiSDK.getState((state) => {
+                updateStatus("State: " + JSON.stringify(state).substring(0, 50), "#00ff00");
+              });
+            });
+
+            const uiLabel = document.createElement("div");
+            uiLabel.className = "section-label";
+            uiLabel.textContent = "UI CONTROL METHODS";
+            buttonsContainer.appendChild(uiLabel);
+
+            createButton("Minimize Chat UI", () => {
+              aiSDK.minimizeChatUI();
+              updateStatus("Chat UI minimized", "#00ff00");
+            });
+
+            createButton("Show Chat UI", () => {
+              aiSDK.showChatUI();
+              updateStatus("Chat UI shown", "#00ff00");
+            });
+
+            createButton("Activate Fullscreen", () => {
+              aiSDK.activateFullscreen();
+              updateStatus("Fullscreen activated", "#00ff00");
+            });
+
+            createButton("Deactivate Fullscreen", () => {
+              aiSDK.deactivateFullscreen();
+              updateStatus("Fullscreen deactivated", "#00ff00");
+            });
+
+            createButton("Post to Chat", () => {
+              const testMessage = "Test message from SDK Test interaction! This is a dummy message to test the postToChat functionality.";
+              aiSDK.postToChat(testMessage, "assistant", true);
+              updateStatus("Posted to chat: " + testMessage.substring(0, 30) + "...", "#00ff00");
+            });
+
+            createButton("Show Script", () => {
+              const testScript = "This is a test script block from the SDK Test interaction. It demonstrates the showScript functionality.";
+              aiSDK.showScript(testScript, true);
+              updateStatus("Script shown: " + testScript.substring(0, 30) + "...", "#00ff00");
+            });
+
+            createButton("Show Snack (5s)", () => {
+              aiSDK.showSnack("Test snack message! (also posts to chat)", 5000, false, (snackId) => {
+                updateStatus("Snack shown: " + snackId, "#00ff00");
+              });
+            });
+
+            createButton("Show Snack (no chat)", () => {
+              aiSDK.showSnack("Test snack message! (hidden from chat)", 5000, true, (snackId) => {
+                updateStatus("Snack shown (no chat): " + snackId, "#00ff00");
+              });
+            });
+
+            createButton("Hide Snack", () => {
+              aiSDK.hideSnack();
+              updateStatus("Snack hidden", "#00ff00");
+            });
+
+            const dataLabel = document.createElement("div");
+            dataLabel.className = "section-label";
+            dataLabel.textContent = "DATA STORAGE METHODS";
+            buttonsContainer.appendChild(dataLabel);
+
+            createButton("Save Instance Data", () => {
+              aiSDK.saveInstanceData(
+                {
+                  testValue: Math.random(),
+                  timestamp: Date.now(),
+                  testArray: [1, 2, 3],
+                },
+                (success, error) => {
+                  if (success) {
+                    updateStatus("Instance data saved", "#00ff00");
+                  } else {
+                    updateStatus("Error: " + error, "#ff0000");
+                  }
+                }
+              );
+            });
+
+            createButton("Get Instance Data History", () => {
+              aiSDK.getInstanceDataHistory(
+                { limit: 10 },
+                (data, error) => {
+                  if (data) {
+                    updateStatus("History: " + data.length + " records", "#00ff00");
+                  } else {
+                    updateStatus("Error: " + error, "#ff0000");
+                  }
+                }
+              );
+            });
+
+            createButton("Save User Progress", () => {
+              aiSDK.saveUserProgress(
+                {
+                  score: Math.floor(Math.random() * 100),
+                  completed: false,
+                  customData: {
+                    testField: "test value",
+                    testNumber: 42,
+                  },
+                },
+                (progress, error) => {
+                  if (progress) {
+                    updateStatus("Progress saved. Attempts: " + progress.attempts, "#00ff00");
+                  } else {
+                    updateStatus("Error: " + error, "#ff0000");
+                  }
+                }
+              );
+            });
+
+            createButton("Get User Progress", () => {
+              aiSDK.getUserProgress((progress, error) => {
+                if (progress) {
+                  updateStatus(
+                    "Progress: Attempts=" + progress.attempts + ", Completed=" + progress.completed,
+                    "#00ff00"
+                  );
+                } else if (error) {
+                  updateStatus("Error: " + error, "#ff0000");
+                } else {
+                  updateStatus("No progress found", "#ffff00");
+                }
+              });
+            });
+
+            createButton("Mark Completed", () => {
+              aiSDK.markCompleted((progress, error) => {
+                if (progress) {
+                  updateStatus("Marked as completed", "#00ff00");
+                } else {
+                  updateStatus("Error: " + error, "#ff0000");
+                }
+              });
+            });
+
+            createButton("Increment Attempts", () => {
+              aiSDK.incrementAttempts((progress, error) => {
+                if (progress) {
+                  updateStatus("Attempts: " + progress.attempts, "#00ff00");
+                } else {
+                  updateStatus("Error: " + error, "#ff0000");
+                }
+              });
+            });
+
+            createButton("Get User Public Profile", () => {
+              aiSDK.getUserPublicProfile(undefined, (profile, error) => {
+                if (profile) {
+                  updateStatus("Profile: " + (profile.displayName || "No name"), "#00ff00");
+                } else if (error) {
+                  updateStatus("Error: " + error, "#ff0000");
+                } else {
+                  updateStatus("No profile found (this is OK)", "#ffff00");
+                }
+              });
+            });
+
+            console.log("[SDK Test iFrame] All buttons created");
+          }
+          
+          // Wait for elements and then initialize
+          const checkAndRun = () => {
+            const container = document.getElementById("sdk-test-buttons");
+            const status = document.getElementById("status-text");
+            
+            if (!container || !status) {
+              console.log('[LessonView] ⏳ Waiting for elements...', { buttons: !!container, status: !!status });
+              setTimeout(checkAndRun, 50);
+              return;
+            }
+            
+            // Assign to outer scope variables BEFORE calling initTestApp
+            buttonsContainer = container;
+            statusText = status;
+            
+            console.log('[LessonView] ✅ Elements found, initializing app');
+            initTestApp();
+          };
+          
+          // Start checking immediately
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', checkAndRun);
+          } else {
+            checkAndRun();
+          }
+        })();
+      `;
+      
+      // Create new script element
+      this.iframeSectionScriptElement = document.createElement('script');
+      this.iframeSectionScriptElement.textContent = wrappedScript;
+      
+      // Append to section element
+      sectionElement.appendChild(this.iframeSectionScriptElement);
+      console.log('[LessonView] ✅ Injected script into iframe section below');
+      console.log('[LessonView] 🔍 Buttons container exists:', !!buttons, 'Status text exists:', !!status);
+      
+      // Check if buttons were created after a delay
+      setTimeout(() => {
+        if (buttons.children.length === 0) {
+          console.warn('[LessonView] ⚠️ Script injected but buttons not created after 1s - script may have errors');
+        } else {
+          console.log('[LessonView] ✅ Buttons created successfully:', buttons.children.length);
+        }
+      }, 1000);
+    };
+
+    // Start injection attempt
+    tryInject();
   }
 
   /**
