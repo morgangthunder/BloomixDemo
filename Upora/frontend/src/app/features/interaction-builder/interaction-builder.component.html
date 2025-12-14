@@ -177,18 +177,41 @@
                 </div>
                 </div>
 
+                <!-- iFrame Type Configuration (in Settings tab) -->
+                <div *ngIf="currentInteraction?.interactionTypeCategory === 'iframe'" class="info-section" style="margin-top: 30px;">
+                  <h3>iFrame Configuration</h3>
+                  
+                  <div class="form-group">
+                    <label>iFrame URL *</label>
+                    <input type="url" 
+                           [(ngModel)]="currentInteraction!.iframeUrl"
+                           (ngModelChange)="markChanged()"
+                           placeholder="https://example.com/embed" />
+                    <small class="hint">The URL to embed in an iframe</small>
+                  </div>
+
+                  <div class="form-group">
+                    <label>Overlay Mode</label>
+                    <select [(ngModel)]="iframeOverlayMode" (ngModelChange)="onIframeOverlayModeChange()" class="form-control" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; background: white; color: #333;">
+                      <option value="overlay">Overlay on iFrame</option>
+                      <option value="section">Section below iFrame</option>
+                    </select>
+                    <small class="hint">Choose how the HTML/CSS/JS content is displayed: as an overlay on top of the iFrame, or as a section below it.</small>
+                  </div>
+                </div>
+
                 <!-- Media Player Configuration (for uploaded-media type) -->
                 <ng-container *ngIf="currentInteraction?.interactionTypeCategory === 'uploaded-media'">
                   <div class="info-section" style="margin-top: 30px;">
                     <h3>Media Player Configuration</h3>
                     
                     <div class="form-group">
-                      <label>Display Mode</label>
+                      <label>Overlay Mode</label>
                       <select [(ngModel)]="displayMode" (ngModelChange)="onDisplayModeChange()" class="form-control">
-                        <option value="section">Section Below Player</option>
                         <option value="overlay">Overlay on Player</option>
+                        <option value="section">Section Below Player</option>
                       </select>
-                      <small class="hint">Choose how the HTML/CSS/JS content is displayed: as a section below the media player, or as an overlay on top of it.</small>
+                      <small class="hint">Choose how the HTML/CSS/JS content is displayed: as an overlay on top of the media player, or as a section below it.</small>
                     </div>
 
                     <div class="form-group">
@@ -302,17 +325,8 @@
                   </div>
                 </div>
 
-                <!-- iFrame Type Configuration -->
+                <!-- iFrame Type Configuration (in Code tab - JSON config only) -->
                 <div *ngIf="currentInteraction?.interactionTypeCategory === 'iframe'" class="iframe-config">
-                  <div class="form-group">
-                    <label>iFrame URL *</label>
-                    <input type="url" 
-                           [(ngModel)]="currentInteraction!.iframeUrl"
-                           (ngModelChange)="markChanged()"
-                           placeholder="https://example.com/embed" />
-                    <small class="hint">The URL to embed in an iframe</small>
-                  </div>
-
                   <div class="form-group">
                     <label>iFrame Configuration (JSON)</label>
                     <textarea [(ngModel)]="iframeConfigText"
@@ -321,43 +335,43 @@
                               rows="6"
                               placeholder="iFrame configuration JSON"
                               spellcheck="false"></textarea>
-                    <small class="hint">Optional: width, height, allow permissions, etc.</small>
+                    <small class="hint">Optional: width, height, allow permissions, etc. Note: Overlay Mode is configured in the Settings tab.</small>
                   </div>
 
                   <!-- Screenshot Trigger Options -->
                   <div class="form-group">
                     <label>Screenshot Triggers</label>
                     <small class="hint">Select when to automatically capture screenshots for AI guidance</small>
-                    <div class="checkbox-group">
-                      <label class="checkbox-label">
+                    <div class="checkbox-group" style="display: flex; flex-direction: column; gap: 12px;">
+                      <label class="checkbox-label" style="display: block;">
                         <input type="checkbox" 
                                [checked]="getScreenshotTrigger('iframeLoad')"
                                (change)="toggleScreenshotTrigger('iframeLoad', $event)"
                                [disabled]="!currentInteraction?.iframeConfig" />
                         <span>On iframe load (initial page load)</span>
                       </label>
-                      <label class="checkbox-label">
+                      <label class="checkbox-label" style="display: block;">
                         <input type="checkbox" 
                                [checked]="getScreenshotTrigger('iframeUrlChange')"
                                (change)="toggleScreenshotTrigger('iframeUrlChange', $event)"
                                [disabled]="!currentInteraction?.iframeConfig" />
                         <span>On URL change (navigation within iframe)</span>
                       </label>
-                      <label class="checkbox-label">
+                      <label class="checkbox-label" style="display: block;">
                         <input type="checkbox" 
                                [checked]="getScreenshotTrigger('postMessage')"
                                (change)="toggleScreenshotTrigger('postMessage', $event)"
                                [disabled]="!currentInteraction?.iframeConfig" />
                         <span>On postMessage (if iframed site sends messages)</span>
                       </label>
-                      <label class="checkbox-label">
+                      <label class="checkbox-label" style="display: block;">
                         <input type="checkbox" 
                                [checked]="getScreenshotTrigger('scriptBlockComplete')"
                                (change)="toggleScreenshotTrigger('scriptBlockComplete', $event)"
                                [disabled]="!currentInteraction?.iframeConfig" />
                         <span>On script block completion (after teacher narration)</span>
                       </label>
-                      <label class="checkbox-label">
+                      <label class="checkbox-label" style="display: block;">
                         <input type="checkbox" 
                                [checked]="getScreenshotTrigger('periodic')"
                                (change)="toggleScreenshotTrigger('periodic', $event)"

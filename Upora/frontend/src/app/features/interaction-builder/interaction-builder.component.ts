@@ -12,6 +12,7 @@ import { takeUntil } from 'rxjs/operators';
 import { TrueFalseSelectionComponent } from '../interactions/true-false-selection/true-false-selection.component';
 import { InteractionConfigureModalComponent } from '../../shared/components/interaction-configure-modal/interaction-configure-modal.component';
 import { MediaContentSelectorComponent } from '../../shared/components/media-content-selector/media-content-selector.component';
+import { UrlContentSelectorComponent } from '../../shared/components/url-content-selector/url-content-selector.component';
 
 interface InteractionType {
   id: string;
@@ -54,7 +55,7 @@ interface ChatMessage {
 @Component({
   selector: 'app-interaction-builder',
   standalone: true,
-  imports: [CommonModule, FormsModule, TrueFalseSelectionComponent, InteractionConfigureModalComponent, MediaContentSelectorComponent],
+  imports: [CommonModule, FormsModule, TrueFalseSelectionComponent, InteractionConfigureModalComponent, MediaContentSelectorComponent, UrlContentSelectorComponent],
   template: `
     <div class="interaction-builder">
       <!-- Header -->
@@ -235,6 +236,21 @@ interface ChatMessage {
                 </div>
                 </div>
 
+                <!-- iFrame Type Configuration (in Settings tab) -->
+                <div *ngIf="currentInteraction?.interactionTypeCategory === 'iframe'" class="info-section" style="margin-top: 30px;">
+                  <h3>iFrame Configuration</h3>
+                  
+                  <div class="form-group">
+                    <label>Overlay Mode</label>
+                    <select [(ngModel)]="iframeOverlayMode" (ngModelChange)="onIframeOverlayModeChange()" class="form-control">
+                      <option value="overlay">Overlay on iFrame</option>
+                      <option value="section">Section below iFrame</option>
+                    </select>
+                    <small class="hint">Choose how the HTML/CSS/JS content is displayed: as an overlay on top of the iFrame, or as a section below it.</small>
+                  </div>
+                  <p class="hint" style="margin-top: 16px;">💡 <strong>Note:</strong> URL selection is available in the Config Modal (⚙️ Configure tab). The selected URL will appear in Sample Data for testing.</p>
+                </div>
+
                 <!-- Media Content Selector (for uploaded-media interactions) -->
                 <div *ngIf="currentInteraction?.interactionTypeCategory === 'uploaded-media'" class="info-section" style="margin-top: 24px;">
                   <h3>Media Content</h3>
@@ -254,12 +270,12 @@ interface ChatMessage {
                     <h3>Media Player Configuration</h3>
                     
                     <div class="form-group">
-                      <label>Display Mode</label>
+                      <label>Overlay Mode</label>
                       <select [(ngModel)]="displayMode" (ngModelChange)="onDisplayModeChange()" class="form-control">
-                        <option value="section">Section Below Player</option>
                         <option value="overlay">Overlay on Player</option>
+                        <option value="section">Section Below Player</option>
                       </select>
-                      <small class="hint">Choose how the HTML/CSS/JS content is displayed: as a section below the media player, or as an overlay on top of it.</small>
+                      <small class="hint">Choose how the HTML/CSS/JS content is displayed: as an overlay on top of the media player, or as a section below it.</small>
                     </div>
 
                     <div class="form-group">
@@ -375,14 +391,7 @@ interface ChatMessage {
 
                 <!-- iFrame Type Configuration -->
                 <div *ngIf="currentInteraction?.interactionTypeCategory === 'iframe'" class="iframe-config">
-                  <div class="form-group">
-                    <label>iFrame URL *</label>
-                    <input type="url" 
-                           [(ngModel)]="currentInteraction!.iframeUrl"
-                           (ngModelChange)="markChanged()"
-                           placeholder="https://example.com/embed" />
-                    <small class="hint">The URL to embed in an iframe</small>
-                  </div>
+                  <!-- iFrame URL field removed - URL comes from sample data or instance config -->
 
                   <div class="form-group">
                     <label>iFrame Configuration (JSON)</label>
@@ -1031,6 +1040,14 @@ interface ChatMessage {
         (close)="closeMediaSelector()"
         (selected)="onMediaSelected($event)">
       </app-media-content-selector>
+
+      <!-- URL Content Selector Modal -->
+      <app-url-content-selector
+        [isOpen]="showIframeContentSelector"
+        [selectedContentId]="selectedIframeContentId"
+        (close)="closeIframeContentSelector()"
+        (contentSelected)="onIframeContentSelected($event)">
+      </app-url-content-selector>
 
       <!-- Success Snackbar -->
       <div *ngIf="showSnackbar" class="snackbar">
@@ -2727,12 +2744,19 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   showMediaSelector = false;
   selectedMediaId: string | null = null;
   selectedMediaName = '';
-  displayMode: 'overlay' | 'section' = 'section';
+  displayMode: 'overlay' | 'section' = 'overlay'; // Renamed from 'Display Mode' to 'Overlay Mode' for consistency
   sectionHeight = 'auto';
   sectionMinHeight = '200px';
   sectionMaxHeight = 'none';
   showPlayerControls = false; // Default: hide controls
   hideOverlayDuringPlayback = true; // Default: hide overlay content during playback
+  iframeOverlayMode: 'overlay' | 'section' = 'overlay'; // Overlay mode for iFrame interactions
+  
+  // iFrame content selector
+  showIframeContentSelector = false;
+  selectedIframeContentId: string | null = null;
+  selectedIframeContentName = '';
+  
   aiResponseActionsError = '';
   configSchemaText = '';
   sampleDataText = '';
@@ -2900,6 +2924,31 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     this.iframeConfigText = interaction.iframeConfig ? JSON.stringify(interaction.iframeConfig, null, 2) : '';
     this.mediaConfigText = (interaction as any).mediaConfig ? JSON.stringify((interaction as any).mediaConfig, null, 2) : '';
     
+    // Load overlay mode from iframeConfig
+    if (interaction.iframeConfig?.overlayMode) {
+      this.iframeOverlayMode = interaction.iframeConfig.overlayMode;
+      console.log('[InteractionBuilder] 🎛️ iFrame Overlay Mode initialized:', this.iframeOverlayMode);
+    } else {
+      // Default to overlay for iFrame interactions (current behavior)
+      this.iframeOverlayMode = 'overlay';
+      console.log('[InteractionBuilder] 🎛️ iFrame Overlay Mode defaulted to overlay');
+    }
+    
+    // Debug: Log interaction category to verify condition
+    console.log('[InteractionBuilder] 🔍 Loading interaction:', {
+      id: interaction.id,
+      category: interaction.interactionTypeCategory,
+      isIframe: interaction.interactionTypeCategory === 'iframe',
+      iframeOverlayMode: this.iframeOverlayMode,
+      currentInteractionCategory: this.currentInteraction?.interactionTypeCategory
+    });
+    
+    // Force change detection for iframe configuration section
+    if (interaction.interactionTypeCategory === 'iframe') {
+      console.log('[InteractionBuilder] ✅ iFrame category detected - iFrame Configuration section should be visible');
+      console.log('[InteractionBuilder] 🔍 Template should render iFrame Configuration with Overlay Mode dropdown');
+    }
+    
     // Load display mode and section sizing from mediaConfig
     if ((interaction as any).mediaConfig) {
       this.displayMode = (interaction as any).mediaConfig.displayMode || 'section';
@@ -2930,6 +2979,35 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
       this.selectedMediaId = (interaction as any).mediaConfig.testMediaContentId;
       // Fetch media name if needed
     }
+    
+    // Load iframe content selection if present
+    if (interaction.interactionTypeCategory === 'iframe' && interaction.iframeConfig?.testContentOutputId) {
+      this.selectedIframeContentId = interaction.iframeConfig.testContentOutputId;
+      // Fetch content name
+      this.http.get<any>(`${environment.apiUrl}/lesson-editor/processed-outputs/${this.selectedIframeContentId}`, {
+        headers: {
+          'x-tenant-id': environment.tenantId,
+          'x-user-id': environment.defaultUserId
+        }
+      })
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: (content) => {
+            this.selectedIframeContentName = content.outputName || content.contentSource?.title || 'Selected Content';
+            console.log('[InteractionBuilder] ✅ iFrame content name loaded:', this.selectedIframeContentName);
+          },
+          error: (err) => {
+            console.error('[InteractionBuilder] ❌ Failed to fetch iframe content details:', err);
+            if (err.status === 404) {
+              this.selectedIframeContentId = null;
+              this.selectedIframeContentName = '';
+            } else {
+              this.selectedIframeContentName = 'Selected Content';
+            }
+          }
+        });
+    }
+    
     this.configSchemaText = interaction.configSchema ? JSON.stringify(interaction.configSchema, null, 2) : '';
     this.sampleDataText = interaction.sampleData ? JSON.stringify(interaction.sampleData, null, 2) : '';
     
@@ -3044,14 +3122,28 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   onIframeConfigChange() {
     this.markChanged();
     if (!this.iframeConfigText.trim()) {
-      this.currentInteraction!.iframeConfig = undefined;
+      this.currentInteraction!.iframeConfig = {};
+      // Preserve overlayMode if it was set
+      if (this.iframeOverlayMode) {
+        this.currentInteraction!.iframeConfig.overlayMode = this.iframeOverlayMode;
+      }
       return;
     }
 
     try {
-      this.currentInteraction!.iframeConfig = JSON.parse(this.iframeConfigText);
+      const parsed = JSON.parse(this.iframeConfigText);
+      this.currentInteraction!.iframeConfig = parsed;
+      // Update overlayMode from parsed config if it exists
+      if (parsed.overlayMode) {
+        this.iframeOverlayMode = parsed.overlayMode;
+      } else if (this.iframeOverlayMode) {
+        // Preserve overlayMode if it was set but not in parsed config
+        this.currentInteraction!.iframeConfig.overlayMode = this.iframeOverlayMode;
+        this.iframeConfigText = JSON.stringify(this.currentInteraction!.iframeConfig, null, 2);
+      }
     } catch (e: any) {
       // Keep as text for now, will validate on save
+      console.error('[InteractionBuilder] Failed to parse iframeConfig JSON:', e);
     }
   }
 
@@ -3130,6 +3222,23 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     this.currentMediaPlayerBlobUrl = null;
     this.currentMediaPlayerBlobUrlKey = null;
     this.previewKey = Date.now();
+  }
+
+  onIframeOverlayModeChange() {
+    this.markChanged();
+    if (!this.currentInteraction?.iframeConfig) {
+      this.currentInteraction!.iframeConfig = {};
+    }
+    this.currentInteraction!.iframeConfig.overlayMode = this.iframeOverlayMode;
+    this.updateIframeConfigText();
+    // Invalidate preview cache to force regeneration with new overlay mode
+    this.previewKey = Date.now();
+  }
+
+  updateIframeConfigText() {
+    if (this.currentInteraction?.iframeConfig) {
+      this.iframeConfigText = JSON.stringify(this.currentInteraction.iframeConfig, null, 2);
+    }
   }
 
   updateMediaConfigText() {
@@ -3451,6 +3560,31 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
       saveData.mediaConfig.showPlayerControls = this.showPlayerControls;
       saveData.mediaConfig.hideOverlayDuringPlayback = this.hideOverlayDuringPlayback;
     }
+    
+    // Save overlay mode and content selection for iFrame interactions
+    if (this.currentInteraction.interactionTypeCategory === 'iframe') {
+      if (!saveData.iframeConfig) {
+        saveData.iframeConfig = {};
+      }
+      // Parse existing iframeConfig from text field if it exists
+      if (this.iframeConfigText.trim()) {
+        try {
+          saveData.iframeConfig = { ...JSON.parse(this.iframeConfigText), overlayMode: this.iframeOverlayMode };
+        } catch (e) {
+          // If parsing fails, just add overlayMode to existing config
+          saveData.iframeConfig.overlayMode = this.iframeOverlayMode;
+        }
+      } else {
+        saveData.iframeConfig.overlayMode = this.iframeOverlayMode;
+      }
+      // Save testContentOutputId if available (for builder testing)
+      if (this.selectedIframeContentId) {
+        saveData.iframeConfig.testContentOutputId = this.selectedIframeContentId;
+      }
+      // Remove iframeUrl - it should come from sample data or instance config
+      delete saveData.iframeUrl;
+    }
+    
     delete saveData.contentOutputId;
     
     // Add AI configuration
@@ -4827,7 +4961,7 @@ overlayContent + '\n' +
     }
     
     if (lower.includes('iframe')) {
-      return 'For iFrame interactions, simply provide the URL you want to embed. You can configure the width, height, and permissions in the iframe config JSON.';
+      return 'For iFrame interactions, simply provide the URL you want to embed. You can configure the width, height, and permissions in the iframe config JSON. You can also set the "Overlay Mode" to control how HTML/CSS/JS content is displayed: "Overlay on iFrame" (default) renders content on top of the iframe, while "Section below iFrame" renders content as a separate section below.';
     }
     
     if (lower.includes('config') || lower.includes('schema')) {
@@ -5573,6 +5707,70 @@ overlayContent + '\n' +
             }
           } else {
             this.selectedMediaName = 'Selected Media';
+          }
+          this.markChanged();
+        }
+      });
+  }
+
+  openIframeContentSelector() {
+    this.showIframeContentSelector = true;
+  }
+
+  closeIframeContentSelector() {
+    this.showIframeContentSelector = false;
+  }
+
+  onIframeContentSelected(processedContentId: string) {
+    console.log('[InteractionBuilder] 🔗 iFrame content selected:', processedContentId);
+    this.selectedIframeContentId = processedContentId;
+    
+    // Store in iframeConfig for persistence (for testing in builder)
+    if (!this.currentInteraction!.iframeConfig) {
+      this.currentInteraction!.iframeConfig = {};
+    }
+    this.currentInteraction!.iframeConfig.testContentOutputId = processedContentId;
+    
+    // Update iframeConfigText to reflect the change
+    this.iframeConfigText = JSON.stringify(this.currentInteraction!.iframeConfig, null, 2);
+    
+    // Fetch content details to display name and URL
+    this.http.get<any>(`${environment.apiUrl}/lesson-editor/processed-outputs/${processedContentId}`, {
+      headers: {
+        'x-tenant-id': environment.tenantId,
+        'x-user-id': environment.defaultUserId
+      }
+    })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (content) => {
+          this.selectedIframeContentName = content.outputName || content.contentSource?.title || 'Selected Content';
+          // Extract URL from outputData if available
+          const url = content.outputData?.url || content.outputData?.sourceUrl || content.contentSource?.sourceUrl;
+          if (url && this.currentInteraction!.sampleData) {
+            // Update sample data URL if it doesn't exist
+            if (!this.currentInteraction!.sampleData.url) {
+              this.currentInteraction!.sampleData.url = url;
+              this.sampleDataText = JSON.stringify(this.currentInteraction!.sampleData, null, 2);
+            }
+          }
+          console.log('[InteractionBuilder] ✅ iFrame content name set:', this.selectedIframeContentName);
+          this.markChanged();
+        },
+        error: (err) => {
+          console.error('[InteractionBuilder] ❌ Failed to fetch content details:', err);
+          // If 404, the processed content doesn't exist - clear the selection
+          if (err.status === 404) {
+            console.warn('[InteractionBuilder] ⚠️ Processed content not found, clearing selection');
+            this.selectedIframeContentId = null;
+            this.selectedIframeContentName = '';
+            // Clear from iframeConfig
+            if (this.currentInteraction!.iframeConfig) {
+              delete this.currentInteraction!.iframeConfig.testContentOutputId;
+              this.iframeConfigText = JSON.stringify(this.currentInteraction!.iframeConfig, null, 2);
+            }
+          } else {
+            this.selectedIframeContentName = 'Selected Content';
           }
           this.markChanged();
         }

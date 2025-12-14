@@ -7,12 +7,13 @@ import { firstValueFrom } from 'rxjs';
 import { TrueFalseSelectionComponent } from '../../../features/interactions/true-false-selection/true-false-selection.component';
 import { ContentSourceService } from '../../../core/services/content-source.service';
 import { MediaContentSelectorComponent } from '../media-content-selector/media-content-selector.component';
+import { UrlContentSelectorComponent } from '../url-content-selector/url-content-selector.component';
 import { environment } from '../../../../environments/environment';
 
 @Component({
   selector: 'app-interaction-configure-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, TrueFalseSelectionComponent, MediaContentSelectorComponent],
+  imports: [CommonModule, FormsModule, TrueFalseSelectionComponent, MediaContentSelectorComponent, UrlContentSelectorComponent],
   template: `
     <div *ngIf="isOpen" class="modal-overlay-fullscreen" (click)="close()" style="z-index: 999999 !important; position: fixed !important;">
       <div class="modal-container-fullscreen" (click)="$event.stopPropagation()">
@@ -50,8 +51,18 @@ import { environment } from '../../../../environments/environment';
               <p class="hint">Choose approved media content (video or audio) to use for this interaction.</p>
             </div>
 
+            <!-- URL Content Selector (for iframe interactions) -->
+            <div *ngIf="interactionCategory === 'iframe'" class="form-group processed-content-selector">
+              <label>🔗 URL Content</label>
+              <div class="config-value">
+                <span class="value">{{selectedUrlContentName || 'None selected'}}</span>
+                <button type="button" class="btn-small" style="margin-left: 12px;" (click)="openUrlContentSelector()">{{selectedUrlContentId ? 'Change URL' : 'Select URL'}}</button>
+              </div>
+              <p class="hint">Choose approved URL content to use for this iframe interaction. The selected URL will be used in the interaction.</p>
+            </div>
+
             <!-- Generic Processed Content Selector (for other interaction types) -->
-            <div *ngIf="interactionCategory !== 'uploaded-media'" class="form-group processed-content-selector">
+            <div *ngIf="interactionCategory !== 'uploaded-media' && interactionCategory !== 'iframe'" class="form-group processed-content-selector">
               <label>Processed Content</label>
               <div class="config-value">
                 <span class="value">{{selectedContentOutputName || 'None selected'}}</span>
@@ -304,6 +315,14 @@ import { environment } from '../../../../environments/environment';
           (close)="closeMediaSelector()"
           (selected)="onMediaSelected($event)">
         </app-media-content-selector>
+
+        <!-- URL Content Selector Modal -->
+        <app-url-content-selector
+          [isOpen]="showUrlContentSelector"
+          [selectedContentId]="selectedUrlContentId"
+          (close)="closeUrlContentSelector()"
+          (contentSelected)="onUrlContentSelected($event)">
+        </app-url-content-selector>
 
         <div class="modal-footer-sticky">
           <button (click)="close()" class="btn-secondary">Cancel</button>
@@ -872,6 +891,11 @@ export class InteractionConfigureModalComponent implements OnChanges {
   showMediaSelector = false;
   selectedMediaId: string | null = null;
   selectedMediaName = '';
+  
+  // URL content selector (for iframe interactions)
+  showUrlContentSelector = false;
+  selectedUrlContentId: string | null = null;
+  selectedUrlContentName = '';
 
   constructor(
     private domSanitizer: DomSanitizer,
@@ -910,6 +934,63 @@ export class InteractionConfigureModalComponent implements OnChanges {
     }
     
     this.closeMediaSelector();
+    this.onConfigChange();
+  }
+
+  openUrlContentSelector() {
+    this.showUrlContentSelector = true;
+  }
+
+  closeUrlContentSelector() {
+    this.showUrlContentSelector = false;
+  }
+
+  onUrlContentSelected(processedContentId: string) {
+    console.log('[ConfigModal] 🔗 URL content selected:', processedContentId);
+    this.selectedUrlContentId = processedContentId;
+    
+    // Fetch content details to display name and URL
+    this.http.get<any>(`${environment.apiUrl}/lesson-editor/processed-outputs/${processedContentId}`, {
+      headers: {
+        'x-tenant-id': environment.tenantId,
+        'x-user-id': environment.defaultUserId
+      }
+    })
+      .subscribe({
+        next: (content) => {
+          this.selectedUrlContentName = content.outputName || content.contentSource?.title || 'Selected URL';
+          // Extract URL from outputData
+          const url = content.outputData?.url || content.outputData?.sourceUrl || content.contentSource?.sourceUrl;
+          
+          // Update config with selected URL content
+          if (this.config) {
+            this.config.contentOutputId = processedContentId;
+            // Also update iframeUrl in config if it exists
+            if (url) {
+              this.config.iframeUrl = url;
+            }
+          }
+          
+          // Update sample data with the URL (for preview and testing)
+          if (this.sampleData && url) {
+            this.sampleData.url = url;
+            // Trigger preview update
+            this.updatePreviewData();
+          } else if (url) {
+            // If sampleData doesn't exist, create it
+            this.sampleData = { url: url };
+            this.updatePreviewData();
+          }
+          
+          console.log('[ConfigModal] ✅ URL content name set:', this.selectedUrlContentName, 'URL:', url);
+        },
+        error: (err) => {
+          console.error('[ConfigModal] ❌ Failed to fetch URL content details:', err);
+          this.selectedUrlContentName = 'Selected URL';
+        }
+      });
+    
+    this.closeUrlContentSelector();
     this.onConfigChange();
   }
 
@@ -971,10 +1052,7 @@ export class InteractionConfigureModalComponent implements OnChanges {
       }
       
       // Merge sample data with config for preview
-      this.previewData = {
-        ...this.sampleData,
-        ...this.config
-      };
+      this.updatePreviewData();
       
       // Hide page header and prevent scroll
       this.hidePageElements();
@@ -990,12 +1068,27 @@ export class InteractionConfigureModalComponent implements OnChanges {
   onConfigChange() {
     // Dynamically update preview data based on config changes
     console.log('[ConfigModal] ⚙️ Config changed:', this.config);
-    if (this.previewData) {
-      this.previewData = {
-        ...this.previewData,
-        ...this.config
-      };
+    this.updatePreviewData();
+  }
+
+  updatePreviewData() {
+    // Merge sample data with config for preview
+    this.previewData = {
+      ...this.sampleData,
+      ...this.config
+    };
+    
+    // For iframe interactions, ensure URL is in sample data
+    if (this.interactionCategory === 'iframe') {
+      const url = this.config?.iframeUrl || this.config?.url || this.sampleData?.url;
+      if (url && this.previewData) {
+        this.previewData.url = url;
+      }
     }
+    
+    // Invalidate blob URL cache to force regeneration
+    this.currentBlobUrl = null;
+    this.currentBlobUrlKey = '';
   }
 
   /**

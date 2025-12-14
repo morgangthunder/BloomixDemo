@@ -200,13 +200,36 @@ import { MediaPlayerComponent } from '../../shared/components/media-player/media
                 (endedEvent)="onMediaEnded()"
                 (errorEvent)="onMediaError($event)">
               </app-media-player>
+              
+              <!-- Section below media player (when displayMode is 'section') -->
+              <div *ngIf="mediaPlayerData.displayMode === 'section' && (mediaPlayerData.sectionHtml || mediaPlayerData.sectionCss || mediaPlayerData.sectionJs)" 
+                   class="interaction-section-below"
+                   [style.height]="mediaPlayerData.sectionHeight || 'auto'"
+                   [style.min-height]="mediaPlayerData.sectionMinHeight || '200px'"
+                   [style.max-height]="mediaPlayerData.sectionMaxHeight || 'none'">
+                <div [innerHTML]="getSanitizedSectionHtml(mediaPlayerData.sectionHtml, mediaPlayerData.sectionCss)"></div>
+              </div>
             </div>
 
             <!-- PixiJS/HTML/iframe Interactions -->
             <div *ngIf="!isLoadingInteraction && interactionBuild && interactionBuild?.interactionTypeCategory !== 'uploaded-media' && interactionBlobUrl && !interactionError" class="interaction-build-container">
-              <!-- Note: Both allow-scripts and allow-same-origin are required for interaction iframes to function properly.
-                   The browser warning about escaping sandboxing is expected and safe for our use case where we control the content being loaded. -->
+              <!-- iFrame interactions -->
+              <!-- Note: The blob URL HTML handles its own overlay system (buttons on the right side) -->
+              <!-- The overlay mode setting controls how HTML/CSS/JS is displayed inside the blob URL HTML -->
               <iframe 
+                *ngIf="interactionBuild?.interactionTypeCategory === 'iframe'"
+                #interactionIframe
+                [src]="interactionBlobUrl" 
+                [attr.data-key]="interactionPreviewKey"
+                class="interaction-iframe"
+                frameborder="0"
+                sandbox="allow-scripts allow-same-origin"
+                (load)="onInteractionIframeLoad()"
+                style="width: 100%; min-height: 600px; max-height: 90vh; border: none; display: block;"></iframe>
+              
+              <!-- Regular iframe for non-iframe interactions (PixiJS/HTML) -->
+              <iframe 
+                *ngIf="interactionBuild?.interactionTypeCategory !== 'iframe'"
                 #interactionIframe
                 [src]="interactionBlobUrl" 
                 [attr.data-key]="interactionPreviewKey"
@@ -1095,6 +1118,13 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     overlayHtml: string;
     overlayCss: string;
     overlayJs: string;
+    sectionHtml?: string;
+    sectionCss?: string;
+    sectionJs?: string;
+    displayMode?: 'overlay' | 'section';
+    sectionHeight?: string;
+    sectionMinHeight?: string;
+    sectionMaxHeight?: string;
   } | null = null;
   @ViewChild('mediaPlayer') mediaPlayerRef?: MediaPlayerComponent;
   
@@ -1883,7 +1913,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
                 this.interactionAISDK.setTeacherWidgetRef(this.teacherWidget);
                 console.log('[LessonView] ✅ Teacher widget reference set for SDK (retry)');
               } else {
-                console.warn('[LessonView] ⚠️ Teacher widget not available after retry');
+                // Only log as debug, not warning - widget may not be needed immediately and will be set when it initializes
+                console.log('[LessonView] ℹ️ Teacher widget not yet available (will be set when widget initializes)');
               }
             }, 500);
           }
@@ -2535,6 +2566,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
           const overlayCss = build.cssCode || '';
           const overlayJs = build.jsCode || '';
           
+          // Get display mode (overlay vs section) from mediaConfig
+          const displayMode = mediaConfig.displayMode || 'overlay';
+          
           // Set media player data immediately (don't defer)
           this.mediaPlayerData = {
             mediaUrl: fullMediaUrl,
@@ -2547,10 +2581,20 @@ export class LessonViewComponent implements OnInit, OnDestroy {
               startTime: config.startTime,
               endTime: config.endTime,
               hideOverlayDuringPlayback: config.hideOverlayDuringPlayback ?? mediaConfig.hideOverlayDuringPlayback ?? true, // Default: hide overlay during playback
+              displayMode, // Store display mode for conditional rendering
             },
-            overlayHtml,
-            overlayCss,
-            overlayJs,
+            // Only pass overlay code if displayMode is 'overlay', otherwise render as section below
+            overlayHtml: displayMode === 'overlay' ? overlayHtml : '',
+            overlayCss: displayMode === 'overlay' ? overlayCss : '',
+            overlayJs: displayMode === 'overlay' ? overlayJs : '',
+            // Store section code separately for section mode
+            sectionHtml: displayMode === 'section' ? overlayHtml : '',
+            sectionCss: displayMode === 'section' ? overlayCss : '',
+            sectionJs: displayMode === 'section' ? overlayJs : '',
+            displayMode,
+            sectionHeight: mediaConfig.sectionHeight || 'auto',
+            sectionMinHeight: mediaConfig.sectionMinHeight || '200px',
+            sectionMaxHeight: mediaConfig.sectionMaxHeight || 'none',
           };
           
           console.log('[LessonView] ✅ Media player data loaded:', {
@@ -3704,6 +3748,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       overflow-y: auto;
       padding: 20px;
       box-shadow: -4px 0 12px rgba(0, 0, 0, 0.5);
+      display: block !important;
+      transform: translateX(0) !important;
     }
     
     #toggle-overlay {
@@ -3733,6 +3779,12 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     
     #button-overlay.hidden {
       transform: translateX(100%);
+      display: none;
+    }
+    
+    /* Ensure button overlay is visible by default */
+    #button-overlay {
+      display: block !important;
     }
     
     #sdk-test-header {
@@ -3816,7 +3868,14 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   
   <div id="button-overlay">
     <div id="overlay-content">
-${escapedHtml || '<div>No overlay content</div>'}
+      <!-- SDK Test structure (always at the top) -->
+      <div id="sdk-test-header">
+        <h1>SDK Test iFrame</h1>
+        <p id="status-text">Initializing...</p>
+      </div>
+      <div id="sdk-test-buttons"></div>
+      <!-- Builder's HTML content (below SDK test structure) -->
+      ${escapedHtml || ''}
     </div>
   </div>
 
@@ -3824,6 +3883,39 @@ ${escapedHtml || '<div>No overlay content</div>'}
     // Inject interaction data and config
     window.interactionData = ${sampleDataJson};
     window.interactionConfig = ${configJson};
+    
+    // Ensure SDK test elements are visible and at the top
+    // Elements are already in the HTML template at the top
+    (function() {
+      const header = document.getElementById("sdk-test-header");
+      const buttons = document.getElementById("sdk-test-buttons");
+      const status = document.getElementById("status-text");
+      
+      // Ensure elements are visible and positioned at the top
+      const overlayContent = document.getElementById("overlay-content");
+      if (overlayContent) {
+        if (header) {
+          header.style.display = "block";
+          // Move to top if not already there
+          if (header.parentNode === overlayContent && header !== overlayContent.firstElementChild) {
+            overlayContent.insertBefore(header, overlayContent.firstChild);
+          }
+        }
+        if (buttons) {
+          buttons.style.display = "block";
+          // Move to top after header if not already there
+          if (buttons.parentNode === overlayContent) {
+            const headerEl = document.getElementById("sdk-test-header");
+            if (headerEl && buttons !== headerEl.nextElementSibling) {
+              overlayContent.insertBefore(buttons, headerEl.nextSibling || overlayContent.firstChild);
+            } else if (!headerEl && buttons !== overlayContent.firstElementChild) {
+              overlayContent.insertBefore(buttons, overlayContent.firstChild);
+            }
+          }
+        }
+      }
+      if (status) status.style.display = "block";
+    })();
     
     // Provide createIframeAISDK helper function for builder's code
     // Only declare if it doesn't already exist (builder's code might provide it)
@@ -4442,24 +4534,86 @@ ${escapedHtml || '<div>No overlay content</div>'}
       // but ensure the overlay elements exist first
       const runBuilderCode = () => {
         // Ensure elements exist - wait for them if needed
+        let retryCount = 0;
+        const maxRetries = 20; // Wait up to 1 second (20 * 50ms)
+        
         const checkElements = () => {
           const overlayContent = document.getElementById("overlay-content");
           if (!overlayContent) {
-            console.warn("[iFrame Overlay] overlay-content element not found, retrying...");
-            setTimeout(checkElements, 50);
-            return;
+            if (retryCount < maxRetries) {
+              retryCount++;
+              console.warn("[iFrame Overlay] overlay-content element not found, retrying... (" + retryCount + "/" + maxRetries + ")");
+              setTimeout(checkElements, 50);
+              return;
+            } else {
+              console.error("[iFrame Overlay] overlay-content element not found after max retries");
+              return;
+            }
           }
           
           // Check if HTML content is actually rendered
-          const statusText = document.getElementById("status-text");
-          const buttonsContainer = document.getElementById("sdk-test-buttons");
-          if (!statusText && !buttonsContainer && overlayContent.children.length === 0) {
-            console.warn("[iFrame Overlay] HTML content not rendered yet, retrying...");
+          let statusText = document.getElementById("status-text");
+          let buttonsContainer = document.getElementById("sdk-test-buttons");
+          
+          // If elements don't exist, create them (for SDK test interactions that need them)
+          if (!statusText || !buttonsContainer) {
+            // Check if the HTML content looks like it needs SDK test structure
+            const needsSDKStructure = ${escapedJs ? 'escapedJs.includes("initTestApp") || escapedJs.includes("sdk-test-buttons") || escapedJs.includes("SDK Test")' : 'false'};
+            
+            if (needsSDKStructure && overlayContent) {
+              console.log("[iFrame Overlay] Creating SDK test structure elements...");
+              
+              // Create SDK test header and buttons container if they don't exist
+              if (!buttonsContainer) {
+                // Check if there's already a structure, or create new one
+                const existingHeader = overlayContent.querySelector("#sdk-test-header");
+                if (!existingHeader) {
+                  // Create the SDK test structure
+                  const header = document.createElement("div");
+                  header.id = "sdk-test-header";
+                  header.innerHTML = '<h1>SDK Test iFrame</h1><p id="status-text">Initializing...</p>';
+                  overlayContent.appendChild(header);
+                  
+                  buttonsContainer = document.createElement("div");
+                  buttonsContainer.id = "sdk-test-buttons";
+                  overlayContent.appendChild(buttonsContainer);
+                  
+                  statusText = document.getElementById("status-text");
+                  console.log("[iFrame Overlay] Created SDK test structure elements");
+                } else {
+                  buttonsContainer = document.getElementById("sdk-test-buttons");
+                  statusText = document.getElementById("status-text");
+                }
+              }
+            }
+          }
+          
+          // Log what we found for debugging
+          console.log("[iFrame Overlay] Checking elements:", {
+            overlayContent: !!overlayContent,
+            overlayContentChildren: overlayContent ? overlayContent.children.length : 0,
+            statusText: !!statusText,
+            buttonsContainer: !!buttonsContainer,
+            htmlContent: overlayContent ? overlayContent.innerHTML.substring(0, 200) : 'none'
+          });
+          
+          // If HTML was injected but elements aren't found yet, wait a bit more
+          if (overlayContent.children.length > 0 && !statusText && !buttonsContainer && retryCount < maxRetries) {
+            retryCount++;
+            console.log("[iFrame Overlay] HTML content present but buttons/status elements not found yet, retrying... (" + retryCount + "/" + maxRetries + ")");
             setTimeout(checkElements, 50);
             return;
           }
           
-          console.log("[iFrame Overlay] Elements found, running builder's JavaScript code...");
+          // If no HTML content at all and no elements, wait
+          if (overlayContent.children.length === 0 && !statusText && !buttonsContainer && retryCount < maxRetries) {
+            retryCount++;
+            console.warn("[iFrame Overlay] HTML content not rendered yet, retrying... (" + retryCount + "/" + maxRetries + ")");
+            setTimeout(checkElements, 50);
+            return;
+          }
+          
+          console.log("[iFrame Overlay] Elements ready, running builder's JavaScript code...");
           console.log("[iFrame Overlay] JavaScript code length:", ${escapedJs ? escapedJs.length : 0});
           
           try {
@@ -4522,11 +4676,10 @@ ${escapedCss}
       const sampleDataJson = JSON.stringify(sampleData);
       const configJson = JSON.stringify({ ...config, iframeUrl });
       
-      // Check if overlay mode is enabled in iframeConfig
-      const iframeConfig = build.iframeConfig || {};
-      const useOverlay = iframeConfig.useOverlay === true;
+      // Check if there's HTML/CSS/JS code to display (always use overlay wrapper if code exists)
+      const hasOverlayCode = !!(build.htmlCode || build.cssCode || build.jsCode);
       
-      if (useOverlay) {
+      if (hasOverlayCode) {
         // Overlay mode: use wrapper with custom HTML/CSS/JS code from builder
         const htmlCode = (build.htmlCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
         const cssCode = (build.cssCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
@@ -4654,6 +4807,58 @@ ${jsCode}
   /**
    * Play a teacher script block
    */
+  /**
+   * Get overlay mode for iFrame interactions
+   */
+  getIframeOverlayMode(): 'overlay' | 'section' {
+    if (!this.interactionBuild || this.interactionBuild.interactionTypeCategory !== 'iframe') {
+      return 'overlay'; // Default
+    }
+    return this.interactionBuild.iframeConfig?.overlayMode || 'overlay';
+  }
+
+  /**
+   * Get sanitized HTML for iFrame overlay
+   */
+  getSanitizedIframeOverlayHtml(): any {
+    if (!this.interactionBuild || this.interactionBuild.interactionTypeCategory !== 'iframe') {
+      return '';
+    }
+    const html = this.interactionBuild.htmlCode || '';
+    const css = this.interactionBuild.cssCode || '';
+    const fullHtml = css ? `<style>${css}</style>${html}` : html;
+    return this.sanitizer.bypassSecurityTrustHtml(fullHtml);
+  }
+
+  /**
+   * Get sanitized HTML for iFrame section below
+   */
+  getSanitizedIframeSectionHtml(): any {
+    if (!this.interactionBuild || this.interactionBuild.interactionTypeCategory !== 'iframe') {
+      return '';
+    }
+    const html = this.interactionBuild.htmlCode || '';
+    const css = this.interactionBuild.cssCode || '';
+    const js = this.interactionBuild.jsCode || '';
+    let fullHtml = css ? `<style>${css}</style>` : '';
+    fullHtml += html;
+    if (js) {
+      fullHtml += `<script>${js}</script>`;
+    }
+    return this.sanitizer.bypassSecurityTrustHtml(fullHtml);
+  }
+
+  /**
+   * Get sanitized HTML for media player section below
+   */
+  getSanitizedSectionHtml(html?: string, css?: string): any {
+    if (!html && !css) {
+      return '';
+    }
+    const fullHtml = css ? `<style>${css}</style>${html || ''}` : (html || '');
+    return this.sanitizer.bypassSecurityTrustHtml(fullHtml);
+  }
+
   private playTeacherScript(script?: ScriptBlock | any, scriptBlock?: any) {
     if (!script || !script.text) {
       console.log('[LessonView] No script to play');

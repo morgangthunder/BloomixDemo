@@ -121,7 +121,7 @@ export class CreateSDKTestIframeInteraction1734500004000 implements MigrationInt
         'iframe',
         '{"allowFullscreen": true, "sandbox": "allow-scripts allow-same-origin"}',
         '{"fields": [{"key": "goFullscreenOnLoad", "type": "boolean", "label": "Go to fullscreen on load", "default": false, "description": "Automatically activate fullscreen mode when the interaction loads"}]}',
-        '{"url": "", "message": "For iframe interactions, set the iframeUrl field to point to the HTML document. The full HTML document is in Upora/backend/scripts/sdk-test-iframe-document.html"}',
+        '{"url": "https://en.wikipedia.org/wiki/Main_Page"}',
         '{"fields": [{"name": "testValue", "type": "number", "required": false, "description": "Test numeric value"}, {"name": "timestamp", "type": "number", "required": false, "description": "Timestamp of test"}, {"name": "testArray", "type": "array", "required": false, "description": "Test array"}]}',
         '{"customFields": [{"name": "testField", "type": "string", "required": false, "description": "Test string field"}, {"name": "testNumber", "type": "number", "required": false, "description": "Test number field"}]}',
         true

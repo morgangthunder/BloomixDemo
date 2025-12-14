@@ -6,6 +6,16 @@ This guide explains how to integrate the AI Teacher SDK into HTML, PixiJS, and i
 
 Interactions that run in iframes (HTML, PixiJS, or external iframe embeds) can communicate with the AI Teacher using postMessage. The SDK is automatically initialized when an interaction is active in a lesson.
 
+## Overlay Mode Configuration
+
+iFrame interactions support two display modes for HTML/CSS/JS content:
+
+- **Overlay on iFrame**: HTML/CSS/JS content is rendered as an overlay on top of the iframe (default). This is useful for interactive controls, buttons, or UI elements that should appear over the embedded content.
+
+- **Section below iFrame**: HTML/CSS/JS content is rendered as a separate section below the iframe. This is useful for instructions, explanations, or additional content that should appear after the embedded content.
+
+You can configure this setting in the Interaction Builder under Settings → Overlay Mode. The setting is stored in `iframeConfig.overlayMode` and can be accessed via the interaction's configuration.
+
 ## Quick Start
 
 Include this code at the top of your interaction's HTML/JavaScript:
@@ -224,6 +234,28 @@ Add this script tag at the beginning of your HTML code:
 ### Option 2: External Script
 
 Reference the SDK from a CDN or include it as part of your interaction bundle.
+
+## Overlay Mode Behavior
+
+When creating an iFrame interaction, you can choose how your HTML/CSS/JS content is displayed:
+
+- **Overlay Mode: "Overlay on iFrame"** (default): Your HTML/CSS/JS code is rendered as an overlay positioned on top of the iframe. This is ideal for:
+  - Interactive controls and buttons
+  - Floating UI elements
+  - Progress indicators
+  - Tooltips and hints
+  
+  The overlay is positioned absolutely over the iframe, allowing you to create interactive elements that appear on top of the embedded content.
+
+- **Overlay Mode: "Section below iFrame"**: Your HTML/CSS/JS code is rendered as a separate section below the iframe. This is ideal for:
+  - Instructions and explanations
+  - Additional content that should appear after the embedded content
+  - Form elements or inputs
+  - Summary information
+  
+  The section appears as a block element below the iframe, maintaining normal document flow.
+
+**Note:** The overlay mode setting only affects how your HTML/CSS/JS code is displayed. The iframe itself (the embedded URL) is always rendered first, and your code is either overlaid on top or placed below based on this setting.
 
 ### `minimizeChatUI()`
 Minimize the AI Teacher chat widget.
