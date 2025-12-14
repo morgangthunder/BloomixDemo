@@ -353,8 +353,8 @@ import { MediaPlayerComponent } from '../../shared/components/media-player/media
               </svg>
             </button>
             <div class="script-progress-info">
-              <!-- Show volume control when media player is present or TTS is active, but hide when timer is shown -->
-              <div *ngIf="(isMediaPlayerReady || isTTSActive) && !showTimer" class="volume-control-container">
+              <!-- Show volume control when media player is present or TTS is active, but hide when timer is shown or interaction has ended -->
+              <div *ngIf="(isMediaPlayerReady || isTTSActive) && !showTimer && !interactionEnded" class="volume-control-container">
                 <label for="volume-slider" class="volume-label">🔊</label>
                 <input 
                   type="range" 
@@ -368,6 +368,12 @@ import { MediaPlayerComponent } from '../../shared/components/media-player/media
                   title="Volume: {{ Math.round(mediaVolume * 100) }}%"
                 />
                 <span class="volume-value">{{ Math.round(mediaVolume * 100) }}%</span>
+              </div>
+              <!-- Show Next button when interaction has ended and auto-progress is disabled -->
+              <div *ngIf="interactionEnded" class="next-button-container">
+                <button class="control-bar-btn next-btn" (click)="onNextButtonClick()" title="Continue to next sub-stage">
+                  Next →
+                </button>
               </div>
               <!-- Show script text when no media player and no TTS -->
               <ng-container *ngIf="!isMediaPlayerReady && !isTTSActive">
@@ -649,6 +655,28 @@ import { MediaPlayerComponent } from '../../shared/components/media-player/media
       gap: 0.5rem;
       justify-content: center;
       min-width: 150px;
+    }
+
+    .next-button-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 150px;
+    }
+
+    .next-btn {
+      padding: 0.5rem 1.5rem;
+      background: var(--brand-primary, #3b82f6);
+      color: white;
+      border: none;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .next-btn:hover {
+      background: var(--brand-primary-dark, #2563eb);
     }
 
     .volume-label {
@@ -1028,6 +1056,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   isScriptPlaying = false;
   teacherWidgetHidden = true; // Start hidden, show on first script or manual open
   private autoAdvanceTimeout: any = null;
+  interactionEnded = false; // Track if current interaction has ended (for showing Next button)
   
   // Fullscreen
   isFullscreen = false;
@@ -1700,6 +1729,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // Pause script playback - defer to avoid change detection error
     setTimeout(() => {
       this.isScriptPlaying = false;
+      this.interactionEnded = false; // Reset interaction ended flag
       this.cdr.detectChanges();
     }, 0);
     
@@ -1867,25 +1897,24 @@ export class LessonViewComponent implements OnInit, OnDestroy {
               console.log('[LessonView] ✅ Media player reference set for SDK');
               
               // Check for autoplay when sub-stage is selected
+              // Only attempt autoplay if lesson is already playing (user has interacted)
               const shouldAutoplay = this.mediaPlayerData?.config?.autoplay ?? false;
-              if (shouldAutoplay && !this.mediaPlayerRef.isPlaying()) {
-                // If lesson isn't playing, start it first
-                if (!this.isScriptPlaying) {
-                  console.log('[LessonView] ▶️ Starting lesson (autoplay enabled on sub-stage select)');
-                  this.onTeacherPlay();
-                }
-                
-                // Then start media
+              if (shouldAutoplay && this.isScriptPlaying && !this.mediaPlayerRef.isPlaying()) {
+                // Lesson is playing (user has clicked play), so we can attempt autoplay
                 setTimeout(() => {
                   if (this.mediaPlayerRef && !this.mediaPlayerRef.isPlaying()) {
                     try {
                       this.mediaPlayerRef.play();
-                      console.log('[LessonView] ▶️ Media started automatically (autoplay on sub-stage select)');
+                      console.log('[LessonView] ▶️ Media started automatically (autoplay on sub-stage select, lesson playing)');
                     } catch (error) {
                       console.log('[LessonView] ℹ️ Autoplay blocked by browser:', error);
                     }
                   }
                 }, 200);
+              } else if (shouldAutoplay && !this.isScriptPlaying) {
+                // Autoplay is enabled but lesson isn't playing yet
+                // Media will start when user clicks play
+                console.log('[LessonView] ℹ️ Media autoplay enabled - will start when lesson plays');
               }
             } else {
               // Retry if media player not ready yet
@@ -1933,18 +1962,32 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       this.autoAdvanceTimeout = null;
     }
     
-    // If no interaction, auto-advance after script duration
+    // If no interaction, auto-advance after script duration (checking auto-progress flag)
     if (!this.getEmbeddedInteraction() && this.activeSubStage) {
       const scriptDuration = this.calculateSubStageScriptDuration();
+      const scriptBlocks = (this.activeSubStage as any)?.scriptBlocks || [];
       
-      this.autoAdvanceTimeout = setTimeout(() => {
-        this.moveToNextSubStage();
-      }, scriptDuration * 1000);
+      // Check if auto-progress is enabled (default to true)
+      const shouldAutoProgress = scriptBlocks.every((script: any) => script.autoProgressAtEnd !== false);
+      
+      if (shouldAutoProgress) {
+        this.autoAdvanceTimeout = setTimeout(() => {
+          this.moveToNextSubStage();
+        }, scriptDuration * 1000);
+      } else {
+        // Auto-progress disabled, show Next button after duration
+        this.autoAdvanceTimeout = setTimeout(() => {
+          this.interactionEnded = true;
+          this.cdr.detectChanges();
+          console.log('[LessonView] Script duration ended - waiting for user to click Next');
+        }, scriptDuration * 1000);
+      }
     }
   }
   
   /**
    * Calculate total script duration for current substage
+   * For media interactions, if video duration is longer than allocated time, use video duration
    */
   private calculateSubStageScriptDuration(): number {
     if (!this.activeSubStage) return 5; // Default 5 seconds
@@ -1956,6 +1999,15 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       (sum, script) => sum + (script.estimatedDuration || 10),
       0
     );
+    
+    // For media interactions, check if video duration is longer than allocated time
+    if (this.interactionBuild?.interactionTypeCategory === 'uploaded-media' && this.mediaPlayerRef) {
+      const videoDuration = this.mediaPlayerRef.getDuration() || 0;
+      if (videoDuration > 0 && videoDuration > totalDuration) {
+        console.log(`[LessonView] Video duration (${videoDuration}s) is longer than allocated time (${totalDuration}s), using video duration`);
+        return Math.max(5, videoDuration);
+      }
+    }
     
     // Minimum 5 seconds, use calculated duration
     return Math.max(5, totalDuration);
@@ -2132,9 +2184,6 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     this.interactionScore = null;
     this.normalizedInteractionData = null;
     this.normalizedEmbeddedInteractionData = null;
-    this.interactionBuild = null;
-    this.interactionBlobUrl = null;
-    this.interactionError = null;
     
     const subStage = this.activeSubStage;
     if (!subStage) {
@@ -2146,21 +2195,52 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     const interaction = subStage.interaction || (subStage as any).interactionType;
     const interactionTypeId = interaction?.type || interaction?.id || interaction;
     
+    // Don't clear interactionBuild or mediaPlayerData if we're already on the same media interaction
+    // This prevents the player from disappearing during playback
+    const isCurrentlyMediaInteraction = this.interactionBuild?.interactionTypeCategory === 'uploaded-media';
+    const currentSubStageId = this.activeSubStage?.id;
+    const isSameMediaInteraction = isCurrentlyMediaInteraction && 
+                                   currentSubStageId === subStage.id &&
+                                   this.interactionBuild?.id === interactionTypeId;
+    
+    if (!isSameMediaInteraction) {
+      // Only clear if not the same media interaction
+      this.interactionBuild = null;
+      this.mediaPlayerData = null;
+      this.isMediaPlayerReady = false;
+    }
+    
+    this.interactionBlobUrl = null;
+    this.interactionError = null;
+    
     // Check if this is an uploaded-media interaction
     if (interactionTypeId && interactionTypeId !== 'true-false-selection') {
+      // If we're already on the same media interaction, don't reload it
+      if (isSameMediaInteraction) {
+        console.log('[LessonView] Already on same media interaction, skipping reload');
+        this.isLoadingInteraction = false;
+        return;
+      }
+      
+      // Set loading state
+      this.isLoadingInteraction = true;
+      
       // First, fetch the interaction build to check its category
       const cacheBuster = `?t=${Date.now()}`;
       this.http.get(`${environment.apiUrl}/interaction-types/${interactionTypeId}${cacheBuster}`)
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: (build: any) => {
+            console.log('[LessonView] ✅ Loaded interaction build:', build.id, 'Category:', build.interactionTypeCategory);
             // Check if this is an uploaded-media interaction
             if (build.interactionTypeCategory === 'uploaded-media') {
+              console.log('[LessonView] 🎬 Detected uploaded-media interaction, loading media player data');
               this.loadMediaPlayerData(build, subStage);
               return;
             }
             
             // Otherwise, continue with normal PixiJS/HTML/iframe loading
+            console.log('[LessonView] Loading PixiJS/HTML/iframe interaction');
             this.loadPixiJSHTMLIframeInteraction(build, subStage);
           },
           error: (error) => {
@@ -2409,8 +2489,10 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   // Helper method to load media player data for uploaded-media interactions
   private loadMediaPlayerData(build: any, subStage: SubStage) {
     console.log('[LessonView] 🎬 Loading media player data for uploaded-media interaction');
+    console.log('[LessonView] 🎬 Build ID:', build.id, 'SubStage ID:', subStage.id);
     this.isLoadingInteraction = true;
-    this.mediaPlayerData = null;
+    // Don't clear mediaPlayerData immediately - wait until we have new data
+    // This prevents the player from disappearing during reload
     this.isMediaPlayerReady = false; // Reset ready flag
     this.interactionBuild = build; // Store build for reference
     
@@ -2453,38 +2535,43 @@ export class LessonViewComponent implements OnInit, OnDestroy {
           const overlayCss = build.cssCode || '';
           const overlayJs = build.jsCode || '';
           
-          // Defer property updates to avoid ExpressionChangedAfterItHasBeenCheckedError
-          // Use queueMicrotask to ensure this runs after the current change detection cycle
+          // Set media player data immediately (don't defer)
+          this.mediaPlayerData = {
+            mediaUrl: fullMediaUrl,
+            mediaType: mediaType as 'video' | 'audio',
+            config: {
+              autoplay: config.autoplay ?? mediaConfig.autoplay ?? false,
+              loop: false, // Never loop - we handle progression manually based on auto-progress setting
+              showControls: config.showControls ?? mediaConfig.showControls ?? false, // Default: hide controls
+              defaultVolume: config.defaultVolume ?? mediaConfig.defaultVolume ?? 1,
+              startTime: config.startTime,
+              endTime: config.endTime,
+              hideOverlayDuringPlayback: config.hideOverlayDuringPlayback ?? mediaConfig.hideOverlayDuringPlayback ?? true, // Default: hide overlay during playback
+            },
+            overlayHtml,
+            overlayCss,
+            overlayJs,
+          };
+          
+          console.log('[LessonView] ✅ Media player data loaded:', {
+            mediaUrl: fullMediaUrl,
+            mediaType,
+            hasOverlay: !!(overlayHtml || overlayCss || overlayJs),
+            hasMediaPlayerData: !!this.mediaPlayerData,
+            interactionBuildCategory: this.interactionBuild?.interactionTypeCategory,
+          });
+          
+          this.isLoadingInteraction = false;
+          
+          // Update ready flag in next microtask to avoid change detection issues
           queueMicrotask(() => {
-            this.mediaPlayerData = {
-              mediaUrl: fullMediaUrl,
-              mediaType: mediaType as 'video' | 'audio',
-              config: {
-                autoplay: config.autoplay ?? mediaConfig.autoplay ?? false,
-                loop: config.loop ?? mediaConfig.loop ?? false,
-                showControls: config.showControls ?? mediaConfig.showControls ?? false, // Default: hide controls
-                defaultVolume: config.defaultVolume ?? mediaConfig.defaultVolume ?? 1,
-                startTime: config.startTime,
-                endTime: config.endTime,
-                hideOverlayDuringPlayback: config.hideOverlayDuringPlayback ?? mediaConfig.hideOverlayDuringPlayback ?? true, // Default: hide overlay during playback
-              },
-              overlayHtml,
-              overlayCss,
-              overlayJs,
-            };
-            
-            console.log('[LessonView] ✅ Media player data loaded:', {
-              mediaUrl: fullMediaUrl,
-              mediaType,
-              hasOverlay: !!(overlayHtml || overlayCss || overlayJs),
+            this.isMediaPlayerReady = !!(this.mediaPlayerRef && this.mediaPlayerData);
+            console.log('[LessonView] 🎬 Media player ready state:', {
+              isMediaPlayerReady: this.isMediaPlayerReady,
+              hasMediaPlayerRef: !!this.mediaPlayerRef,
+              hasMediaPlayerData: !!this.mediaPlayerData,
             });
-            
-            this.isLoadingInteraction = false;
-            // Update ready flag in next microtask to avoid change detection issues
-            queueMicrotask(() => {
-              this.isMediaPlayerReady = !!(this.mediaPlayerRef && this.mediaPlayerData);
-              this.cdr.markForCheck();
-            });
+            this.cdr.markForCheck();
           });
         },
         error: (error) => {
@@ -2528,10 +2615,16 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     if (afterScripts && afterScripts.length > 0) {
       console.log('[LessonView] Playing post-interaction script');
       this.playTeacherScript(afterScripts[0], afterScripts[0]);
+      
+      // After scripts complete, check auto-progress
+      const afterScriptDuration = afterScripts.reduce((sum: number, script: any) => sum + (script.estimatedDuration || 10), 0);
+      setTimeout(() => {
+        this.handleInteractionEnd();
+      }, afterScriptDuration * 1000);
+    } else {
+      // No after scripts, check auto-progress immediately
+      this.handleInteractionEnd();
     }
-    
-    // Auto-advance to next substage/stage
-    this.moveToNextSubStage();
   }
   
   /**
@@ -2654,40 +2747,26 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         }
       }
       
-      // If media should autoplay, start media (and lesson if needed)
+      // Only attempt autoplay if the lesson is already playing (user has interacted)
+      // This ensures we don't violate browser autoplay policies
       const shouldAutoplay = this.mediaPlayerData?.config?.autoplay ?? false;
-      if (shouldAutoplay && this.mediaPlayerRef) {
+      if (shouldAutoplay && this.mediaPlayerRef && this.isScriptPlaying) {
+        // Lesson is already playing (user has clicked play), so we can attempt autoplay
         setTimeout(() => {
           if (this.mediaPlayerRef && !this.mediaPlayerRef.isPlaying()) {
-            // If lesson isn't playing, start it first
-            if (!this.isScriptPlaying) {
-              console.log('[LessonView] ▶️ Starting lesson (autoplay enabled but lesson paused)');
-              this.onTeacherPlay();
-            }
-            
-            // Then start media
             try {
               this.mediaPlayerRef.play();
-              console.log('[LessonView] ▶️ Media started automatically (autoplay enabled)');
+              console.log('[LessonView] ▶️ Media started automatically (autoplay enabled, lesson playing)');
             } catch (error) {
               // Browser autoplay restrictions - this is expected and normal
               console.log('[LessonView] ℹ️ Autoplay blocked by browser (user interaction required):', error);
             }
           }
         }, 100);
-      } else if (this.isScriptPlaying && this.mediaPlayerRef) {
-        // If lesson is playing but autoplay is disabled, try to start media anyway
-        // (user might have manually started the lesson)
-        setTimeout(() => {
-          if (this.mediaPlayerRef && !this.mediaPlayerRef.isPlaying()) {
-            try {
-              this.mediaPlayerRef.play();
-              console.log('[LessonView] ▶️ Media started (lesson playing)');
-            } catch (error) {
-              console.log('[LessonView] ℹ️ Media play blocked:', error);
-            }
-          }
-        }, 100);
+      } else if (shouldAutoplay && !this.isScriptPlaying) {
+        // Autoplay is enabled but lesson isn't playing yet
+        // Media will start when user clicks play (handled in onTeacherPlay or selectSubStage)
+        console.log('[LessonView] ℹ️ Media autoplay enabled - will start when lesson plays');
       }
       // Update ready flag in next microtask to avoid change detection issues
       queueMicrotask(() => {
@@ -2758,7 +2837,121 @@ export class LessonViewComponent implements OnInit, OnDestroy {
 
   onMediaEnded() {
     console.log('[LessonView] ✅ Media ended');
-    // Auto-advance to next substage when media ends
+    
+    // Ensure video doesn't restart (prevent looping)
+    if (this.mediaPlayerRef) {
+      // Pause the video to prevent any restart
+      this.mediaPlayerRef.pause();
+      console.log('[LessonView] 🎬 Video paused after ending (preventing loop)');
+    }
+    
+    // For media interactions, check if there's remaining time after video ends
+    if (this.activeSubStage && this.interactionBuild?.interactionTypeCategory === 'uploaded-media') {
+      const scriptBlocks = (this.activeSubStage as any)?.scriptBlocks || [];
+      const totalAllocatedTime = this.calculateSubStageScriptDuration(); // Total time allocated for this sub-stage
+      
+      // Get video duration from media player
+      const videoDuration = this.mediaPlayerRef?.getDuration() || 0;
+      
+      // If allocated time > video duration, wait for remaining time
+      if (totalAllocatedTime > videoDuration) {
+        const remainingTime = totalAllocatedTime - videoDuration;
+        console.log(`[LessonView] Video ended, waiting ${remainingTime}s remaining time`);
+        
+        // Wait for remaining time, then check auto-progress
+        setTimeout(() => {
+          this.handleInteractionEnd();
+        }, remainingTime * 1000);
+      } else {
+        // Video duration >= allocated time, check auto-progress immediately
+        this.handleInteractionEnd();
+      }
+    } else {
+      // Non-media interaction, check auto-progress immediately
+      this.handleInteractionEnd();
+    }
+  }
+  
+  /**
+   * Handle interaction end - check auto-progress flag and either advance or show Next button
+   */
+  private handleInteractionEnd() {
+    if (!this.activeSubStage) {
+      console.warn('[LessonView] No active sub-stage, cannot handle interaction end');
+      return;
+    }
+
+    let shouldAutoProgress = true; // Default to true
+    
+    // For media interactions, check interaction config first
+    if (this.interactionBuild?.interactionTypeCategory === 'uploaded-media') {
+      const interaction = (this.activeSubStage as any)?.interaction;
+      
+      // Check interaction config for autoProgressAtEnd
+      if (interaction?.config?.autoProgressAtEnd !== undefined) {
+        shouldAutoProgress = interaction.config.autoProgressAtEnd;
+        console.log('[LessonView] Found autoProgressAtEnd in interaction config:', shouldAutoProgress);
+      } else {
+        // Check loadInteractionTiming if available
+        const loadInteractionTiming = (this.activeSubStage as any)?.loadInteractionTiming;
+        if (loadInteractionTiming?.autoProgressAtEnd !== undefined) {
+          shouldAutoProgress = loadInteractionTiming.autoProgressAtEnd;
+          console.log('[LessonView] Found autoProgressAtEnd in loadInteractionTiming:', shouldAutoProgress);
+        } else {
+          // Check for load_interaction script block
+          const scriptBlocks = (this.activeSubStage as any)?.scriptBlocks || [];
+          const loadInteractionBlock = scriptBlocks.find((block: any) => block.type === 'load_interaction');
+          if (loadInteractionBlock?.autoProgressAtEnd !== undefined) {
+            shouldAutoProgress = loadInteractionBlock.autoProgressAtEnd;
+            console.log('[LessonView] Found autoProgressAtEnd in load_interaction block:', shouldAutoProgress);
+          } else {
+            console.log('[LessonView] No autoProgressAtEnd found for media interaction, defaulting to true');
+          }
+        }
+      }
+    } else {
+      // For non-media interactions, check all script blocks
+      const scriptBlocks = (this.activeSubStage as any)?.scriptBlocks || [];
+      const afterScripts = (this.activeSubStage as any)?.scriptBlocksAfterInteraction || [];
+      const allScripts = [...scriptBlocks, ...afterScripts];
+      
+      // Check if any script block has autoProgressAtEnd set to false
+      // Default to true if not specified
+      shouldAutoProgress = allScripts.every(script => script.autoProgressAtEnd !== false);
+      console.log('[LessonView] Checked all script blocks for autoProgressAtEnd, result:', shouldAutoProgress);
+    }
+    
+    console.log('[LessonView] handleInteractionEnd - shouldAutoProgress:', shouldAutoProgress);
+    
+    if (shouldAutoProgress) {
+      // Auto-progress to next sub-stage
+      console.log('[LessonView] Auto-progressing to next sub-stage');
+      this.moveToNextSubStage();
+    } else {
+      // Show Next button and wait for user
+      // Keep the lesson timer running and lesson-view on the sub-stage
+      console.log('[LessonView] Auto-progress disabled - showing Next button');
+      this.interactionEnded = true;
+      
+      // Ensure video stays paused and doesn't restart
+      if (this.mediaPlayerRef && this.mediaPlayerRef.isPlaying()) {
+        this.mediaPlayerRef.pause();
+        console.log('[LessonView] 🎬 Paused video (auto-progress off)');
+      }
+      
+      // Don't pause the lesson timer - let it continue
+      // The lesson-view will remain on this sub-stage until Next is clicked
+      this.cdr.detectChanges();
+      console.log('[LessonView] Interaction ended - waiting for user to click Next (lesson timer continues)');
+    }
+  }
+  
+  /**
+   * Handle Next button click
+   */
+  onNextButtonClick() {
+    console.log('[LessonView] Next button clicked');
+    this.interactionEnded = false;
     this.moveToNextSubStage();
   }
 
@@ -2788,6 +2981,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // Defer to avoid change detection error
     setTimeout(() => {
       this.isScriptPlaying = true;
+      // Reset interactionEnded when playback starts
+      this.interactionEnded = false;
       this.cdr.detectChanges();
     }, 0);
     

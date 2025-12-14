@@ -766,6 +766,7 @@ export class ContentSourcesService {
         mediaFileType: mediaType,
         mediaFileSize: metadata.fileSize,
         mediaFileDuration: metadata.duration,
+        duration: metadata.duration, // Add top-level duration for easier access
         mediaMetadata: {
           codec: metadata.codec,
           bitrate: metadata.bitrate,
@@ -774,6 +775,7 @@ export class ContentSourcesService {
           fps: metadata.fps,
           sampleRate: metadata.sampleRate,
           channels: metadata.channels,
+          duration: metadata.duration, // Also include in metadata object
         },
         // Transcription will be added later (async processing)
         transcription: null,

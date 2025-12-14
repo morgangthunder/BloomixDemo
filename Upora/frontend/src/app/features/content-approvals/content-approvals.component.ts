@@ -4,12 +4,13 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ContentSourceService } from '../../core/services/content-source.service';
 import { ContentSource } from '../../core/models/content-source.model';
+import { ContentSourceViewModalComponent } from '../../shared/components/content-source-view-modal/content-source-view-modal.component';
 import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-content-approvals',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ContentSourceViewModalComponent],
   template: `
     <div class="approvals-page">
       <div class="header">
@@ -147,6 +148,13 @@ import { environment } from '../../../environments/environment';
           </div>
         </div>
       </div>
+
+      <!-- Content Source View Modal -->
+      <app-content-source-view-modal
+        [contentSource]="viewingSource"
+        [isOpen]="!!viewingSource"
+        (close)="closeViewModal()">
+      </app-content-source-view-modal>
     </div>
   `,
   styles: [`
@@ -511,7 +519,16 @@ export class ContentApprovalsComponent implements OnInit {
   }
 
   async approveContent(id: string) {
-    if (!confirm('Approve this content source? It will be indexed in Weaviate for semantic search.')) {
+    // Find the content source to check its type
+    const source = this.pendingContent.find(s => s.id === id);
+    const isMediaContent = source?.type === 'media' || source?.filePath?.match(/\.(mp4|webm|ogg|mp3|wav|m4a)$/i);
+    
+    // Conditional message based on content type
+    const confirmMessage = isMediaContent 
+      ? 'Approve this media content? It will be processed and metadata will be indexed in Weaviate for semantic search.'
+      : 'Approve this content source? It will be indexed in Weaviate for semantic search.';
+    
+    if (!confirm(confirmMessage)) {
       return;
     }
 
@@ -520,14 +537,19 @@ export class ContentApprovalsComponent implements OnInit {
       const approved = await this.contentSourceService.approveContent(id);
       console.log('Approved:', approved);
       
-      // Show success message
-      alert(`✅ Content approved and indexed in Weaviate!\nWeaviate ID: ${approved.weaviateId}`);
+      // Conditional success message
+      const successMessage = isMediaContent
+        ? `✅ Media content approved! Metadata indexed in Weaviate.\nWeaviate ID: ${approved.weaviateId || 'N/A'}`
+        : `✅ Content approved and indexed in Weaviate!\nWeaviate ID: ${approved.weaviateId || 'N/A'}`;
+      
+      alert(successMessage);
       
       this.approvedToday++;
       await this.loadPendingContent();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to approve:', error);
-      alert('Failed to approve content source');
+      const errorMessage = error?.message || error?.error?.message || 'Failed to approve content source';
+      alert(`Failed to approve: ${errorMessage}`);
     } finally {
       this.processing = false;
     }
@@ -565,9 +587,25 @@ export class ContentApprovalsComponent implements OnInit {
     }
   }
 
+  viewingSource: ContentSource | null = null;
+
   viewSource(source: ContentSource) {
-    if (source.sourceUrl) {
-      window.open(source.sourceUrl, '_blank');
+    this.viewingSource = source;
+    // Hide header when modal opens - same as working modals
+    document.body.style.overflow = 'hidden';
+    const header = document.querySelector('app-header');
+    if (header) {
+      (header as HTMLElement).style.display = 'none';
+    }
+  }
+
+  closeViewModal() {
+    this.viewingSource = null;
+    // Show header when modal closes - same as working modals
+    document.body.style.overflow = '';
+    const header = document.querySelector('app-header');
+    if (header) {
+      (header as HTMLElement).style.display = '';
     }
   }
 

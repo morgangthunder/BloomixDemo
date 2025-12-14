@@ -29,13 +29,16 @@ interface MediaConfig {
           [loop]="config?.loop ?? false"
           [controls]="false"
           [volume]="config?.defaultVolume ?? 1"
+          preload="metadata"
           class="media-element"
           (loadedmetadata)="onMediaLoaded()"
           (timeupdate)="onTimeUpdate()"
           (play)="onPlay()"
           (pause)="onPause()"
           (ended)="onEnded()"
-          (error)="onError($event)">
+          (error)="onError($event)"
+          (loadstart)="onLoadStart()"
+          (canplay)="onCanPlay()">
           Your browser does not support the video tag.
         </video>
 
@@ -48,13 +51,16 @@ interface MediaConfig {
           [loop]="config?.loop ?? false"
           [controls]="false"
           [volume]="config?.defaultVolume ?? 1"
+          preload="metadata"
           class="media-element"
           (loadedmetadata)="onMediaLoaded()"
           (timeupdate)="onTimeUpdate()"
           (play)="onPlay()"
           (pause)="onPause()"
           (ended)="onEnded()"
-          (error)="onError($event)">
+          (error)="onError($event)"
+          (loadstart)="onLoadStart()"
+          (canplay)="onCanPlay()">
           Your browser does not support the audio tag.
         </audio>
 
@@ -182,6 +188,7 @@ export class MediaPlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   constructor(private domSanitizer: DomSanitizer) {}
 
   ngOnInit() {
+    console.log('[MediaPlayer] 🎬 ngOnInit - mediaUrl:', this.mediaUrl, 'mediaType:', this.mediaType, 'hasConfig:', !!this.config);
     this.hasOverlay = !!(this.overlayHtml || this.overlayCss || this.overlayJs);
     if (this.overlayHtml) {
       // Use bypassSecurityTrustHtml since overlay content is trusted (from interaction builder)
@@ -205,7 +212,38 @@ export class MediaPlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit() {
-    console.log('[MediaPlayer] ngAfterViewInit - hasOverlay:', this.hasOverlay, 'overlayHtml length:', this.overlayHtml?.length || 0);
+    console.log('[MediaPlayer] 🎬 ngAfterViewInit - mediaUrl:', this.mediaUrl, 'mediaType:', this.mediaType, 'hasOverlay:', this.hasOverlay, 'overlayHtml length:', this.overlayHtml?.length || 0);
+    
+    // Test if the URL is accessible
+    if (this.mediaUrl) {
+      fetch(this.mediaUrl, { method: 'HEAD' })
+        .then(response => {
+          console.log('[MediaPlayer] ✅ URL is accessible - Status:', response.status, 'Content-Type:', response.headers.get('Content-Type'));
+          if (!response.ok) {
+            console.error('[MediaPlayer] ❌ URL returned error status:', response.status, response.statusText);
+          }
+        })
+        .catch(error => {
+          console.error('[MediaPlayer] ❌ URL fetch failed:', error);
+        });
+    }
+    
+    // Check if media element is rendered
+    if (this.mediaElementRef) {
+      const element = this.mediaElementRef.nativeElement as HTMLVideoElement | HTMLAudioElement;
+      console.log('[MediaPlayer] ✅ Media element ref found:', element.tagName);
+      console.log('[MediaPlayer] Media element src:', element.src);
+      console.log('[MediaPlayer] Media element readyState:', element.readyState);
+      
+      // Explicitly call load() to start loading the media
+      if (element.readyState === 0) {
+        console.log('[MediaPlayer] 🎬 Calling load() on media element to start loading');
+        element.load();
+      }
+    } else {
+      console.warn('[MediaPlayer] ⚠️ Media element ref NOT found!');
+    }
+    
     if (this.hasOverlay && this.overlayCss) {
       this.injectOverlayStyles();
     }
@@ -225,7 +263,53 @@ export class MediaPlayerComponent implements OnInit, AfterViewInit, OnDestroy {
         const buttons = overlayContainer.querySelectorAll('button');
         console.log('[MediaPlayer] Buttons found in overlay:', buttons.length);
       }
-    }, 500);
+      
+      // Also check for video/audio element
+      const videoElement = document.querySelector('video.media-element');
+      const audioElement = document.querySelector('audio.media-element');
+      console.log('[MediaPlayer] Video element found:', !!videoElement);
+      console.log('[MediaPlayer] Audio element found:', !!audioElement);
+      if (videoElement) {
+        const video = videoElement as HTMLVideoElement;
+        console.log('[MediaPlayer] Video src:', video.src);
+        console.log('[MediaPlayer] Video readyState:', video.readyState, '(0=HAVE_NOTHING, 1=HAVE_METADATA, 2=HAVE_CURRENT_DATA, 3=HAVE_FUTURE_DATA, 4=HAVE_ENOUGH_DATA)');
+        console.log('[MediaPlayer] Video networkState:', video.networkState, '(0=EMPTY, 1=IDLE, 2=LOADING, 3=NO_SOURCE)');
+        console.log('[MediaPlayer] Video error:', video.error);
+        if (video.error) {
+          console.error('[MediaPlayer] ❌ Video error code:', video.error.code, 'message:', video.error.message);
+        }
+        
+        // Check if video is stuck loading
+        if (video.networkState === 2 && video.readyState === 0) {
+          console.warn('[MediaPlayer] ⚠️ Video appears stuck - networkState is LOADING but readyState is HAVE_NOTHING');
+          // Try reloading after a delay
+          setTimeout(() => {
+            if (video.readyState === 0 && video.networkState === 2) {
+              console.log('[MediaPlayer] 🔄 Video still stuck, trying to reload...');
+              video.load();
+            }
+          }, 2000);
+        }
+      }
+      if (audioElement) {
+        const audio = audioElement as HTMLAudioElement;
+        console.log('[MediaPlayer] Audio src:', audio.src);
+        console.log('[MediaPlayer] Audio readyState:', audio.readyState);
+        console.log('[MediaPlayer] Audio networkState:', audio.networkState);
+        console.log('[MediaPlayer] Audio error:', audio.error);
+        if (audio.error) {
+          console.error('[MediaPlayer] ❌ Audio error code:', audio.error.code, 'message:', audio.error.message);
+        }
+      }
+    }, 1000);
+  }
+  
+  onLoadStart() {
+    console.log('[MediaPlayer] 🎬 loadstart event fired - media started loading');
+  }
+  
+  onCanPlay() {
+    console.log('[MediaPlayer] ✅ canplay event fired - media can start playing');
   }
 
   ngOnDestroy() {
@@ -415,6 +499,9 @@ export class MediaPlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onEnded() {
+    console.log('[MediaPlayer] 🎬 Media ended event fired');
+    // Don't restart playback - let the parent component handle what happens next
+    // The loop attribute should be false when auto-progress is off
     this.endedEvent.emit();
   }
 
@@ -422,15 +509,24 @@ export class MediaPlayerComponent implements OnInit, AfterViewInit, OnDestroy {
     const element = event.target as HTMLVideoElement | HTMLAudioElement;
     const error = element?.error;
     
+    console.error('[MediaPlayer] ❌ onError event fired!');
+    console.error('[MediaPlayer] Element:', element?.tagName);
+    console.error('[MediaPlayer] Element src:', element?.src);
+    console.error('[MediaPlayer] Element readyState:', element?.readyState);
+    console.error('[MediaPlayer] Element networkState:', element?.networkState);
+    console.error('[MediaPlayer] Error object:', error);
+    
     let errorMessage = 'Unknown media error';
     if (error) {
+      console.error('[MediaPlayer] Error code:', error.code);
+      console.error('[MediaPlayer] Error message:', error.message);
       // Map error codes to more descriptive messages
       switch (error.code) {
         case MediaError.MEDIA_ERR_ABORTED:
           errorMessage = 'MEDIA_ELEMENT_ERROR: Playback aborted';
           break;
         case MediaError.MEDIA_ERR_NETWORK:
-          errorMessage = 'MEDIA_ELEMENT_ERROR: Network error - unable to load media file';
+          errorMessage = 'MEDIA_ELEMENT_ERROR: Network error - unable to load media file. Check CORS headers and network connectivity.';
           break;
         case MediaError.MEDIA_ERR_DECODE:
           errorMessage = 'MEDIA_ELEMENT_ERROR: Format error - unable to decode media file. The file may be corrupted or in an unsupported format.';

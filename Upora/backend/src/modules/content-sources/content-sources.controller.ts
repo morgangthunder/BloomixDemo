@@ -259,12 +259,43 @@ export class ContentSourcesController {
             Key: key,
           });
           
+          console.log(`[ContentSourcesController] 🎬 Sending GetObjectCommand to MinIO...`);
           const s3Response = await adapter.s3Client.send(getObjectCommand);
-          const fileStream = s3Response.Body;
+          let fileStream: any = s3Response.Body;
           const contentLength = s3Response.ContentLength;
           const contentTypeFromS3 = s3Response.ContentType;
           
-          console.log(`[ContentSourcesController] S3 Response - ContentLength: ${contentLength}, ContentType: ${contentTypeFromS3}`);
+          console.log(`[ContentSourcesController] ✅ S3 Response received - ContentLength: ${contentLength}, ContentType: ${contentTypeFromS3}`);
+          console.log(`[ContentSourcesController] 🎬 Stream type: ${fileStream?.constructor?.name || typeof fileStream}`);
+          console.log(`[ContentSourcesController] 🎬 Stream has pipe: ${typeof fileStream?.pipe === 'function'}`);
+          console.log(`[ContentSourcesController] 🎬 Stream has on: ${typeof fileStream?.on === 'function'}`);
+          
+          if (!fileStream) {
+            throw new Error('File stream is null from S3/MinIO');
+          }
+          
+          // AWS SDK v3 returns a Readable stream in Node.js, but we need to ensure it's a proper Node.js stream
+          // If it's a web stream, convert it
+          if (fileStream && typeof fileStream.getReader === 'function') {
+            console.log(`[ContentSourcesController] 🎬 Converting web stream to Node.js stream...`);
+            const { Readable } = require('stream');
+            const reader = fileStream.getReader();
+            const nodeStream = new Readable({
+              async read() {
+                try {
+                  const { done, value } = await reader.read();
+                  if (done) {
+                    this.push(null);
+                  } else {
+                    this.push(Buffer.from(value));
+                  }
+                } catch (error: any) {
+                  this.destroy(error);
+                }
+              }
+            });
+            fileStream = nodeStream;
+          }
           
           // Determine content type (prefer S3 metadata, fallback to extension)
           const ext = filePathOrUrl.split('.').pop()?.toLowerCase();

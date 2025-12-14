@@ -4,7 +4,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 // Read version from package.json
-let BACKEND_VERSION = '0.1.25'; // Switched to MinIO for file storage (S3-compatible)
+let BACKEND_VERSION = '0.1.27'; // Content source view modal fixes and processed content loading
 console.log(`🔍 [AppController VERSION DEBUG] __dirname: ${__dirname}`);
 console.log(`🔍 [AppController VERSION DEBUG] process.cwd(): ${process.cwd()}`);
 

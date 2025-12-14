@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 export interface ScriptBlock {
   text: string;
   estimatedDuration?: number; // seconds
+  autoProgressAtEnd?: boolean; // Auto-progress to next sub-stage when interaction time ends (default: true)
   voiceConfig?: {
     speed?: number;
     pitch?: number;

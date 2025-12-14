@@ -64,6 +64,7 @@ interface ScriptBlock {
   openChatUI?: boolean; // Open/restore chat UI if minimized
   minimizeChatUI?: boolean; // Minimize chat UI on load
   activateFullscreen?: boolean; // Activate fullscreen on load
+  autoProgressAtEnd?: boolean; // Auto-progress to next sub-stage when interaction time ends (default: true)
 }
 
 interface ProcessedContentOutput {
@@ -629,6 +630,17 @@ interface ProcessedContentOutput {
                                      (ngModelChange)="markAsChanged()"
                                      [checked]="block.activateFullscreen || false">
                               <span> Activate fullscreen</span>
+                            </label>
+                          </div>
+                          
+                          <!-- Auto-progress at end - available for all script block types -->
+                          <div class="config-section">
+                            <label class="checkbox-label">
+                              <input type="checkbox" 
+                                     [(ngModel)]="block.autoProgressAtEnd" 
+                                     (ngModelChange)="markAsChanged()"
+                                     [checked]="block.autoProgressAtEnd !== false">
+                              <span> Auto-progress at end</span>
                             </label>
                           </div>
                         </div>
@@ -2786,13 +2798,17 @@ interface ProcessedContentOutput {
       border-radius: 8px;
       border: 1px solid #333;
       box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-      z-index: 1000;
-      transition: transform 0.3s ease;
+      z-index: 10000;
+      transition: transform 0.3s ease, opacity 0.3s ease;
       font-size: 0.875rem;
       white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
     }
     .snackbar.visible {
       transform: translateX(-50%) translateY(0);
+      opacity: 1;
+      pointer-events: auto;
     }
     .snackbar.success {
       background: #22c55e;
@@ -3540,6 +3556,16 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     
     // Load linked content sources for this lesson
     this.loadLinkedContentSources();
+    
+    // Also load processed content from interactions after stages are loaded
+    setTimeout(() => {
+      this.loadProcessedContentFromInteractions();
+    }, 1000);
+    
+    // Also load processed content from interactions after stages are loaded
+    setTimeout(() => {
+      this.loadProcessedContentFromInteractions();
+    }, 1000);
   }
 
   /**
@@ -3662,6 +3688,55 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
             console.log('[LessonEditor] 📊 Parsing stages from lesson data');
             this.stages = this.parseStagesFromJSON(stagesData);
             console.log('[LessonEditor] ✅ Parsed stages:', this.stages);
+            
+            // Restore load_interaction blocks from saved data (interaction.config or loadInteractionTiming)
+            this.stages.forEach((stage) => {
+              stage.subStages.forEach((substage) => {
+                if (substage.interaction) {
+                  // Check if we have saved timing data for load_interaction block
+                  const loadInteractionTiming = (substage as any).loadInteractionTiming;
+                  const configTiming = substage.interaction.config;
+                  
+                  if (loadInteractionTiming || (configTiming && (configTiming.startTime !== undefined || configTiming.endTime !== undefined))) {
+                    // Find or create the load_interaction block
+                    let loadInteractionBlock = substage.scriptBlocks?.find(b => b.type === 'load_interaction');
+                    
+                    if (!loadInteractionBlock) {
+                      // Create the load_interaction block if it doesn't exist
+                      if (!substage.scriptBlocks) {
+                        substage.scriptBlocks = [];
+                      }
+                      loadInteractionBlock = {
+                        id: `load-interaction-${substage.id}`,
+                        type: 'load_interaction',
+                        content: '',
+                        startTime: loadInteractionTiming?.startTime || configTiming?.startTime || 0,
+                        endTime: loadInteractionTiming?.endTime || configTiming?.endTime || 10,
+                        autoProgressAtEnd: loadInteractionTiming?.autoProgressAtEnd !== undefined 
+                          ? loadInteractionTiming.autoProgressAtEnd 
+                          : (configTiming?.autoProgressAtEnd !== undefined ? configTiming.autoProgressAtEnd : true)
+                      };
+                      substage.scriptBlocks.push(loadInteractionBlock);
+                      console.log('[LessonEditor] ✅ Created load_interaction block from saved timing:', loadInteractionBlock);
+                    } else {
+                      // Update existing block with saved timing
+                      if (loadInteractionTiming) {
+                        loadInteractionBlock.startTime = loadInteractionTiming.startTime || loadInteractionBlock.startTime;
+                        loadInteractionBlock.endTime = loadInteractionTiming.endTime || loadInteractionBlock.endTime;
+                        loadInteractionBlock.autoProgressAtEnd = loadInteractionTiming.autoProgressAtEnd !== undefined 
+                          ? loadInteractionTiming.autoProgressAtEnd 
+                          : loadInteractionBlock.autoProgressAtEnd;
+                      } else if (configTiming) {
+                        if (configTiming.startTime !== undefined) loadInteractionBlock.startTime = configTiming.startTime;
+                        if (configTiming.endTime !== undefined) loadInteractionBlock.endTime = configTiming.endTime;
+                        if (configTiming.autoProgressAtEnd !== undefined) loadInteractionBlock.autoProgressAtEnd = configTiming.autoProgressAtEnd;
+                      }
+                      console.log('[LessonEditor] ✅ Restored load_interaction block timing:', loadInteractionBlock);
+                    }
+                  }
+                }
+              });
+            });
             
             // Collapse all script blocks by default and fix any overlapping times
             this.collapsedScriptBlocks.clear();
@@ -3796,6 +3871,64 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Load processed content items that are linked to interactions in this lesson
+   */
+  loadProcessedContentFromInteractions() {
+    if (!this.stages || this.stages.length === 0) {
+      console.log('[LessonEditor] No stages, skipping interaction content load');
+      return;
+    }
+
+    const contentOutputIds: string[] = [];
+    
+    // Collect all contentOutputIds from interactions
+    this.stages.forEach(stage => {
+      stage.subStages.forEach(substage => {
+        if (substage.contentOutputId) {
+          contentOutputIds.push(substage.contentOutputId);
+        }
+        if (substage.interaction?.contentOutputId) {
+          contentOutputIds.push(substage.interaction.contentOutputId);
+        }
+      });
+    });
+
+    if (contentOutputIds.length === 0) {
+      console.log('[LessonEditor] No contentOutputIds found in interactions');
+      return;
+    }
+
+    console.log('[LessonEditor] Loading processed content from interactions:', contentOutputIds);
+
+    // Load each processed output
+    const loadPromises = contentOutputIds.map(id => 
+      this.http.get<any>(`${environment.apiUrl}/lesson-editor/processed-outputs/${id}`)
+        .pipe(
+          catchError(error => {
+            console.warn(`[LessonEditor] Failed to load processed output ${id}:`, error);
+            return of(null);
+          })
+        )
+        .toPromise()
+    );
+
+    Promise.all(loadPromises).then(results => {
+      const newItems = results
+        .filter(item => item !== null)
+        .map(item => item as ProcessedContentItem)
+        .filter(item => {
+          // Only add if not already in processedContentItems
+          return !this.processedContentItems.find(existing => existing.id === item.id);
+        });
+
+      if (newItems.length > 0) {
+        console.log('[LessonEditor] Adding processed content from interactions:', newItems.length);
+        this.processedContentItems.push(...newItems);
+      }
+    });
+  }
+
   viewProcessedContent(content: ProcessedContentItem) {
     console.log('[LessonEditor] View processed content:', content);
     // Fetch the full processed output data from API
@@ -3923,6 +4056,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     // If there are no unsaved changes, don't save and show a message
     if (!this.hasUnsavedChanges && this.lastSaved) {
       this.showSnackbar('No changes to save', 'info');
+      // Don't reset hasUnsavedChanges here - it's already false
       return;
     }
     console.log('[LessonEditor] Lesson ID:', this.lesson?.id, 'Type:', typeof this.lesson?.id);
@@ -3995,26 +4129,72 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
                 : null;
 
             // Convert scriptBlocks from editor format to DB format
-            const dbScriptBlocks = (substage.scriptBlocks || [])
-              .filter(block => block.type === 'teacher_talk') // Only save teacher_talk blocks
-              .map(block => ({
-                id: block.id,
-                text: block.content || '',
-                idealTimestamp: block.startTime || 0,
-                estimatedDuration: (block.endTime || block.startTime || 0) - (block.startTime || 0) || 10,
-                playbackRules: block.metadata || {},
-                // Include display configuration
-                showInSnack: block.showInSnack || false,
-                snackDuration: block.snackDuration || undefined,
-                openChatUI: block.openChatUI || false,
-                minimizeChatUI: block.minimizeChatUI || false,
-                activateFullscreen: block.activateFullscreen || false
-              }));
+            // Save ALL blocks (teacher_talk, load_interaction, pause) with their times
+            const allScriptBlocks = (substage.scriptBlocks || []).map(block => {
+              if (block.type === 'teacher_talk') {
+                return {
+                  id: block.id,
+                  type: 'teacher_talk',
+                  text: block.content || '',
+                  idealTimestamp: block.startTime || 0,
+                  estimatedDuration: (block.endTime || block.startTime || 0) - (block.startTime || 0) || 10,
+                  startTime: block.startTime || 0,
+                  endTime: block.endTime || block.startTime || 0,
+                  playbackRules: block.metadata || {},
+                  // Include display configuration
+                  showInSnack: block.showInSnack || false,
+                  snackDuration: block.snackDuration || undefined,
+                  openChatUI: block.openChatUI || false,
+                  minimizeChatUI: block.minimizeChatUI || false,
+                  activateFullscreen: block.activateFullscreen || false,
+                  autoProgressAtEnd: block.autoProgressAtEnd !== undefined ? block.autoProgressAtEnd : true
+                };
+              } else if (block.type === 'load_interaction') {
+                return {
+                  id: block.id,
+                  type: 'load_interaction',
+                  startTime: block.startTime || 0,
+                  endTime: block.endTime || block.startTime || 0,
+                  estimatedDuration: (block.endTime || block.startTime || 0) - (block.startTime || 0) || 10,
+                  autoProgressAtEnd: block.autoProgressAtEnd !== undefined ? block.autoProgressAtEnd : true
+                };
+              } else if (block.type === 'pause') {
+                return {
+                  id: block.id,
+                  type: 'pause',
+                  startTime: block.startTime || 0,
+                  endTime: block.endTime || block.startTime || 0,
+                  estimatedDuration: (block.endTime || block.startTime || 0) - (block.startTime || 0) || 10
+                };
+              }
+              return null;
+            }).filter(block => block !== null);
             
             // Separate scriptBlocks and scriptBlocksAfterInteraction based on interaction position
             const interactionIndex = (substage.scriptBlocks || []).findIndex(b => b.type === 'load_interaction');
-            const preInteractionScripts = dbScriptBlocks.slice(0, interactionIndex >= 0 ? interactionIndex : dbScriptBlocks.length);
-            const postInteractionScripts = interactionIndex >= 0 ? dbScriptBlocks.slice(interactionIndex) : [];
+            const teacherTalkBlocks = allScriptBlocks.filter(b => b.type === 'teacher_talk');
+            const preInteractionScripts = teacherTalkBlocks.filter((block, idx) => {
+              const originalIndex = (substage.scriptBlocks || []).findIndex(b => b.id === block.id);
+              return interactionIndex < 0 || originalIndex < interactionIndex;
+            });
+            const postInteractionScripts = teacherTalkBlocks.filter((block, idx) => {
+              const originalIndex = (substage.scriptBlocks || []).findIndex(b => b.id === block.id);
+              return interactionIndex >= 0 && originalIndex > interactionIndex;
+            });
+            
+            // Include load_interaction block in the interaction data if it exists
+            const loadInteractionBlock = allScriptBlocks.find(b => b.type === 'load_interaction');
+            
+            // Include load_interaction block timing in interaction config if it exists
+            if (loadInteractionBlock && interactionData) {
+              if (!interactionData.config) {
+                interactionData.config = {};
+              }
+              interactionData.config.startTime = loadInteractionBlock.startTime;
+              interactionData.config.endTime = loadInteractionBlock.endTime;
+              interactionData.config.estimatedDuration = loadInteractionBlock.estimatedDuration;
+              interactionData.config.autoProgressAtEnd = loadInteractionBlock.autoProgressAtEnd;
+            }
 
             return {
               id: substage.id,
@@ -4025,7 +4205,14 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
               scriptBlocksAfterInteraction: postInteractionScripts,
               contentOutputId: substage.contentOutputId || interactionData?.contentOutputId || null,
               interactionType: substage.interactionType || interactionData?.type || null,
-              interaction: interactionData
+              interaction: interactionData,
+              // Store load_interaction block timing separately for easy access
+              loadInteractionTiming: loadInteractionBlock ? {
+                startTime: loadInteractionBlock.startTime,
+                endTime: loadInteractionBlock.endTime,
+                estimatedDuration: loadInteractionBlock.estimatedDuration,
+                autoProgressAtEnd: loadInteractionBlock.autoProgressAtEnd
+              } : null
             };
           })
         }))
@@ -4215,8 +4402,27 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     // Save draft if there are unsaved changes
     if (this.hasUnsavedChanges) {
       console.log('[LessonEditor] 💾 Saving draft before submission (has unsaved changes)...');
-      await this.saveDraft();
-      // Wait a moment for save to complete
+      const hadUnsavedChangesBeforeSave = this.hasUnsavedChanges;
+      const hadDraftBeforeSave = this.hasDraft;
+      const hadCurrentDraftIdBeforeSave = !!this.currentDraftId;
+      
+      // Call executeSaveDraft directly to ensure it actually saves
+      await this.executeSaveDraft();
+      
+      // Wait for save to complete
+      let waitCount = 0;
+      while (this.saving && waitCount < 50) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        waitCount++;
+      }
+      
+      // If save didn't actually complete (no draft ID and still has unsaved changes was false), restore state
+      if (hadUnsavedChangesBeforeSave && !this.currentDraftId && !this.hasDraft) {
+        console.log('[LessonEditor] ⚠️ Save did not complete, restoring hasUnsavedChanges');
+        this.hasUnsavedChanges = true;
+      }
+      
+      // Wait a moment for any async operations to complete
       await new Promise(resolve => setTimeout(resolve, 500));
       
       // Refresh draft status again after save
@@ -4224,11 +4430,19 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     }
 
     // Check if we have a draft ID now (either from save or from refresh)
+    // Also check if refreshPendingDraftStatus found a draft but didn't set currentDraftId
+    if (!this.currentDraftId && this.hasDraft) {
+      console.log('[LessonEditor] ⚠️ Has draft but no currentDraftId - refreshing again...');
+      await this.refreshPendingDraftStatus();
+    }
+    
     if (!this.currentDraftId) {
       console.log('[LessonEditor] ❌ Cannot submit - no draft available');
       console.log('[LessonEditor] ❌ hasDraft:', this.hasDraft);
       console.log('[LessonEditor] ❌ hasUnsavedChanges:', this.hasUnsavedChanges);
+      console.log('[LessonEditor] ❌ currentDraftId:', this.currentDraftId);
       this.showSnackbar('No draft to publish. Please save your changes first.', 'error');
+      // Don't reset hasUnsavedChanges here - let the user save manually
       return;
     }
 
@@ -4714,24 +4928,25 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     this.snackbarType = type;
     this.snackbarVisible = true;
     
-    // Force change detection
-    this.cdr.detectChanges();
+    console.log('[LessonEditor] 🍪 Snackbar state after:', {
+      visible: this.snackbarVisible,
+      message: this.snackbarMessage,
+      type: this.snackbarType
+    });
+    
+    // Force change detection using setTimeout to ensure it happens in next tick
+    setTimeout(() => {
+      this.cdr.detectChanges();
+      console.log('[LessonEditor] 🍪 Change detection triggered for snackbar');
+    }, 0);
     
     // Auto-hide after 5 seconds for success/info, 7 seconds for error
     const duration = type === 'error' ? 7000 : 5000;
     this.snackbarTimeout = setTimeout(() => {
       this.snackbarVisible = false;
       this.cdr.detectChanges();
+      console.log('[LessonEditor] 🍪 Snackbar auto-hidden');
     }, duration);
-    
-    // Auto-hide after 3 seconds
-    if (this.snackbarTimeout) {
-      clearTimeout(this.snackbarTimeout);
-    }
-    this.snackbarTimeout = setTimeout(() => {
-      this.snackbarVisible = false;
-      this.cdr.detectChanges();
-    }, 3000);
   }
 
   canSubmit(): boolean {
@@ -4741,7 +4956,6 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     }
     // Can submit if there are unsaved changes or if there's a draft that hasn't been submitted
     return this.hasUnsavedChanges || (this.hasDraft && !this.hasBeenSubmitted);
-    return !!(this.lesson?.title && this.stages.length > 0);
   }
 
   // Sidebar
@@ -4955,7 +5169,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       type: 'teacher_talk',
       content: '',
       startTime: nextStartTime,
-      endTime: nextStartTime + 10
+      endTime: nextStartTime + 10,
+      autoProgressAtEnd: true // Default to auto-progress enabled
     };
     substage.scriptBlocks.push(newBlock);
     this.markAsChanged();
@@ -5261,9 +5476,343 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       this.loadProcessedOutputPreview(String(substage.interaction.contentOutputId), substage.interaction.type);
     }
 
+    // Check if this is a media interaction and update script block timing if needed
+    console.log('[LessonEditor] Checking for media interaction:', {
+      context: this.processedContentSelectionContext,
+      interactionType: substage.interaction?.type,
+      contentOutputId: normalizedId
+    });
+    
+    if (this.processedContentSelectionContext === 'interaction' && substage.interaction?.type === 'uploaded-media') {
+      console.log('[LessonEditor] Media interaction detected, checking script block timing...');
+      this.checkAndUpdateScriptBlockTimingForMedia(normalizedId, substage).catch(error => {
+        console.error('[LessonEditor] Error in checkAndUpdateScriptBlockTimingForMedia:', error);
+      });
+    } else {
+      console.log('[LessonEditor] Not a media interaction or wrong context:', {
+        isInteractionContext: this.processedContentSelectionContext === 'interaction',
+        interactionType: substage.interaction?.type
+      });
+    }
+
     this.markAsChanged();
     this.showSnackbar('Processed content linked to substage', 'success');
     this.closeProcessedContentPicker();
+  }
+
+  /**
+   * Check if video duration exceeds script block time and update if needed
+   */
+  async checkAndUpdateScriptBlockTimingForMedia(contentOutputId: string, substage: any) {
+    try {
+      console.log('[LessonEditor] 🎬 Starting script block timing check for media:', contentOutputId);
+      
+      // Fetch processed output to get video duration
+      const processedOutput = await firstValueFrom(this.http.get<any>(`${environment.apiUrl}/lesson-editor/processed-outputs/${contentOutputId}`));
+      
+      console.log('[LessonEditor] Processed output received:', {
+        hasOutputData: !!processedOutput?.outputData,
+        outputType: processedOutput?.outputType
+      });
+      
+      if (!processedOutput?.outputData) {
+        console.log('[LessonEditor] No output data found for processed content');
+        return;
+      }
+
+      const outputData = processedOutput.outputData;
+      const mediaType = outputData.mediaFileType || outputData.mediaType;
+      
+      console.log('[LessonEditor] Media type detected:', mediaType);
+      
+      // Only proceed if it's a video or audio file
+      if (mediaType !== 'video' && mediaType !== 'audio') {
+        console.log('[LessonEditor] Not a video or audio file, skipping timing update');
+        return;
+      }
+
+      // Get video duration from metadata or outputData
+      // Check multiple possible locations for duration (backend stores it as mediaFileDuration)
+      let videoDuration = outputData.mediaFileDuration 
+        || outputData.duration 
+        || outputData.metadata?.duration 
+        || outputData.videoDuration 
+        || outputData.mediaDuration
+        || outputData.metadata?.videoDuration
+        || outputData.metadata?.mediaDuration;
+      
+      console.log('[LessonEditor] Video duration from metadata:', videoDuration, 'seconds');
+      
+      // If duration is not in outputData, try to get it from the media file
+      if (!videoDuration && (outputData.mediaFileUrl || outputData.filePath)) {
+        // For MinIO/S3 URLs, use the backend proxy endpoint
+        let mediaUrl = outputData.mediaFileUrl;
+        if (mediaUrl && (mediaUrl.startsWith('http://localhost:9000') || mediaUrl.startsWith('https://'))) {
+          // Use backend proxy for MinIO/S3 files
+          mediaUrl = `${environment.apiUrl}/content-sources/processed-content/${contentOutputId}/file`;
+        } else if (outputData.filePath && !mediaUrl) {
+          // Fallback to filePath if mediaFileUrl is not available
+          mediaUrl = `${environment.apiUrl}/content-sources/processed-content/${contentOutputId}/file`;
+        }
+        
+        if (mediaUrl) {
+          videoDuration = await this.getVideoDurationFromUrl(mediaUrl);
+        }
+      }
+
+      if (!videoDuration || videoDuration <= 0) {
+        console.log('[LessonEditor] Could not determine video duration');
+        return;
+      }
+
+      // Find the load_interaction script block for this sub-stage
+      const scriptBlocks = substage.scriptBlocks || [];
+      console.log('[LessonEditor] Script blocks found:', scriptBlocks.length, scriptBlocks.map((b: any) => b.type));
+      
+      const loadInteractionBlock = scriptBlocks.find((block: any) => block.type === 'load_interaction');
+      
+      if (!loadInteractionBlock) {
+        console.log('[LessonEditor] ⚠️ No load_interaction script block found - cannot update timing');
+        return;
+      }
+      
+      console.log('[LessonEditor] Found load_interaction block:', {
+        startTime: loadInteractionBlock.startTime,
+        endTime: loadInteractionBlock.endTime
+      });
+
+      // Check if video duration exceeds the script block's endTime
+      const currentEndTime = loadInteractionBlock.endTime || 0;
+      const videoDurationSeconds = Math.ceil(videoDuration); // Round up to nearest second
+      
+      console.log('[LessonEditor] Comparing durations:', {
+        videoDuration: videoDurationSeconds,
+        currentEndTime: currentEndTime,
+        needsUpdate: videoDurationSeconds > currentEndTime
+      });
+
+      if (videoDurationSeconds > currentEndTime) {
+        // Update the endTime to accommodate the video
+        const oldEndTime = loadInteractionBlock.endTime;
+        loadInteractionBlock.endTime = videoDurationSeconds;
+        
+        // Also update startTime of subsequent blocks if needed to prevent overlap
+        const currentBlockIndex = scriptBlocks.indexOf(loadInteractionBlock);
+        if (currentBlockIndex < scriptBlocks.length - 1) {
+          const nextBlock = scriptBlocks[currentBlockIndex + 1];
+          if (nextBlock.startTime <= loadInteractionBlock.endTime) {
+            nextBlock.startTime = loadInteractionBlock.endTime;
+          }
+        }
+
+        this.markAsChanged();
+        
+        const timeAdded = videoDurationSeconds - oldEndTime;
+        const timeAddedFormatted = this.formatTime(timeAdded);
+        this.showSnackbar(
+          `Script block time updated: Added ${timeAddedFormatted} to accommodate video duration (${this.formatTime(videoDurationSeconds)})`,
+          'info'
+        );
+        
+        console.log(`[LessonEditor] ✅ Updated script block endTime from ${this.formatTime(oldEndTime)} to ${this.formatTime(videoDurationSeconds)} for video duration`);
+      }
+    } catch (error: any) {
+      console.error('[LessonEditor] Error checking/updating script block timing:', error);
+      // Don't show error to user as this is a background operation
+    }
+  }
+
+  /**
+   * Validate and correct script block timing for media interactions
+   * Called when user manually edits the endTime of a load_interaction block
+   * Returns the corrected endTime if adjustment was needed, otherwise returns null
+   */
+  async validateAndCorrectMediaInteractionTiming(block: ScriptBlock, newEndTime: number, inputElement?: HTMLInputElement): Promise<number | null> {
+    const substage = this.getSelectedSubStage();
+    if (!substage || !substage.interaction) {
+      console.log('[LessonEditor] ⚠️ No substage or interaction found');
+      return null;
+    }
+    
+    console.log('[LessonEditor] 🔍 Checking interaction type:', substage.interaction.type);
+    console.log('[LessonEditor] 🔍 Checking interaction category:', substage.interaction.category);
+    
+    // Only check for uploaded-media interactions (check both type and category)
+    const isMediaInteraction = substage.interaction.type === 'uploaded-media' 
+      || substage.interaction.category === 'uploaded-media'
+      || (substage.interaction.type && substage.interaction.type.includes('media'));
+    
+    if (!isMediaInteraction) {
+      console.log('[LessonEditor] ⚠️ Not an uploaded-media interaction, skipping validation. Type:', substage.interaction.type, 'Category:', substage.interaction.category);
+      return null;
+    }
+    
+    // Check multiple locations for contentOutputId (including nested config fields)
+    const config = substage.interaction.config || {};
+    const contentOutputId = substage.interaction.contentOutputId 
+      || substage.contentOutputId 
+      || config.contentOutputId
+      || config.testMediaContentId
+      || config.mediaContentId
+      || (typeof config === 'object' && config !== null ? (config as any).contentOutputId : null)
+      || null;
+    
+    console.log('[LessonEditor] 🔍 Looking for contentOutputId:', {
+      'interaction.contentOutputId': substage.interaction.contentOutputId,
+      'substage.contentOutputId': substage.contentOutputId,
+      'interaction.config': config,
+      'config.contentOutputId': config?.contentOutputId,
+      'config.testMediaContentId': config?.testMediaContentId,
+      'resolved': contentOutputId
+    });
+    
+    if (!contentOutputId) {
+      console.log('[LessonEditor] ⚠️ No contentOutputId found - cannot validate media duration');
+      return null;
+    }
+    
+    console.log('[LessonEditor] ✅ Found contentOutputId:', contentOutputId);
+    
+    try {
+      console.log('[LessonEditor] 🔍 Validating media interaction timing...');
+      
+      // Fetch processed output to get video duration
+      const processedOutput = await firstValueFrom(this.http.get<any>(`${environment.apiUrl}/lesson-editor/processed-outputs/${contentOutputId}`));
+      
+      if (!processedOutput?.outputData) {
+        return null;
+      }
+      
+      const outputData = processedOutput.outputData;
+      const mediaType = outputData.mediaFileType || outputData.mediaType;
+      
+      if (mediaType !== 'video' && mediaType !== 'audio') {
+        return null;
+      }
+      
+      // Get video duration - check multiple possible locations (prioritize top-level duration)
+      let videoDuration: number | null = outputData.duration 
+        || outputData.mediaFileDuration 
+        || outputData.mediaMetadata?.duration
+        || outputData.metadata?.duration 
+        || outputData.videoDuration 
+        || outputData.mediaDuration
+        || outputData.metadata?.videoDuration
+        || outputData.metadata?.mediaDuration
+        || null;
+      
+      console.log('[LessonEditor] 🎬 Video duration from outputData:', {
+        duration: outputData.duration,
+        mediaFileDuration: outputData.mediaFileDuration,
+        mediaMetadataDuration: outputData.mediaMetadata?.duration,
+        metadataDuration: outputData.metadata?.duration,
+        resolved: videoDuration,
+        fullOutputData: JSON.stringify(outputData, null, 2)
+      });
+      
+      // If duration not in metadata, try to load from file
+      if (!videoDuration && (outputData.mediaFileUrl || outputData.filePath)) {
+        let mediaUrl = outputData.mediaFileUrl;
+        if (mediaUrl && (mediaUrl.startsWith('http://localhost:9000') || mediaUrl.startsWith('https://'))) {
+          mediaUrl = `${environment.apiUrl}/content-sources/processed-content/${contentOutputId}/file`;
+        } else if (outputData.filePath && !mediaUrl) {
+          mediaUrl = `${environment.apiUrl}/content-sources/processed-content/${contentOutputId}/file`;
+        }
+        
+        if (mediaUrl) {
+          const fetchedDuration = await this.getVideoDurationFromUrl(mediaUrl);
+          if (fetchedDuration !== null && fetchedDuration !== undefined) {
+            videoDuration = fetchedDuration;
+          }
+        }
+      }
+      
+      if (!videoDuration || videoDuration <= 0) {
+        return null;
+      }
+      
+      const videoDurationSeconds = Math.ceil(videoDuration);
+      
+      // Calculate the script block duration (endTime - startTime)
+      const scriptBlockDuration = newEndTime - block.startTime;
+      
+      console.log('[LessonEditor] 🎬 Duration check:', {
+        'newEndTime': newEndTime,
+        'block.startTime': block.startTime,
+        'scriptBlockDuration': scriptBlockDuration,
+        'videoDurationSeconds': videoDurationSeconds,
+        'needsCorrection': scriptBlockDuration < videoDurationSeconds
+      });
+      
+      // If script block duration is less than video duration, correct it
+      if (scriptBlockDuration < videoDurationSeconds) {
+        console.log(`[LessonEditor] ⚠️ Script block duration (${scriptBlockDuration}s) is less than video duration (${videoDurationSeconds}s), correcting...`);
+        
+        // Ensure minimum duration is maintained (5 seconds) and video duration is met
+        // The endTime needs to be at least (startTime + videoDuration), but also at least (startTime + 5)
+        const minEndTime = Math.max(block.startTime + videoDurationSeconds, block.startTime + 5);
+        
+        // Update subsequent blocks to prevent overlap
+        const scriptBlocks = substage.scriptBlocks || [];
+        const currentBlockIndex = scriptBlocks.indexOf(block);
+        if (currentBlockIndex < scriptBlocks.length - 1) {
+          const nextBlock = scriptBlocks[currentBlockIndex + 1];
+          if (nextBlock.startTime <= minEndTime) {
+            nextBlock.startTime = minEndTime;
+          }
+        }
+        
+        const timeAdded = minEndTime - newEndTime;
+        const timeAddedFormatted = this.formatTime(timeAdded);
+        this.showSnackbar(
+          `Script block time corrected: Added ${timeAddedFormatted} to accommodate video duration (${this.formatTime(minEndTime)})`,
+          'info'
+        );
+        
+        // Force change detection to show snackbar
+        this.cdr.detectChanges();
+        
+        return minEndTime; // Return the corrected endTime
+      }
+      
+      return null; // No correction needed
+    } catch (error: any) {
+      console.error('[LessonEditor] Error validating media interaction timing:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get video duration from URL by loading the media element
+   */
+  private async getVideoDurationFromUrl(url: string): Promise<number | null> {
+    return new Promise((resolve) => {
+      try {
+        // Create a temporary video element
+        const video = document.createElement('video');
+        video.preload = 'metadata';
+        video.src = url;
+        
+        video.addEventListener('loadedmetadata', () => {
+          const duration = video.duration;
+          video.remove();
+          resolve(duration);
+        });
+        
+        video.addEventListener('error', () => {
+          video.remove();
+          resolve(null);
+        });
+        
+        // Set a timeout in case the video doesn't load
+        setTimeout(() => {
+          video.remove();
+          resolve(null);
+        }, 5000);
+      } catch (error) {
+        resolve(null);
+      }
+    });
   }
 
   get processedContentPickerList(): ProcessedContentItem[] {
@@ -5774,8 +6323,20 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 
-  updateTimeFromString(event: any, block: ScriptBlock, field: 'startTime' | 'endTime') {
+  /**
+   * Parse time string (MM:SS) to seconds
+   */
+  parseTimeToSeconds(timeString: string): number {
+    const parts = timeString.split(':');
+    if (parts.length !== 2) return 0;
+    const minutes = parseInt(parts[0], 10) || 0;
+    const seconds = parseInt(parts[1], 10) || 0;
+    return minutes * 60 + seconds;
+  }
+
+  async updateTimeFromString(event: any, block: ScriptBlock, field: 'startTime' | 'endTime') {
     const input = event.target.value.trim();
+    const inputElement = event.target; // Store reference to input element
     
     // Parse MM:SS format
     const timeRegex = /^(\d{1,2}):([0-5]?\d)$/;
@@ -5793,17 +6354,92 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
         return;
       }
 
+      // Store original values for validation
+      const originalStartTime = block.startTime;
+      const originalEndTime = block.endTime;
+      const originalInputValue = totalSeconds; // Store original input before any adjustments
+      let newStartTime = field === 'startTime' ? totalSeconds : originalStartTime;
+      let newEndTime = field === 'endTime' ? totalSeconds : originalEndTime;
+      let finalValue = totalSeconds; // Use this for the final value to set
+
+      // For load_interaction blocks with media, validate against video duration FIRST
+      // This must happen BEFORE other validations so we check against the original input value
+      if (field === 'endTime' && block.type === 'load_interaction') {
+        const substage = this.getSelectedSubStage();
+        console.log('[LessonEditor] 🎬 Checking media interaction timing FIRST (before other validations)');
+        console.log('[LessonEditor] 🎬 Original input value:', originalInputValue, 'Current block.endTime:', block.endTime);
+        console.log('[LessonEditor] 🎬 Substage:', substage ? 'found' : 'not found');
+        console.log('[LessonEditor] 🎬 Interaction:', substage?.interaction ? JSON.stringify({ type: substage.interaction.type, category: substage.interaction.category, contentOutputId: substage.interaction.contentOutputId }) : 'not found');
+        
+        const correctedEndTime = await this.validateAndCorrectMediaInteractionTiming(block, originalInputValue, inputElement);
+        if (correctedEndTime !== null && correctedEndTime !== undefined && correctedEndTime !== originalInputValue) {
+          console.log('[LessonEditor] ✅ Media validation corrected endTime from', originalInputValue, 'to', correctedEndTime);
+          newEndTime = correctedEndTime;
+          finalValue = correctedEndTime;
+          block.endTime = correctedEndTime; // Update block immediately
+          event.target.value = this.formatTime(correctedEndTime);
+          this.markAsChanged();
+          this.cdr.detectChanges();
+          // Don't continue with other validations since we've already corrected
+          return;
+        } else if (correctedEndTime === null || correctedEndTime === undefined) {
+          console.log('[LessonEditor] ℹ️ Media validation returned null/undefined - not a media interaction or no correction needed');
+        } else {
+          console.log('[LessonEditor] ✅ Media validation passed, no correction needed (correctedEndTime === originalInputValue)');
+        }
+      }
+
+      // Validation 1: Ensure endTime >= startTime
+      if (newEndTime < newStartTime) {
+        if (field === 'endTime') {
+          // If editing endTime, set it to startTime + minimum duration
+          newEndTime = newStartTime + 5;
+          finalValue = newEndTime;
+        } else {
+          // If editing startTime, set it to endTime - minimum duration
+          newStartTime = Math.max(0, newEndTime - 5);
+          finalValue = newStartTime;
+        }
+        event.target.value = this.formatTime(finalValue);
+        this.showSnackbar('End time must be after start time. Adjusted to maintain minimum duration.', 'error');
+        this.markAsChanged();
+        this.cdr.detectChanges();
+      }
+
+      // Validation 2: Ensure minimum 5 second duration
+      const duration = newEndTime - newStartTime;
+      if (duration < 5) {
+        if (field === 'endTime') {
+          // Extend endTime to meet minimum duration
+          newEndTime = newStartTime + 5;
+          finalValue = newEndTime;
+        } else {
+          // Adjust startTime to meet minimum duration
+          newStartTime = Math.max(0, newEndTime - 5);
+          finalValue = newStartTime;
+        }
+        event.target.value = this.formatTime(finalValue);
+        console.log('[LessonEditor] ⚠️ Duration < 5 seconds, showing snackbar...');
+        this.showSnackbar('Script blocks must be at least 5 seconds long. Time adjusted.', 'error');
+        this.markAsChanged();
+        // Force change detection to show snackbar
+        this.cdr.detectChanges();
+      }
+
+      // Update the block values
+      block.startTime = newStartTime;
+      block.endTime = newEndTime;
+
       // Check for overlaps if updating startTime
       if (field === 'startTime') {
-        const adjustedTime = this.adjustStartTimeForOverlap(block, totalSeconds, substage.scriptBlocks);
-        if (adjustedTime !== totalSeconds) {
-          (block as any)[field] = adjustedTime;
+        const adjustedTime = this.adjustStartTimeForOverlap(block, finalValue, substage.scriptBlocks);
+        if (adjustedTime !== finalValue) {
+          block.startTime = adjustedTime;
+          block.endTime = Math.max(block.endTime, block.startTime + 5); // Ensure minimum duration
           event.target.value = this.formatTime(adjustedTime);
           this.markAsChanged();
-          // Show snackbar immediately
           this.showSnackbar('Script start time updated. Script block periods cannot overlap', 'info');
-        } else {
-          (block as any)[field] = totalSeconds;
+          return;
         }
       } else if (field === 'endTime') {
         // Check if endTime overlaps with next block of the same type's startTime
@@ -5818,25 +6454,25 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
             }
           }
           
-          if (nextSameTypeBlock && totalSeconds > nextSameTypeBlock.startTime) {
+          if (nextSameTypeBlock && block.endTime > nextSameTypeBlock.startTime) {
             // End time would overlap with next block of same type, adjust to just before it starts
-            (block as any)[field] = nextSameTypeBlock.startTime;
-            event.target.value = this.formatTime(nextSameTypeBlock.startTime);
+            block.endTime = nextSameTypeBlock.startTime;
+            // Re-validate minimum duration after overlap adjustment
+            if (block.endTime - block.startTime < 5) {
+              block.startTime = Math.max(0, block.endTime - 5);
+              this.showSnackbar('Script end time updated. Start time adjusted to maintain minimum 5 second duration.', 'info');
+            } else {
+              this.showSnackbar('Script end time updated. Script block periods cannot overlap', 'info');
+            }
+            event.target.value = this.formatTime(block.endTime);
             this.markAsChanged();
-            // Show snackbar immediately
-            this.showSnackbar('Script end time updated. Script block periods cannot overlap', 'info');
-          } else {
-            (block as any)[field] = totalSeconds;
+            return;
           }
-        } else {
-          (block as any)[field] = totalSeconds;
         }
-      } else {
-        (block as any)[field] = totalSeconds;
       }
       
       this.markAsChanged();
-      console.log(`[LessonEditor] ⏱️ Time updated: ${input} = ${totalSeconds}s`);
+      console.log(`[LessonEditor] ⏱️ Time updated: ${input} = ${finalValue}s`);
     } else {
       // Invalid format - revert to current value
       console.warn(`[LessonEditor] ⚠️ Invalid time format: ${input}. Use MM:SS (e.g., 1:30)`);
@@ -6101,6 +6737,10 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   /**
    * Get source content items used in this lesson
+   * Includes content sources from:
+   * 1. Processed content items (content sources that have been processed)
+   * 2. Directly linked content sources (e.g., iframe guide URLs that may not have processed content yet)
+   * 3. Content sources linked to interactions via contentOutputId
    */
   getSourceContentForLesson(): any[] {
     // Get unique source content items from both:
@@ -6125,6 +6765,32 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
         seenIds.add(source.id);
       }
     });
+    
+    // Also check interactions for contentOutputId and find their content sources
+    if (this.stages && this.stages.length > 0) {
+      this.stages.forEach(stage => {
+        stage.subStages.forEach(substage => {
+          // Check if substage has a contentOutputId
+          if (substage.contentOutputId && !seenIds.has(substage.contentOutputId)) {
+            const processedItem = this.processedContentItems.find(item => item.id === substage.contentOutputId);
+            if (processedItem?.contentSource && !seenIds.has(processedItem.contentSource.id)) {
+              sources.push(processedItem.contentSource);
+              seenIds.add(processedItem.contentSource.id);
+            }
+          }
+
+          // Check if interaction has a contentOutputId
+          if (substage.interaction?.contentOutputId && !seenIds.has(substage.interaction.contentOutputId)) {
+            const contentOutputId = substage.interaction.contentOutputId;
+            const processedItem = this.processedContentItems.find(item => item.id === contentOutputId);
+            if (processedItem?.contentSource && !seenIds.has(processedItem.contentSource.id)) {
+              sources.push(processedItem.contentSource);
+              seenIds.add(processedItem.contentSource.id);
+            }
+          }
+        });
+      });
+    }
     
     return sources;
   }

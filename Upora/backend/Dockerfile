@@ -20,6 +20,9 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# Install ffmpeg (includes ffprobe) for media metadata extraction
+RUN apk add --no-cache ffmpeg
+
 # Copy package files
 COPY package*.json ./
 

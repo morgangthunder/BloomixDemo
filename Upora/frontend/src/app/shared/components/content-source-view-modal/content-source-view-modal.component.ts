@@ -26,6 +26,7 @@ interface ProcessedOutput {
   outputName: string;
   outputType: string;
   contentSourceId: string;
+  outputData?: any;
 }
 
 @Component({
@@ -115,6 +116,9 @@ interface ProcessedOutput {
                   <span class="output-icon">🎯</span>
                   <span class="output-name">{{output.outputName}}</span>
                   <span class="output-type">{{output.outputType}}</span>
+                  <span class="output-duration" *ngIf="getOutputDuration(output) !== null">
+                    ⏱️ {{formatDuration(getOutputDuration(output))}}
+                  </span>
                 </div>
               </div>
               <p class="hint warning" *ngIf="processedOutputs.length > 0">
@@ -610,6 +614,23 @@ export class ContentSourceViewModalComponent implements OnInit, OnChanges {
   ngOnInit() {
     if (this.isOpen && this.contentSource) {
       this.loadProcessedOutputs();
+      // Lock body scroll when modal opens - prevent any scrolling
+      const originalOverflow = document.body.style.overflow;
+      const originalPosition = document.body.style.position;
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+      document.body.style.top = `-${window.scrollY}px`;
+      
+      // Store original values for restoration
+      (document.body as any).__modalOriginalOverflow = originalOverflow;
+      (document.body as any).__modalOriginalPosition = originalPosition;
+      (document.body as any).__modalScrollY = window.scrollY;
+      
+      const header = document.querySelector('app-header');
+      if (header) {
+        (header as HTMLElement).style.display = 'none';
+      }
     }
   }
 
@@ -617,18 +638,26 @@ export class ContentSourceViewModalComponent implements OnInit, OnChanges {
     if (changes['isOpen'] && this.isOpen && this.contentSource) {
       this.loadProcessedOutputs();
     }
-    if (changes['contentSource'] && this.contentSource) {
+    if (changes['contentSource'] && this.contentSource && this.isOpen) {
       this.loadProcessedOutputs();
     }
   }
 
   async loadProcessedOutputs() {
-    if (!this.contentSource?.id) return;
+    if (!this.contentSource?.id) {
+      console.log('[ContentSourceView] No content source ID, skipping load');
+      this.processedOutputs = [];
+      return;
+    }
+
+    console.log('[ContentSourceView] Loading processed outputs for content source:', this.contentSource.id);
 
     try {
       const outputs = await this.http.get<any[]>(
         `${environment.apiUrl}/lesson-editor/processed-outputs/by-content-source?contentSourceId=${this.contentSource.id}`
       ).toPromise();
+
+      console.log('[ContentSourceView] Raw processed outputs from API:', outputs);
 
       // Map to ProcessedOutput format
       this.processedOutputs = (outputs || []).map((output: any) => {
@@ -638,18 +667,129 @@ export class ContentSourceViewModalComponent implements OnInit, OnChanges {
           const sourceTitle = this.contentSource.title || this.contentSource.sourceUrl || 'Content';
           displayName = `${sourceTitle} - processed content`;
         }
-        return {
+        // Get outputData from various possible locations
+        const outputData = output.outputData 
+          || output.data 
+          || (output as any).processedOutputData
+          || {};
+        
+        const mapped = {
           id: output.id,
           outputName: displayName || output.title || output.name || 'Untitled',
           outputType: output.outputType || output.type || 'unknown',
           contentSourceId: output.contentSourceId || this.contentSource?.id,
+          outputData: outputData, // Include full outputData for duration access
         };
+        
+        console.log('[ContentSourceView] Output mapping details:', {
+          rawOutput: output,
+          outputData: outputData,
+          outputDataKeys: Object.keys(outputData),
+          hasDuration: !!(outputData.duration || outputData.mediaFileDuration)
+        });
+        console.log('[ContentSourceView] Mapped processed output:', {
+          id: mapped.id,
+          outputName: mapped.outputName,
+          hasOutputData: !!mapped.outputData,
+          outputDataKeys: mapped.outputData ? Object.keys(mapped.outputData) : [],
+          duration: this.getOutputDuration(mapped)
+        });
+        return mapped;
       });
-      console.log('[ContentSourceView] Loaded processed outputs:', this.processedOutputs.length);
+      console.log('[ContentSourceView] ✅ Loaded processed outputs:', this.processedOutputs.length);
+      this.processedOutputs.forEach((output, idx) => {
+        console.log(`[ContentSourceView]   Output ${idx + 1}:`, {
+          id: output.id,
+          name: output.outputName,
+          duration: this.getOutputDuration(output)
+        });
+      });
     } catch (error) {
-      console.error('[ContentSourceView] Failed to load processed outputs:', error);
+      console.error('[ContentSourceView] ❌ Failed to load processed outputs:', error);
       this.processedOutputs = [];
     }
+  }
+
+  getOutputDuration(output: ProcessedOutput): number | null {
+    if (!output) {
+      console.log('[ContentSourceView] No output for duration check');
+      return null;
+    }
+    
+    // First check if duration is at top level of output (from entity)
+    if ((output as any).duration) {
+      const topLevelDuration = (output as any).duration;
+      // If it's a string like "PT1M30S", parse it, otherwise try to convert to number
+      let duration: number | null = null;
+      if (typeof topLevelDuration === 'number') {
+        duration = topLevelDuration;
+      } else if (typeof topLevelDuration === 'string') {
+        // Try to parse ISO 8601 duration format (PT1M30S) or just a number string
+        const match = topLevelDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+        if (match) {
+          const hours = parseInt(match[1] || '0', 10);
+          const minutes = parseInt(match[2] || '0', 10);
+          const seconds = parseInt(match[3] || '0', 10);
+          duration = hours * 3600 + minutes * 60 + seconds;
+        } else {
+          const parsed = parseFloat(topLevelDuration);
+          if (!isNaN(parsed)) {
+            duration = parsed;
+          }
+        }
+      }
+      if (duration !== null && duration > 0) {
+        console.log('[ContentSourceView] ✅ Found duration at top level:', duration);
+        return duration;
+      }
+    }
+    
+    // Then check outputData
+    if (!output.outputData) {
+      console.log('[ContentSourceView] ⚠️ No outputData for duration check');
+      return null;
+    }
+    
+    const data = output.outputData;
+    
+    // Check all possible locations for duration
+    const duration = data.duration 
+      || data.mediaFileDuration 
+      || data.mediaMetadata?.duration
+      || data.metadata?.duration
+      || data.videoDuration
+      || data.mediaDuration
+      || (data.mediaMetadata && typeof data.mediaMetadata === 'object' ? data.mediaMetadata.duration : null)
+      || null;
+    
+    console.log('[ContentSourceView] 🔍 Duration check for output:', {
+      outputId: output.id,
+      outputName: output.outputName,
+      hasOutputData: !!data,
+      dataKeys: Object.keys(data || {}),
+      duration: duration,
+      topLevelDuration: (output as any).duration,
+      dataDuration: data.duration,
+      dataMediaFileDuration: data.mediaFileDuration,
+      dataMediaMetadata: data.mediaMetadata,
+      fullOutputData: JSON.stringify(data, null, 2)
+    });
+    
+    if (!duration) {
+      console.warn('[ContentSourceView] ⚠️ No duration found in outputData. Available keys:', Object.keys(data || {}));
+    }
+    
+    return duration;
+  }
+
+  formatDuration(seconds: number | null): string {
+    if (!seconds || seconds <= 0) return '';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    if (mins > 0) {
+      return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+    }
+    return `${secs}s`;
   }
 
   formatDate(dateString: string): string {
@@ -670,7 +810,9 @@ export class ContentSourceViewModalComponent implements OnInit, OnChanges {
   }
 
   close() {
+    console.log('[ContentSourceView] Closing modal');
     this.showDeleteConfirm = false;
+    // Emit close event - parent will handle body scroll and header
     this.closed.emit();
   }
 

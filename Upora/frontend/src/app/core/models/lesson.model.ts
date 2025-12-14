@@ -4,6 +4,7 @@ export interface ScriptBlock {
   content: string;
   startTime: number; // in seconds
   endTime: number; // in seconds
+  autoProgressAtEnd?: boolean; // Auto-progress to next sub-stage when interaction time ends (default: true)
 }
 
 export interface SubStage {

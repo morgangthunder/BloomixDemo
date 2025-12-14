@@ -81,11 +81,15 @@ export class MediaMetadataService {
         }
       }
 
-      this.logger.log(`Extracted metadata for ${mediaType}: duration=${duration}s, size=${fileSize} bytes`);
+      this.logger.log(`✅ Extracted metadata for ${mediaType}: duration=${duration}s, size=${fileSize} bytes`);
+      if (!duration) {
+        this.logger.warn(`⚠️ Duration not found in metadata for ${mediaType} file: ${filePath}`);
+      }
       return metadata;
     } catch (error: any) {
       // ffprobe not available or failed - return basic metadata
-      this.logger.warn(`ffprobe not available or failed: ${error.message}. Using basic metadata.`);
+      this.logger.warn(`⚠️ ffprobe not available or failed: ${error.message}. Using basic metadata.`);
+      this.logger.warn(`⚠️ Duration extraction failed. Install ffmpeg/ffprobe for duration support.`);
       return {
         fileSize,
         // Duration and other metadata will be undefined

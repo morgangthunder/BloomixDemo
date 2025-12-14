@@ -1412,7 +1412,16 @@ export class ApprovalQueueComponent implements OnInit, AfterViewInit {
   }
 
   async approveContent(id: string) {
-    if (!confirm('Approve this content source? It will be indexed in Weaviate for semantic search.')) {
+    // Find the content source to check its type
+    const source = this.pendingContent.find((s: any) => s.id === id);
+    const isMediaContent = source?.type === 'media' || source?.filePath?.match(/\.(mp4|webm|ogg|mp3|wav|m4a)$/i);
+    
+    // Conditional message based on content type
+    const confirmMessage = isMediaContent 
+      ? 'Approve this media content? It will be processed and metadata will be indexed in Weaviate for semantic search.'
+      : 'Approve this content source? It will be indexed in Weaviate for semantic search.';
+    
+    if (!confirm(confirmMessage)) {
       return;
     }
 
@@ -1420,7 +1429,13 @@ export class ApprovalQueueComponent implements OnInit, AfterViewInit {
     try {
       const approved = await this.contentSourceService.approveContent(id);
       console.log('[ApprovalQueue] Content approved:', approved);
-      alert(`✅ Content approved and indexed in Weaviate!`);
+      
+      // Conditional success message
+      const successMessage = isMediaContent
+        ? `✅ Media content approved! Metadata indexed in Weaviate.`
+        : `✅ Content approved and indexed in Weaviate!`;
+      
+      alert(successMessage);
       await this.loadPendingContent();
     } catch (error) {
       console.error('[ApprovalQueue] Failed to approve content:', error);
