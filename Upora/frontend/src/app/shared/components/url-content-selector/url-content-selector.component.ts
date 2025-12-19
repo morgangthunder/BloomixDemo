@@ -374,6 +374,7 @@ interface ProcessedUrlContent {
 export class UrlContentSelectorComponent implements OnInit, OnChanges {
   @Input() isOpen = false;
   @Input() selectedContentId: string | null = null;
+  @Input() filterVideoUrls = false; // If true, only show YouTube/Vimeo URLs
   @Output() close = new EventEmitter<void>();
   @Output() contentSelected = new EventEmitter<string>();
 
@@ -410,9 +411,21 @@ export class UrlContentSelectorComponent implements OnInit, OnChanges {
       );
 
       // Filter for URL content sources (type === 'url')
+      // If filterVideoUrls is true, only show YouTube/Vimeo URLs
       this.urlContentList = response.filter(item => {
         const sourceType = item.contentSource?.type || item.outputData?.contentSourceType;
-        return sourceType === 'url' || sourceType === 'api';
+        if (sourceType !== 'url' && sourceType !== 'api') {
+          return false;
+        }
+        
+        // If filtering for video URLs, check if it's YouTube or Vimeo
+        if (this.filterVideoUrls) {
+          const url = item.outputData?.url || item.outputData?.sourceUrl || item.contentSource?.sourceUrl || '';
+          const urlLower = url.toLowerCase();
+          return urlLower.includes('youtube.com') || urlLower.includes('youtu.be') || urlLower.includes('vimeo.com');
+        }
+        
+        return true;
       });
 
       this.loading = false;

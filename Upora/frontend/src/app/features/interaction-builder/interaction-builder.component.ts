@@ -18,7 +18,7 @@ interface InteractionType {
   id: string;
   name: string;
   description: string;
-  interactionTypeCategory?: 'html' | 'pixijs' | 'iframe' | 'uploaded-media';
+  interactionTypeCategory?: 'html' | 'pixijs' | 'iframe' | 'uploaded-media' | 'video-url';
   htmlCode?: string;
   cssCode?: string;
   jsCode?: string;
@@ -114,6 +114,7 @@ interface ChatMessage {
                 <option value="pixijs">🎮 PixiJS</option>
                 <option value="iframe">🖼️ iFrame</option>
                 <option value="uploaded-media">🎬 Media Player</option>
+                <option value="video-url">🎥 Video URL</option>
                 <option value="legacy">📦 Legacy</option>
               </select>
             </div>
@@ -129,6 +130,7 @@ interface ChatMessage {
                 <span *ngIf="interaction.interactionTypeCategory === 'pixijs'">🎮</span>
                 <span *ngIf="interaction.interactionTypeCategory === 'iframe'">🖼️</span>
                 <span *ngIf="interaction.interactionTypeCategory === 'uploaded-media'">🎬</span>
+                <span *ngIf="interaction.interactionTypeCategory === 'video-url'">🎥</span>
                 <span *ngIf="!interaction.interactionTypeCategory">📦</span>
               </div>
               <div class="interaction-info">
@@ -219,6 +221,7 @@ interface ChatMessage {
                       <option value="pixijs">🎮 PixiJS (TypeScript Game/Animation)</option>
                       <option value="iframe">🖼️ iFrame (External Embed)</option>
                       <option value="uploaded-media">🎬 Media Player (Video/Audio)</option>
+                      <option value="video-url">🎥 Video URL (YouTube/Vimeo)</option>
                     </select>
                     <small class="hint">Cannot be changed after creation</small>
                   </div>
@@ -292,6 +295,51 @@ interface ChatMessage {
                         Hide HTML Content During Playback
                       </label>
                       <small class="hint">When enabled, text content (headers, paragraphs) in the overlay will be hidden when media is playing, but buttons and interactive elements will remain visible. When disabled, all overlay content stays visible during playback.</small>
+                    </div>
+
+                    <div *ngIf="displayMode === 'section'" class="form-row">
+                      <div class="form-group">
+                        <label>Section Height</label>
+                        <input type="text" [(ngModel)]="sectionHeight" (ngModelChange)="onSectionSizingChange()" 
+                               class="form-control" placeholder="auto" />
+                        <small class="hint">Height of the section (e.g., "auto", "300px", "50vh"). Default: "auto"</small>
+                      </div>
+                      <div class="form-group">
+                        <label>Section Min Height</label>
+                        <input type="text" [(ngModel)]="sectionMinHeight" (ngModelChange)="onSectionSizingChange()" 
+                               class="form-control" placeholder="200px" />
+                        <small class="hint">Minimum height (e.g., "200px", "150px"). Default: "200px"</small>
+                      </div>
+                      <div class="form-group">
+                        <label>Section Max Height</label>
+                        <input type="text" [(ngModel)]="sectionMaxHeight" (ngModelChange)="onSectionSizingChange()" 
+                               class="form-control" placeholder="none" />
+                        <small class="hint">Maximum height (e.g., "500px", "50vh", "none"). Default: "none"</small>
+                      </div>
+                    </div>
+                  </div>
+                </ng-container>
+
+                <!-- Video URL Configuration (for video-url type) -->
+                <ng-container *ngIf="currentInteraction?.interactionTypeCategory === 'video-url'">
+                  <div class="info-section" style="margin-top: 30px;">
+                    <h3>Video URL Configuration</h3>
+                    
+                    <div class="form-group">
+                      <label>Overlay Mode</label>
+                      <select [(ngModel)]="displayMode" (ngModelChange)="onDisplayModeChange()" class="form-control">
+                        <option value="overlay">Overlay on Player</option>
+                        <option value="section">Section Below Player</option>
+                      </select>
+                      <small class="hint">Choose how the HTML/CSS/JS content is displayed: as an overlay on top of the video player, or as a section below it. Note: Overlay mode is disabled for YouTube and Vimeo due to provider policies.</small>
+                    </div>
+
+                    <div class="form-group">
+                      <label>
+                        <input type="checkbox" [(ngModel)]="hideOverlayDuringPlayback" (ngModelChange)="onHideOverlayDuringPlaybackChange()" />
+                        Hide HTML Content During Playback
+                      </label>
+                      <small class="hint">When enabled, text content (headers, paragraphs) in the overlay will be hidden when video is playing, but buttons and interactive elements will remain visible.</small>
                     </div>
 
                     <div *ngIf="displayMode === 'section'" class="form-row">
@@ -619,6 +667,86 @@ interface ChatMessage {
                   </div>
                 </div>
 
+                <!-- Video URL Type Configuration -->
+                <div *ngIf="currentInteraction?.interactionTypeCategory === 'video-url'" class="video-url-config">
+                  <!-- Processed Content Selector -->
+                  <div class="form-group">
+                    <label>Processed Content Source</label>
+                    <div class="config-value">
+                      <span class="value">{{selectedVideoUrlName || 'None selected'}}</span>
+                      <button type="button" class="btn btn-primary" style="margin-left: 12px;" (click)="openVideoUrlSelector()">{{selectedVideoUrlId ? 'Change Video URL' : 'Select Video URL'}}</button>
+                    </div>
+                    <small class="hint">Select approved video URL content (YouTube or Vimeo) to use for this interaction. This will be available as processed content when the interaction is used in lessons.</small>
+                  </div>
+
+                  <!-- Video URL Config JSON -->
+                  <div class="form-group">
+                    <label>Video URL Configuration (JSON)</label>
+                    <textarea [(ngModel)]="videoUrlConfigText"
+                              (ngModelChange)="onVideoUrlConfigChange()"
+                              class="code-textarea"
+                              rows="6"
+                              placeholder='{"autoplay": false, "loop": false, "showControls": true, "defaultVolume": 1.0, "showCaptions": false, "videoQuality": "auto"}'
+                              spellcheck="false"></textarea>
+                    <small class="hint">Configure video player behavior: autoplay, loop, showControls, defaultVolume (0.0 to 1.0), showCaptions, videoQuality (auto, hd1080, hd720, medium, small), startTime, endTime, etc.</small>
+                  </div>
+
+                  <!-- Overlay Code Section -->
+                  <div class="form-group">
+                    <div class="info-section">
+                      <h4>🎨 Overlay Code</h4>
+                      <p>Add custom HTML/CSS/JS code that will appear in an overlay panel or section below the video player (depending on display mode). This allows you to add interactive elements, buttons, or UI controls that work with the AI Teacher SDK.</p>
+                      <p><strong>Use the HTML, CSS, and JavaScript tabs below to add your overlay content.</strong></p>
+                      <p><strong>Note:</strong> Overlay mode is disabled for YouTube and Vimeo due to provider policies. Use "Section below Player" mode instead.</p>
+                    </div>
+                  </div>
+
+                  <!-- HTML/CSS/JS Code Editors for Overlay -->
+                  <div class="overlay-code-editor">
+                    <div class="editor-subtabs">
+                      <button [class.active]="activeCodeTab === 'html'" 
+                              (click)="activeCodeTab = 'html'">HTML</button>
+                      <button [class.active]="activeCodeTab === 'css'" 
+                              (click)="activeCodeTab = 'css'">CSS</button>
+                      <button [class.active]="activeCodeTab === 'js'" 
+                              (click)="activeCodeTab = 'js'">JavaScript</button>
+                    </div>
+
+                    <div class="code-editor-container">
+                      <textarea *ngIf="activeCodeTab === 'html'"
+                                [(ngModel)]="currentInteraction!.htmlCode"
+                                (ngModelChange)="markChanged()"
+                                class="code-textarea"
+                                placeholder='<div id="video-url-overlay">Your overlay HTML here</div>'
+                                spellcheck="false"></textarea>
+
+                      <textarea *ngIf="activeCodeTab === 'css'"
+                                [(ngModel)]="currentInteraction!.cssCode"
+                                (ngModelChange)="markChanged()"
+                                class="code-textarea"
+                                placeholder="#video-url-overlay { position: absolute; bottom: 0; }"
+                                spellcheck="false"></textarea>
+
+                      <textarea *ngIf="activeCodeTab === 'js'"
+                                [(ngModel)]="currentInteraction!.jsCode"
+                                (ngModelChange)="markChanged()"
+                                class="code-textarea"
+                                placeholder="// Your overlay JavaScript code&#10;// Use createVideoUrlAISDK() to access the AI Teacher SDK&#10;// Video control methods: playVideoUrl(), pauseVideoUrl(), seekVideoUrl(time), setVideoUrlVolume(volume), getVideoUrlCurrentTime(), getVideoUrlDuration(), isVideoUrlPlaying(), etc."
+                                spellcheck="false"></textarea>
+                    </div>
+                    <div class="editor-note">
+                      <p>💡 <strong>Video URL Overlay Code Tips:</strong></p>
+                      <ul>
+                        <li>Your HTML will be injected into the video player overlay container (overlay mode) or section below player (section mode)</li>
+                        <li>Your CSS will be scoped to the overlay/section panel</li>
+                        <li>Your JavaScript can use the AI Teacher SDK with video URL control methods</li>
+                        <li>Video control methods: <code>playVideoUrl()</code>, <code>pauseVideoUrl()</code>, <code>seekVideoUrl(time)</code>, <code>setVideoUrlVolume(volume)</code>, <code>getVideoUrlCurrentTime()</code>, <code>getVideoUrlDuration()</code>, <code>isVideoUrlPlaying()</code></li>
+                        <li>Overlay mode is disabled for YouTube/Vimeo - use section mode instead</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
                 <div *ngIf="!currentInteraction?.interactionTypeCategory" class="no-type-selected">
                   <p>⚠️ Please select an interaction type in the Settings tab first.</p>
                 </div>
@@ -895,6 +1023,28 @@ interface ChatMessage {
                     </div>
                   </div>
 
+                  <!-- Video URL Preview (YouTube/Vimeo) -->
+                  <div *ngIf="(currentInteraction?.interactionTypeCategory === 'video-url') && previewKey" 
+                       class="html-preview video-url-preview">
+                    <iframe #previewIframe 
+                            [src]="getVideoUrlPreviewBlobUrl()" 
+                            [attr.data-preview-key]="previewKey"
+                            class="preview-iframe"
+                            frameborder="0"
+                            style="width: 100%; height: calc(100vh - 320px); min-height: 400px; max-height: calc(100vh - 320px);"
+                            sandbox="allow-scripts allow-same-origin allow-popups"></iframe>
+                  </div>
+
+                  <!-- Video URL Preview Placeholder (if no overlay code yet) -->
+                  <div *ngIf="(currentInteraction?.interactionTypeCategory === 'video-url') && !currentInteraction?.htmlCode" class="video-url-preview-placeholder">
+                    <div class="placeholder-content">
+                      <span class="placeholder-icon">▶️</span>
+                      <h4>Video URL Preview</h4>
+                      <p>Add overlay HTML/CSS/JS code in the Code tab to see a preview.</p>
+                      <p *ngIf="!selectedVideoUrlId" style="margin-top: 10px; color: #ffaa00;">⚠️ Select a video URL content in the Code tab to test with actual video.</p>
+                    </div>
+                  </div>
+
                   <!-- Fallback: Use Angular component for true-false-selection if no HTML code -->
                   <div *ngIf="(currentInteraction?.id === 'true-false-selection') && !currentInteraction?.htmlCode && currentInteraction?.sampleData" class="interaction-preview">
                     <app-true-false-selection 
@@ -1041,12 +1191,22 @@ interface ChatMessage {
         (selected)="onMediaSelected($event)">
       </app-media-content-selector>
 
-      <!-- URL Content Selector Modal -->
+      <!-- URL Content Selector Modal (for iframe) -->
       <app-url-content-selector
         [isOpen]="showIframeContentSelector"
         [selectedContentId]="selectedIframeContentId"
+        [filterVideoUrls]="false"
         (close)="closeIframeContentSelector()"
         (contentSelected)="onIframeContentSelected($event)">
+      </app-url-content-selector>
+
+      <!-- Video URL Content Selector Modal (for video-url) -->
+      <app-url-content-selector
+        [isOpen]="showVideoUrlSelector"
+        [selectedContentId]="selectedVideoUrlId"
+        [filterVideoUrls]="true"
+        (close)="closeVideoUrlSelector()"
+        (contentSelected)="onVideoUrlSelected($event)">
       </app-url-content-selector>
 
       <!-- Success Snackbar -->
@@ -2732,6 +2892,7 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   // JSON text fields (for editing)
   iframeConfigText = '';
   mediaConfigText = '';
+  videoUrlConfigText = '';
   uploadingDocument = false;
   
   // AI configuration fields
@@ -2744,6 +2905,12 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   showMediaSelector = false;
   selectedMediaId: string | null = null;
   selectedMediaName = '';
+  
+  // Video URL content selector
+  showVideoUrlSelector = false;
+  selectedVideoUrlId: string | null = null;
+  selectedVideoUrlName = '';
+  selectedVideoUrlData: any = null; // Store video URL data for preview
   displayMode: 'overlay' | 'section' = 'overlay'; // Renamed from 'Display Mode' to 'Overlay Mode' for consistency
   sectionHeight = 'auto';
   sectionMinHeight = '200px';
@@ -2797,6 +2964,8 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   private currentIframeOverlayBlobUrlKey: number | null = null;
   private currentMediaPlayerBlobUrl: SafeResourceUrl | null = null;
   private currentMediaPlayerBlobUrlKey: number | null = null;
+  private currentVideoUrlBlobUrl: SafeResourceUrl | null = null;
+  private currentVideoUrlBlobUrlKey: number | null = null;
 
   // Snackbar
   showSnackbar = false;
@@ -2923,6 +3092,7 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     // Load JSON fields into text areas
     this.iframeConfigText = interaction.iframeConfig ? JSON.stringify(interaction.iframeConfig, null, 2) : '';
     this.mediaConfigText = (interaction as any).mediaConfig ? JSON.stringify((interaction as any).mediaConfig, null, 2) : '';
+    this.videoUrlConfigText = (interaction as any).videoUrlConfig ? JSON.stringify((interaction as any).videoUrlConfig, null, 2) : '';
     
     // Load overlay mode from iframeConfig
     if (interaction.iframeConfig?.overlayMode) {
@@ -2949,7 +3119,7 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
       console.log('[InteractionBuilder] 🔍 Template should render iFrame Configuration with Overlay Mode dropdown');
     }
     
-    // Load display mode and section sizing from mediaConfig
+    // Load display mode and section sizing from mediaConfig (for uploaded-media)
     if ((interaction as any).mediaConfig) {
       this.displayMode = (interaction as any).mediaConfig.displayMode || 'section';
       this.sectionHeight = (interaction as any).mediaConfig.sectionHeight || 'auto';
@@ -2957,8 +3127,24 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
       this.sectionMaxHeight = (interaction as any).mediaConfig.sectionMaxHeight || 'none';
       this.showPlayerControls = (interaction as any).mediaConfig.showPlayerControls ?? false; // Default to false
       this.hideOverlayDuringPlayback = (interaction as any).mediaConfig.hideOverlayDuringPlayback ?? true; // Default to true
+    } else if ((interaction as any).videoUrlConfig) {
+      // Load display mode and section sizing from videoUrlConfig (for video-url)
+      this.displayMode = (interaction as any).videoUrlConfig.displayMode || 'section';
+      this.sectionHeight = (interaction as any).videoUrlConfig.sectionHeight || 'auto';
+      this.sectionMinHeight = (interaction as any).videoUrlConfig.sectionMinHeight || '200px';
+      this.sectionMaxHeight = (interaction as any).videoUrlConfig.sectionMaxHeight || 'none';
+      this.hideOverlayDuringPlayback = (interaction as any).videoUrlConfig.hideOverlayDuringPlayback ?? true; // Default to true
+      
+      // Check if provider is YouTube or Vimeo and disable overlay mode
+      const provider = (interaction as any).videoUrlConfig.provider;
+      if ((provider === 'youtube' || provider === 'vimeo') && this.displayMode === 'overlay') {
+        console.warn('[InteractionBuilder] ⚠️ Overlay mode disabled for YouTube/Vimeo, switching to section mode');
+        this.displayMode = 'section';
+        (interaction as any).videoUrlConfig.displayMode = 'section';
+        this.videoUrlConfigText = JSON.stringify((interaction as any).videoUrlConfig, null, 2);
+      }
     } else {
-      // Initialize with defaults if no mediaConfig
+      // Initialize with defaults if no config
       this.displayMode = 'section';
       this.sectionHeight = 'auto';
       this.sectionMinHeight = '200px';
@@ -2978,6 +3164,34 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     if ((interaction as any).mediaConfig?.testMediaContentId) {
       this.selectedMediaId = (interaction as any).mediaConfig.testMediaContentId;
       // Fetch media name if needed
+    }
+    
+    // Load video URL selection if present
+    if ((interaction as any).videoUrlConfig?.testVideoUrlContentId) {
+      this.selectedVideoUrlId = (interaction as any).videoUrlConfig.testVideoUrlContentId;
+      // Fetch video URL name if needed
+      this.http.get<any>(`${environment.apiUrl}/lesson-editor/processed-outputs/${this.selectedVideoUrlId}`, {
+        headers: {
+          'x-tenant-id': environment.tenantId,
+          'x-user-id': environment.defaultUserId
+        }
+      })
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: (content) => {
+            this.selectedVideoUrlName = content.outputName || content.contentSource?.title || 'Selected Video URL';
+            console.log('[InteractionBuilder] ✅ Video URL name loaded:', this.selectedVideoUrlName);
+          },
+          error: (err) => {
+            console.error('[InteractionBuilder] ❌ Failed to fetch video URL details:', err);
+            if (err.status === 404) {
+              this.selectedVideoUrlId = null;
+              this.selectedVideoUrlName = '';
+            } else {
+              this.selectedVideoUrlName = 'Selected Video URL';
+            }
+          }
+        });
     }
     
     // Load iframe content selection if present
@@ -3170,32 +3384,68 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
 
   onDisplayModeChange() {
     this.markChanged();
-    if (!(this.currentInteraction as any).mediaConfig) {
-      (this.currentInteraction as any).mediaConfig = {};
+    
+    // Check if this is a video-url interaction with YouTube/Vimeo
+    if (this.currentInteraction?.interactionTypeCategory === 'video-url') {
+      const videoUrlConfig = (this.currentInteraction as any).videoUrlConfig;
+      const provider = videoUrlConfig?.provider;
+      
+      if ((provider === 'youtube' || provider === 'vimeo') && this.displayMode === 'overlay') {
+        // Overlay mode not allowed for YouTube/Vimeo
+        this.snackbarMessage = 'Overlay mode is not allowed for YouTube/Vimeo due to provider policies. Please use "Section Below Player" mode.';
+        this.showSnackbar = true;
+        setTimeout(() => {
+          this.showSnackbar = false;
+        }, 5000);
+        this.displayMode = 'section'; // Force to section mode
+      }
+      
+      if (!videoUrlConfig) {
+        (this.currentInteraction as any).videoUrlConfig = {};
+      }
+      (this.currentInteraction as any).videoUrlConfig.displayMode = this.displayMode;
+      this.updateVideoUrlConfigText();
+    } else if (this.currentInteraction?.interactionTypeCategory === 'uploaded-media') {
+      if (!(this.currentInteraction as any).mediaConfig) {
+        (this.currentInteraction as any).mediaConfig = {};
+      }
+      (this.currentInteraction as any).mediaConfig.displayMode = this.displayMode;
+      this.updateMediaConfigText();
+      // Invalidate preview cache to force regeneration with new display mode
+      this.currentMediaPlayerBlobUrl = null;
+      this.currentMediaPlayerBlobUrlKey = null;
     }
-    (this.currentInteraction as any).mediaConfig.displayMode = this.displayMode;
-    this.updateMediaConfigText();
-    // Invalidate preview cache to force regeneration with new display mode
-    this.currentMediaPlayerBlobUrl = null;
-    this.currentMediaPlayerBlobUrlKey = null;
+    
     this.previewKey = Date.now();
   }
 
   onSectionSizingChange() {
     this.markChanged();
-    if (!(this.currentInteraction as any).mediaConfig) {
-      (this.currentInteraction as any).mediaConfig = {};
+    
+    if (this.currentInteraction?.interactionTypeCategory === 'video-url') {
+      if (!(this.currentInteraction as any).videoUrlConfig) {
+        (this.currentInteraction as any).videoUrlConfig = {};
+      }
+      (this.currentInteraction as any).videoUrlConfig.sectionHeight = this.sectionHeight;
+      (this.currentInteraction as any).videoUrlConfig.sectionMinHeight = this.sectionMinHeight;
+      (this.currentInteraction as any).videoUrlConfig.sectionMaxHeight = this.sectionMaxHeight;
+      this.updateVideoUrlConfigText();
+    } else if (this.currentInteraction?.interactionTypeCategory === 'uploaded-media') {
+      if (!(this.currentInteraction as any).mediaConfig) {
+        (this.currentInteraction as any).mediaConfig = {};
+      }
+      (this.currentInteraction as any).mediaConfig.sectionHeight = this.sectionHeight;
+      (this.currentInteraction as any).mediaConfig.sectionMinHeight = this.sectionMinHeight;
+      (this.currentInteraction as any).mediaConfig.sectionMaxHeight = this.sectionMaxHeight;
+      this.updateMediaConfigText();
+      // Invalidate preview cache to force regeneration with new section sizing
+      if (this.displayMode === 'section') {
+        this.currentMediaPlayerBlobUrl = null;
+        this.currentMediaPlayerBlobUrlKey = null;
+      }
     }
-    (this.currentInteraction as any).mediaConfig.sectionHeight = this.sectionHeight;
-    (this.currentInteraction as any).mediaConfig.sectionMinHeight = this.sectionMinHeight;
-    (this.currentInteraction as any).mediaConfig.sectionMaxHeight = this.sectionMaxHeight;
-    this.updateMediaConfigText();
-    // Invalidate preview cache to force regeneration with new section sizing
-    if (this.displayMode === 'section') {
-      this.currentMediaPlayerBlobUrl = null;
-      this.currentMediaPlayerBlobUrlKey = null;
-      this.previewKey = Date.now();
-    }
+    
+    this.previewKey = Date.now();
   }
 
   onShowPlayerControlsChange() {
@@ -3213,14 +3463,24 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
 
   onHideOverlayDuringPlaybackChange() {
     this.markChanged();
-    if (!(this.currentInteraction as any).mediaConfig) {
-      (this.currentInteraction as any).mediaConfig = {};
+    
+    if (this.currentInteraction?.interactionTypeCategory === 'video-url') {
+      if (!(this.currentInteraction as any).videoUrlConfig) {
+        (this.currentInteraction as any).videoUrlConfig = {};
+      }
+      (this.currentInteraction as any).videoUrlConfig.hideOverlayDuringPlayback = this.hideOverlayDuringPlayback;
+      this.updateVideoUrlConfigText();
+    } else if (this.currentInteraction?.interactionTypeCategory === 'uploaded-media') {
+      if (!(this.currentInteraction as any).mediaConfig) {
+        (this.currentInteraction as any).mediaConfig = {};
+      }
+      (this.currentInteraction as any).mediaConfig.hideOverlayDuringPlayback = this.hideOverlayDuringPlayback;
+      this.updateMediaConfigText();
+      // Invalidate preview cache to force regeneration with new setting
+      this.currentMediaPlayerBlobUrl = null;
+      this.currentMediaPlayerBlobUrlKey = null;
     }
-    (this.currentInteraction as any).mediaConfig.hideOverlayDuringPlayback = this.hideOverlayDuringPlayback;
-    this.updateMediaConfigText();
-    // Invalidate preview cache to force regeneration with new setting
-    this.currentMediaPlayerBlobUrl = null;
-    this.currentMediaPlayerBlobUrlKey = null;
+    
     this.previewKey = Date.now();
   }
 
@@ -3244,6 +3504,47 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   updateMediaConfigText() {
     if ((this.currentInteraction as any).mediaConfig) {
       this.mediaConfigText = JSON.stringify((this.currentInteraction as any).mediaConfig, null, 2);
+    }
+  }
+
+  onVideoUrlConfigChange() {
+    this.markChanged();
+    if (!this.videoUrlConfigText.trim()) {
+      (this.currentInteraction as any).videoUrlConfig = undefined;
+      return;
+    }
+
+    try {
+      (this.currentInteraction as any).videoUrlConfig = JSON.parse(this.videoUrlConfigText);
+      // Update display mode and section sizing from parsed config
+      if ((this.currentInteraction as any).videoUrlConfig) {
+        this.displayMode = (this.currentInteraction as any).videoUrlConfig.displayMode || 'section';
+        this.sectionHeight = (this.currentInteraction as any).videoUrlConfig.sectionHeight || 'auto';
+        this.sectionMinHeight = (this.currentInteraction as any).videoUrlConfig.sectionMinHeight || '200px';
+        this.sectionMaxHeight = (this.currentInteraction as any).videoUrlConfig.sectionMaxHeight || 'none';
+        
+        // Check if provider is YouTube/Vimeo and disable overlay mode
+        const provider = (this.currentInteraction as any).videoUrlConfig.provider;
+        if ((provider === 'youtube' || provider === 'vimeo') && this.displayMode === 'overlay') {
+          console.warn('[InteractionBuilder] ⚠️ Overlay mode not allowed for YouTube/Vimeo, switching to section mode');
+          this.displayMode = 'section';
+          (this.currentInteraction as any).videoUrlConfig.displayMode = 'section';
+          this.videoUrlConfigText = JSON.stringify((this.currentInteraction as any).videoUrlConfig, null, 2);
+          this.snackbarMessage = 'Overlay mode is not allowed for YouTube/Vimeo due to provider policies. Switched to Section Below Player mode.';
+          this.showSnackbar = true;
+          setTimeout(() => {
+            this.showSnackbar = false;
+          }, 5000);
+        }
+      }
+    } catch (e: any) {
+      // Keep as text for now, will validate on save
+    }
+  }
+
+  updateVideoUrlConfigText() {
+    if ((this.currentInteraction as any).videoUrlConfig) {
+      this.videoUrlConfigText = JSON.stringify((this.currentInteraction as any).videoUrlConfig, null, 2);
     }
   }
 
@@ -3561,6 +3862,35 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
       saveData.mediaConfig.hideOverlayDuringPlayback = this.hideOverlayDuringPlayback;
     }
     
+    // Save video URL config for video-url interactions
+    if (this.currentInteraction.interactionTypeCategory === 'video-url') {
+      if (!saveData.videoUrlConfig) {
+        saveData.videoUrlConfig = {};
+      }
+      // Use selectedVideoUrlId if available (from video URL selector), otherwise use contentOutputId
+      if (this.selectedVideoUrlId) {
+        saveData.videoUrlConfig.testVideoUrlContentId = this.selectedVideoUrlId;
+      } else if ((this.currentInteraction as any).contentOutputId) {
+        saveData.videoUrlConfig.testVideoUrlContentId = (this.currentInteraction as any).contentOutputId;
+      }
+      // Also save display mode, section sizing, and hide overlay setting
+      saveData.videoUrlConfig.displayMode = this.displayMode;
+      saveData.videoUrlConfig.sectionHeight = this.sectionHeight;
+      saveData.videoUrlConfig.sectionMinHeight = this.sectionMinHeight;
+      saveData.videoUrlConfig.sectionMaxHeight = this.sectionMaxHeight;
+      saveData.videoUrlConfig.hideOverlayDuringPlayback = this.hideOverlayDuringPlayback;
+      
+      // Parse videoUrlConfigText if it exists and merge
+      if (this.videoUrlConfigText.trim()) {
+        try {
+          const parsed = JSON.parse(this.videoUrlConfigText);
+          saveData.videoUrlConfig = { ...saveData.videoUrlConfig, ...parsed };
+        } catch (e) {
+          console.warn('[InteractionBuilder] ⚠️ Failed to parse videoUrlConfigText, using defaults');
+        }
+      }
+    }
+    
     // Save overlay mode and content selection for iFrame interactions
     if (this.currentInteraction.interactionTypeCategory === 'iframe') {
       if (!saveData.iframeConfig) {
@@ -3702,6 +4032,7 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
       case 'pixijs': return 'PixiJS';
       case 'iframe': return 'iFrame';
       case 'uploaded-media': return 'Media Player';
+      case 'video-url': return 'Video URL';
       default: return 'Unknown';
     }
   }
@@ -3723,6 +4054,11 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     
     // Media Player interactions can show preview even without overlay code
     if ((this.currentInteraction.interactionTypeCategory as any) === 'uploaded-media') {
+      return true;
+    }
+    
+    // Video URL interactions can show preview even without overlay code
+    if ((this.currentInteraction.interactionTypeCategory as any) === 'video-url') {
       return true;
     }
     
@@ -4634,6 +4970,309 @@ overlayContent + '\n' +
     return this.currentMediaPlayerBlobUrl;
   }
 
+  getVideoUrlPreviewBlobUrl(): SafeResourceUrl {
+    if (!this.currentInteraction) {
+      return this.sanitizer.bypassSecurityTrustResourceUrl('about:blank');
+    }
+
+    // Check if we already have a cached blob URL for the current preview key
+    if (this.currentVideoUrlBlobUrl && this.currentVideoUrlBlobUrlKey === this.previewKey) {
+      return this.currentVideoUrlBlobUrl;
+    }
+
+    // Clean up old blob URL if it exists and key has changed
+    if (this.currentVideoUrlBlobUrl && this.currentVideoUrlBlobUrlKey !== this.previewKey) {
+      const oldUrl = (this.currentVideoUrlBlobUrl as any).changingThisBreaksApplicationSecurity;
+      if (oldUrl && oldUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(oldUrl);
+      }
+    }
+
+    // Get overlay code
+    const htmlCode = (this.currentInteraction.htmlCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
+    const cssCode = (this.currentInteraction.cssCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
+    const jsCode = (this.currentInteraction.jsCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
+    
+    // Get sample data and config
+    const sampleData = this.currentInteraction.sampleData || {};
+    const sampleDataJson = JSON.stringify(sampleData);
+    const videoUrlConfig = (this.currentInteraction as any).videoUrlConfig || {};
+    const displayMode = videoUrlConfig.displayMode || 'section';
+    const sectionHeight = videoUrlConfig.sectionHeight || 'auto';
+    const sectionMinHeight = videoUrlConfig.sectionMinHeight || '200px';
+    const sectionMaxHeight = videoUrlConfig.sectionMaxHeight || 'none';
+    
+    // Get video URL from stored data, config, or sample data
+    let videoUrl = '';
+    let videoId = '';
+    let provider = 'youtube'; // 'youtube' or 'vimeo'
+    
+    // First, try to use videoUrlConfig (from saved interaction)
+    if (videoUrlConfig.videoId && videoUrlConfig.videoUrl) {
+      videoId = videoUrlConfig.videoId;
+      videoUrl = videoUrlConfig.videoUrl;
+      provider = videoUrlConfig.provider || 'youtube';
+      console.log('[Preview] Using videoUrlConfig:', { videoId, videoUrl, provider });
+    }
+    // Then try stored video URL data (from selected content)
+    else if (this.selectedVideoUrlData) {
+      videoUrl = this.selectedVideoUrlData.url || '';
+      videoId = this.selectedVideoUrlData.videoId || '';
+      // Determine provider from URL
+      if (videoUrl) {
+        const urlLower = videoUrl.toLowerCase();
+        if (urlLower.includes('youtube.com') || urlLower.includes('youtu.be')) {
+          provider = 'youtube';
+        } else if (urlLower.includes('vimeo.com')) {
+          provider = 'vimeo';
+        }
+      }
+      console.log('[Preview] Using selectedVideoUrlData:', { videoId, videoUrl, provider });
+    }
+    // Fallback to sample data if no stored data
+    else if (sampleData && (sampleData as any).videoUrl) {
+      videoUrl = (sampleData as any).videoUrl;
+      videoId = (sampleData as any).videoId || '';
+      provider = (sampleData as any).provider || 'youtube';
+      console.log('[Preview] Using sampleData:', { videoId, videoUrl, provider });
+    }
+    
+    // Determine provider from URL if not set
+    if (videoUrl && !provider) {
+      const urlLower = videoUrl.toLowerCase();
+      if (urlLower.includes('youtube.com') || urlLower.includes('youtu.be')) {
+        provider = 'youtube';
+      } else if (urlLower.includes('vimeo.com')) {
+        provider = 'vimeo';
+      }
+    }
+    
+    // Extract video ID from URL if needed
+    if (videoUrl && !videoId) {
+      if (provider === 'youtube') {
+        const match = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+        if (match) videoId = match[1];
+      } else if (provider === 'vimeo') {
+        const match = videoUrl.match(/vimeo\.com\/(\d+)/);
+        if (match) videoId = match[1];
+      }
+      console.log('[Preview] Extracted from URL:', { videoId, videoUrl, provider });
+    }
+    
+    // Final validation
+    if (!videoId) {
+      console.warn('[Preview] ⚠️ No video ID found. videoUrl:', videoUrl, 'videoUrlConfig:', videoUrlConfig, 'selectedVideoUrlData:', this.selectedVideoUrlData);
+    }
+    
+    // Build embed URL
+    let embedUrl = '';
+    if (videoId && videoId.length > 0) {
+      // Use stored data start/end times if available, otherwise from config or sample data
+      const startTime = this.selectedVideoUrlData?.startTime || videoUrlConfig.startTime || (sampleData as any)?.startTime || 0;
+      const endTime = this.selectedVideoUrlData?.endTime || videoUrlConfig.endTime || (sampleData as any)?.endTime;
+      
+      if (provider === 'youtube') {
+        // Build embed URL - use absolute simplest format for preview
+        // Note: Some videos may not allow embedding, which will show Error 153
+        // The video will work properly in the actual lesson view using YouTube IFrame API
+        // Try with minimal parameters first
+        let embedParams = '';
+        if (startTime > 0 || (endTime && endTime > startTime)) {
+          embedParams = '?';
+          if (startTime > 0) embedParams += `start=${Math.floor(startTime)}`;
+          if (endTime && endTime > startTime) {
+            if (embedParams !== '?') embedParams += '&';
+            embedParams += `end=${Math.floor(endTime)}`;
+          }
+        }
+        embedUrl = `https://www.youtube.com/embed/${videoId}${embedParams}`;
+        console.log('[Preview] YouTube embed URL:', embedUrl, 'videoId:', videoId, 'startTime:', startTime, 'endTime:', endTime);
+      } else if (provider === 'vimeo') {
+        let embedParams = '?badge=0&byline=0&portrait=0&title=0';
+        if (startTime > 0) embedParams += `#t=${Math.floor(startTime)}s`;
+        embedUrl = `https://player.vimeo.com/video/${videoId}${embedParams}`;
+        console.log('[Preview] Vimeo embed URL:', embedUrl);
+      }
+    } else {
+      console.error('[Preview] ❌ Cannot build embed URL - no valid videoId. videoId:', videoId);
+    }
+    
+    // Create video player HTML with error handling note
+    // For YouTube, always show a note about preview limitations since Error 153 is common in sandboxed iframes
+    const showPreviewNote = provider === 'youtube';
+    const videoPlayerHtml = embedUrl
+      ? `<div style="position: relative; width: 100%; height: 100%; min-height: 400px; background: #000;">
+          <iframe id="video-url-player" src="${this.escapeHtml(embedUrl)}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen style="width: 100%; height: 100%; min-height: 400px;" loading="lazy"></iframe>
+          ${showPreviewNote ? `<div id="youtube-preview-note" style="position: absolute; bottom: 10px; left: 10px; right: 10px; background: rgba(255,193,7,0.95); color: #000; padding: 12px; border-radius: 4px; font-size: 12px; z-index: 10; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+            <strong>ℹ️ Preview Note:</strong> If you see "Error 153" above, this is a known limitation in preview mode due to sandbox restrictions. The video will work properly when used in an actual lesson using the YouTube IFrame API.
+          </div>` : ''}
+        </div>`
+      : '<div style="padding: 40px; text-align: center; color: #999; background: rgba(0,0,0,0.3); border: 2px dashed #444; border-radius: 8px; margin: 20px;"><p style="font-size: 16px; margin-bottom: 10px;">⚠️ No video URL selected</p><p style="font-size: 12px;">Select a video URL content in the Code tab to preview</p></div>';
+    
+    // Ensure overlay content is properly formatted
+    const overlayContent = htmlCode.trim() || '<div style="padding: 20px; color: #999; text-align: center;">No SDK test buttons configured</div>';
+    
+    // Escape CSS for safe insertion
+    const escapedCss = cssCode || '';
+    
+    const htmlDoc = '<!DOCTYPE html>\n' +
+'<html lang="en">\n' +
+'<head>\n' +
+'  <meta charset="UTF-8">\n' +
+'  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
+'  <title>Video URL Preview</title>\n' +
+'  <style>\n' +
+'    * {\n' +
+'      margin: 0;\n' +
+'      padding: 0;\n' +
+'      box-sizing: border-box;\n' +
+'    }\n' +
+'    \n' +
+'    body {\n' +
+'      margin: 0;\n' +
+'      padding: 0;\n' +
+'      background: #0f0f23;\n' +
+'      color: #ffffff;\n' +
+'      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;\n' +
+(displayMode === 'overlay' 
+  ? '      overflow: hidden; position: relative; width: 100vw; height: 100vh;\n'
+  : '      display: flex; flex-direction: column; height: 100vh; overflow-y: auto; width: 100vw;\n') +
+'    }\n' +
+'    \n' +
+'    #video-container {\n' +
+(displayMode === 'overlay'
+  ? '      position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; display: flex; align-items: center; justify-content: center; background: #000;\n'
+  : '      flex: 0 0 auto; width: 100%; display: flex; align-items: center; justify-content: center; background: #000; padding: 10px; min-height: 400px; order: 1;\n') +
+'    }\n' +
+'    \n' +
+'    #video-container iframe {\n' +
+'      max-width: 100%;\n' +
+(displayMode === 'overlay' ? '      max-height: 100%; z-index: 1;\n' : '      width: 100%; height: 500px;\n') +
+'    }\n' +
+'    \n' +
+'    #overlay-container {\n' +
+(displayMode === 'overlay'
+  ? '      position: absolute; bottom: 0; left: 0; right: 0; z-index: 100; pointer-events: none; max-height: 40%; overflow-y: auto; background: rgba(15, 15, 35, 0.95); padding: 20px;\n' +
+    '    }\n' +
+    '    \n' +
+    '    #overlay-container > * {\n' +
+    '      pointer-events: auto;\n' +
+    '    }\n'
+  : '      flex: 1 1 auto; width: 100%; overflow-y: auto; background: rgba(15, 15, 35, 0.95); padding: 20px; height: ' + sectionHeight + '; min-height: ' + sectionMinHeight + ';' + (sectionMaxHeight !== 'none' ? ' max-height: ' + sectionMaxHeight + ';' : '') + ' order: 2; position: relative !important; z-index: 1 !important;\n') +
+'    }\n' +
+escapedCss + '\n' +
+'  </style>\n' +
+'</head>\n' +
+'<body>\n' +
+'  <div id="video-container">\n' +
+videoPlayerHtml + '\n' +
+'  </div>\n' +
+'  \n' +
+'  <div id="overlay-container">\n' +
+overlayContent + '\n' +
+'  </div>\n' +
+'\n' +
+'  <script type="text/javascript">\n' +
+'    // Inject interaction data and config\n' +
+'    window.interactionData = ' + sampleDataJson + ';\n' +
+'    window.interactionConfig = ' + JSON.stringify(videoUrlConfig) + ';\n' +
+'    \n' +
+'    // Mock SDK for preview\n' +
+'    window.aiSDK = {\n' +
+'      // Core SDK methods - isReady listens for message event\n' +
+'      isReady: (callback) => { \n' +
+'        const listener = (event) => { \n' +
+'          if (event.data && event.data.type === "ai-sdk-ready") { \n' +
+'            window.removeEventListener("message", listener); \n' +
+'            if (callback) callback(true); \n' +
+'          } \n' +
+'        }; \n' +
+'        window.addEventListener("message", listener); \n' +
+'        // Also trigger ready immediately in case event already fired\n' +
+'        setTimeout(() => { \n' +
+'          if (callback) callback(true); \n' +
+'        }, 100); \n' +
+'      },\n' +
+'      emitEvent: (event) => { \n' +
+'        console.log("[Video URL Preview] emitEvent called:", event);\n' +
+'      },\n' +
+'      updateState: (key, value) => { \n' +
+'        console.log("[Video URL Preview] updateState called:", key, value);\n' +
+'      },\n' +
+'      getState: (key, callback) => { \n' +
+'        if (callback) callback(null);\n' +
+'      },\n' +
+'      // Video URL specific methods\n' +
+'      playVideoUrl: (callback) => { \n' +
+'        console.log("[Video URL Preview] playVideoUrl called");\n' +
+'        if (callback) callback(true);\n' +
+'      },\n' +
+'      pauseVideoUrl: (callback) => { \n' +
+'        console.log("[Video URL Preview] pauseVideoUrl called");\n' +
+'        if (callback) callback(true);\n' +
+'      },\n' +
+'      seekVideoUrl: (time, callback) => { \n' +
+'        console.log("[Video URL Preview] seekVideoUrl called with time:", time);\n' +
+'        if (callback) callback(true);\n' +
+'      },\n' +
+'      setVideoUrlVolume: (volume, callback) => { \n' +
+'        console.log("[Video URL Preview] setVideoUrlVolume called with volume:", volume);\n' +
+'        if (callback) callback(true);\n' +
+'      },\n' +
+'      getVideoUrlCurrentTime: (callback) => { \n' +
+'        if (callback) callback(0);\n' +
+'      },\n' +
+'      getVideoUrlDuration: (callback) => { \n' +
+'        if (callback) callback(0);\n' +
+'      },\n' +
+'      isVideoUrlPlaying: (callback) => { \n' +
+'        if (callback) callback(false);\n' +
+'      },\n' +
+'      showVideoUrlOverlayHtml: (html) => { \n' +
+'        console.log("[Video URL Preview] showVideoUrlOverlayHtml called");\n' +
+'      },\n' +
+'      hideVideoUrlOverlayHtml: () => { \n' +
+'        console.log("[Video URL Preview] hideVideoUrlOverlayHtml called");\n' +
+'      },\n' +
+'    };\n' +
+'    \n' +
+'    // Trigger SDK ready event for interactions that wait for it\n' +
+'    setTimeout(() => { \n' +
+'      window.postMessage({ type: "ai-sdk-ready" }, "*");\n' +
+'      console.log("[Video URL Preview] ✅ SDK ready event sent");\n' +
+'    }, 200);\n' +
+'    \n' +
+'    // Execute builder\'s JavaScript code\n' +
+'    (function() {\n' +
+'      var userJsCode = ' + JSON.stringify(jsCode || '// No JavaScript code provided') + ';\n' +
+'      var executeCode = function() {\n' +
+'        try {\n' +
+'          eval(userJsCode);\n' +
+'        } catch (e) {\n' +
+'          console.error("[Video URL Preview] Error in builder\'s JavaScript:", e);\n' +
+'        }\n' +
+'      };\n' +
+'      \n' +
+'      if (document.readyState === "loading") {\n' +
+'        document.addEventListener("DOMContentLoaded", executeCode);\n' +
+'      } else {\n' +
+'        setTimeout(executeCode, 10);\n' +
+'      }\n' +
+'    })();\n' +
+'  </script>\n' +
+'</body>\n' +
+'</html>';
+
+    // Create a Blob from the HTML string
+    const blob = new Blob([htmlDoc], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    
+    // Store and return
+    this.currentVideoUrlBlobUrl = this.sanitizer.bypassSecurityTrustResourceUrl(url);
+    this.currentVideoUrlBlobUrlKey = this.previewKey;
+    return this.currentVideoUrlBlobUrl;
+  }
+
   private escapeHtml(text: string): string {
     const div = document.createElement('div');
     div.textContent = text;
@@ -5404,12 +6043,149 @@ overlayContent + '\n' +
         return { success: false, error: renderError.message || 'Preview render failed' };
       }
 
+    } else if (this.currentInteraction.interactionTypeCategory === 'video-url') {
+      // Video URL interactions use overlay HTML/CSS/JS similar to uploaded-media interactions
+      if (!this.currentInteraction.htmlCode || this.currentInteraction.htmlCode.trim() === '') {
+        return { success: false, error: 'Overlay HTML code is required for Video URL interactions' };
+      }
+
+      // Validate HTML for common typos
+      const htmlCode = this.currentInteraction.htmlCode;
+      const typoPatterns = [
+        { pattern: /\bclas=/gi, error: 'HTML typo: "clas=" should be "class="' },
+        { pattern: /\bclasss=/gi, error: 'HTML typo: "classs=" should be "class="' },
+        { pattern: /cladss\s*=/gi, error: 'HTML typo: "cladss=" should be "class="' },
+        { pattern: /cldss\s*=/gi, error: 'HTML typo: "cldss=" should be "class="' },
+        { pattern: /cl[^a]ss\s*=/gi, error: 'HTML typo: Possible "class" typo detected (should be "class=")' },
+        { pattern: /\bclss=/gi, error: 'HTML typo: "clss=" should be "class="' },
+        { pattern: /\bide=/gi, error: 'HTML typo: "ide=" should be "id="' },
+        { pattern: /\bidd=/gi, error: 'HTML typo: "idd=" should be "id="' },
+        { pattern: /\bdiv\s+[^>]*[^c]lass=/gi, error: 'Possible spacing issue in "class=" attribute' }
+      ];
+
+      for (const {pattern, error} of typoPatterns) {
+        if (pattern.test(htmlCode)) {
+          return { success: false, error };
+        }
+      }
+
+      // Validate sample data is valid JSON
+      let sampleData = {};
+      if (this.sampleDataText.trim()) {
+        try {
+          sampleData = JSON.parse(this.sampleDataText);
+        } catch (jsonError: any) {
+          return { success: false, error: `Sample data JSON error: ${jsonError.message}` };
+        }
+      }
+
+      // Validate video URL config JSON if provided
+      if (this.videoUrlConfigText.trim()) {
+        try {
+          const videoUrlConfig = JSON.parse(this.videoUrlConfigText);
+          if (typeof videoUrlConfig !== 'object' || videoUrlConfig === null) {
+            return { success: false, error: 'Video URL Config must be a valid JSON object' };
+          }
+        } catch (configError: any) {
+          return { success: false, error: `Video URL Config JSON error: ${configError.message}` };
+        }
+      }
+
+      // ACTUAL TEST: Try to render overlay in hidden container
+      console.log('[Test] 🎬 Attempting to render Video URL overlay preview...');
+      const testContainer = document.createElement('div');
+      testContainer.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:800px;height:600px;';
+      document.body.appendChild(testContainer);
+
+      try {
+        // Add CSS
+        let testHtml = '';
+        if (this.currentInteraction.cssCode) {
+          testHtml += `<style>${this.currentInteraction.cssCode}</style>`;
+        }
+
+        // Add HTML
+        testHtml += this.currentInteraction.htmlCode;
+
+        // Inject and execute
+        testContainer.innerHTML = testHtml;
+
+        // Execute JavaScript with sample data
+        if (this.currentInteraction.jsCode) {
+          // First, validate JavaScript syntax BEFORE trying to execute
+          let jsCode = this.currentInteraction.jsCode;
+          
+          // Normalize line endings (CRLF -> LF, CR -> LF)
+          jsCode = jsCode.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+          
+          // Fix SQL-escaped single quotes ('' -> ') - SQL uses '' to represent a single quote
+          jsCode = jsCode.replace(/''/g, "'");
+          
+          // Fix escaped template literals
+          jsCode = jsCode.replace(/\\\\`/g, '`');
+          jsCode = jsCode.replace(/\\`/g, '`');
+          jsCode = jsCode.replace(/\\\\\$\{/g, '${');
+          jsCode = jsCode.replace(/\\\$\{/g, '${');
+          
+          // Remove corrupted emoji characters and Unicode replacement characters
+          jsCode = jsCode.replace(/\?{2,}/g, '');
+          jsCode = jsCode.replace(/\uFFFD/g, '');
+          
+          // Check for characters that would break HTML string injection
+          if (jsCode.includes('</script>') && !jsCode.includes('\\/script>')) {
+            throw new Error('JavaScript contains unescaped "</script>" tag. Use "\\/script>" in strings instead.');
+          }
+          
+          // Check for syntax errors using Function constructor
+          try {
+            const wrappedCode = '(function() {\n' + jsCode + '\n})();';
+            new Function(wrappedCode);
+            console.log('[Test] ✅ Video URL overlay JavaScript syntax is valid');
+          } catch (syntaxError: any) {
+            const errorMsg = syntaxError.message || 'Unknown syntax error';
+            const errorName = syntaxError.name || 'SyntaxError';
+            throw new Error(`JavaScript syntax error: ${errorName}: ${errorMsg}. This will prevent the code from executing in the preview.`);
+          }
+          
+          const sampleDataJson = JSON.stringify(sampleData);
+          const jsCodeJson = JSON.stringify(jsCode);
+          const wrappedJs = '(function() {\n' +
+            '  try {\n' +
+            '    window.interactionData = ' + sampleDataJson + ';\n' +
+            '    var userCode = ' + jsCodeJson + ';\n' +
+            '    eval(userCode);\n' +
+            '  } catch (e) {\n' +
+            '    throw new Error("Runtime error: " + e.message);\n' +
+            '  }\n' +
+            '})();';
+          const scriptEl = document.createElement('script');
+          scriptEl.textContent = wrappedJs;
+          testContainer.appendChild(scriptEl);
+        }
+
+        // Small delay to catch async errors
+        setTimeout(() => {
+          if (document.body.contains(testContainer)) {
+            document.body.removeChild(testContainer);
+            console.log('[Test] 🧹 Cleaned up test container');
+          }
+        }, 100);
+
+        return { success: true };
+
+      } catch (renderError: any) {
+        if (document.body.contains(testContainer)) {
+          document.body.removeChild(testContainer);
+        }
+        return { success: false, error: renderError.message || 'Preview render failed' };
+      }
+
     } else {
       // Better error message - show what type was found
       const type = this.currentInteraction?.interactionTypeCategory || 'none';
       return { 
         success: false, 
-        error: `Unsupported interaction type: "${type}". Supported types: html, pixijs, iframe, uploaded-media` 
+        error: `Unsupported interaction type: "${type}". Supported types: html, pixijs, iframe, uploaded-media, video-url` 
       };
     }
   }
@@ -5718,6 +6494,102 @@ overlayContent + '\n' +
       });
   }
 
+  openVideoUrlSelector() {
+    this.showVideoUrlSelector = true;
+  }
+
+  closeVideoUrlSelector() {
+    this.showVideoUrlSelector = false;
+  }
+
+  onVideoUrlSelected(processedContentId: string) {
+    console.log('[InteractionBuilder] 🎥 Video URL selected:', processedContentId);
+    (this.currentInteraction as any).contentOutputId = processedContentId;
+    this.selectedVideoUrlId = processedContentId;
+    
+    // Store in videoUrlConfig for persistence (for testing in builder)
+    if (!(this.currentInteraction as any).videoUrlConfig) {
+      (this.currentInteraction as any).videoUrlConfig = {};
+    }
+    (this.currentInteraction as any).videoUrlConfig.testVideoUrlContentId = processedContentId;
+    
+    // Update videoUrlConfigText to reflect the change
+    this.videoUrlConfigText = JSON.stringify((this.currentInteraction as any).videoUrlConfig, null, 2);
+    
+    // Fetch video URL details to display name and extract provider/videoId
+    this.http.get<any>(`${environment.apiUrl}/lesson-editor/processed-outputs/${processedContentId}`, {
+      headers: {
+        'x-tenant-id': environment.tenantId,
+        'x-user-id': environment.defaultUserId
+      }
+    })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (content) => {
+          this.selectedVideoUrlName = content.outputName || content.contentSource?.title || 'Selected Video URL';
+          
+          // Extract URL and determine provider
+          const url = content.outputData?.url || content.outputData?.sourceUrl || content.contentSource?.sourceUrl;
+          if (url) {
+            const urlLower = url.toLowerCase();
+            const isYouTube = urlLower.includes('youtube.com') || urlLower.includes('youtu.be');
+            const isVimeo = urlLower.includes('vimeo.com');
+            
+            // Extract video ID
+            let videoId = '';
+            if (isYouTube) {
+              const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+              videoId = match ? match[1] : '';
+            } else if (isVimeo) {
+              const match = url.match(/(?:vimeo\.com\/)(\d+)/);
+              videoId = match ? match[1] : '';
+            }
+            
+            // Store video URL data for preview
+            this.selectedVideoUrlData = {
+              videoId: videoId || content.videoId || content.outputData?.videoId,
+              url: url,
+              title: content.title || content.outputName,
+              thumbnail: content.thumbnail,
+              duration: content.duration,
+              startTime: content.startTime || content.outputData?.startTime,
+              endTime: content.endTime || content.outputData?.endTime,
+            };
+            
+            // Update videoUrlConfig with provider and videoId
+            if (!(this.currentInteraction as any).videoUrlConfig) {
+              (this.currentInteraction as any).videoUrlConfig = {};
+            }
+            (this.currentInteraction as any).videoUrlConfig.provider = isYouTube ? 'youtube' : (isVimeo ? 'vimeo' : 'unknown');
+            (this.currentInteraction as any).videoUrlConfig.videoId = videoId;
+            (this.currentInteraction as any).videoUrlConfig.videoUrl = url;
+            this.videoUrlConfigText = JSON.stringify((this.currentInteraction as any).videoUrlConfig, null, 2);
+            
+            // Trigger preview update
+            this.previewKey = Date.now();
+          }
+          
+          console.log('[InteractionBuilder] ✅ Video URL data stored:', this.selectedVideoUrlData);
+          this.markChanged();
+        },
+        error: (err) => {
+          console.error('[InteractionBuilder] ❌ Failed to fetch video URL details:', err);
+          if (err.status === 404) {
+            console.warn('[InteractionBuilder] ⚠️ Processed content not found, clearing selection');
+            this.selectedVideoUrlId = null;
+            this.selectedVideoUrlName = '';
+            if ((this.currentInteraction as any).videoUrlConfig) {
+              delete (this.currentInteraction as any).videoUrlConfig.testVideoUrlContentId;
+              this.videoUrlConfigText = JSON.stringify((this.currentInteraction as any).videoUrlConfig, null, 2);
+            }
+          } else {
+            this.selectedVideoUrlName = 'Selected Video URL';
+          }
+          this.markChanged();
+        }
+      });
+  }
+
   openIframeContentSelector() {
     this.showIframeContentSelector = true;
   }
@@ -5728,18 +6600,8 @@ overlayContent + '\n' +
 
   onIframeContentSelected(processedContentId: string) {
     console.log('[InteractionBuilder] 🔗 iFrame content selected:', processedContentId);
-    this.selectedIframeContentId = processedContentId;
     
-    // Store in iframeConfig for persistence (for testing in builder)
-    if (!this.currentInteraction!.iframeConfig) {
-      this.currentInteraction!.iframeConfig = {};
-    }
-    this.currentInteraction!.iframeConfig.testContentOutputId = processedContentId;
-    
-    // Update iframeConfigText to reflect the change
-    this.iframeConfigText = JSON.stringify(this.currentInteraction!.iframeConfig, null, 2);
-    
-    // Fetch content details to display name and URL
+    // Fetch content details first to check if it's a video URL
     this.http.get<any>(`${environment.apiUrl}/lesson-editor/processed-outputs/${processedContentId}`, {
       headers: {
         'x-tenant-id': environment.tenantId,
@@ -5749,9 +6611,41 @@ overlayContent + '\n' +
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (content) => {
-          this.selectedIframeContentName = content.outputName || content.contentSource?.title || 'Selected Content';
           // Extract URL from outputData if available
           const url = content.outputData?.url || content.outputData?.sourceUrl || content.contentSource?.sourceUrl;
+          
+          // Check if URL is YouTube or Vimeo
+          if (url) {
+            const urlLower = url.toLowerCase();
+            const isYouTube = urlLower.includes('youtube.com') || urlLower.includes('youtu.be');
+            const isVimeo = urlLower.includes('vimeo.com');
+            
+            if (isYouTube || isVimeo) {
+              // Show error message and prevent selection
+              this.snackbarMessage = `Cannot use ${isYouTube ? 'YouTube' : 'Vimeo'} URLs in iframe interactions. Please use the "Video URL" interaction category instead.`;
+              this.showSnackbar = true;
+              setTimeout(() => {
+                this.showSnackbar = false;
+              }, 5000);
+              console.warn('[InteractionBuilder] ⚠️ Video URL detected in iframe interaction:', url);
+              return;
+            }
+          }
+          
+          // If not a video URL, proceed with selection
+          this.selectedIframeContentId = processedContentId;
+          
+          // Store in iframeConfig for persistence (for testing in builder)
+          if (!this.currentInteraction!.iframeConfig) {
+            this.currentInteraction!.iframeConfig = {};
+          }
+          this.currentInteraction!.iframeConfig.testContentOutputId = processedContentId;
+          
+          // Update iframeConfigText to reflect the change
+          this.iframeConfigText = JSON.stringify(this.currentInteraction!.iframeConfig, null, 2);
+          
+          this.selectedIframeContentName = content.outputName || content.contentSource?.title || 'Selected Content';
+          
           if (url && this.currentInteraction!.sampleData) {
             // Update sample data URL if it doesn't exist
             if (!this.currentInteraction!.sampleData.url) {

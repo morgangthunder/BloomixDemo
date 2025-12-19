@@ -6,6 +6,7 @@ import { LessonDataLink } from '../../entities/lesson-data-link.entity';
 import { ProcessedContentOutput } from '../../entities/processed-content-output.entity';
 import { WeaviateService } from '../../services/weaviate.service';
 import { YouTubeService } from '../../services/youtube.service';
+import { VimeoService } from '../../services/vimeo.service';
 import { ContentAnalyzerService } from '../../services/content-analyzer.service';
 import { MediaMetadataService } from '../../services/media-metadata.service';
 import { FileStorageService } from '../../services/file-storage.service';
@@ -28,6 +29,7 @@ export class ContentSourcesService {
     private processedContentRepository: Repository<ProcessedContentOutput>,
     private weaviateService: WeaviateService,
     private youtubeService: YouTubeService,
+    private vimeoService: VimeoService,
     private contentAnalyzerService: ContentAnalyzerService,
     private mediaMetadataService: MediaMetadataService,
     private fileStorageService: FileStorageService,
@@ -220,6 +222,177 @@ export class ContentSourcesService {
         await this.processMediaFile(contentSource, approvedBy);
         processedOutputCreated = true;
         this.logger.log(`[ContentSources] ✅ Media file processed successfully`);
+      } else if (contentSource.type === 'url' && (contentSource.metadata?.videoId || 
+                 (contentSource.sourceUrl && (contentSource.sourceUrl.includes('youtube.com') || contentSource.sourceUrl.includes('vimeo.com'))))) {
+        // Handle YouTube/Vimeo URLs - analyze transcript if available, but allow approval even without processed outputs
+        this.logger.log(`[ContentSources] 🎥 Processing YouTube/Vimeo URL: ${contentSource.id}`);
+        
+        // Check if processed output already exists (created by frontend when user submitted)
+        const existingProcessedOutput = await this.processedContentRepository.findOne({
+          where: {
+            contentSourceId: contentSource.id,
+            outputType: contentSource.metadata?.videoId ? 
+              (contentSource.sourceUrl?.includes('vimeo.com') ? 'vimeo_video' : 'youtube_video') : 
+              undefined,
+          },
+        });
+        
+        if (existingProcessedOutput) {
+          processedOutputCreated = true;
+          this.logger.log(`[ContentSources] ✅ YouTube/Vimeo URL already has processed output (ID: ${existingProcessedOutput.id})`);
+        } else {
+          // Try to analyze transcript content if available
+          const hasTranscript = contentSource.fullText && contentSource.fullText.trim().length > 0 && 
+                               contentSource.fullText !== 'Transcript not available for this video.';
+          
+          if (hasTranscript) {
+            this.logger.log(`[ContentSources] 📝 YouTube/Vimeo URL has transcript (${contentSource.fullText.length} chars), analyzing...`);
+            try {
+              const results = await this.contentAnalyzerService.analyzeContentSource(contentSource.id, approvedBy);
+              
+              if (results && results.length > 0) {
+                // Verify processed output exists
+                const processedOutput = await this.processedContentRepository.findOne({
+                  where: {
+                    contentSourceId: contentSource.id,
+                    outputType: 'true-false-selection', // Or other output types from analysis
+                  },
+                });
+                
+                if (processedOutput) {
+                  processedOutputCreated = true;
+                  this.logger.log(`[ContentSources] ✅ Transcript analyzed successfully - generated ${results.length} output(s)`);
+                } else {
+                  // Analysis ran but didn't create processed output - create one from metadata
+                  this.logger.log(`[ContentSources] ℹ️ Transcript analyzed but no processed output created - creating from metadata`);
+                  const outputType = contentSource.sourceUrl?.includes('vimeo.com') ? 'vimeo_video' : 'youtube_video';
+                  
+                  const processedOutput = this.processedContentRepository.create({
+                    lessonId: '00000000-0000-0000-0000-000000000000',
+                    contentSourceId: contentSource.id,
+                    outputName: contentSource.title || 'Video',
+                    outputType: outputType,
+                    outputData: {
+                      videoId: contentSource.metadata?.videoId,
+                      url: contentSource.sourceUrl,
+                      startTime: contentSource.metadata?.startTime || null,
+                      endTime: contentSource.metadata?.endTime || null,
+                    },
+                    videoId: contentSource.metadata?.videoId || null,
+                    title: contentSource.title || null,
+                    description: contentSource.summary || null,
+                    thumbnail: contentSource.metadata?.thumbnail || null,
+                    channel: contentSource.metadata?.channel || null,
+                    duration: contentSource.metadata?.duration || null,
+                    transcript: contentSource.fullText || null,
+                    startTime: contentSource.metadata?.startTime || null,
+                    endTime: contentSource.metadata?.endTime || null,
+                    createdBy: approvedBy,
+                  });
+                  
+                  await this.processedContentRepository.save(processedOutput);
+                  this.logger.log(`[ContentSources] ✅ Created processed content item (ID: ${processedOutput.id}, outputType: ${outputType})`);
+                  processedOutputCreated = true;
+                }
+              } else {
+                // Analysis didn't generate outputs - create processed content from metadata
+                this.logger.log(`[ContentSources] ℹ️ Transcript analysis didn't generate outputs - creating from metadata`);
+                const outputType = contentSource.sourceUrl?.includes('vimeo.com') ? 'vimeo_video' : 'youtube_video';
+                
+                const processedOutput = this.processedContentRepository.create({
+                  lessonId: '00000000-0000-0000-0000-000000000000',
+                  contentSourceId: contentSource.id,
+                  outputName: contentSource.title || 'Video',
+                  outputType: outputType,
+                  outputData: {
+                    videoId: contentSource.metadata?.videoId,
+                    url: contentSource.sourceUrl,
+                    startTime: contentSource.metadata?.startTime || null,
+                    endTime: contentSource.metadata?.endTime || null,
+                  },
+                  videoId: contentSource.metadata?.videoId || null,
+                  title: contentSource.title || null,
+                  description: contentSource.summary || null,
+                  thumbnail: contentSource.metadata?.thumbnail || null,
+                  channel: contentSource.metadata?.channel || null,
+                  duration: contentSource.metadata?.duration || null,
+                  transcript: contentSource.fullText || null,
+                  startTime: contentSource.metadata?.startTime || null,
+                  endTime: contentSource.metadata?.endTime || null,
+                  createdBy: approvedBy,
+                });
+                
+                await this.processedContentRepository.save(processedOutput);
+                this.logger.log(`[ContentSources] ✅ Created processed content item (ID: ${processedOutput.id}, outputType: ${outputType})`);
+                processedOutputCreated = true;
+              }
+            } catch (analysisError) {
+              // Analysis failed - create processed content from metadata
+              this.logger.warn(`[ContentSources] ⚠️ Transcript analysis failed: ${analysisError.message} - creating processed content from metadata`);
+              const outputType = contentSource.sourceUrl?.includes('vimeo.com') ? 'vimeo_video' : 'youtube_video';
+              
+              const processedOutput = this.processedContentRepository.create({
+                lessonId: '00000000-0000-0000-0000-000000000000',
+                contentSourceId: contentSource.id,
+                outputName: contentSource.title || 'Video',
+                outputType: outputType,
+                outputData: {
+                  videoId: contentSource.metadata?.videoId,
+                  url: contentSource.sourceUrl,
+                  startTime: contentSource.metadata?.startTime || null,
+                  endTime: contentSource.metadata?.endTime || null,
+                },
+                videoId: contentSource.metadata?.videoId || null,
+                title: contentSource.title || null,
+                description: contentSource.summary || null,
+                thumbnail: contentSource.metadata?.thumbnail || null,
+                channel: contentSource.metadata?.channel || null,
+                duration: contentSource.metadata?.duration || null,
+                transcript: contentSource.fullText || null,
+                startTime: contentSource.metadata?.startTime || null,
+                endTime: contentSource.metadata?.endTime || null,
+                createdBy: approvedBy,
+              });
+              
+              await this.processedContentRepository.save(processedOutput);
+              this.logger.log(`[ContentSources] ✅ Created processed content item (ID: ${processedOutput.id}, outputType: ${outputType})`);
+              processedOutputCreated = true;
+            }
+          } else {
+            // No transcript available - create processed content from metadata
+            this.logger.log(`[ContentSources] ℹ️ No transcript available for YouTube/Vimeo URL - creating processed content from metadata`);
+            
+            // Create processed content item from video metadata
+            const outputType = contentSource.sourceUrl?.includes('vimeo.com') ? 'vimeo_video' : 'youtube_video';
+            
+            const processedOutput = this.processedContentRepository.create({
+              lessonId: '00000000-0000-0000-0000-000000000000', // Placeholder - will be linked to lessons later
+              contentSourceId: contentSource.id,
+              outputName: contentSource.title || 'Video',
+              outputType: outputType,
+              outputData: {
+                videoId: contentSource.metadata?.videoId,
+                url: contentSource.sourceUrl,
+                startTime: contentSource.metadata?.startTime || null,
+                endTime: contentSource.metadata?.endTime || null,
+              },
+              videoId: contentSource.metadata?.videoId || null,
+              title: contentSource.title || null,
+              description: contentSource.summary || null,
+              thumbnail: contentSource.metadata?.thumbnail || null,
+              channel: contentSource.metadata?.channel || null,
+              duration: contentSource.metadata?.duration || null,
+              transcript: contentSource.fullText || null,
+              startTime: contentSource.metadata?.startTime || null,
+              endTime: contentSource.metadata?.endTime || null,
+              createdBy: approvedBy,
+            });
+            
+            await this.processedContentRepository.save(processedOutput);
+            this.logger.log(`[ContentSources] ✅ Created processed content item (ID: ${processedOutput.id}, outputType: ${outputType})`);
+            processedOutputCreated = true;
+          }
+        }
       } else {
         // For all other content types, use standard content analysis
         this.logger.log(`[ContentSources] 🔍 Auto-processing content source: ${contentSource.id} (type: ${contentSource.type})`);
@@ -800,7 +973,7 @@ export class ContentSourcesService {
     
     this.logger.log(`✅ Fetched video data: ${videoData.videoId} - ${videoData.title}`);
     
-    // Step 2: Save URL as source content (auto-approved for MVP)
+    // Step 2: Save URL as source content (pending approval)
     const sourceContent = this.contentSourcesRepository.create({
       tenantId: tenantId || '00000000-0000-0000-0000-000000000001',
       createdBy: userId || '00000000-0000-0000-0000-000000000011',
@@ -809,7 +982,7 @@ export class ContentSourcesService {
       title: videoData.title,
       summary: videoData.description || `YouTube video: ${videoData.title}`,
       fullText: videoData.transcript || '',
-      status: 'approved', // Auto-approve for MVP (can add approval workflow later)
+      status: 'pending', // Require approval like other content sources
       metadata: {
         videoId: videoData.videoId,
         channel: videoData.channel,
@@ -823,7 +996,7 @@ export class ContentSourcesService {
     
     const savedSourceRaw = await this.contentSourcesRepository.save(sourceContent);
     let savedSource = (Array.isArray(savedSourceRaw) ? savedSourceRaw[0] : savedSourceRaw) as ContentSource;
-    this.logger.log(`📚 Saved source content: ${savedSource.id}`);
+    this.logger.log(`📚 Saved source content: ${savedSource.id} (status: ${savedSource.status})`);
     
     // Step 3: Index source content in Weaviate
     try {
@@ -846,6 +1019,70 @@ export class ContentSourcesService {
       
       savedSource.weaviateId = weaviateId;
       savedSource = await this.contentSourcesRepository.save(savedSource);
+      this.logger.log(`🔍 Indexed in Weaviate: ${weaviateId}`);
+    } catch (error) {
+      this.logger.error(`Failed to index in Weaviate: ${error.message}`);
+    }
+    
+    // Step 4: Return video data + source content ID for frontend to save as processed output
+    return {
+      success: true,
+      data: videoData,
+      sourceContentId: savedSource.id, // Frontend will use this when saving processed output
+    };
+  }
+
+  async processVimeoUrl(url: string, startTime?: number, endTime?: number, tenantId?: string, userId?: string) {
+    this.logger.log(`🎬 Processing Vimeo URL: ${url}`);
+    
+    // Step 1: Fetch video data from Vimeo API
+    const videoData = await this.vimeoService.processVimeoUrl(url, startTime, endTime);
+    
+    this.logger.log(`✅ Fetched video data: ${videoData.videoId} - ${videoData.title}`);
+    
+    // Step 2: Save URL as source content (pending approval)
+    const sourceContent = this.contentSourcesRepository.create({
+      tenantId: tenantId || '00000000-0000-0000-0000-000000000001',
+      createdBy: userId || '00000000-0000-0000-0000-000000000011',
+      type: 'url', // Vimeo URLs are stored as 'url' type
+      sourceUrl: url,
+      title: videoData.title,
+      summary: videoData.description || `Vimeo video: ${videoData.title}`,
+      fullText: videoData.transcript || '',
+      status: 'pending', // Require approval like other content sources
+      metadata: {
+        videoId: videoData.videoId,
+        channel: videoData.channel,
+        duration: videoData.duration,
+        topics: [],
+        keywords: videoData.title.split(' ').filter(w => w.length > 3),
+        difficulty: 'beginner',
+        language: 'en',
+      },
+    } as any); // Type cast needed due to relation properties
+    
+    const savedSourceRaw = await this.contentSourcesRepository.save(sourceContent);
+    let savedSource = (Array.isArray(savedSourceRaw) ? savedSourceRaw[0] : savedSourceRaw) as ContentSource;
+    this.logger.log(`📚 Saved source content: ${savedSource.id} (status: ${savedSource.status})`);
+    
+    // Step 3: Index source content in Weaviate
+    try {
+      const weaviateId = await this.weaviateService.indexContent({
+        contentSourceId: savedSource.id,
+        tenantId: savedSource.tenantId,
+        summary: savedSource.summary,
+        fullText: savedSource.fullText || '',
+        topics: savedSource.metadata?.topics || [],
+        keywords: savedSource.metadata?.keywords || [],
+        type: savedSource.type,
+        status: savedSource.status,
+        title: savedSource.title,
+        sourceUrl: savedSource.sourceUrl || '',
+        contentCategory: 'source_content',
+        videoId: videoData.videoId,
+        channel: videoData.channel,
+        transcript: videoData.transcript,
+      });
       this.logger.log(`🔍 Indexed in Weaviate: ${weaviateId}`);
     } catch (error) {
       this.logger.error(`Failed to index in Weaviate: ${error.message}`);

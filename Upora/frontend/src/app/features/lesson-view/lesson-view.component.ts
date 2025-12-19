@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ChangeDetectorRef, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 // html2canvas will be dynamically imported
 import { Router, ActivatedRoute } from '@angular/router';
@@ -21,11 +21,12 @@ import { TrueFalseSelectionComponent } from '../interactions/true-false-selectio
 import { FloatingTeacherWidgetComponent, ScriptBlock, ChatMessage as WidgetChatMessage } from '../../shared/components/floating-teacher/floating-teacher-widget.component';
 import { SnackMessageComponent } from '../../shared/components/snack-message/snack-message.component';
 import { MediaPlayerComponent } from '../../shared/components/media-player/media-player.component';
+import { VideoUrlPlayerComponent } from '../../shared/components/video-url-player/video-url-player.component';
 
 @Component({
   selector: 'app-lesson-view',
   standalone: true,
-  imports: [CommonModule, FormsModule, IonContent, TrueFalseSelectionComponent, FloatingTeacherWidgetComponent, SnackMessageComponent, MediaPlayerComponent],
+  imports: [CommonModule, FormsModule, IonContent, TrueFalseSelectionComponent, FloatingTeacherWidgetComponent, SnackMessageComponent, MediaPlayerComponent, VideoUrlPlayerComponent],
   template: `
     <div class="bg-brand-dark text-white overflow-hidden flex flex-col md:flex-row lesson-view-wrapper" [class.fullscreen-active]="isFullscreen">
       <!-- Mobile overlay -->
@@ -207,7 +208,34 @@ import { MediaPlayerComponent } from '../../shared/components/media-player/media
                    [style.height]="mediaPlayerData.sectionHeight || 'auto'"
                    [style.min-height]="mediaPlayerData.sectionMinHeight || '200px'"
                    [style.max-height]="mediaPlayerData.sectionMaxHeight || 'none'">
-                <div [innerHTML]="getSanitizedSectionHtml(mediaPlayerData.sectionHtml, mediaPlayerData.sectionCss)"></div>
+                <div [innerHTML]="getSanitizedSectionHtml(mediaPlayerData.sectionHtml || '', mediaPlayerData.sectionCss || '')"></div>
+              </div>
+            </div>
+
+            <!-- Video URL Interactions -->
+            <div *ngIf="!isLoadingInteraction && interactionBuild?.interactionTypeCategory === 'video-url' && videoUrlPlayerData && !interactionError" class="media-interaction-container">
+              <app-video-url-player
+                #videoUrlPlayer
+                [config]="videoUrlPlayerData.config"
+                [overlayHtml]="videoUrlPlayerData.overlayHtml"
+                [overlayCss]="videoUrlPlayerData.overlayCss"
+                [overlayJs]="videoUrlPlayerData.overlayJs"
+                (videoLoaded)="onVideoUrlLoaded($event)"
+                (timeUpdate)="onVideoUrlTimeUpdate($event)"
+                (playEvent)="onVideoUrlPlay()"
+                (pauseEvent)="onVideoUrlPause()"
+                (endedEvent)="onVideoUrlEnded()"
+                (errorEvent)="onVideoUrlError($event)">
+              </app-video-url-player>
+
+              <!-- Section below player (when displayMode is 'section') -->
+              <div *ngIf="videoUrlPlayerData.displayMode === 'section' && (videoUrlPlayerData.sectionHtml || videoUrlPlayerData.sectionCss || videoUrlPlayerData.sectionJs)" 
+                   #videoUrlSectionContainer
+                   class="interaction-section-below"
+                   [style.height]="videoUrlPlayerData.sectionHeight || 'auto'"
+                   [style.min-height]="videoUrlPlayerData.sectionMinHeight || '200px'"
+                   [style.max-height]="videoUrlPlayerData.sectionMaxHeight || 'none'">
+                <div [innerHTML]="getSanitizedSectionHtml(videoUrlPlayerData.sectionHtml || '', videoUrlPlayerData.sectionCss || '')"></div>
               </div>
             </div>
 
@@ -382,8 +410,8 @@ import { MediaPlayerComponent } from '../../shared/components/media-player/media
               </svg>
             </button>
             <div class="script-progress-info">
-              <!-- Show volume control when media player is present or TTS is active, but hide when timer is shown or interaction has ended -->
-              <div *ngIf="(isMediaPlayerReady || isTTSActive) && !showTimer && !interactionEnded" class="volume-control-container">
+              <!-- Show volume control when media player or video URL is present or TTS is active, but hide when timer is shown or interaction has ended -->
+              <div *ngIf="(isMediaPlayerReady || isVideoUrlReady || isTTSActive) && !showTimer && !interactionEnded" class="volume-control-container">
                 <label for="volume-slider" class="volume-label">🔊</label>
                 <input 
                   type="range" 
@@ -404,8 +432,8 @@ import { MediaPlayerComponent } from '../../shared/components/media-player/media
                   Next →
                 </button>
               </div>
-              <!-- Show script text when no media player and no TTS -->
-              <ng-container *ngIf="!isMediaPlayerReady && !isTTSActive">
+              <!-- Show script text when no media player, no video URL, and no TTS -->
+              <ng-container *ngIf="!isMediaPlayerReady && !isVideoUrlReady && !isTTSActive">
                 <span *ngIf="!showTimer" class="script-title">{{ currentTeacherScript?.text?.substring(0, 40) || 'Ready to teach' }}{{ (currentTeacherScript?.text?.length || 0) > 40 ? '...' : '' }}</span>
                 <span *ngIf="showTimer" class="timer-display">⏱️ {{ formatTime(elapsedSeconds) }}</span>
               </ng-container>
@@ -1133,9 +1161,28 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     sectionMaxHeight?: string;
   } | null = null;
   @ViewChild('mediaPlayer') mediaPlayerRef?: MediaPlayerComponent;
+
+  // Video URL player properties (for video-url interactions)
+  videoUrlPlayerData: {
+    config: any; // Passed directly to VideoUrlPlayerComponent
+    overlayHtml: string;
+    overlayCss: string;
+    overlayJs: string;
+    sectionHtml?: string;
+    sectionCss?: string;
+    sectionJs?: string;
+    displayMode?: 'overlay' | 'section';
+    sectionHeight?: string;
+    sectionMinHeight?: string;
+    sectionMaxHeight?: string;
+  } | null = null;
+  @ViewChild('videoUrlPlayer') videoUrlPlayerRef?: VideoUrlPlayerComponent;
+  @ViewChild('videoUrlSectionContainer') videoUrlSectionContainerRef?: any;
   
   mediaVolume = 1.0; // Default volume (0.0 to 1.0)
   isTTSActive = false; // Will be true when TTS is integrated
+  isMediaPlayerReady = false; // Media player (uploaded-media) is ready
+  isVideoUrlReady = false; // Video URL player is ready
   Math = Math; // Expose Math to template
   
   private destroy$ = new Subject<void>();
@@ -1155,7 +1202,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     private bridgeService: InteractionAIBridgeService,
     private snackService: SnackMessageService,
     private sanitizer: DomSanitizer,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private ngZone: NgZone
   ) {}
 
   ngOnInit() {
@@ -1186,6 +1234,76 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       if (overlayContainer) {
         overlayContainer.classList.add('media-playing');
         console.log('[LessonView] ✅ Overlay HTML hidden');
+      }
+    }) as EventListener);
+    
+    // Listen for ai-sdk-message custom events from video-url section SDK
+    // These are sent via CustomEvent (same-document communication) instead of postMessage
+    document.addEventListener('ai-sdk-message', ((e: CustomEvent) => {
+      const message = e.detail;
+      if (!message || !message.type) {
+        return;
+      }
+      
+      console.log('[LessonView] 📨 Received ai-sdk-message custom event:', message.type);
+      
+      // Route message to bridge service (which handles it via handleIframeMessage)
+      // Create a mock MessageEvent-like object for compatibility
+      const mockEvent = {
+        data: message,
+        source: window,
+        origin: window.location.origin
+      } as any;
+      
+      // Call bridge service's private method via a workaround
+      // Since handleIframeMessage is private, we'll handle common messages directly
+      switch (message.type) {
+        case 'ai-sdk-minimize-chat-ui':
+          this.interactionAISDK.minimizeChatUI();
+          console.log('[LessonView] ✅ Minimized chat UI from SDK message');
+          break;
+        case 'ai-sdk-show-chat-ui':
+          this.interactionAISDK.showChatUI();
+          console.log('[LessonView] ✅ Showed chat UI from SDK message');
+          break;
+        case 'ai-sdk-activate-fullscreen':
+          this.interactionAISDK.activateFullscreen();
+          console.log('[LessonView] ✅ Activated fullscreen from SDK message');
+          break;
+        case 'ai-sdk-deactivate-fullscreen':
+          this.interactionAISDK.deactivateFullscreen();
+          console.log('[LessonView] ✅ Deactivated fullscreen from SDK message');
+          break;
+        case 'ai-sdk-post-to-chat':
+          this.interactionAISDK.postToChat(message.content, message.role || 'assistant', message.openChat || false);
+          console.log('[LessonView] ✅ Posted to chat from SDK message');
+          break;
+        case 'ai-sdk-show-script':
+          this.interactionAISDK.showScript(message.text || message.script, message.openChat || false);
+          console.log('[LessonView] ✅ Showed script from SDK message');
+          break;
+        case 'ai-sdk-show-snack':
+          this.interactionAISDK.showSnack(message.content, message.duration, message.hideFromChatUI || false);
+          console.log('[LessonView] ✅ Showed snack from SDK message');
+          break;
+        case 'ai-sdk-hide-snack':
+          this.interactionAISDK.hideSnack();
+          console.log('[LessonView] ✅ Hid snack from SDK message');
+          break;
+        case 'ai-sdk-emit-event':
+          this.interactionAISDK.emitEvent(message.event, message.processedContentId);
+          console.log('[LessonView] ✅ Emitted event from SDK message');
+          break;
+        case 'ai-sdk-update-state':
+          this.interactionAISDK.updateState(message.key, message.value);
+          console.log('[LessonView] ✅ Updated state from SDK message');
+          break;
+        case 'ai-sdk-get-state':
+          // This one needs a callback, but SDK test doesn't use it with callback
+          console.log('[LessonView] 📊 Get state requested from SDK message');
+          break;
+        default:
+          console.log('[LessonView] 📨 Unhandled SDK message type:', message.type);
       }
     }) as EventListener);
     
@@ -1397,6 +1515,17 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       setTimeout(() => {
         this.toggleFullscreen();
       }, 300); // Small delay to ensure iframe is fully rendered
+    }
+    
+    // Check if config has "playVideoOnLoad" option for video-url interactions
+    if (this.interactionBuild?.interactionTypeCategory === 'video-url' && this.videoUrlPlayerData) {
+      const videoConfig = config.playVideoOnLoad !== undefined ? config.playVideoOnLoad : (this.videoUrlPlayerData.config?.autoplay || false);
+      if (videoConfig === true && this.videoUrlPlayerRef && this.isVideoUrlReady) {
+        console.log('[LessonView] Config requests video autoplay on load');
+        setTimeout(() => {
+          this.videoUrlPlayerRef?.playVideoUrl();
+        }, 500); // Delay to ensure player is ready
+      }
     }
     
     // Send SDK ready message after iframe is loaded
@@ -2234,16 +2363,20 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     
     // Don't clear interactionBuild or mediaPlayerData if we're already on the same media interaction
     // This prevents the player from disappearing during playback
-    const isCurrentlyMediaInteraction = this.interactionBuild?.interactionTypeCategory === 'uploaded-media';
+    const isCurrentlyMediaInteraction = this.interactionBuild?.interactionTypeCategory === 'uploaded-media' || 
+                                        this.interactionBuild?.interactionTypeCategory === 'video-url';
     const currentSubStageId = this.activeSubStage?.id;
     const isSameMediaInteraction = isCurrentlyMediaInteraction && 
                                    currentSubStageId === subStage.id &&
                                    this.interactionBuild?.id === interactionTypeId;
     
     if (!isSameMediaInteraction) {
-      // Only clear if not the same media interaction
+      // Only clear if not the same media/video-url interaction
       this.interactionBuild = null;
       this.mediaPlayerData = null;
+      this.videoUrlPlayerData = null;
+      // Clear cached HTML when clearing video URL data
+      this.cachedVideoUrlSectionHtml = null;
       this.isMediaPlayerReady = false;
     }
     
@@ -2269,10 +2402,16 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         .subscribe({
           next: (build: any) => {
             console.log('[LessonView] ✅ Loaded interaction build:', build.id, 'Category:', build.interactionTypeCategory);
-            // Check if this is an uploaded-media interaction
+            // Check if this is an uploaded-media or video-url interaction
             if (build.interactionTypeCategory === 'uploaded-media') {
               console.log('[LessonView] 🎬 Detected uploaded-media interaction, loading media player data');
               this.loadMediaPlayerData(build, subStage);
+              return;
+            }
+
+            if (build.interactionTypeCategory === 'video-url') {
+              console.log('[LessonView] 🎬 Detected video-url interaction, loading video URL player data');
+              this.loadVideoUrlPlayerData(build, subStage);
               return;
             }
             
@@ -2645,6 +2784,171 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       });
   }
 
+  // Helper method to load video URL player data for video-url interactions
+  private loadVideoUrlPlayerData(build: any, subStage: SubStage) {
+    console.log('[LessonView] 🎬 Loading video URL player data for video-url interaction');
+    console.log('[LessonView] 🎬 Build ID:', build.id, 'SubStage ID:', subStage.id);
+    this.isLoadingInteraction = true;
+    this.interactionBuild = build;
+
+    // Get processed content ID from config / substage
+    const processedContentId = this.normalizeContentOutputId(
+      subStage.contentOutputId || (subStage.interaction as any)?.contentOutputId || (subStage.interaction as any)?.config?.contentOutputId
+    );
+
+    if (!processedContentId) {
+      console.warn('[LessonView] ❌ No processed content ID found for video-url interaction');
+      this.interactionError = 'No video content selected for this interaction. Please select a processed YouTube/Vimeo URL in the lesson editor.';
+      this.isLoadingInteraction = false;
+      return;
+    }
+
+    // Fetch processed output (contains URL metadata)
+    this.http.get(`${environment.apiUrl}/lesson-editor/processed-outputs/${processedContentId}`)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (output: any) => {
+          console.log('[LessonView] ✅ Loaded processed output for video URL:', processedContentId);
+
+          const outputData = output.outputData || {};
+          const url = outputData.url || outputData.sourceUrl || output.contentSource?.sourceUrl;
+
+          // Determine provider from URL or videoUrlConfig
+          const configFromInteraction = (build as any).videoUrlConfig || {};
+          let provider: 'youtube' | 'vimeo' | 'unknown' = configFromInteraction.provider || 'unknown';
+          let videoId: string | undefined = configFromInteraction.videoId;
+
+          if (url) {
+            const urlLower = url.toLowerCase();
+            const isYouTube = urlLower.includes('youtube.com') || urlLower.includes('youtu.be');
+            const isVimeo = urlLower.includes('vimeo.com');
+
+            if (isYouTube) {
+              provider = 'youtube';
+              if (!videoId) {
+                const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+                videoId = match ? match[1] : undefined;
+              }
+            } else if (isVimeo) {
+              provider = 'vimeo';
+              if (!videoId) {
+                const match = url.match(/(?:vimeo\.com\/)(\d+)/);
+                videoId = match ? match[1] : undefined;
+              }
+            }
+          }
+
+          if (!url || !videoId || provider === 'unknown') {
+            console.warn('[LessonView] ❌ Could not determine provider or videoId for video-url interaction', { url, provider, videoId });
+            this.interactionError = 'Invalid video URL configuration. Please ensure the processed content is a valid YouTube or Vimeo URL.';
+            this.isLoadingInteraction = false;
+            return;
+          }
+
+          // Build config for VideoUrlPlayerComponent
+          const substageConfig = subStage.interaction?.config || {};
+          const autoplay = substageConfig.autoplay ?? configFromInteraction.autoplay ?? false;
+          const loop = substageConfig.loop ?? configFromInteraction.loop ?? false;
+          const defaultVolume = substageConfig.defaultVolume ?? configFromInteraction.defaultVolume ?? 1;
+          const showCaptions = substageConfig.showCaptions ?? configFromInteraction.showCaptions ?? false;
+          const videoQuality = substageConfig.videoQuality ?? configFromInteraction.videoQuality ?? 'auto';
+          const startTime = substageConfig.startTime ?? configFromInteraction.startTime;
+          const endTime = substageConfig.endTime ?? configFromInteraction.endTime;
+          const hideOverlayDuringPlayback = substageConfig.hideOverlayDuringPlayback ?? configFromInteraction.hideOverlayDuringPlayback ?? true;
+
+          // Overlay/section code from interaction build
+          const overlayHtml = build.htmlCode || '';
+          const overlayCss = build.cssCode || '';
+          const overlayJs = build.jsCode || '';
+          
+          // Debug: Log jsCode length to check for truncation
+          console.log('[LessonView] 📝 Video URL jsCode length:', overlayJs.length);
+          if (overlayJs.length < 100) {
+            console.warn('[LessonView] ⚠️ Video URL jsCode is suspiciously short! First 200 chars:', overlayJs.substring(0, 200));
+          }
+
+          // Determine display mode, enforcing section mode for YouTube/Vimeo
+          let displayMode: 'overlay' | 'section' = (configFromInteraction.displayMode as any) || 'section';
+          if ((provider === 'youtube' || provider === 'vimeo') && displayMode === 'overlay') {
+            console.log('[LessonView] ⚠️ Overlay mode not allowed for YouTube/Vimeo. Forcing section mode.');
+            displayMode = 'section';
+          }
+
+          this.videoUrlPlayerData = {
+            config: {
+              provider,
+              videoId,
+              videoUrl: url,
+              autoplay,
+              loop,
+              defaultVolume,
+              showCaptions,
+              videoQuality,
+              startTime,
+              endTime,
+              hideOverlayDuringPlayback,
+            },
+            overlayHtml: displayMode === 'overlay' ? overlayHtml : '',
+            overlayCss: displayMode === 'overlay' ? overlayCss : '',
+            overlayJs: displayMode === 'overlay' ? overlayJs : '',
+            sectionHtml: displayMode === 'section' ? overlayHtml : '',
+            sectionCss: displayMode === 'section' ? overlayCss : '',
+            sectionJs: displayMode === 'section' ? overlayJs : '',
+            displayMode,
+            sectionHeight: configFromInteraction.sectionHeight || 'auto',
+            sectionMinHeight: configFromInteraction.sectionMinHeight || '200px',
+            sectionMaxHeight: configFromInteraction.sectionMaxHeight || 'none',
+          };
+
+          console.log('[LessonView] ✅ Video URL player data loaded:', {
+            provider,
+            videoId,
+            url,
+            displayMode,
+          });
+
+          this.isLoadingInteraction = false;
+          
+          // Clear cached HTML when loading new video URL data (to allow re-initialization)
+          this.cachedVideoUrlSectionHtml = null;
+          
+          // Store player reference globally for SDK access
+          (window as any).__videoUrlPlayerRef = this.videoUrlPlayerRef;
+          
+          // Check for autoplay/playVideoOnLoad
+          const config = (this.activeSubStage as any)?.interaction?.config || {};
+          const playOnLoad = config.playVideoOnLoad !== undefined ? config.playVideoOnLoad : (configFromInteraction.autoplay || false);
+          
+          // Execute section JS and send SDK ready after view update
+          // Use queueMicrotask to ensure Angular's change detection has completed
+          queueMicrotask(() => {
+            setTimeout(() => {
+              this.executeVideoUrlSectionJs();
+              this.sendSDKReadyToVideoUrlSection();
+              
+              // Auto-play if configured (after player is ready)
+              if (playOnLoad) {
+                setTimeout(() => {
+                  if (this.videoUrlPlayerRef && this.isVideoUrlReady) {
+                    this.videoUrlPlayerRef.playVideoUrl();
+                  }
+                }, 500);
+              }
+            }, 200); // Increased delay to ensure DOM is ready
+          });
+        },
+        error: (error) => {
+          console.error('[LessonView] ❌ Failed to load processed output for video URL:', error);
+          if (error.status === 404) {
+            this.interactionError = 'Video content not found. The processed content associated with this interaction could not be found.';
+          } else {
+            this.interactionError = `Failed to load video content: ${error.message || 'Unknown error'}`;
+          }
+          this.isLoadingInteraction = false;
+        },
+      });
+  }
+
   /**
    * Handle interaction completion with score
    */
@@ -2834,9 +3138,74 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       });
     });
   }
-  
-  // Property to track if media player is ready (set explicitly to avoid change detection issues)
-  isMediaPlayerReady = false;
+
+  /**
+   * Video URL Player Event Handlers
+   * These mirror the media player handlers but operate on the video-url interaction
+   */
+  onVideoUrlLoaded(event: { duration: number; provider: string; videoId: string }) {
+    console.log('[LessonView] 🎬 Video URL loaded:', event);
+    
+    // Set video URL ready flag
+    queueMicrotask(() => {
+      this.isVideoUrlReady = true;
+      
+      // Set video URL player reference for SDK
+      if (this.videoUrlPlayerRef) {
+        (window as any).__videoUrlPlayerRef = this.videoUrlPlayerRef;
+        console.log('[LessonView] ✅ Video URL player reference set for SDK');
+      }
+      
+      // Initialize volume from config if available
+      if (this.videoUrlPlayerData?.config?.defaultVolume !== undefined) {
+        this.mediaVolume = this.videoUrlPlayerData.config.defaultVolume;
+        // Apply to video player
+        if (this.videoUrlPlayerRef) {
+          this.videoUrlPlayerRef.setVideoUrlVolume(this.mediaVolume);
+        }
+      }
+      
+      this.cdr.detectChanges();
+    });
+  }
+
+  onVideoUrlTimeUpdate(currentTime: number) {
+    // Sync lesson elapsed time with video current time for video-url interactions
+    if (this.interactionBuild?.interactionTypeCategory === 'video-url' && this.isScriptPlaying) {
+      this.elapsedSeconds = Math.floor(currentTime);
+    }
+  }
+
+  onVideoUrlPlay() {
+    console.log('[LessonView] ▶️ Video URL playing');
+    setTimeout(() => {
+      if (!this.isScriptPlaying) {
+        this.isScriptPlaying = true;
+      }
+      this.cdr.detectChanges();
+    }, 0);
+  }
+
+  onVideoUrlPause() {
+    console.log('[LessonView] ⏸ Video URL paused');
+    setTimeout(() => {
+      if (this.isScriptPlaying) {
+        this.isScriptPlaying = false;
+      }
+      this.cdr.detectChanges();
+    }, 0);
+  }
+
+  onVideoUrlEnded() {
+    console.log('[LessonView] ✅ Video URL ended');
+    // For now, just reuse the interaction end logic
+    this.handleInteractionEnd();
+  }
+
+  onVideoUrlError(errorMessage: string) {
+    console.error('[LessonView] ❌ Video URL error:', errorMessage);
+    this.interactionError = errorMessage;
+  }
   
   onVolumeChange(event: Event) {
     const target = event.target as HTMLInputElement;
@@ -2844,8 +3213,13 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     this.mediaVolume = newVolume;
     
     // Apply to media player if available
-    if (this.mediaPlayerRef) {
+    if (this.mediaPlayerRef && this.isMediaPlayerReady) {
       this.mediaPlayerRef.setVolume(this.mediaVolume);
+    }
+    
+    // Apply to video URL player if available
+    if (this.videoUrlPlayerRef && this.isVideoUrlReady) {
+      this.videoUrlPlayerRef.setVideoUrlVolume(this.mediaVolume);
     }
     
     // TODO: When TTS is integrated, also apply volume to TTS here
@@ -3132,8 +3506,18 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     console.log('[LessonView] Toggle play/pause from control bar');
     if (this.isScriptPlaying) {
       this.onTeacherPause();
+      
+      // Also pause video URL player if active
+      if (this.videoUrlPlayerRef && this.isVideoUrlReady) {
+        this.videoUrlPlayerRef.pauseVideoUrl();
+      }
     } else {
       this.onTeacherPlay();
+      
+      // Also play video URL player if ready
+      if (this.videoUrlPlayerRef && this.isVideoUrlReady) {
+        this.videoUrlPlayerRef.playVideoUrl();
+      }
     }
   }
 
@@ -5433,12 +5817,490 @@ ${jsCode}
   /**
    * Get sanitized HTML for media player section below
    */
+  // Cache for sanitized section HTML to prevent re-rendering after initialization
+  private cachedVideoUrlSectionHtml: any = null;
+
   getSanitizedSectionHtml(html?: string, css?: string): any {
     if (!html && !css) {
       return '';
     }
     const fullHtml = css ? `<style>${css}</style>${html || ''}` : (html || '');
-    return this.sanitizer.bypassSecurityTrustHtml(fullHtml);
+    
+    // Check if this section has been initialized (buttons created) - if so, return cached HTML
+    const sectionContainer = this.videoUrlSectionContainerRef?.nativeElement;
+    if (sectionContainer) {
+      const innerHtmlDiv = sectionContainer.querySelector('div') || sectionContainer.firstElementChild;
+      if (innerHtmlDiv && (innerHtmlDiv as any).__initialized) {
+        // Section already initialized, return cached HTML to prevent re-rendering
+        // This preserves onclick handlers which are lost if we return innerHTML
+        if (this.cachedVideoUrlSectionHtml) {
+          console.log('[LessonView] 🔒 Preventing re-render of initialized section (using cache)');
+          return this.cachedVideoUrlSectionHtml;
+        }
+      }
+    }
+    
+    // Cache the sanitized HTML on first call
+    const sanitized = this.sanitizer.bypassSecurityTrustHtml(fullHtml);
+    if (sectionContainer) {
+      const innerHtmlDiv = sectionContainer.querySelector('div') || sectionContainer.firstElementChild;
+      if (innerHtmlDiv && !(innerHtmlDiv as any).__initialized) {
+        // Only cache if not yet initialized (to avoid caching stale HTML)
+        this.cachedVideoUrlSectionHtml = sanitized;
+      }
+    }
+    
+    return sanitized;
+  }
+
+  /**
+   * Execute JavaScript code for video-url section content
+   */
+  private executeVideoUrlSectionJs() {
+    if (!this.videoUrlPlayerData?.sectionJs) {
+      return;
+    }
+
+    const sectionContainer = this.videoUrlSectionContainerRef?.nativeElement;
+    if (!sectionContainer) {
+      console.warn('[LessonView] ⚠️ Video URL section container not found');
+      return;
+    }
+    
+    // Wait for HTML to be rendered before injecting JS
+    // Check if expected elements exist (like sdk-test-buttons or sdk-test-video-url-overlay)
+    const waitForHtml = (retries = 0, maxRetries = 20) => {
+      if (!sectionContainer) {
+        console.warn('[LessonView] ⚠️ Section container is null, cannot wait for HTML');
+        return;
+      }
+      
+      const hasExpectedElements = sectionContainer.querySelector('#sdk-test-buttons') || 
+                                  sectionContainer.querySelector('#sdk-test-video-url-overlay') ||
+                                  sectionContainer.querySelector('[id*="sdk-test"]');
+      
+      if (!hasExpectedElements && this.videoUrlPlayerData?.sectionHtml && retries < maxRetries) {
+        // HTML not rendered yet, retry after a short delay
+        setTimeout(() => waitForHtml(retries + 1, maxRetries), 50);
+        return;
+      }
+      
+      if (retries >= maxRetries) {
+        console.warn('[LessonView] ⚠️ HTML elements not found after waiting, proceeding anyway');
+      }
+      
+      // HTML is rendered (or we've given up waiting), proceed with JS injection
+      this.injectVideoUrlSectionJs();
+    };
+    
+    waitForHtml();
+  }
+  
+  private injectVideoUrlSectionJs() {
+    // Run outside Angular's zone to prevent change detection from clearing dynamically added buttons
+    this.ngZone.runOutsideAngular(() => {
+      const sectionContainer = this.videoUrlSectionContainerRef?.nativeElement;
+      if (!sectionContainer) {
+        return;
+      }
+      
+      if (!this.videoUrlPlayerData) {
+        console.warn('[LessonView] ⚠️ Video URL player data is null');
+        return;
+      }
+
+      // Remove any existing script element
+      const existingScript = sectionContainer.querySelector('script.video-url-section-script');
+      if (existingScript) {
+        existingScript.remove();
+      }
+
+      // Create and inject SDK first, then the user's script
+      const sdkScript = document.createElement('script');
+      sdkScript.className = 'video-url-section-sdk';
+      try {
+        const sdkCode = this.createVideoUrlSectionSDK();
+        sdkScript.textContent = sdkCode;
+        sectionContainer.appendChild(sdkScript);
+      } catch (error) {
+        console.error('[LessonView] ❌ Error creating SDK script:', error);
+        return;
+      }
+      
+      // Create and inject user's script (only if it exists and is not empty)
+      if (this.videoUrlPlayerData.sectionJs && this.videoUrlPlayerData.sectionJs.trim()) {
+        const script = document.createElement('script');
+        script.className = 'video-url-section-script';
+        try {
+          // Validate that the JavaScript code doesn't have obvious syntax errors
+          const jsCode = this.videoUrlPlayerData.sectionJs.trim();
+          
+          // Log code info for debugging
+          console.log('[LessonView] 📝 Injecting section JS, length:', jsCode.length);
+          console.log('[LessonView] 📝 Section JS preview (first 500 chars):', jsCode.substring(0, 500));
+          console.log('[LessonView] 📝 Section JS preview (last 500 chars):', jsCode.substring(Math.max(0, jsCode.length - 500)));
+          
+          // Check if code is suspiciously short (likely truncated)
+          if (jsCode.length < 200) {
+            console.warn('[LessonView] ⚠️ Section JS is suspiciously short (likely truncated). Expected ~5000+ chars for SDK test interactions.');
+            console.warn('[LessonView] Code preview:', jsCode.substring(0, 200));
+            console.warn('[LessonView] ⚠️ Skipping injection of truncated code. SDK will still be available.');
+            // Don't inject truncated code - it will cause syntax errors
+            // The SDK is already injected above, so buttons should still work
+            return;
+          }
+          
+          // Check for unclosed template literals (basic check)
+          const backtickCount = (jsCode.match(/`/g) || []).length;
+          const escapedBacktickCount = (jsCode.match(/\\`/g) || []).length;
+          const unescapedBackticks = backtickCount - escapedBacktickCount;
+          
+          if (unescapedBackticks % 2 !== 0) {
+            console.warn('[LessonView] ⚠️ Potential unclosed template literal in section JS');
+            console.warn('[LessonView] Backtick count:', backtickCount, 'Escaped:', escapedBacktickCount);
+          }
+          
+          // Try to parse the code as JavaScript to catch syntax errors early
+          try {
+            // This will throw if there's a syntax error
+            new Function(jsCode);
+          } catch (parseError) {
+            console.error('[LessonView] ❌ JavaScript syntax error detected:', parseError);
+            console.error('[LessonView] Code preview (first 500 chars):', jsCode.substring(0, 500));
+            throw parseError; // Re-throw to be caught by outer try-catch
+          }
+          
+          script.textContent = jsCode;
+          sectionContainer.appendChild(script);
+          console.log('[LessonView] ✅ Video URL section JS executed with SDK');
+          
+          // Immediately mark section as initialized to prevent re-rendering
+          // This must happen BEFORE Angular's next change detection cycle
+          const innerHtmlDiv = sectionContainer.querySelector('div') || sectionContainer.firstElementChild;
+          if (innerHtmlDiv) {
+            (innerHtmlDiv as any).__initialized = true;
+            console.log('[LessonView] ✅ Section marked as initialized immediately');
+          }
+          
+          // Use MutationObserver to detect when buttons are added and ensure they persist
+          const buttonsContainer = document.getElementById('sdk-test-buttons');
+          if (buttonsContainer) {
+            const observer = new MutationObserver((mutations) => {
+              mutations.forEach((mutation) => {
+                if (mutation.addedNodes.length > 0) {
+                  console.log('[LessonView] ✅ Buttons detected being added:', mutation.addedNodes.length);
+                  // Ensure the section stays initialized
+                  if (innerHtmlDiv) {
+                    (innerHtmlDiv as any).__initialized = true;
+                  }
+                }
+              });
+            });
+            
+            observer.observe(buttonsContainer, { childList: true, subtree: true });
+            
+            // Also check after a delay
+            setTimeout(() => {
+              if (buttonsContainer.children.length > 0) {
+                console.log('[LessonView] ✅ Buttons found after injection:', buttonsContainer.children.length);
+              } else {
+                console.warn('[LessonView] ⚠️ Buttons not found after injection - may have been cleared by Angular');
+              }
+              observer.disconnect();
+            }, 2000);
+          }
+        } catch (error) {
+          console.error('[LessonView] ❌ Error injecting section JS:', error);
+          console.error('[LessonView] Section JS length:', this.videoUrlPlayerData.sectionJs?.length);
+          console.error('[LessonView] Section JS preview:', this.videoUrlPlayerData.sectionJs?.substring(0, 200));
+          // Don't throw - just log the error and continue
+          // The SDK is already injected above, so buttons should still work
+        }
+      } else {
+        console.log('[LessonView] ✅ Video URL section JS executed with SDK (no custom JS)');
+      }
+    });
+  }
+
+  /**
+   * Send SDK ready message to video-url section content
+   */
+  private sendSDKReadyToVideoUrlSection() {
+    const sectionContainer = this.videoUrlSectionContainerRef?.nativeElement;
+    if (!sectionContainer) {
+      return;
+    }
+
+    // Send SDK ready message via postMessage (section content listens for this)
+    window.postMessage({
+      type: 'ai-sdk-ready',
+      lessonId: this.lesson?.id,
+      substageId: String(this.activeSubStageId),
+      interactionId: this.interactionBuild?.id || this.interactionBuild?.interactionTypeId
+    }, '*');
+
+    // Also dispatch a custom event that the section content can listen to
+    const event = new CustomEvent('ai-sdk-ready', {
+      detail: {
+        lessonId: this.lesson?.id,
+        substageId: String(this.activeSubStageId),
+        interactionId: this.interactionBuild?.id || this.interactionBuild?.interactionTypeId
+      }
+    });
+    sectionContainer.dispatchEvent(event);
+    
+    console.log('[LessonView] ✅ SDK ready message sent to video URL section');
+  }
+
+  /**
+   * Create SDK code for video-url section content
+   */
+  private createVideoUrlSectionSDK(): string {
+    // Store player reference globally so SDK can access it
+    const playerRef = this.videoUrlPlayerRef;
+    (window as any).__videoUrlPlayerRef = playerRef;
+    
+    // Mark that we're in lesson view (not preview)
+    (window as any).__isLessonView = true;
+    
+    // Build SDK code as a single string
+    const sdkCode = `
+      (function() {
+        if (window.aiSDK) return; // Already exists
+        
+        const getPlayer = () => {
+          // Get player from global reference set by lesson view
+          return window.__videoUrlPlayerRef || null;
+        };
+        
+        // Helper to send messages (works in same document via custom events)
+        const sendMessage = (type, data, callback) => {
+          const message = Object.assign({ type: type }, data);
+          // Dispatch custom event for same-document communication
+          const event = new CustomEvent('ai-sdk-message', { detail: message });
+          document.dispatchEvent(event);
+          // Also try postMessage for iframe compatibility
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage(message, "*");
+          }
+          if (callback) {
+            setTimeout(function() { callback({ success: true }); }, 0);
+          }
+        };
+        
+        window.aiSDK = {
+          isReady: (callback) => {
+            const listener = (event) => {
+              if (event.data && event.data.type === "ai-sdk-ready") {
+                window.removeEventListener("message", listener);
+                if (callback) callback(true);
+              }
+            };
+            window.addEventListener("message", listener);
+            // Also check for custom event
+            const customListener = (event) => {
+              if (event.detail && event.detail.type === "ai-sdk-ready") {
+                document.removeEventListener("ai-sdk-ready", customListener);
+                if (callback) callback(true);
+              }
+            };
+            document.addEventListener("ai-sdk-ready", customListener);
+            setTimeout(() => {
+              if (callback) callback(true);
+            }, 100);
+          },
+          emitEvent: (event, processedContentId) => {
+            sendMessage("ai-sdk-emit-event", { event, processedContentId });
+          },
+          updateState: (key, value) => {
+            sendMessage("ai-sdk-update-state", { key, value });
+          },
+          getState: (key, callback) => {
+            if (callback) callback(null);
+          },
+          playVideoUrl: (callback) => {
+            const player = getPlayer();
+            if (player) {
+              player.playVideoUrl().then((success) => {
+                if (callback) callback(success);
+              });
+            } else if (callback) {
+              callback(false);
+            }
+          },
+          pauseVideoUrl: (callback) => {
+            const player = getPlayer();
+            if (player) {
+              player.pauseVideoUrl();
+              if (callback) callback(true);
+            } else if (callback) {
+              callback(false);
+            }
+          },
+          seekVideoUrl: (time, callback) => {
+            const player = getPlayer();
+            if (player) {
+              player.seekVideoUrl(time);
+              if (callback) callback(true);
+            } else if (callback) {
+              callback(false);
+            }
+          },
+          setVideoUrlVolume: (volume, callback) => {
+            const player = getPlayer();
+            if (player) {
+              player.setVideoUrlVolume(volume);
+              if (callback) callback(true);
+            } else if (callback) {
+              callback(false);
+            }
+          },
+          getVideoUrlCurrentTime: (callback) => {
+            const player = getPlayer();
+            if (player) {
+              player.getVideoUrlCurrentTime().then((time) => {
+                if (callback) callback(time);
+              });
+            } else if (callback) {
+              callback(0);
+            }
+          },
+          getVideoUrlDuration: (callback) => {
+            const player = getPlayer();
+            if (player) {
+              player.getVideoUrlDuration().then((duration) => {
+                if (callback) callback(duration);
+              });
+            } else if (callback) {
+              callback(0);
+            }
+          },
+          isVideoUrlPlaying: (callback) => {
+            const player = getPlayer();
+            if (player) {
+              player.isVideoUrlPlaying().then((playing) => {
+                if (callback) callback(playing);
+              });
+            } else if (callback) {
+              callback(false);
+            }
+          },
+          showVideoUrlOverlayHtml: (html) => {
+            const player = getPlayer();
+            if (player) {
+              player.showOverlayHtml();
+            }
+          },
+          hideVideoUrlOverlayHtml: () => {
+            const player = getPlayer();
+            if (player) {
+              player.hideOverlayHtml();
+            }
+          },
+          // Additional methods expected by SDK test interaction
+          showOverlayHtml: () => {
+            const player = getPlayer();
+            if (player) {
+              player.showOverlayHtml();
+            }
+          },
+          hideOverlayHtml: () => {
+            const player = getPlayer();
+            if (player) {
+              player.hideOverlayHtml();
+            }
+          },
+          // UI Control Methods
+          minimizeChatUI: () => {
+            sendMessage("ai-sdk-minimize-chat-ui", {});
+          },
+          showChatUI: () => {
+            sendMessage("ai-sdk-show-chat-ui", {});
+          },
+          activateFullscreen: () => {
+            sendMessage("ai-sdk-activate-fullscreen", {});
+          },
+          deactivateFullscreen: () => {
+            sendMessage("ai-sdk-deactivate-fullscreen", {});
+          },
+          postToChat: (content, role, showInWidget) => {
+            sendMessage("ai-sdk-post-to-chat", { content, role, showInWidget });
+          },
+          showScript: (script, autoPlay) => {
+            sendMessage("ai-sdk-show-script", { script, autoPlay });
+          },
+          showSnack: (content, duration, hideFromChatUI, callback) => {
+            sendMessage("ai-sdk-show-snack", { content, duration, hideFromChatUI: hideFromChatUI || false }, (response) => {
+              if (callback && response.snackId) {
+                callback(response.snackId);
+              }
+            });
+          },
+          hideSnack: () => {
+            sendMessage("ai-sdk-hide-snack", {});
+          },
+          // Data Storage Methods
+          saveInstanceData: (data, callback) => {
+            sendMessage("ai-sdk-save-instance-data", { data }, (response) => {
+              if (callback) {
+                callback(response.success, response.error);
+              }
+            });
+          },
+          getInstanceDataHistory: (filters, callback) => {
+            const filtersData = filters ? {
+              dateFrom: filters.dateFrom?.toISOString(),
+              dateTo: filters.dateTo?.toISOString(),
+              limit: filters.limit,
+            } : {};
+            sendMessage("ai-sdk-get-instance-data-history", { filters: filtersData }, (response) => {
+              if (callback) {
+                callback(response.data, response.error);
+              }
+            });
+          },
+          saveUserProgress: (data, callback) => {
+            sendMessage("ai-sdk-save-user-progress", { data }, (response) => {
+              if (callback) {
+                callback(response.progress, response.error);
+              }
+            });
+          },
+          getUserProgress: (callback) => {
+            sendMessage("ai-sdk-get-user-progress", {}, (response) => {
+              if (callback) {
+                callback(response.progress, response.error);
+              }
+            });
+          },
+          markCompleted: (callback) => {
+            sendMessage("ai-sdk-mark-completed", {}, (response) => {
+              if (callback) {
+                callback(response.progress, response.error);
+              }
+            });
+          },
+          incrementAttempts: (callback) => {
+            sendMessage("ai-sdk-increment-attempts", {}, (response) => {
+              if (callback) {
+                callback(response.progress, response.error);
+              }
+            });
+          },
+          getUserPublicProfile: (userId, callback) => {
+            sendMessage("ai-sdk-get-user-public-profile", { userId }, (response) => {
+              if (callback) {
+                callback(response.profile, response.error);
+              }
+            });
+          }
+        };
+        
+        console.log('[VideoUrlSection] ✅ SDK created');
+      })();
+    `;
+    
+    return sdkCode;
   }
 
   private playTeacherScript(script?: ScriptBlock | any, scriptBlock?: any) {

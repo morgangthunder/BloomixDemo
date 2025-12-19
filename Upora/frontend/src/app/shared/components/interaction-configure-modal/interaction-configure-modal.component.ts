@@ -61,8 +61,18 @@ import { environment } from '../../../../environments/environment';
               <p class="hint">Choose approved URL content to use for this iframe interaction. The selected URL will be used in the interaction.</p>
             </div>
 
+            <!-- Video URL Content Selector (for video-url interactions) -->
+            <div *ngIf="interactionCategory === 'video-url'" class="form-group processed-content-selector">
+              <label>🎥 Video URL Content</label>
+              <div class="config-value">
+                <span class="value">{{selectedVideoUrlContentName || 'None selected'}}</span>
+                <button type="button" class="btn-small" style="margin-left: 12px;" (click)="openVideoUrlContentSelector()">{{selectedVideoUrlContentId ? 'Change Video URL' : 'Select Video URL'}}</button>
+              </div>
+              <p class="hint">Choose approved video URL content (YouTube or Vimeo) to use for this interaction.</p>
+            </div>
+
             <!-- Generic Processed Content Selector (for other interaction types) -->
-            <div *ngIf="interactionCategory !== 'uploaded-media' && interactionCategory !== 'iframe'" class="form-group processed-content-selector">
+            <div *ngIf="interactionCategory !== 'uploaded-media' && interactionCategory !== 'iframe' && interactionCategory !== 'video-url'" class="form-group processed-content-selector">
               <label>Processed Content</label>
               <div class="config-value">
                 <span class="value">{{selectedContentOutputName || 'None selected'}}</span>
@@ -283,8 +293,8 @@ import { environment } from '../../../../environments/environment';
                 <p>⚠️ No sample data provided for preview</p>
               </div>
               
-              <!-- HTML/PixiJS/iFrame/Media Player Preview -->
-              <div *ngIf="previewData && (interactionCategory === 'html' || interactionCategory === 'pixijs' || interactionCategory === 'iframe' || interactionCategory === 'uploaded-media') && htmlCode" 
+              <!-- HTML/PixiJS/iFrame/Media Player/Video URL Preview -->
+              <div *ngIf="previewData && (interactionCategory === 'html' || interactionCategory === 'pixijs' || interactionCategory === 'iframe' || interactionCategory === 'uploaded-media' || interactionCategory === 'video-url') && htmlCode" 
                    class="iframe-preview-container">
                 <iframe 
                   [src]="getInteractionPreviewBlobUrlSafe()"
@@ -294,7 +304,7 @@ import { environment } from '../../../../environments/environment';
               
               <!-- True/False Selection Preview (legacy component-based preview) -->
               <app-true-false-selection
-                *ngIf="previewData && interactionType === 'true-false-selection' && interactionCategory !== 'html' && interactionCategory !== 'pixijs' && interactionCategory !== 'iframe' && interactionCategory !== 'uploaded-media'"
+                *ngIf="previewData && interactionType === 'true-false-selection' && interactionCategory !== 'html' && interactionCategory !== 'pixijs' && interactionCategory !== 'iframe' && interactionCategory !== 'uploaded-media' && interactionCategory !== 'video-url'"
                 [data]="previewData"
                 (interactionComplete)="onPreviewComplete($event)">
               </app-true-false-selection>
@@ -316,12 +326,22 @@ import { environment } from '../../../../environments/environment';
           (selected)="onMediaSelected($event)">
         </app-media-content-selector>
 
-        <!-- URL Content Selector Modal -->
+        <!-- URL Content Selector Modal (for iframe) -->
         <app-url-content-selector
           [isOpen]="showUrlContentSelector"
           [selectedContentId]="selectedUrlContentId"
+          [filterVideoUrls]="false"
           (close)="closeUrlContentSelector()"
           (contentSelected)="onUrlContentSelected($event)">
+        </app-url-content-selector>
+
+        <!-- Video URL Content Selector Modal (for video-url) -->
+        <app-url-content-selector
+          [isOpen]="showVideoUrlContentSelector"
+          [selectedContentId]="selectedVideoUrlContentId"
+          [filterVideoUrls]="true"
+          (close)="closeVideoUrlContentSelector()"
+          (contentSelected)="onVideoUrlContentSelected($event)">
         </app-url-content-selector>
 
         <div class="modal-footer-sticky">
@@ -896,6 +916,11 @@ export class InteractionConfigureModalComponent implements OnChanges {
   showUrlContentSelector = false;
   selectedUrlContentId: string | null = null;
   selectedUrlContentName = '';
+  
+  // Video URL content selector (for video-url interactions)
+  showVideoUrlContentSelector = false;
+  selectedVideoUrlContentId: string | null = null;
+  selectedVideoUrlContentName = '';
 
   constructor(
     private domSanitizer: DomSanitizer,
@@ -991,6 +1016,71 @@ export class InteractionConfigureModalComponent implements OnChanges {
       });
     
     this.closeUrlContentSelector();
+    this.onConfigChange();
+  }
+
+  openVideoUrlContentSelector() {
+    this.showVideoUrlContentSelector = true;
+  }
+
+  closeVideoUrlContentSelector() {
+    this.showVideoUrlContentSelector = false;
+  }
+
+  onVideoUrlContentSelected(processedContentId: string) {
+    console.log('[ConfigModal] 🎥 Video URL content selected:', processedContentId);
+    this.selectedVideoUrlContentId = processedContentId;
+    
+    // Fetch content details to display name and video info
+    this.http.get<any>(`${environment.apiUrl}/lesson-editor/processed-outputs/${processedContentId}`, {
+      headers: {
+        'x-tenant-id': environment.tenantId,
+        'x-user-id': environment.defaultUserId
+      }
+    })
+      .subscribe({
+        next: (content) => {
+          this.selectedVideoUrlContentName = content.outputName || content.contentSource?.title || 'Selected Video URL';
+          
+          // Extract video URL and metadata
+          const url = content.outputData?.url || content.outputData?.sourceUrl || content.contentSource?.sourceUrl;
+          const videoId = content.outputData?.videoId || content.contentSource?.metadata?.videoId;
+          const provider = content.outputData?.provider || (url?.toLowerCase().includes('youtube') ? 'youtube' : url?.toLowerCase().includes('vimeo') ? 'vimeo' : 'youtube');
+          
+          // Update config with selected video URL content
+          if (this.config) {
+            this.config.contentOutputId = processedContentId;
+            // Store video URL config
+            if (!this.config.videoUrlConfig) {
+              this.config.videoUrlConfig = {};
+            }
+            this.config.videoUrlConfig.testVideoUrlContentId = processedContentId;
+            this.config.videoUrlConfig.videoUrl = url;
+            this.config.videoUrlConfig.videoId = videoId;
+            this.config.videoUrlConfig.provider = provider;
+          }
+          
+          // Update sample data with the video URL (for preview and testing)
+          if (this.sampleData) {
+            this.sampleData.videoUrl = url;
+            this.sampleData.videoId = videoId;
+            this.sampleData.provider = provider;
+            this.updatePreviewData();
+          } else if (url) {
+            // If sampleData doesn't exist, create it
+            this.sampleData = { videoUrl: url, videoId: videoId, provider: provider };
+            this.updatePreviewData();
+          }
+          
+          console.log('[ConfigModal] ✅ Video URL content name set:', this.selectedVideoUrlContentName, 'URL:', url, 'videoId:', videoId);
+        },
+        error: (err) => {
+          console.error('[ConfigModal] ❌ Failed to fetch video URL content details:', err);
+          this.selectedVideoUrlContentName = 'Selected Video URL';
+        }
+      });
+    
+    this.closeVideoUrlContentSelector();
     this.onConfigChange();
   }
 
@@ -1301,7 +1391,7 @@ export class InteractionConfigureModalComponent implements OnChanges {
     const escapedHtml = this.htmlCode || '';
     const jsCodeForPreview = this.jsCode || '';
     
-    // For uploaded-media, we need to generate a media player preview similar to interaction builder
+    // For uploaded-media and video-url, we need to generate a media player preview similar to interaction builder
     let htmlDoc = '';
     if (this.interactionCategory === 'uploaded-media') {
       // Get media URL from config or selectedMediaId
@@ -1398,6 +1488,122 @@ overlayContent + '\n' +
 '    window.interactionConfig = ' + configJson + ';\n' +
 '    const createIframeAISDK = function() { var mediaPlayer = document.getElementById("media-player"); return { emitEvent: function() {}, updateState: function() {}, getState: function(cb) { if (cb) cb({}); }, onResponse: function() { return function() {}; }, isReady: function(cb) { if (cb) cb(true); }, minimizeChatUI: function() {}, showChatUI: function() {}, activateFullscreen: function() {}, deactivateFullscreen: function() {}, postToChat: function() {}, showScript: function() {}, showSnack: function() {}, hideSnack: function() {}, saveInstanceData: function(d, cb) { if (cb) cb(true, null); }, getInstanceDataHistory: function(f, cb) { if (cb) cb([], null); }, saveUserProgress: function(d, cb) { if (cb) cb(null, "Preview"); }, getUserProgress: function(cb) { if (cb) cb(null, "Preview"); }, markCompleted: function(cb) { if (cb) cb(null, "Preview"); }, incrementAttempts: function(cb) { if (cb) cb(null, "Preview"); }, getUserPublicProfile: function(u, cb) { if (cb) cb(null, "Preview"); }, playMedia: function(cb) { if (mediaPlayer) { const playPromise = mediaPlayer.play(); if (playPromise !== undefined) { playPromise.then(function() { console.log("[Preview] playMedia success"); if (cb) cb(true, null); }).catch(function(e) { console.error("[Preview] playMedia error:", e); if (cb) cb(false, e.message); }); } else { if (cb) cb(true, null); } } else if (cb) { cb(false, "Media player not available"); } }, pauseMedia: function() { if (mediaPlayer) { mediaPlayer.pause(); console.log("[Preview] pauseMedia"); } }, seekMedia: function(t) { if (mediaPlayer) { mediaPlayer.currentTime = t; console.log("[Preview] seekMedia:", t); } }, setMediaVolume: function(v) { if (mediaPlayer) { mediaPlayer.volume = v; console.log("[Preview] setMediaVolume:", v); } }, getMediaCurrentTime: function(cb) { if (mediaPlayer && cb) cb(mediaPlayer.currentTime); }, getMediaDuration: function(cb) { if (mediaPlayer && cb) cb(mediaPlayer.duration || 0); }, isMediaPlaying: function(cb) { if (mediaPlayer && cb) cb(!mediaPlayer.paused); }, showOverlayHtml: function() { var overlay = document.getElementById("overlay-container"); if (overlay) { overlay.classList.remove("media-playing"); console.log("[Preview] showOverlayHtml"); } }, hideOverlayHtml: function() { var overlay = document.getElementById("overlay-container"); if (overlay) { overlay.classList.add("media-playing"); console.log("[Preview] hideOverlayHtml"); } } }; };\n' +
 '    (function() { var userJsCode = ' + JSON.stringify(jsCodeForPreview || '// No JavaScript code provided') + '; var executeCode = function() { try { eval(userJsCode); } catch (e) { console.error("[Preview] Error:", e); } }; var codeExecuted = false; var executeOnce = function() { if (!codeExecuted) { codeExecuted = true; executeCode(); } }; var mediaPlayer = document.getElementById("media-player"); if (mediaPlayer && (mediaPlayer.tagName === "VIDEO" || mediaPlayer.tagName === "AUDIO")) { mediaPlayer.addEventListener("loadedmetadata", function() { console.log("[ConfigModal Preview] Media metadata loaded"); executeOnce(); }); mediaPlayer.addEventListener("error", function(e) { console.error("[ConfigModal Preview] Media load error:", e); executeOnce(); }); if (mediaPlayer.readyState >= 1) { executeOnce(); } else { setTimeout(executeOnce, 2000); } } else { if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", executeOnce); } else { setTimeout(executeOnce, 10); } } })();\n' +
+'  </script>\n' +
+'</body>\n' +
+'</html>';
+    } else if (this.interactionCategory === 'video-url') {
+      // Get video URL from config or selectedVideoUrlContentId
+      let videoUrl = '';
+      let videoId = '';
+      let provider = 'youtube';
+      const videoContentId = this.config?.contentOutputId || this.selectedVideoUrlContentId;
+      
+      // Get video URL config
+      const videoUrlConfig = this.config?.videoUrlConfig || {};
+      const displayMode = videoUrlConfig.displayMode || normalizedConfig.displayMode || 'section';
+      const sectionHeight = videoUrlConfig.sectionHeight || normalizedConfig.sectionHeight || 'auto';
+      const sectionMinHeight = videoUrlConfig.sectionMinHeight || normalizedConfig.sectionMinHeight || '200px';
+      const sectionMaxHeight = videoUrlConfig.sectionMaxHeight || normalizedConfig.sectionMaxHeight || 'none';
+      
+      // Try to get video info from config
+      if (videoUrlConfig.videoId && videoUrlConfig.videoUrl) {
+        videoId = videoUrlConfig.videoId;
+        videoUrl = videoUrlConfig.videoUrl;
+        provider = videoUrlConfig.provider || 'youtube';
+      } else if (this.sampleData && (this.sampleData as any).videoUrl) {
+        videoUrl = (this.sampleData as any).videoUrl;
+        videoId = (this.sampleData as any).videoId || '';
+        provider = (this.sampleData as any).provider || 'youtube';
+      }
+      
+      // Extract video ID from URL if needed
+      if (videoUrl && !videoId) {
+        if (videoUrl.toLowerCase().includes('youtube.com') || videoUrl.toLowerCase().includes('youtu.be')) {
+          const match = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+          if (match) videoId = match[1];
+          provider = 'youtube';
+        } else if (videoUrl.toLowerCase().includes('vimeo.com')) {
+          const match = videoUrl.match(/vimeo\.com\/(\d+)/);
+          if (match) videoId = match[1];
+          provider = 'vimeo';
+        }
+      }
+      
+      // Build embed URL
+      let embedUrl = '';
+      if (videoId) {
+        const startTime = videoUrlConfig.startTime || (this.sampleData as any)?.startTime || 0;
+        const endTime = videoUrlConfig.endTime || (this.sampleData as any)?.endTime;
+        
+        if (provider === 'youtube') {
+          let embedParams = '';
+          if (startTime > 0 || (endTime && endTime > startTime)) {
+            embedParams = '?';
+            if (startTime > 0) embedParams += `start=${Math.floor(startTime)}`;
+            if (endTime && endTime > startTime) {
+              if (embedParams !== '?') embedParams += '&';
+              embedParams += `end=${Math.floor(endTime)}`;
+            }
+          }
+          embedUrl = `https://www.youtube.com/embed/${videoId}${embedParams}`;
+        } else if (provider === 'vimeo') {
+          let embedParams = '?badge=0&byline=0&portrait=0&title=0';
+          if (startTime > 0) embedParams += `#t=${Math.floor(startTime)}s`;
+          embedUrl = `https://player.vimeo.com/video/${videoId}${embedParams}`;
+        }
+      }
+      
+      const showPreviewNote = provider === 'youtube';
+      const videoPlayerHtml = embedUrl
+        ? `<div style="position: relative; width: 100%; height: 100%; min-height: 400px; background: #000;">
+            <iframe id="video-url-player" src="${embedUrl.replace(/"/g, '&quot;')}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen style="width: 100%; height: 100%; min-height: 400px;" loading="lazy"></iframe>
+            ${showPreviewNote ? `<div id="youtube-preview-note" style="position: absolute; bottom: 10px; left: 10px; right: 10px; background: rgba(255,193,7,0.95); color: #000; padding: 12px; border-radius: 4px; font-size: 12px; z-index: 10; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+              <strong>ℹ️ Preview Note:</strong> If you see "Error 153" above, this is a known limitation in preview mode. The video will work properly when used in an actual lesson.
+            </div>` : ''}
+          </div>`
+        : '<div style="padding: 40px; text-align: center; color: #999; background: rgba(0,0,0,0.3); border: 2px dashed #444; border-radius: 8px; margin: 20px;"><p style="font-size: 16px; margin-bottom: 10px;">⚠️ No video URL selected</p><p style="font-size: 12px;">Select a video URL content in the Configure tab to preview</p></div>';
+      
+      const overlayContent = escapedHtml.trim() || '<div style="padding: 20px; color: #999; text-align: center;">No SDK test buttons configured</div>';
+      
+      htmlDoc = '<!DOCTYPE html>\n' +
+'<html lang="en">\n' +
+'<head>\n' +
+'  <meta charset="UTF-8">\n' +
+'  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
+'  <title>Video URL Preview</title>\n' +
+'  <style>\n' +
+'    * { margin: 0; padding: 0; box-sizing: border-box; }\n' +
+'    body { margin: 0; padding: 0; background: #0f0f23; color: #ffffff; font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; ' +
+(displayMode === 'overlay' 
+  ? 'overflow: hidden; position: relative; width: 100vw; height: 100vh;'
+  : 'display: flex; flex-direction: column; height: 100vh; overflow-y: auto; width: 100vw;') + ' }\n' +
+'    #video-container { ' +
+(displayMode === 'overlay'
+  ? 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; display: flex; align-items: center; justify-content: center; background: #000;'
+  : 'flex: 0 0 auto; width: 100%; display: flex; align-items: center; justify-content: center; background: #000; padding: 10px; min-height: 400px; order: 1;') + ' }\n' +
+'    #video-container iframe { max-width: 100%;' +
+(displayMode === 'overlay' ? ' max-height: 100%; z-index: 1;' : ' width: 100%; height: 500px;') + ' }\n' +
+'    #overlay-container { ' +
+(displayMode === 'overlay'
+  ? 'position: absolute; bottom: 0; left: 0; right: 0; z-index: 100; pointer-events: none; max-height: 40%; overflow-y: auto; background: rgba(15, 15, 35, 0.95); padding: 20px; }\n' +
+    '    #overlay-container > * { pointer-events: auto; }\n'
+  : 'flex: 1 1 auto; width: 100%; overflow-y: auto; background: rgba(15, 15, 35, 0.95); padding: 20px; height: ' + sectionHeight + '; min-height: ' + sectionMinHeight + ';' + (sectionMaxHeight !== 'none' ? ' max-height: ' + sectionMaxHeight + ';' : '') + ' order: 2; position: relative !important; z-index: 1 !important; }\n') +
+escapedCss + '\n' +
+'  </style>\n' +
+'</head>\n' +
+'<body>\n' +
+'  <div id="video-container">\n' +
+videoPlayerHtml + '\n' +
+'  </div>\n' +
+'  <div id="overlay-container">\n' +
+overlayContent + '\n' +
+'  </div>\n' +
+'  <script>\n' +
+'    window.interactionData = ' + sampleDataJson + ';\n' +
+'    window.interactionConfig = ' + configJson + ';\n' +
+'    window.aiSDK = { isReady: (cb) => { setTimeout(() => { if (cb) cb(true); }, 100); }, emitEvent: () => {}, updateState: () => {}, getState: (k, cb) => { if (cb) cb(null); }, playVideoUrl: (cb) => { if (cb) cb(true); }, pauseVideoUrl: (cb) => { if (cb) cb(true); }, seekVideoUrl: (t, cb) => { if (cb) cb(true); }, setVideoUrlVolume: (v, cb) => { if (cb) cb(true); }, getVideoUrlCurrentTime: (cb) => { if (cb) cb(0); }, getVideoUrlDuration: (cb) => { if (cb) cb(0); }, isVideoUrlPlaying: (cb) => { if (cb) cb(false); }, showVideoUrlOverlayHtml: () => {}, hideVideoUrlOverlayHtml: () => {} };\n' +
+'    setTimeout(() => { window.postMessage({ type: "ai-sdk-ready" }, "*"); }, 200);\n' +
+'    (function() { var userJsCode = ' + JSON.stringify(jsCodeForPreview || '// No JavaScript code provided') + '; var executeCode = function() { try { eval(userJsCode); } catch (e) { console.error("[Preview] Error:", e); } }; if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", executeCode); } else { setTimeout(executeCode, 10); } })();\n' +
 '  </script>\n' +
 '</body>\n' +
 '</html>';

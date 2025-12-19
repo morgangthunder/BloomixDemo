@@ -243,6 +243,143 @@ interface InteractionType {
                 </div>
               </div>
             </div>
+            
+            <!-- Vimeo Video Configuration -->
+            <div *ngIf="selectedInteractionType.id === 'vimeo_video'" class="vimeo-config">
+              <div class="url-input-section">
+                <label>Vimeo URL</label>
+                <div class="input-group">
+                  <input
+                    type="url"
+                    [(ngModel)]="vimeoUrl"
+                    (ngModelChange)="validateVimeoUrl($event)"
+                    placeholder="https://vimeo.com/..."
+                    class="url-input"
+                    [class.error]="urlError">
+                </div>
+                <div class="url-error" *ngIf="urlError">
+                  <span class="error-icon">⚠️</span>
+                  {{urlError}}
+                </div>
+              </div>
+
+              <!-- Time Range Configuration -->
+              <div class="time-range-section" *ngIf="isValidVimeoUrl">
+                <h4>⏱️ Time Range (Optional)</h4>
+                <p class="hint">Configure start and end times to process only a specific segment of the video.</p>
+                
+                <div class="time-inputs">
+                  <div class="time-input-group">
+                    <label>Start Time</label>
+                    <input
+                      type="text"
+                      [(ngModel)]="startTimeInput"
+                      (ngModelChange)="parseStartTime($event)"
+                      placeholder="0:35 or 35"
+                      class="time-input">
+                    <span class="time-display">{{formatTime(startTime || 0)}}</span>
+                  </div>
+                  
+                  <div class="time-input-group">
+                    <label>End Time</label>
+                    <input
+                      type="text"
+                      [(ngModel)]="endTimeInput"
+                      (ngModelChange)="parseEndTime($event)"
+                      placeholder="2:30 or 150"
+                      class="time-input">
+                    <span class="time-display">{{formatTime(endTime || 0)}}</span>
+                  </div>
+                </div>
+                
+                <div class="time-range-info" *ngIf="(startTime || 0) > 0 || (endTime || 0) > 0">
+                  <span class="info-icon">ℹ️</span>
+                  <span>Will process segment: {{formatTime(startTime || 0)}} - {{formatTime(endTime || 0)}}</span>
+                </div>
+              </div>
+
+              <!-- Process Button -->
+              <div class="process-section" *ngIf="isValidVimeoUrl">
+                <button 
+                  (click)="processVimeoUrl()" 
+                  [disabled]="processing"
+                  [class.disabled]="isTimeRangeTooLong()"
+                  class="process-btn">
+                  {{processing ? 'Processing...' : '🔧 Process Content'}}
+                </button>
+              </div>
+
+              <!-- Video Preview -->
+              <div class="video-preview" *ngIf="videoData">
+                <div class="video-thumbnail">
+                  <img [src]="videoData.thumbnail" [alt]="videoData.title" class="thumbnail">
+                  <div class="video-overlay">
+                    <div class="play-button">▶️</div>
+                    <div class="duration">{{formatDuration(videoData.duration)}}</div>
+                  </div>
+                </div>
+                
+                <div class="video-info">
+                  <h4 class="video-title">{{videoData.title}}</h4>
+                  <p class="video-channel">{{videoData.channel}}</p>
+                  <p class="video-description">{{truncateText(videoData.description, 100)}}</p>
+                </div>
+              </div>
+
+              <!-- Time Range Configuration -->
+              <div class="time-config" *ngIf="videoData">
+                <h4>Time Range (Optional)</h4>
+                <div class="time-inputs">
+                  <div class="time-input-group">
+                    <label>Start Time (seconds)</label>
+                    <input 
+                      type="number" 
+                      [(ngModel)]="startTime"
+                      [min]="0"
+                      [max]="videoData.duration"
+                      placeholder="0"
+                      class="time-input">
+                  </div>
+                  
+                  <div class="time-input-group">
+                    <label>End Time (seconds)</label>
+                    <input 
+                      type="number" 
+                      [(ngModel)]="endTime"
+                      [min]="startTime || 0"
+                      [max]="videoData.duration"
+                      [placeholder]="videoData.duration"
+                      class="time-input">
+                  </div>
+                </div>
+                
+                <div class="time-preview" *ngIf="hasTimeRange()">
+                  <span class="time-label">Preview:</span>
+                  <span class="time-display">
+                    {{formatTime(startTime || 0)}} - {{formatTime(endTime || videoData.duration)}}
+                    ({{formatDuration((endTime || videoData.duration) - (startTime || 0))}})
+                  </span>
+                </div>
+              </div>
+
+              <!-- Player Settings -->
+              <div class="player-settings" *ngIf="videoData">
+                <h4>Player Settings</h4>
+                <div class="settings-grid">
+                  <label class="setting-item">
+                    <input type="checkbox" [(ngModel)]="autoplay">
+                    <span class="checkmark"></span>
+                    Autoplay
+                  </label>
+                  
+                  <label class="setting-item">
+                    <input type="checkbox" [(ngModel)]="showControls" [checked]="true">
+                    <span class="checkmark"></span>
+                    Show Controls
+                  </label>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Step 3: Review & Submit -->
@@ -1293,6 +1430,7 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
   currentStep = 1;
   selectedInteractionType?: InteractionType;
   youtubeUrl = '';
+  vimeoUrl = '';
   iframeGuideUrl = '';
   videoData?: YouTubeVideoData;
   processedContent?: any;
@@ -1328,6 +1466,13 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
       enabled: true
     },
     {
+      id: 'vimeo_video',
+      name: 'Vimeo Video',
+      description: 'Embed Vimeo videos with custom start/end times and playback controls',
+      icon: '🎬',
+      enabled: true
+    },
+    {
       id: 'iframe_guide_url',
       name: 'iFrame Guide URL',
       description: 'Add a webpage URL that contains guidance for navigating a web app or playing a game. This will be processed and used to help guide users through the iframe interaction.',
@@ -1346,7 +1491,7 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
       name: 'Webpage',
       description: 'Extract and process content from any webpage or article',
       icon: '🌐',
-      enabled: false
+      enabled: true
     }
   ];
 
@@ -1451,10 +1596,34 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
   get isValidYouTubeUrl(): boolean {
     return !!this.youtubeUrl && !this.urlError;
   }
+
+  validateVimeoUrl(url: string) {
+    this.urlError = '';
+    
+    if (!url) {
+      return;
+    }
+
+    // Simple Vimeo URL validation
+    const vimeoRegex = /^(https?:\/\/)?(www\.)?(vimeo\.com\/)(\d+)/;
+    if (!vimeoRegex.test(url)) {
+      this.urlError = 'Please enter a valid Vimeo URL (e.g., https://vimeo.com/123456789)';
+    }
+  }
+
+  get isValidVimeoUrl(): boolean {
+    return !!this.vimeoUrl && !this.urlError;
+  }
   
   private extractVideoId(url: string): string | null {
     // Extract video ID from YouTube URL
     const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    return match ? match[1] : null;
+  }
+
+  private extractVimeoVideoId(url: string): string | null {
+    // Extract video ID from Vimeo URL
+    const match = url.match(/(?:vimeo\.com\/)(\d+)/);
     return match ? match[1] : null;
   }
 
@@ -1541,6 +1710,18 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
       
       if (result?.success && result.data) {
         this.videoData = result.data;
+        
+        // Convert duration from ISO 8601 string to seconds if needed
+        if (this.videoData && typeof this.videoData.duration === 'string') {
+          this.videoData.duration = this.parseISO8601Duration(this.videoData.duration);
+        }
+        
+        // Cap end time if it exceeds duration
+        if (this.endTime && this.videoData && this.videoData.duration && this.endTime > this.videoData.duration) {
+          this.endTime = this.videoData.duration;
+          this.endTimeInput = this.formatTime(this.endTime);
+        }
+        
         this.processingMessage = 'Validating content...';
         
         // Simple validation score (backend can do more sophisticated validation)
@@ -1675,6 +1856,205 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
       
       this.hasError = true;
       this.errorMessage = error.message || 'Failed to process YouTube video';
+    } finally {
+      this.processing = false;
+    }
+  }
+
+  async processVimeoUrl() {
+    if (!this.isValidVimeoUrl) return;
+
+    // Check time range limit
+    if (this.isTimeRangeTooLong()) {
+      this.showSnackbarMessage('10 minutes is the max for Vimeo snippets');
+      return;
+    }
+    
+    // Check if this URL was already processed BEFORE starting any processing
+    const videoId = this.extractVimeoVideoId(this.vimeoUrl);
+    if (videoId && this.lessonId) {
+      // Fetch from backend API instead of localStorage
+      try {
+        const items = await this.http.get<any[]>(`${environment.apiUrl}/lesson-editor/lessons/${this.lessonId}/processed-outputs`).toPromise();
+        const isDuplicate = items?.some((item: any) => item.videoId === videoId);
+        
+        if (isDuplicate) {
+          console.log('[ContentProcessor] ⚠️ This URL was already processed');
+          this.showSnackbarMessage('This URL was already processed');
+          // DON'T start processing or show Step 3 - just stay at Step 2
+          return;
+        }
+      } catch (error) {
+        console.error('[ContentProcessor] ❌ Failed to check for duplicates:', error);
+        // Continue with processing if the check fails
+      }
+    }
+
+    this.processing = true;
+    this.hasError = false;
+    this.processingMessage = 'Extracting video metadata...';
+
+    try {
+      // Convert time strings to seconds
+      const startTimeSec = this.parseTimeToSeconds(this.startTimeInput);
+      const endTimeSec = this.parseTimeToSeconds(this.endTimeInput);
+      
+      // Call backend API instead of frontend service
+      const payload = {
+        url: this.vimeoUrl,
+        startTime: startTimeSec,
+        endTime: endTimeSec
+      };
+      
+      console.log('[ContentProcessor] 📤 Calling backend API to process Vimeo URL');
+      console.log('[ContentProcessor] 🎬 Two-step flow: URL → source content → processed output');
+      
+      const result = await this.http.post<any>(
+        `${environment.apiUrl}/content-sources/process-vimeo`,
+        payload,
+        {
+          headers: {
+            'x-tenant-id': environment.tenantId,
+            'x-user-id': environment.defaultUserId
+          }
+        }
+      ).toPromise();
+      
+      console.log('[ContentProcessor] ✅ Backend response:', result);
+      console.log('[ContentProcessor] 📚 Source content ID:', result.sourceContentId);
+      
+      if (result?.success && result.data) {
+        this.videoData = result.data;
+        
+        // Vimeo duration is already in seconds (number), but ensure it's a number
+        if (this.videoData && typeof this.videoData.duration === 'string') {
+          this.videoData.duration = parseFloat(this.videoData.duration) || 0;
+        }
+        
+        // Cap end time if it exceeds duration
+        if (this.endTime && this.videoData && this.videoData.duration && this.endTime > this.videoData.duration) {
+          this.endTime = this.videoData.duration;
+          this.endTimeInput = this.formatTime(this.endTime);
+        }
+        
+        this.processingMessage = 'Validating content...';
+        
+        // Simple validation score (backend can do more sophisticated validation)
+        this.validationScore = result.validationScore || 75; // Default to 75 for educational content
+
+        this.processingMessage = 'Creating processed content...';
+        
+        // Create processed content object
+        this.processedContent = {
+          id: `processed_${Date.now()}`,
+          type: 'vimeo_video',
+          title: this.videoData!.title,
+          description: this.videoData!.description,
+          thumbnail: this.videoData!.thumbnail,
+          duration: this.videoData!.duration,
+          channel: this.videoData!.channel,
+          videoId: this.videoData!.videoId,
+          transcript: this.videoData!.transcript,
+          startTime: this.startTime,
+          endTime: this.endTime,
+          autoplay: this.autoplay,
+          showControls: this.showControls,
+          validationScore: this.validationScore,
+          status: 'ready',
+          createdAt: new Date().toISOString()
+        };
+
+        this.processingMessage = 'Processing complete!';
+        
+        // Automatically save processed content to service
+        if (this.lessonId) {
+          const processedContentItem: ProcessedContentItem = {
+            id: `processed_${Date.now()}`,
+            type: this.processedContent!.type,
+            title: this.processedContent!.title,
+            description: this.processedContent!.description,
+            thumbnail: this.processedContent!.thumbnail,
+            duration: this.processedContent!.duration,
+            channel: this.processedContent!.channel,
+            videoId: this.processedContent!.videoId,
+            transcript: this.processedContent!.transcript,
+            startTime: this.processedContent!.startTime,
+            endTime: this.processedContent!.endTime,
+            autoplay: this.processedContent!.autoplay,
+            showControls: this.processedContent!.showControls,
+            validationScore: this.processedContent!.validationScore,
+            status: 'ready',
+            createdAt: new Date().toISOString(),
+            lessonId: this.lessonId,
+            metadata: {
+              videoId: this.processedContent!.videoId,
+              duration: this.processedContent!.duration,
+              channel: this.processedContent!.channel,
+              startTime: this.processedContent!.startTime,
+              endTime: this.processedContent!.endTime
+            }
+          };
+          
+          console.log('[ContentProcessor] 💾 Saving processed content to backend:', processedContentItem);
+          console.log('[ContentProcessor] 🔍 lessonId:', this.lessonId, 'type:', typeof this.lessonId);
+          
+          // Save to backend API with link to source content
+          const payload = {
+            lessonId: this.lessonId,
+            contentSourceId: result.sourceContentId, // Link to source content created by backend
+            outputName: this.videoData!.title,
+            outputType: 'vimeo_video',
+            outputData: {
+              videoId: this.videoData!.videoId,
+              url: this.vimeoUrl,
+              startTime: this.startTime,
+              endTime: this.endTime,
+              autoplay: this.autoplay,
+              showControls: this.showControls,
+            },
+            videoId: this.videoData!.videoId,
+            title: this.videoData!.title,
+            description: this.videoData!.description,
+            thumbnail: this.videoData!.thumbnail,
+            channel: this.videoData!.channel,
+            duration: this.videoData!.duration?.toString(),
+            transcript: this.videoData!.transcript,
+            startTime: this.startTime,
+            endTime: this.endTime,
+            validationScore: this.validationScore,
+            createdBy: environment.defaultUserId,
+          };
+          
+          console.log('[ContentProcessor] 🔗 Linking processed output to source:', result.sourceContentId);
+          
+          console.log('[ContentProcessor] 📤 Sending payload:', payload);
+          
+          this.http.post(`${environment.apiUrl}/lesson-editor/processed-outputs`, payload).subscribe({
+            next: (response) => {
+              console.log('[ContentProcessor] ✅ Saved to backend:', response);
+              
+              // Emit event to parent to refresh list
+              this.contentProcessed.emit({
+                type: 'processed_content',
+                content: response,
+                lessonId: this.lessonId
+              });
+            },
+            error: (error) => {
+              console.error('[ContentProcessor] ❌ Failed to save:', error);
+              this.hasError = true;
+              this.errorMessage = 'Failed to save processed content';
+            }
+          });
+        }
+        
+        this.currentStep = 3;
+      } else {
+        throw new Error(result?.error || 'Failed to process video');
+      }
+    } catch (error: any) {
+      this.hasError = true;
+      this.errorMessage = error.message || 'Failed to process Vimeo video';
     } finally {
       this.processing = false;
     }
@@ -1829,7 +2209,16 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
 
   parseEndTime(input: string) {
     this.endTimeInput = input;
-    this.endTime = this.parseTimeString(input);
+    let parsedTime = this.parseTimeString(input);
+    
+    // Cap end time at video duration if available
+    if (this.videoData?.duration && parsedTime > this.videoData.duration) {
+      parsedTime = this.videoData.duration;
+      // Update input to reflect the capped value
+      this.endTimeInput = this.formatTime(parsedTime);
+    }
+    
+    this.endTime = parsedTime;
   }
 
   parseTimeString(timeStr: string): number {
@@ -1961,6 +2350,7 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
     this.currentStep = 1;
     this.selectedInteractionType = undefined;
     this.youtubeUrl = '';
+    this.vimeoUrl = '';
     this.iframeGuideUrl = '';
     this.videoData = undefined;
     this.processedContent = undefined;
@@ -1991,6 +2381,18 @@ export class ContentProcessorModalComponent implements OnInit, OnChanges {
 
   formatTime(seconds: number): string {
     return this.formatDuration(seconds);
+  }
+
+  parseISO8601Duration(duration: string): number {
+    // Parse ISO 8601 duration format (e.g., "PT1H2M10S" or "PT5M30S")
+    const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    if (!match) return 0;
+    
+    const hours = parseInt(match[1] || '0', 10);
+    const minutes = parseInt(match[2] || '0', 10);
+    const seconds = parseInt(match[3] || '0', 10);
+    
+    return hours * 3600 + minutes * 60 + seconds;
   }
 
   truncateText(text: string, maxLength: number): string {

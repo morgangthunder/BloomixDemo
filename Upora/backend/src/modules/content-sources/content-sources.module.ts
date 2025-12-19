@@ -6,6 +6,7 @@ import { ContentSource } from '../../entities/content-source.entity';
 import { LessonDataLink } from '../../entities/lesson-data-link.entity';
 import { ProcessedContentOutput } from '../../entities/processed-content-output.entity';
 import { YouTubeService } from '../../services/youtube.service';
+import { VimeoService } from '../../services/vimeo.service';
 import { ContentAnalyzerModule } from '../../services/content-analyzer.module';
 import { AutoPopulatorModule } from '../../services/auto-populator.module';
 import { FileStorageService } from '../../services/file-storage.service';
@@ -18,7 +19,7 @@ import { MediaMetadataService } from '../../services/media-metadata.service';
     AutoPopulatorModule,
   ],
   controllers: [ContentSourcesController],
-  providers: [ContentSourcesService, YouTubeService, FileStorageService, MediaMetadataService],
+  providers: [ContentSourcesService, YouTubeService, VimeoService, FileStorageService, MediaMetadataService],
   exports: [ContentSourcesService],
 })
 export class ContentSourcesModule {}

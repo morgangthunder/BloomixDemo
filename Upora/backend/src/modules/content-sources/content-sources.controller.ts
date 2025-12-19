@@ -162,6 +162,19 @@ export class ContentSourcesController {
     return this.contentSourcesService.processYouTubeUrl(url, startTime, endTime, tenantId, userId);
   }
 
+  @Post('process-vimeo')
+  @HttpCode(HttpStatus.OK)
+  async processVimeo(
+    @Body('url') url: string,
+    @Body('startTime') startTime?: number,
+    @Body('endTime') endTime?: number,
+    @Headers('x-tenant-id') tenantId?: string,
+    @Headers('x-user-id') userId?: string,
+  ) {
+    console.log('[ContentSourcesController] 🎬 Processing Vimeo URL...');
+    return this.contentSourcesService.processVimeoUrl(url, startTime, endTime, tenantId, userId);
+  }
+
   @Post(':id/analyze')
   @HttpCode(HttpStatus.OK)
   async analyzeContent(

@@ -127,6 +127,23 @@ export class InteractionType {
     preload?: 'none' | 'metadata' | 'auto';
   } | null; // Media-specific configuration for uploaded-media interactions
 
+  @Column('jsonb', { name: 'video_url_config', nullable: true })
+  videoUrlConfig: {
+    testVideoUrlContentId?: string;
+    displayMode?: 'overlay' | 'section';
+    sectionHeight?: string;
+    sectionMinHeight?: string;
+    sectionMaxHeight?: string;
+    hideOverlayDuringPlayback?: boolean;
+    autoplay?: boolean;
+    loop?: boolean;
+    defaultVolume?: number;
+    showControls?: boolean;
+    captions?: boolean;
+    startTime?: number;
+    endTime?: number;
+  } | null; // Video URL-specific configuration for video-url interactions
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

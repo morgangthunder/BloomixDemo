@@ -1,254 +1,11 @@
-import { Injectable, OnModuleInit, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { InteractionType } from '../../entities/interaction-type.entity';
-import { FileStorageService } from '../../services/file-storage.service';
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
-@Injectable()
-export class InteractionTypesService implements OnModuleInit {
-  constructor(
-    @InjectRepository(InteractionType)
-    private interactionTypeRepository: Repository<InteractionType>,
-    private fileStorageService: FileStorageService,
-  ) {}
-
-  async onModuleInit() {
-    // Seeding disabled - use POST /api/interaction-types/seed endpoint instead
-    // This avoids race condition with TypeORM synchronize
-  }
-
-  async seedTrueFalseSelection() {
-    const exists = await this.interactionTypeRepository.findOne({
-      where: { id: 'true-false-selection' },
-    });
-
-    if (!exists) {
-      const trueFalseSelection = this.interactionTypeRepository.create({
-        id: 'true-false-selection',
-        name: 'True/False Selection',
-        category: 'tease-trigger',
-        description: 'Students must identify and select all the TRUE statements from a collection of fragments. Used to activate prior knowledge and surface misconceptions early in a lesson.',
-        schema: {
-          type: 'object',
-          required: ['fragments', 'targetStatement'],
-          properties: {
-            fragments: {
-              type: 'array',
-              items: {
-                type: 'object',
-                required: ['text', 'isTrueInContext', 'explanation'],
-                properties: {
-                  text: { type: 'string' },
-                  isTrueInContext: { type: 'boolean' },
-                  explanation: { type: 'string' },
-                },
-              },
-            },
-            targetStatement: { type: 'string' },
-            maxFragments: { type: 'number', default: 8 },
-          },
-        },
-        generationPrompt: `FROM CONTENT: {contentText}
-
-TASK: Generate a True/False Selection interaction for the TEASE-Trigger phase.
-
-PURPOSE: Activate prior knowledge, surface misconceptions, and hook students before diving into content.
-
-1. IDENTIFY: 6-10 statements related to the content topic
-   - Some statements are TRUE (based on content)
-   - Some statements are FALSE (common misconceptions or incorrect variants)
-   - Mix obvious and subtle differences
-2. CREATE TARGET: Write a brief context/question that frames what to look for
-3. WRITE EXPLANATIONS: For each statement, explain why it's true/false
-
-EXAMPLE:
-Content: "Photosynthesis converts light energy to chemical energy in plants"
-Statements:
-  - "Plants perform photosynthesis" (TRUE - core fact) ✓
-  - "Chlorophyll captures sunlight" (TRUE - key molecule) ✓
-  - "Plants eat soil" (FALSE - common misconception) ✗
-  - "Photosynthesis occurs without light" (FALSE - light is required) ✗
-  - "The process produces glucose and oxygen" (TRUE - outputs) ✓
-  - "All living things photosynthesize" (FALSE - only plants and some bacteria) ✗
-
-Target: "Which of these statements about photosynthesis are TRUE?"
-
-CONFIDENCE SCORING:
-- 0.9-1.0: Content has clear true/false statements with good misconceptions
-- 0.7-0.9: Content allows statements but false options need creativity
-- <0.7: Content too complex or unclear for true/false approach
-
-OUTPUT FORMAT: Return ONLY valid JSON matching this structure:
-{
-  "confidence": 0.90,
-  "output": {
-    "fragments": [
-      {"text": "Plants perform photosynthesis", "isTrueInContext": true, "explanation": "Plants are primary organisms that carry out photosynthesis"},
-      {"text": "Plants eat soil", "isTrueInContext": false, "explanation": "Plants make their own food through photosynthesis, they don't consume soil"}
-    ],
-    "targetStatement": "Which of these statements about photosynthesis are TRUE?",
-    "maxFragments": 8
-  }
-}`,
-        pixiRenderer: 'TrueFalseSelectionComponent',
-        minConfidence: 0.8,
-        teachStageFit: ['tease-trigger'],
-        cognitiveLoad: 'medium',
-        estimatedDuration: 240, // 4 minutes
-        assetRequirements: {
-          uiElements: ['fragment-tile.png', 'checkmark.png', 'x-mark.png'],
-          soundEffects: ['tap.mp3', 'correct.mp3', 'incorrect.mp3'],
-          animations: ['shake-animation.json'],
-        },
-        mobileAdaptations: {
-          tapToSelect: 'Large touch targets (min 48x48px)',
-          shakeOnIncorrect: 'Haptic feedback for wrong selection',
-          scrollableFragments: 'Horizontal scroll if >6 fragments on small screens',
-        },
-        scoringLogic:
-          '(True fragments selected / Total true fragments) × 100. Incorrect selections do not penalize, just don\'t add to score. Clicking for explanations does not affect score.',
-        isActive: true,
-      });
-
-      await this.interactionTypeRepository.save(trueFalseSelection);
-      console.log('[InteractionTypes] ✅ True/False Selection seeded successfully');
-    } else {
-      console.log('[InteractionTypes] ℹ️ True/False Selection already exists');
-    }
-  }
-
-  async seedVideoUrlInteraction() {
-    const exists = await this.interactionTypeRepository.findOne({
-      where: { id: 'video-url' },
-    });
-
-    if (exists) {
-      console.log('[InteractionTypes] ℹ️ Video URL interaction type already exists');
-      return;
-    }
-
-    const videoUrl = this.interactionTypeRepository.create({
-      id: 'video-url',
-      name: 'Video URL',
-      category: 'absorb-show',
-      description:
-        'Embed and control external video URLs (YouTube, Vimeo, etc.) with full SDK support and playback controls.',
-      schema: {},
-      generationPrompt:
-        'Create a video URL interaction that embeds an external video (YouTube, Vimeo) with playback controls and SDK integration.',
-      interactionTypeCategory: 'video-url',
-      configSchema: {
-        fields: [
-          {
-            key: 'autoplay',
-            type: 'boolean',
-            label: 'Autoplay',
-            default: false,
-            description: 'Automatically start playback when the interaction loads',
-          },
-          {
-            key: 'loop',
-            type: 'boolean',
-            label: 'Loop',
-            default: false,
-            description: 'Loop the video when it reaches the end',
-          },
-          {
-            key: 'defaultVolume',
-            type: 'number',
-            label: 'Default Volume',
-            default: 1.0,
-            min: 0.0,
-            max: 1.0,
-            step: 0.1,
-            description: 'Initial volume level (0.0 to 1.0)',
-          },
-          {
-            key: 'displayMode',
-            type: 'select',
-            label: 'Display Mode',
-            options: [
-              { value: 'overlay', label: 'Overlay on Player' },
-              { value: 'section', label: 'Section below Player' },
-            ],
-            default: 'section',
-            description: 'How to display HTML/CSS/JS content relative to the video player',
-          },
-          {
-            key: 'sectionHeight',
-            type: 'string',
-            label: 'Section Height',
-            default: 'auto',
-            description: "Height of the section below player (e.g., 'auto', '300px', '50vh')",
-          },
-          {
-            key: 'sectionMinHeight',
-            type: 'string',
-            label: 'Section Min Height',
-            default: '200px',
-            description: 'Minimum height of the section below player',
-          },
-          {
-            key: 'sectionMaxHeight',
-            type: 'string',
-            label: 'Section Max Height',
-            default: 'none',
-            description:
-              "Maximum height of the section below player (e.g., 'none', '500px', '80vh')",
-          },
-          {
-            key: 'showCaptions',
-            type: 'boolean',
-            label: 'Show Captions',
-            default: false,
-            description: 'Show closed captions/subtitles if available (YouTube/Vimeo)',
-          },
-          {
-            key: 'videoQuality',
-            type: 'select',
-            label: 'Video Quality',
-            options: [
-              { value: 'auto', label: 'Auto' },
-              { value: 'hd1080', label: '1080p' },
-              { value: 'hd720', label: '720p' },
-              { value: 'medium', label: '480p' },
-              { value: 'small', label: '360p' },
-            ],
-            default: 'auto',
-            description: 'Preferred video quality (may be limited by provider)',
-          },
-        ],
-      },
-      sampleData: {
-        message: 'Select an approved video URL (YouTube or Vimeo) in the interaction configuration.',
-      },
-      minConfidence: 0.7,
-      teachStageFit: ['absorb-show'],
-      cognitiveLoad: 'medium',
-      estimatedDuration: 300,
-      isActive: true,
-    } as any);
-
-    await this.interactionTypeRepository.save(videoUrl);
-    console.log('[InteractionTypes] ✅ Video URL interaction type seeded successfully');
-  }
-
-  /**
-   * Seed SDK Test Video URL interaction type if it doesn't exist yet.
-   * This mirrors the migration 1735100001000-CreateSDKTestVideoUrlInteraction.
-   */
-  async seedSDKTestVideoUrlInteraction() {
-    const exists = await this.interactionTypeRepository.findOne({
-      where: { id: 'sdk-test-video-url' },
-    });
-
-    if (exists) {
-      console.log('[InteractionTypes] ℹ️ SDK Test Video URL interaction type already exists - updating with full code');
-      // Delete existing to ensure clean update
-      await this.interactionTypeRepository.delete({ id: 'sdk-test-video-url' });
-    }
-
-    // HTML/CSS/JS code from migration
+export class CreateSDKTestVideoUrlInteraction1735100001000 implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    // Video URL SDK Test Interaction
+    // This interaction tests all SDK functionality including video URL control methods
+    // The overlay HTML/CSS/JS is injected into the video URL player component
+    
     const overlayHtml = `
       <div id="sdk-test-video-url-overlay">
         <div id="sdk-test-header">
@@ -347,7 +104,6 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this structure:
       }
     `;
 
-    // JavaScript code is very long - using the exact code from migration
     const overlayJs = `
       (function() {
         console.log("[SDK Test Video URL] Starting initialization...");
@@ -867,169 +623,42 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this structure:
       })();
     `;
 
-    const sdkTest = this.interactionTypeRepository.create({
-      id: 'sdk-test-video-url',
-      name: 'SDK Test - Video URL',
-      category: 'absorb-show',
-      description:
+    await queryRunner.query(`
+      INSERT INTO interaction_types (
+        id, name, description, category, schema, generation_prompt,
+        interaction_type_category, html_code, css_code, js_code,
+        config_schema, sample_data,
+        instance_data_schema, user_progress_schema, is_active
+      ) VALUES (
+        'sdk-test-video-url',
+        'SDK Test - Video URL',
         'Comprehensive test interaction for all AI Teacher SDK functionality including video URL control methods. This interaction displays test buttons in a section below the video URL player.',
-      schema: {},
-      generationPrompt:
+        'absorb-show',
+        '{}',
         'This is a test interaction for SDK functionality with video URL control methods.',
-      interactionTypeCategory: 'video-url',
-      htmlCode: overlayHtml,
-      cssCode: overlayCss,
-      jsCode: overlayJs,
-      configSchema: {
-        fields: [
-          {
-            key: 'goFullscreenOnLoad',
-            type: 'boolean',
-            label: 'Go to fullscreen on load',
-            default: false,
-            description: 'Automatically activate fullscreen mode when the interaction loads',
-          },
-          {
-            key: 'playVideoOnLoad',
-            type: 'boolean',
-            label: 'Play video on load',
-            default: false,
-            description: 'Automatically start video playback when the interaction loads',
-          },
-        ],
-      },
-      sampleData: {
-        message:
-          'This is a test interaction. Select an approved video URL (YouTube or Vimeo) in the interaction configuration.',
-      },
-      instanceDataSchema: {
-        fields: [
-          {
-            name: 'testValue',
-            type: 'number',
-            required: false,
-            description: 'Test numeric value',
-          },
-          {
-            name: 'timestamp',
-            type: 'number',
-            required: false,
-            description: 'Timestamp of test',
-          },
-          {
-            name: 'testArray',
-            type: 'array',
-            required: false,
-            description: 'Test array',
-          },
-        ],
-      },
-      userProgressSchema: {
-        customFields: [
-          {
-            name: 'testField',
-            type: 'string',
-            required: false,
-            description: 'Test string field',
-          },
-          {
-            name: 'testNumber',
-            type: 'number',
-            required: false,
-            description: 'Test number field',
-          },
-        ],
-      },
-      isActive: true,
-    } as any);
-
-    await this.interactionTypeRepository.save(sdkTest);
-    console.log('[InteractionTypes] ✅ SDK Test Video URL interaction type seeded successfully');
+        'video-url',
+        $1,
+        $2,
+        $3,
+        '{"fields": [{"key": "goFullscreenOnLoad", "type": "boolean", "label": "Go to fullscreen on load", "default": false, "description": "Automatically activate fullscreen mode when the interaction loads"}, {"key": "playVideoOnLoad", "type": "boolean", "label": "Play video on load", "default": false, "description": "Automatically start video playback when the interaction loads"}]}',
+        '{"message": "This is a test interaction. Select an approved video URL (YouTube or Vimeo) in the interaction configuration."}',
+        '{"fields": [{"name": "testValue", "type": "number", "required": false, "description": "Test numeric value"}, {"name": "timestamp", "type": "number", "required": false, "description": "Timestamp of test"}, {"name": "testArray", "type": "array", "required": false, "description": "Test array"}]}',
+        '{"customFields": [{"name": "testField", "type": "string", "required": false, "description": "Test string field"}, {"name": "testNumber", "type": "number", "required": false, "description": "Test number field"}]}',
+        true
+      ) ON CONFLICT (id) DO UPDATE SET
+        name = EXCLUDED.name,
+        description = EXCLUDED.description,
+        html_code = EXCLUDED.html_code,
+        css_code = EXCLUDED.css_code,
+        js_code = EXCLUDED.js_code,
+        instance_data_schema = EXCLUDED.instance_data_schema,
+        user_progress_schema = EXCLUDED.user_progress_schema;
+    `, [overlayHtml, overlayCss, overlayJs]);
   }
 
-  async findAll(): Promise<InteractionType[]> {
-    return this.interactionTypeRepository.find({
-      where: { isActive: true },
-      order: { name: 'ASC' },
-    });
-  }
-
-  async findOne(id: string): Promise<InteractionType | null> {
-    return this.interactionTypeRepository.findOne({ where: { id } });
-  }
-
-  async create(dto: any): Promise<InteractionType> {
-    const interactionType = this.interactionTypeRepository.create(dto);
-    const saved = await this.interactionTypeRepository.save(interactionType);
-    // TypeORM save can return array or single entity, ensure we return single
-    return Array.isArray(saved) ? saved[0] : saved;
-  }
-
-  async update(id: string, dto: any): Promise<InteractionType> {
-    await this.interactionTypeRepository.update(id, dto);
-    const updated = await this.findOne(id);
-    if (!updated) {
-      throw new Error(`Interaction type ${id} not found`);
-    }
-    return updated;
-  }
-
-  async validateOutput(typeId: string, output: any): Promise<boolean> {
-    const type = await this.findOne(typeId);
-    if (!type) return false;
-
-    // TODO: Implement Zod validation against type.schema
-    // For now, just check basic structure
-    return output && typeof output === 'object';
-  }
-
-  async uploadDocument(interactionId: string, file: any): Promise<{ success: boolean; data: { url: string; fileName: string } }> {
-    const interaction = await this.findOne(interactionId);
-    if (!interaction) {
-      throw new NotFoundException(`Interaction type ${interactionId} not found`);
-    }
-
-    // Delete old document if exists
-    if (interaction.iframeDocumentUrl) {
-      try {
-        await this.fileStorageService.deleteFile(interaction.iframeDocumentUrl);
-      } catch (error) {
-        // Log but don't fail if old file doesn't exist
-        console.warn(`Failed to delete old document: ${error}`);
-      }
-    }
-
-    // Save new file
-    const { url, fileName } = await this.fileStorageService.saveFile(file, 'interaction-documents');
-
-    // Update interaction
-    await this.interactionTypeRepository.update(interactionId, {
-      iframeDocumentUrl: url,
-      iframeDocumentFileName: fileName,
-    });
-
-    return {
-      success: true,
-      data: { url, fileName },
-    };
-  }
-
-  async removeDocument(interactionId: string): Promise<{ success: boolean }> {
-    const interaction = await this.findOne(interactionId);
-    if (!interaction) {
-      throw new NotFoundException(`Interaction type ${interactionId} not found`);
-    }
-
-    if (interaction.iframeDocumentUrl) {
-      await this.fileStorageService.deleteFile(interaction.iframeDocumentUrl);
-    }
-
-    // Clear document fields
-    await this.interactionTypeRepository.update(interactionId, {
-      iframeDocumentUrl: undefined,
-      iframeDocumentFileName: undefined,
-    });
-
-    return { success: true };
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`DELETE FROM interaction_types WHERE id = 'sdk-test-video-url'`);
   }
 }
+
+

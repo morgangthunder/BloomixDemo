@@ -45,7 +45,9 @@ export class InteractionTypesController {
   @Post('seed')
   async seed() {
     await this.interactionTypesService.seedTrueFalseSelection();
-    return { message: 'True/False Selection seeded successfully' };
+    await this.interactionTypesService.seedVideoUrlInteraction();
+    await this.interactionTypesService.seedSDKTestVideoUrlInteraction();
+    return { message: 'Interaction types seeded successfully' };
   }
 
   @Post('upload-document')
