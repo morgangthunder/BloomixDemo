@@ -161,8 +161,9 @@ Apply this fix whenever:
   - `loadVideoUrlPlayerData()` method (clear cache)
 
 ## Version
-- Frontend: 0.1.103
+- Frontend: 0.1.104
 - Date: 2025-12-19
+- Updated: 2025-12-19 (Added custom event listener for video-url SDK messages)
 
 ## Additional Notes
 
