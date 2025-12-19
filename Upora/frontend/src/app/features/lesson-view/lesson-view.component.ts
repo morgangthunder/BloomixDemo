@@ -437,8 +437,8 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
                 <span *ngIf="!showTimer" class="script-title">{{ currentTeacherScript?.text?.substring(0, 40) || 'Ready to teach' }}{{ (currentTeacherScript?.text?.length || 0) > 40 ? '...' : '' }}</span>
                 <span *ngIf="showTimer" class="timer-display">⏱️ {{ formatTime(elapsedSeconds) }}</span>
               </ng-container>
-              <!-- Show timer when timer is enabled (even if media player is present) -->
-              <span *ngIf="showTimer && (isMediaPlayerReady || isTTSActive)" class="timer-display">⏱️ {{ formatTime(elapsedSeconds) }}</span>
+              <!-- Show timer when timer is enabled (even if media player or video URL is present) -->
+              <span *ngIf="showTimer && (isMediaPlayerReady || isVideoUrlReady || isTTSActive)" class="timer-display">⏱️ {{ formatTime(elapsedSeconds) }}</span>
             </div>
           </div>
 
@@ -1175,6 +1175,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     sectionHeight?: string;
     sectionMinHeight?: string;
     sectionMaxHeight?: string;
+    processedContentData?: any; // Processed output data (metadata, etc.) for AI context
   } | null = null;
   @ViewChild('videoUrlPlayer') videoUrlPlayerRef?: VideoUrlPlayerComponent;
   @ViewChild('videoUrlSectionContainer') videoUrlSectionContainerRef?: any;
@@ -1519,8 +1520,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     
     // Check if config has "playVideoOnLoad" option for video-url interactions
     if (this.interactionBuild?.interactionTypeCategory === 'video-url' && this.videoUrlPlayerData) {
-      const videoConfig = config.playVideoOnLoad !== undefined ? config.playVideoOnLoad : (this.videoUrlPlayerData.config?.autoplay || false);
-      if (videoConfig === true && this.videoUrlPlayerRef && this.isVideoUrlReady) {
+      // Only use playVideoOnLoad if explicitly set, default to false
+      const videoConfig = config.playVideoOnLoad === true;
+      if (videoConfig && this.videoUrlPlayerRef && this.isVideoUrlReady) {
         console.log('[LessonView] Config requests video autoplay on load');
         setTimeout(() => {
           this.videoUrlPlayerRef?.playVideoUrl();
@@ -2847,7 +2849,18 @@ export class LessonViewComponent implements OnInit, OnDestroy {
 
           // Build config for VideoUrlPlayerComponent
           const substageConfig = subStage.interaction?.config || {};
-          const autoplay = substageConfig.autoplay ?? configFromInteraction.autoplay ?? false;
+          // Check playVideoOnLoad first (explicit setting), then default to false
+          // Only use playVideoOnLoad - don't fall back to autoplay
+          // Must be explicitly true (strict check)
+          const playVideoOnLoad = substageConfig.playVideoOnLoad === true || (configFromInteraction.playVideoOnLoad === true);
+          const autoplay = playVideoOnLoad; // Use playVideoOnLoad setting for autoplay (must be explicitly true)
+          
+          console.log('[LessonView] 🎬 Video URL autoplay config:', {
+            substageConfigPlayVideoOnLoad: substageConfig.playVideoOnLoad,
+            configFromInteractionPlayVideoOnLoad: configFromInteraction.playVideoOnLoad,
+            playVideoOnLoad,
+            autoplay
+          });
           const loop = substageConfig.loop ?? configFromInteraction.loop ?? false;
           const defaultVolume = substageConfig.defaultVolume ?? configFromInteraction.defaultVolume ?? 1;
           const showCaptions = substageConfig.showCaptions ?? configFromInteraction.showCaptions ?? false;
@@ -2874,6 +2887,13 @@ export class LessonViewComponent implements OnInit, OnDestroy {
             displayMode = 'section';
           }
 
+          // Ensure URL is included in processedContentData for AI context
+          const processedContentDataWithUrl = {
+            ...outputData,
+            url: url || outputData.url || outputData.sourceUrl,
+            sourceUrl: url || outputData.url || outputData.sourceUrl,
+          };
+
           this.videoUrlPlayerData = {
             config: {
               provider,
@@ -2898,6 +2918,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
             sectionHeight: configFromInteraction.sectionHeight || 'auto',
             sectionMinHeight: configFromInteraction.sectionMinHeight || '200px',
             sectionMaxHeight: configFromInteraction.sectionMaxHeight || 'none',
+            processedContentData: processedContentDataWithUrl, // Store processed output data with URL for AI context
           };
 
           console.log('[LessonView] ✅ Video URL player data loaded:', {
@@ -2915,9 +2936,10 @@ export class LessonViewComponent implements OnInit, OnDestroy {
           // Store player reference globally for SDK access
           (window as any).__videoUrlPlayerRef = this.videoUrlPlayerRef;
           
-          // Check for autoplay/playVideoOnLoad
+          // Check for autoplay/playVideoOnLoad - use the same logic as when building config
           const config = (this.activeSubStage as any)?.interaction?.config || {};
-          const playOnLoad = config.playVideoOnLoad !== undefined ? config.playVideoOnLoad : (configFromInteraction.autoplay || false);
+          // Only play if playVideoOnLoad is explicitly set to true (strict check)
+          const playOnLoad = config.playVideoOnLoad === true || (configFromInteraction.playVideoOnLoad === true);
           
           // Execute section JS and send SDK ready after view update
           // Use queueMicrotask to ensure Angular's change detection has completed
@@ -2927,7 +2949,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
               this.sendSDKReadyToVideoUrlSection();
               
               // Auto-play if configured (after player is ready)
-              if (playOnLoad) {
+              // Only play if playVideoOnLoad is explicitly set to true
+              if (playOnLoad === true) {
                 setTimeout(() => {
                   if (this.videoUrlPlayerRef && this.isVideoUrlReady) {
                     this.videoUrlPlayerRef.playVideoUrl();
@@ -3171,8 +3194,21 @@ export class LessonViewComponent implements OnInit, OnDestroy {
 
   onVideoUrlTimeUpdate(currentTime: number) {
     // Sync lesson elapsed time with video current time for video-url interactions
-    if (this.interactionBuild?.interactionTypeCategory === 'video-url' && this.isScriptPlaying) {
+    // Update elapsedSeconds when script is playing OR when timer is shown
+    if (this.interactionBuild?.interactionTypeCategory === 'video-url' && (this.isScriptPlaying || this.showTimer)) {
       this.elapsedSeconds = Math.floor(currentTime);
+      
+      // Check if video has reached endTime - if so, pause and handle end
+      const endTime = this.videoUrlPlayerData?.config?.endTime;
+      if (endTime && currentTime >= endTime) {
+        console.log('[LessonView] ⏹️ Video reached endTime:', endTime);
+        // Pause the video
+        if (this.videoUrlPlayerRef) {
+          this.videoUrlPlayerRef.pauseVideoUrl();
+        }
+        // Handle interaction end (will check auto-progress flag)
+        this.onVideoUrlEnded();
+      }
     }
   }
 
@@ -3342,6 +3378,32 @@ export class LessonViewComponent implements OnInit, OnDestroy {
           }
         }
       }
+    } else if (this.interactionBuild?.interactionTypeCategory === 'video-url') {
+      // For video-url interactions, check interaction config first (same logic as uploaded-media)
+      const interaction = (this.activeSubStage as any)?.interaction;
+      
+      // Check interaction config for autoProgressAtEnd
+      if (interaction?.config?.autoProgressAtEnd !== undefined) {
+        shouldAutoProgress = interaction.config.autoProgressAtEnd;
+        console.log('[LessonView] Found autoProgressAtEnd in interaction config for video-url:', shouldAutoProgress);
+      } else {
+        // Check loadInteractionTiming if available
+        const loadInteractionTiming = (this.activeSubStage as any)?.loadInteractionTiming;
+        if (loadInteractionTiming?.autoProgressAtEnd !== undefined) {
+          shouldAutoProgress = loadInteractionTiming.autoProgressAtEnd;
+          console.log('[LessonView] Found autoProgressAtEnd in loadInteractionTiming for video-url:', shouldAutoProgress);
+        } else {
+          // Check for load_interaction script block
+          const scriptBlocks = (this.activeSubStage as any)?.scriptBlocks || [];
+          const loadInteractionBlock = scriptBlocks.find((block: any) => block.type === 'load_interaction');
+          if (loadInteractionBlock?.autoProgressAtEnd !== undefined) {
+            shouldAutoProgress = loadInteractionBlock.autoProgressAtEnd;
+            console.log('[LessonView] Found autoProgressAtEnd in load_interaction block for video-url:', shouldAutoProgress);
+          } else {
+            console.log('[LessonView] No autoProgressAtEnd found for video-url interaction, defaulting to true');
+          }
+        }
+      }
     } else {
       // For non-media interactions, check all script blocks
       const scriptBlocks = (this.activeSubStage as any)?.scriptBlocks || [];
@@ -3370,6 +3432,12 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       if (this.mediaPlayerRef && this.mediaPlayerRef.isPlaying()) {
         this.mediaPlayerRef.pause();
         console.log('[LessonView] 🎬 Paused video (auto-progress off)');
+      }
+      
+      // Also pause video URL player if it's playing
+      if (this.videoUrlPlayerRef && this.interactionBuild?.interactionTypeCategory === 'video-url') {
+        this.videoUrlPlayerRef.pauseVideoUrl();
+        console.log('[LessonView] 🎬 Paused video URL player (auto-progress disabled)');
       }
       
       // Don't pause the lesson timer - let it continue
@@ -3600,7 +3668,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     const lessonData = this.lesson ? this.lesson.data : null;
     
     // Get current stage and sub-stage information
-    const currentStageInfo = {
+    const currentStageInfo: any = {
       stageId: this.activeStageId,
       subStageId: this.activeSubStageId,
       stage: this.currentStage ? {
@@ -3614,6 +3682,16 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         type: this.activeSubStage.type
       } : null
     };
+    
+    // If we're in a video-url interaction, include processed content data for AI context
+    if (this.interactionBuild?.interactionTypeCategory === 'video-url' && this.videoUrlPlayerData?.processedContentData) {
+      currentStageInfo.processedContentData = this.videoUrlPlayerData.processedContentData;
+      console.log('[LessonView] 📹 Including video URL processed content data in AI context:', {
+        hasMetadata: !!this.videoUrlPlayerData.processedContentData.metadata,
+        hasTitle: !!this.videoUrlPlayerData.processedContentData.title,
+        hasDescription: !!this.videoUrlPlayerData.processedContentData.description,
+      });
+    }
     
     // If screenshot is provided, this is a response to a screenshot request
     const isScreenshotRequest = !!screenshot;

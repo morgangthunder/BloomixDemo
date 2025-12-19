@@ -310,6 +310,45 @@ export class AiAssistantService {
           contextualMessage += `\n`;
         }
         contextualMessage += `\nThe student is currently viewing this stage/sub-stage in the lesson. Use this context to provide relevant guidance.\n`;
+        
+        // If processed content data is available (e.g., video metadata), include it
+        if (context.currentStageInfo.processedContentData) {
+          contextualMessage += `\n=== CURRENT INTERACTION CONTENT ===\n`;
+          const processedData = context.currentStageInfo.processedContentData;
+          
+          // Include video metadata - check both nested metadata object and direct fields
+          // YouTube service returns: { title, description, thumbnail, duration, channel }
+          // Metadata might be stored directly or nested under 'metadata'
+          const metadata = processedData.metadata || processedData;
+          
+          contextualMessage += `Video Metadata:\n`;
+          if (metadata.title || processedData.title) {
+            contextualMessage += `Title: ${metadata.title || processedData.title}\n`;
+          }
+          if (metadata.description || processedData.description) {
+            contextualMessage += `Description: ${(metadata.description || processedData.description || '').substring(0, 500)}${(metadata.description || processedData.description || '').length > 500 ? '...' : ''}\n`;
+          }
+          if (metadata.duration || processedData.duration) {
+            contextualMessage += `Duration: ${metadata.duration || processedData.duration}\n`;
+          }
+          // Check for channel (YouTube service returns 'channel', not 'channelTitle')
+          if (metadata.channel || metadata.channelTitle || processedData.channel) {
+            contextualMessage += `Channel/Creator: ${metadata.channel || metadata.channelTitle || processedData.channel}\n`;
+          }
+          if (metadata.tags && Array.isArray(metadata.tags)) {
+            contextualMessage += `Tags: ${metadata.tags.join(', ')}\n`;
+          }
+          if (metadata.thumbnail || processedData.thumbnail) {
+            contextualMessage += `Thumbnail: ${metadata.thumbnail || processedData.thumbnail}\n`;
+          }
+          // Include source URL - check multiple possible locations
+          const sourceUrl = processedData.url || metadata.url || processedData.sourceUrl || metadata.sourceUrl;
+          if (sourceUrl) {
+            contextualMessage += `Source URL: ${sourceUrl}\n`;
+          }
+          
+          contextualMessage += `\nThe student is currently interacting with this video content. Use this information to answer questions about the video, including who created it (the channel/creator), what it's about (title and description), and any other relevant details.\n`;
+        }
       }
 
       contextualMessage += `\n\n=== LESSON DATA ===\n`;

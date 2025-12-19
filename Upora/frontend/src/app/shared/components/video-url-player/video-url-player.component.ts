@@ -397,6 +397,24 @@ export class VideoUrlPlayerComponent implements OnInit, AfterViewInit, OnDestroy
             if (this.config?.startTime) {
               event.target.seekTo(this.config.startTime, true);
             }
+            
+            // Ensure video is paused if autoplay is disabled
+            // YouTube player might auto-play even with autoplay: 0 due to browser policies
+            // Use setTimeout to ensure player is fully ready before checking state
+            if (!this.config?.autoplay) {
+              setTimeout(() => {
+                try {
+                  const playerState = event.target.getPlayerState();
+                  // YT.PlayerState.PLAYING = 1
+                  if (playerState === 1) {
+                    console.log('[VideoUrlPlayer] ⏸ Pausing video (autoplay disabled)');
+                    event.target.pauseVideo();
+                  }
+                } catch (e) {
+                  // Player might not be ready yet, ignore
+                }
+              }, 200);
+            }
           },
           onStateChange: (event: any) => {
             const state = event.data;
@@ -407,6 +425,17 @@ export class VideoUrlPlayerComponent implements OnInit, AfterViewInit, OnDestroy
             // YT.PlayerState.ENDED = 0
             
             if (state === 1) { // Playing
+              // If autoplay is disabled, pause immediately
+              if (!this.config?.autoplay) {
+                console.log('[VideoUrlPlayer] ⏸ Video started playing but autoplay is disabled - pausing');
+                try {
+                  event.target.pauseVideo();
+                  return; // Don't emit play event or start time updates
+                } catch (e) {
+                  console.warn('[VideoUrlPlayer] Error pausing video:', e);
+                }
+              }
+              
               this.isPlaying = true;
               this.playEvent.emit();
               this.startTimeUpdateInterval();
@@ -499,9 +528,33 @@ export class VideoUrlPlayerComponent implements OnInit, AfterViewInit, OnDestroy
         if (this.config?.startTime) {
           this.vimeoPlayer.setCurrentTime(this.config.startTime);
         }
+        
+        // Ensure video is paused if autoplay is disabled
+        // Vimeo player might auto-play even with autoplay disabled due to browser policies
+        if (!this.config?.autoplay) {
+          this.vimeoPlayer.getPaused().then((isPaused: boolean) => {
+            if (!isPaused) {
+              console.log('[VideoUrlPlayer] ⏸ Pausing Vimeo video (autoplay disabled)');
+              this.vimeoPlayer.pause();
+            }
+          }).catch(() => {
+            // Player might not be ready yet, ignore
+          });
+        }
       });
       
       this.vimeoPlayer.on('play', () => {
+        // If autoplay is disabled, pause immediately
+        if (!this.config?.autoplay) {
+          console.log('[VideoUrlPlayer] ⏸ Vimeo video started playing but autoplay is disabled - pausing');
+          try {
+            this.vimeoPlayer.pause();
+            return; // Don't emit play event or start time updates
+          } catch (e) {
+            console.warn('[VideoUrlPlayer] Error pausing Vimeo video:', e);
+          }
+        }
+        
         console.log('[VideoUrlPlayer] ▶️ Vimeo player playing');
         this.isPlaying = true;
         this.playEvent.emit();
