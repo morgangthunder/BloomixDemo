@@ -188,3 +188,46 @@ After applying this fix, verify:
 - ✅ Returning cached `cachedVideoUrlSectionHtml` - preserves handlers
 - ❌ Forgetting to clear cache when loading new data - causes stale HTML
 - ✅ Clearing cache in `loadVideoUrlPlayerData()` and when setting `videoUrlPlayerData = null`
+
+## Additional Fix: Custom Event Listener for Video-URL SDK
+
+### Problem
+The video-url SDK sends messages via `CustomEvent('ai-sdk-message')` instead of `window.postMessage`, but the lesson view component wasn't listening for these events. This caused SDK methods like `minimizeChatUI()` to not work.
+
+### Solution
+Added a custom event listener in `ngOnInit()` to handle `ai-sdk-message` events:
+
+```typescript
+// Listen for ai-sdk-message custom events from video-url section SDK
+document.addEventListener('ai-sdk-message', ((e: CustomEvent) => {
+  const message = e.detail;
+  if (!message || !message.type) {
+    return;
+  }
+  
+  // Route message to InteractionAISDK service
+  switch (message.type) {
+    case 'ai-sdk-minimize-chat-ui':
+      this.interactionAISDK.minimizeChatUI();
+      break;
+    case 'ai-sdk-show-chat-ui':
+      this.interactionAISDK.showChatUI();
+      break;
+    // ... other message types
+  }
+}) as EventListener);
+```
+
+### Added Missing SDK Methods
+The video-url SDK was missing UI control methods. Added the following methods to `createVideoUrlSectionSDK()`:
+- `minimizeChatUI()`
+- `showChatUI()`
+- `activateFullscreen()`
+- `deactivateFullscreen()`
+- `postToChat()`
+- `showScript()`
+- `showSnack()`
+- `hideSnack()`
+- Data storage methods (`saveInstanceData`, `getUserProgress`, etc.)
+
+These methods now send messages via `sendMessage()` which dispatches `CustomEvent('ai-sdk-message')` that the lesson view component listens for.
