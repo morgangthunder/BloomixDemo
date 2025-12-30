@@ -887,7 +887,14 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this structure:
             type: 'boolean',
             label: 'Go to fullscreen on load',
             default: false,
-            description: 'Automatically activate fullscreen mode when the interaction loads',
+            description: 'Automatically activate fullscreen mode when the interaction loads'
+          },
+          {
+            key: 'showAiTeacherUiOnLoad',
+            type: 'boolean',
+            label: 'Show AI Teacher UI on load',
+            default: false,
+            description: 'Automatically show the AI Teacher UI when the interaction loads. If false (default), the UI will remain minimized.',
           },
           {
             key: 'playVideoOnLoad',
@@ -1234,12 +1241,11 @@ function initTestApp() {
   let displayedImageSprite = null;
   
   // Update prompt text when input changes (if input field exists)
+  // Note: We don't log on every keystroke to avoid console spam
   if (promptInput) {
     promptInput.addEventListener("input", (e) => {
       imagePromptText = (e.target && e.target.value) ? e.target.value : "";
-      if (imagePromptText) {
-        updateStatus("Image prompt: " + imagePromptText.substring(0, 30) + "...", 0x00ff00);
-      }
+      // Don't log on every keystroke - only update internal state
     });
   }
   
@@ -1494,6 +1500,82 @@ function initTestApp() {
       success: true,
       data: { url, fileName },
     };
+  }
+
+  /**
+   * Update config schema for existing interactions to include new fields
+   * This ensures backward compatibility when new config options are added
+   */
+  async updateConfigSchemaForExistingInteractions() {
+    const interactionsToUpdate = [
+      'sdk-test-html',
+      'sdk-test-iframe',
+      'sdk-test-media-player',
+      'sdk-test-video-url',
+      'sdk-test-pixijs',
+    ];
+
+    const newConfigSchema = {
+      fields: [
+        {
+          key: 'goFullscreenOnLoad',
+          type: 'boolean',
+          label: 'Go to fullscreen on load',
+          default: false,
+          description: 'Automatically activate fullscreen mode when the interaction loads'
+        },
+        {
+          key: 'showAiTeacherUiOnLoad',
+          type: 'boolean',
+          label: 'Show AI Teacher UI on load',
+          default: false,
+          description: 'Automatically show the AI Teacher UI when the interaction loads. If false (default), the UI will remain minimized.'
+        }
+      ]
+    };
+
+    for (const interactionId of interactionsToUpdate) {
+      const existing = await this.interactionTypeRepository.findOne({
+        where: { id: interactionId },
+      });
+
+      if (existing) {
+        // Parse existing config schema
+        let existingSchema: any = {};
+        if (existing.configSchema && typeof existing.configSchema === 'string') {
+          try {
+            existingSchema = JSON.parse(existing.configSchema);
+          } catch (e) {
+            console.warn(`[InteractionTypes] Failed to parse configSchema for ${interactionId}, using empty schema`);
+          }
+        } else if (existing.configSchema) {
+          existingSchema = existing.configSchema;
+        }
+
+        // Merge new fields into existing schema
+        const existingFields = existingSchema.fields || [];
+        const newFields = newConfigSchema.fields;
+        
+        // Check if showAiTeacherUiOnLoad already exists
+        const hasShowAiTeacherUi = existingFields.some((f: any) => f.key === 'showAiTeacherUiOnLoad');
+        
+        if (!hasShowAiTeacherUi) {
+          // Add new field to existing schema
+          existingSchema.fields = [...existingFields, newFields[1]]; // Add showAiTeacherUiOnLoad
+          
+          // Update in database
+          await this.interactionTypeRepository.update(
+            { id: interactionId },
+            { configSchema: existingSchema }
+          );
+          console.log(`[InteractionTypes] ✅ Updated config schema for ${interactionId} to include showAiTeacherUiOnLoad`);
+        } else {
+          console.log(`[InteractionTypes] ℹ️ ${interactionId} already has showAiTeacherUiOnLoad in config schema`);
+        }
+      } else {
+        console.warn(`[InteractionTypes] ⚠️ Interaction ${interactionId} not found, skipping config schema update`);
+      }
+    }
   }
 
   async removeDocument(interactionId: string): Promise<{ success: boolean }> {

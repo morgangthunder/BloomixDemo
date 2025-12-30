@@ -1200,15 +1200,17 @@ await aiSDK.saveUserProgress({
         'api-config': {
           label: 'API Configuration (JSON)',
           content: JSON.stringify({
-            apiEndpoint: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent',
+            apiEndpoint: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent',
             apiKey: 'your-api-key-here',
             apiKeyHeader: 'x-goog-api-key',
-            model: 'gemini-2.5-flash-image',
-            temperature: 0.7,
-            maxTokens: 1000,
+            model: 'gemini-2.0-flash-exp',
+            width: 1024,
+            height: 1024,
+            steps: 50,
+            guidanceScale: 7.5,
             additionalHeaders: {}
           }, null, 2),
-          placeholder: 'Enter API configuration as JSON. Required fields: apiEndpoint, apiKey. Optional: apiKeyHeader (default: "x-goog-api-key"), model, temperature, maxTokens, additionalHeaders. NOTE: API key is stored securely in the database and never exposed to client-side code.'
+          placeholder: 'Enter API configuration as JSON. Required fields: apiEndpoint, apiKey. Optional: apiKeyHeader (default: "x-goog-api-key"), model, temperature, maxTokens, additionalHeaders. NOTE: API key is stored securely in the database and never exposed to client-side code. For Google Gemini (Nano-Banana), use x-goog-api-key header with your Google AI Studio API key.'
         }
       }
     }
@@ -1218,6 +1220,7 @@ await aiSDK.saveUserProgress({
   savingAll = false;
   savingPrompt: string | null = null; // Track which individual prompt is being saved
   originalPrompts: Map<string, string> = new Map(); // Store original content for reset
+  unmaskedPrompts: Map<string, string> = new Map(); // Store unmasked content for prompts with API keys
   hardcodedDefaults: Map<string, AIAssistant> = new Map(); // Store hardcoded defaults before database load
 
   /**
@@ -1225,8 +1228,24 @@ await aiSDK.saveUserProgress({
    */
   hasPromptChanged(assistant: AIAssistant, promptKey: string): boolean {
     const promptId = `${assistant.id}.${promptKey}`;
-    const original = this.originalPrompts.get(promptId);
-    const current = assistant.prompts[promptKey]?.content || '';
+    let original = this.originalPrompts.get(promptId);
+    let current = assistant.prompts[promptKey]?.content || '';
+    
+    // For api-config, we need to compare the actual saved content (unmasked) with what would be saved
+    // The displayed content is masked, but we need to compare what would actually be saved
+    if (promptKey === 'api-config') {
+      // Get what would be saved (handles masking/unmasking logic)
+      const contentToSave = this.getContentToSave(promptId, current);
+      
+      // For comparison, use the unmasked version from originalPrompts if available
+      // If originalPrompts has a masked key, we need to get the unmasked version
+      if (this.unmaskedPrompts.has(promptId)) {
+        original = this.unmaskedPrompts.get(promptId);
+      }
+      
+      return original !== contentToSave;
+    }
+    
     return original !== current;
   }
 
@@ -1286,25 +1305,48 @@ await aiSDK.saveUserProgress({
         dbPrompts.forEach(dbPrompt => {
           const assistant = this.assistants.find(a => a.id === dbPrompt.assistantId);
           if (assistant) {
+            const promptId = `${dbPrompt.assistantId}.${dbPrompt.promptKey}`;
+            
+            // Store original unmasked content
+            this.originalPrompts.set(promptId, dbPrompt.content);
+            
+            // Check if this is an API config prompt with sensitive data (apiKey field)
+            let displayContent = dbPrompt.content;
+            if (dbPrompt.promptKey === 'api-config' && dbPrompt.content) {
+              try {
+                const config = JSON.parse(dbPrompt.content);
+                if (config.apiKey && config.apiKey !== 'your-api-key-here') {
+                  // Store unmasked version
+                  this.unmaskedPrompts.set(promptId, dbPrompt.content);
+                  
+                  // Mask the API key for display
+                  const maskedKey = this.maskApiKey(config.apiKey);
+                  config.apiKey = maskedKey;
+                  displayContent = JSON.stringify(config, null, 2);
+                  
+                  console.log(`[AIPrompts] 🔒 Masked API key for ${promptId}`);
+                }
+              } catch (e) {
+                // Not JSON, use as-is
+                console.warn(`[AIPrompts] Failed to parse API config as JSON:`, e);
+              }
+            }
+            
             // If prompt exists in hardcoded list, update it
             if (assistant.prompts[dbPrompt.promptKey]) {
               // Only update if database has content (don't overwrite with empty)
-              if (dbPrompt.content && dbPrompt.content.trim().length > 0) {
-                assistant.prompts[dbPrompt.promptKey].content = dbPrompt.content;
+              if (displayContent && displayContent.trim().length > 0) {
+                assistant.prompts[dbPrompt.promptKey].content = displayContent;
               }
             } else {
               // Add new prompt from database that's not in hardcoded list
               assistant.prompts[dbPrompt.promptKey] = {
                 label: dbPrompt.label || dbPrompt.promptKey,
-                content: dbPrompt.content,
+                content: displayContent,
                 placeholder: `Enter the prompt for ${dbPrompt.label || dbPrompt.promptKey}...`
               };
               console.log(`[AIPrompts] ➕ Added new prompt from DB: ${dbPrompt.assistantId}.${dbPrompt.promptKey}`);
             }
-            
-            // Store original content for reset functionality
-            const promptId = `${dbPrompt.assistantId}.${dbPrompt.promptKey}`;
-            this.originalPrompts.set(promptId, dbPrompt.content);
             
             console.log(`[AIPrompts] ✓ Updated ${dbPrompt.assistantId}.${dbPrompt.promptKey}`);
           }
@@ -1333,6 +1375,55 @@ await aiSDK.saveUserProgress({
     return Object.keys(assistant.prompts);
   }
 
+  /**
+   * Mask API key for display (shows first 4 and last 4 characters)
+   */
+  private maskApiKey(apiKey: string): string {
+    if (!apiKey || apiKey.length <= 8) {
+      return '••••••••';
+    }
+    return apiKey.substring(0, 4) + '••••••••' + apiKey.substring(apiKey.length - 4);
+  }
+
+  /**
+   * Check if content contains a masked API key
+   */
+  private isMaskedApiKey(value: string): boolean {
+    return value.includes('••••••••') && value.length > 12;
+  }
+
+  /**
+   * Get the content to save - if API key was masked and not changed, merge with original
+   */
+  private getContentToSave(promptId: string, currentContent: string): string {
+    // If this prompt has an unmasked version stored
+    if (this.unmaskedPrompts.has(promptId)) {
+      try {
+        const currentConfig = JSON.parse(currentContent);
+        const originalConfig = JSON.parse(this.unmaskedPrompts.get(promptId)!);
+        
+        // If the API key in current content is masked, replace it with the original unmasked key
+        // This allows users to change other fields (like apiEndpoint) while keeping the API key unchanged
+        if (this.isMaskedApiKey(currentConfig.apiKey)) {
+          // User didn't change the API key, use original unmasked key but keep all other changes
+          const mergedConfig = {
+            ...currentConfig,
+            apiKey: originalConfig.apiKey // Use original unmasked API key
+          };
+          return JSON.stringify(mergedConfig, null, 2);
+        }
+        
+        // User entered a new API key (not masked), use current content as-is
+        return currentContent;
+      } catch (e) {
+        // Not JSON, use as-is
+        return currentContent;
+      }
+    }
+    
+    return currentContent;
+  }
+
   cancelEdit() {
     this.selectedAssistant = null;
     
@@ -1354,13 +1445,33 @@ await aiSDK.saveUserProgress({
       const prompt = assistant.prompts[promptKey];
       const promptId = `${assistant.id}.${promptKey}`;
       
+      // Get content to save (handles API key masking)
+      const contentToSave = this.getContentToSave(promptId, prompt.content);
+      
       await this.http.put(`${environment.apiUrl}/ai-prompts/${promptId}`, {
-        content: prompt.content,
+        content: contentToSave,
         label: prompt.label
       }).toPromise();
       
-      // Update stored original
-      this.originalPrompts.set(promptId, prompt.content);
+      // Update stored original and unmasked versions
+      // IMPORTANT: For api-config, store the unmasked version in originalPrompts (what was actually saved)
+      // The displayed content is masked, but originalPrompts should have the unmasked version for comparison
+      if (promptKey === 'api-config') {
+        this.unmaskedPrompts.set(promptId, contentToSave);
+        this.originalPrompts.set(promptId, contentToSave); // Store unmasked version for comparison
+        // Re-mask for display
+        try {
+          const config = JSON.parse(contentToSave);
+          if (config.apiKey && !this.isMaskedApiKey(config.apiKey)) {
+            config.apiKey = this.maskApiKey(config.apiKey);
+            prompt.content = JSON.stringify(config, null, 2);
+          }
+        } catch (e) {
+          // Not JSON, ignore
+        }
+      } else {
+        this.originalPrompts.set(promptId, contentToSave);
+      }
       
       console.log('[AIPrompts] ✅ Prompt saved:', promptKey);
       this.toastService.success(`Prompt "${prompt.label}" saved successfully!`, 3000);
@@ -1377,7 +1488,23 @@ await aiSDK.saveUserProgress({
     const original = this.originalPrompts.get(promptId);
     
     if (original) {
-      assistant.prompts[promptKey].content = original;
+      // If this is an API config, mask the API key for display
+      let displayContent = original;
+      if (promptKey === 'api-config') {
+        try {
+          const config = JSON.parse(original);
+          if (config.apiKey && config.apiKey !== 'your-api-key-here') {
+            config.apiKey = this.maskApiKey(config.apiKey);
+            displayContent = JSON.stringify(config, null, 2);
+            // Store unmasked version
+            this.unmaskedPrompts.set(promptId, original);
+          }
+        } catch (e) {
+          // Not JSON, use as-is
+        }
+      }
+      
+      assistant.prompts[promptKey].content = displayContent;
       console.log('[AIPrompts] ↶ Reset prompt to original:', promptKey);
       this.toastService.info(`Reset "${assistant.prompts[promptKey].label}" to last saved version`, 2000);
     }
@@ -1430,12 +1557,31 @@ await aiSDK.saveUserProgress({
         const prompt = this.selectedAssistant.prompts[promptKey];
         const promptId = `${this.selectedAssistant.id}.${promptKey}`;
         
+        // Get content to save (handles API key masking)
+        const contentToSave = this.getContentToSave(promptId, prompt.content);
+        
         updates.push(
           this.http.put(`${environment.apiUrl}/ai-prompts/${promptId}`, {
-            content: prompt.content,
+            content: contentToSave,
             label: prompt.label
           }).toPromise()
         );
+        
+        // Update stored versions
+        this.originalPrompts.set(promptId, contentToSave);
+        if (promptKey === 'api-config') {
+          this.unmaskedPrompts.set(promptId, contentToSave);
+          // Re-mask for display
+          try {
+            const config = JSON.parse(contentToSave);
+            if (config.apiKey && !this.isMaskedApiKey(config.apiKey)) {
+              config.apiKey = this.maskApiKey(config.apiKey);
+              prompt.content = JSON.stringify(config, null, 2);
+            }
+          } catch (e) {
+            // Not JSON, ignore
+          }
+        }
       }
       
       await Promise.all(updates);
@@ -1444,9 +1590,16 @@ await aiSDK.saveUserProgress({
       const assistantName = this.selectedAssistant.name;
       
       // Update originalPrompts to reflect saved state (so Save buttons disable)
+      // IMPORTANT: Use the actual saved content (from unmaskedPrompts if available), not the displayed masked content
       Object.keys(this.selectedAssistant.prompts).forEach(key => {
         const promptId = `${this.selectedAssistant!.id}.${key}`;
-        this.originalPrompts.set(promptId, this.selectedAssistant!.prompts[key].content);
+        // For api-config, use the unmasked version that was actually saved
+        if (key === 'api-config' && this.unmaskedPrompts.has(promptId)) {
+          this.originalPrompts.set(promptId, this.unmaskedPrompts.get(promptId)!);
+        } else {
+          // For other prompts, use the content as-is
+          this.originalPrompts.set(promptId, this.selectedAssistant!.prompts[key].content);
+        }
       });
       
       this.toastService.success(

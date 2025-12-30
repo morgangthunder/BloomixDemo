@@ -12,36 +12,7 @@ export class InteractionTypesController {
     return this.interactionTypesService.findAll();
   }
 
-  @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return this.interactionTypesService.findOne(id);
-  }
-
-  @Post()
-  async create(
-    @Body() dto: CreateInteractionTypeDto,
-    @Headers('x-user-id') userId: string,
-    @Headers('x-tenant-id') tenantId: string,
-  ) {
-    // TODO: Add super-admin role check
-    return this.interactionTypesService.create(dto);
-  }
-
-  @Put(':id')
-  async update(
-    @Param('id') id: string,
-    @Body() dto: any, // Use any for now to avoid DTO validation issues
-    @Headers('x-user-id') userId: string,
-    @Headers('x-tenant-id') tenantId: string,
-  ) {
-    // TODO: Add super-admin role check
-    // Remove fields that shouldn't be updated
-    const { id: bodyId, createdAt, updatedAt, contentOutputId, ...updateData } = dto;
-    // contentOutputId is for interaction instances, not interaction types
-    // It's used for testing in the builder but shouldn't be saved to the type
-    return this.interactionTypesService.update(id, updateData);
-  }
-
+  // Specific routes must come before parameterized routes to avoid route conflicts
   @Post('seed')
   async seed() {
     await this.interactionTypesService.seedTrueFalseSelection();
@@ -55,6 +26,12 @@ export class InteractionTypesController {
   async updateSDKTestPixiJS() {
     await this.interactionTypesService.updateSDKTestPixiJSInteraction();
     return { message: 'SDK Test PixiJS interaction updated successfully' };
+  }
+
+  @Post('update-config-schemas')
+  async updateConfigSchemas() {
+    await this.interactionTypesService.updateConfigSchemaForExistingInteractions();
+    return { message: 'Config schemas updated successfully for all interactions' };
   }
 
   @Post('upload-document')
@@ -86,6 +63,36 @@ export class InteractionTypesController {
     }
 
     return this.interactionTypesService.uploadDocument(interactionId, file);
+  }
+
+  @Get(':id')
+  async findOne(@Param('id') id: string) {
+    return this.interactionTypesService.findOne(id);
+  }
+
+  @Post()
+  async create(
+    @Body() dto: CreateInteractionTypeDto,
+    @Headers('x-user-id') userId: string,
+    @Headers('x-tenant-id') tenantId: string,
+  ) {
+    // TODO: Add super-admin role check
+    return this.interactionTypesService.create(dto);
+  }
+
+  @Put(':id')
+  async update(
+    @Param('id') id: string,
+    @Body() dto: any, // Use any for now to avoid DTO validation issues
+    @Headers('x-user-id') userId: string,
+    @Headers('x-tenant-id') tenantId: string,
+  ) {
+    // TODO: Add super-admin role check
+    // Remove fields that shouldn't be updated
+    const { id: bodyId, createdAt, updatedAt, contentOutputId, ...updateData } = dto;
+    // contentOutputId is for interaction instances, not interaction types
+    // It's used for testing in the builder but shouldn't be saved to the type
+    return this.interactionTypesService.update(id, updateData);
   }
 
   @Delete('document/:id')

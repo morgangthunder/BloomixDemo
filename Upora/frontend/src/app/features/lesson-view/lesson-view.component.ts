@@ -1935,6 +1935,55 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // Load interaction data if available
     this.loadInteractionData();
     
+    // Check chat UI behavior for component-based interactions (like true-false-selection)
+    // This needs to happen here because component-based interactions don't go through loadPixiJSHTMLIframeInteraction
+    if (this.activeSubStage) {
+      const config = (this.activeSubStage.interaction as any)?.config || {};
+      const showAiTeacherUiOnLoad = config.showAiTeacherUiOnLoad;
+      const configOpenChatUI = config.openChatUI;
+      const configMinimizeChatUI = config.minimizeChatUI;
+      
+      // Check script block settings as fallback (only if interaction config doesn't specify)
+      let shouldShowChatUI: boolean | null = null;
+      if (showAiTeacherUiOnLoad === true) {
+        shouldShowChatUI = true;
+      } else if (showAiTeacherUiOnLoad === false) {
+        shouldShowChatUI = false;
+      } else if (configOpenChatUI === true) {
+        shouldShowChatUI = true;
+      } else if (configMinimizeChatUI === true) {
+        shouldShowChatUI = false;
+      } else {
+        // Interaction config doesn't specify, check first script block
+        const scriptBlocks = (this.activeSubStage as any)?.scriptBlocks || [];
+        const firstScriptBlock = scriptBlocks.find((block: any) => block.type === 'teacher_talk' || block.type === 'load_interaction' || block.type === 'pause');
+        if (firstScriptBlock) {
+          if (firstScriptBlock.openChatUI === true) {
+            shouldShowChatUI = true;
+          } else if (firstScriptBlock.minimizeChatUI === true) {
+            shouldShowChatUI = false;
+          }
+        }
+      }
+      
+      // Apply chat UI state
+      setTimeout(() => {
+        if (this.teacherWidget) {
+          if (shouldShowChatUI === true) {
+            this.teacherWidget.openWidget();
+            console.log('[LessonView] ✅ Showing AI Teacher UI on component interaction load (interaction config: showAiTeacherUiOnLoad=true or openChatUI=true)');
+          } else if (shouldShowChatUI === false) {
+            this.teacherWidget.minimize();
+            console.log('[LessonView] ✅ Minimized AI Teacher UI on component interaction load (interaction config: showAiTeacherUiOnLoad=false or minimizeChatUI=true or script block: minimizeChatUI=true)');
+          } else {
+            // Default: minimize
+            this.teacherWidget.minimize();
+            console.log('[LessonView] ✅ Minimized AI Teacher UI on component interaction load (default behavior)');
+          }
+        }
+      }, 100);
+    }
+    
     // Check if this is a media player interaction and if autoplay is disabled
     const isMediaInteraction = this.interactionBuild?.interactionTypeCategory === 'uploaded-media';
     const mediaConfig = this.interactionBuild?.mediaConfig || {};
@@ -2636,16 +2685,57 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       console.log('[LessonView] 🎛️ Full iframeConfig:', JSON.stringify(build.iframeConfig, null, 2));
       this.interactionBuild = build;
       
+      // Check chat UI behavior on load - interaction config takes precedence, then script block settings
+      const config = (subStage.interaction as any)?.config || {};
+      const showAiTeacherUiOnLoad = config.showAiTeacherUiOnLoad;
+      const configOpenChatUI = config.openChatUI;
+      const configMinimizeChatUI = config.minimizeChatUI;
+      
+      // Check script block settings as fallback (only if interaction config doesn't specify)
+      let shouldShowChatUI: boolean | null = null;
+      if (showAiTeacherUiOnLoad === true) {
+        shouldShowChatUI = true;
+      } else if (showAiTeacherUiOnLoad === false) {
+        shouldShowChatUI = false;
+      } else if (configOpenChatUI === true) {
+        shouldShowChatUI = true;
+      } else if (configMinimizeChatUI === true) {
+        shouldShowChatUI = false;
+      } else {
+        // Interaction config doesn't specify, check first script block
+        const scriptBlocks = (subStage as any)?.scriptBlocks || [];
+        const firstScriptBlock = scriptBlocks.find((block: any) => block.type === 'teacher_talk' || block.type === 'load_interaction' || block.type === 'pause');
+        if (firstScriptBlock) {
+          if (firstScriptBlock.openChatUI === true) {
+            shouldShowChatUI = true;
+          } else if (firstScriptBlock.minimizeChatUI === true) {
+            shouldShowChatUI = false;
+          }
+        }
+      }
+      
+      // Minimize AI Teacher UI when interaction loads unless explicitly configured to show
+      // Use setTimeout to ensure teacherWidget is initialized
+      setTimeout(() => {
+        if (this.teacherWidget) {
+          if (shouldShowChatUI === true) {
+            this.teacherWidget.openWidget();
+            console.log('[LessonView] ✅ Showing AI Teacher UI on interaction load (interaction config: showAiTeacherUiOnLoad=true)');
+          } else if (shouldShowChatUI === false) {
+            this.teacherWidget.minimize();
+            console.log('[LessonView] ✅ Minimized AI Teacher UI on interaction load (interaction config: showAiTeacherUiOnLoad=false or script block: minimizeChatUI=true)');
+          } else {
+            // Default: minimize
+            this.teacherWidget.minimize();
+            console.log('[LessonView] ✅ Minimized AI Teacher UI on interaction load (default behavior)');
+          }
+        }
+      }, 100);
+      
       // Check for processed output (PixiJS/HTML interactions can use processed outputs, but it's optional)
       const processedContentId = this.normalizeContentOutputId(
         subStage.contentOutputId || (subStage.interaction as any)?.contentOutputId
       );
-      
-      // Minimize AI Teacher UI when interaction loads
-      if (this.teacherWidget) {
-        this.teacherWidget.minimize();
-        console.log('[LessonView] ✅ Minimized AI Teacher UI on interaction load');
-      }
       
       if (!processedContentId) {
         // No processed content - use sample data (no error, interactions can work without processed content)
@@ -2706,11 +2796,45 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     console.log('[LessonView] 🎬 Loading media player data for uploaded-media interaction');
     console.log('[LessonView] 🎬 Build ID:', build.id, 'SubStage ID:', subStage.id);
     
-    // Minimize AI Teacher UI when interaction loads
-    if (this.teacherWidget) {
-      this.teacherWidget.minimize();
-      console.log('[LessonView] ✅ Minimized AI Teacher UI on media interaction load');
+    // Check chat UI behavior on load - interaction config takes precedence, then script block settings
+    const config = (subStage.interaction as any)?.config || {};
+    const showAiTeacherUiOnLoad = config.showAiTeacherUiOnLoad;
+    
+    // Check script block settings as fallback (only if interaction config doesn't specify)
+    let shouldShowChatUI: boolean | null = null;
+    if (showAiTeacherUiOnLoad === true) {
+      shouldShowChatUI = true;
+    } else if (showAiTeacherUiOnLoad === false) {
+      shouldShowChatUI = false;
+    } else {
+      // Interaction config doesn't specify, check first script block
+      const scriptBlocks = (subStage as any)?.scriptBlocks || [];
+      const firstScriptBlock = scriptBlocks.find((block: any) => block.type === 'teacher_talk' || block.type === 'load_interaction' || block.type === 'pause');
+      if (firstScriptBlock) {
+        if (firstScriptBlock.openChatUI === true) {
+          shouldShowChatUI = true;
+        } else if (firstScriptBlock.minimizeChatUI === true) {
+          shouldShowChatUI = false;
+        }
+      }
     }
+    
+    // Minimize AI Teacher UI when interaction loads unless explicitly configured to show
+    setTimeout(() => {
+      if (this.teacherWidget) {
+        if (shouldShowChatUI === true) {
+          this.teacherWidget.openWidget();
+          console.log('[LessonView] ✅ Showing AI Teacher UI on media interaction load (interaction config: showAiTeacherUiOnLoad=true)');
+        } else if (shouldShowChatUI === false) {
+          this.teacherWidget.minimize();
+          console.log('[LessonView] ✅ Minimized AI Teacher UI on media interaction load (interaction config: showAiTeacherUiOnLoad=false or script block: minimizeChatUI=true)');
+        } else {
+          // Default: minimize
+          this.teacherWidget.minimize();
+          console.log('[LessonView] ✅ Minimized AI Teacher UI on media interaction load (default behavior)');
+        }
+      }
+    }, 100);
     
     this.isLoadingInteraction = true;
     // Don't clear mediaPlayerData immediately - wait until we have new data
@@ -2826,11 +2950,45 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     console.log('[LessonView] 🎬 Loading video URL player data for video-url interaction');
     console.log('[LessonView] 🎬 Build ID:', build.id, 'SubStage ID:', subStage.id);
     
-    // Minimize AI Teacher UI when interaction loads
-    if (this.teacherWidget) {
-      this.teacherWidget.minimize();
-      console.log('[LessonView] ✅ Minimized AI Teacher UI on video URL interaction load');
+    // Check chat UI behavior on load - interaction config takes precedence, then script block settings
+    const config = (subStage.interaction as any)?.config || {};
+    const showAiTeacherUiOnLoad = config.showAiTeacherUiOnLoad;
+    
+    // Check script block settings as fallback (only if interaction config doesn't specify)
+    let shouldShowChatUI: boolean | null = null;
+    if (showAiTeacherUiOnLoad === true) {
+      shouldShowChatUI = true;
+    } else if (showAiTeacherUiOnLoad === false) {
+      shouldShowChatUI = false;
+    } else {
+      // Interaction config doesn't specify, check first script block
+      const scriptBlocks = (subStage as any)?.scriptBlocks || [];
+      const firstScriptBlock = scriptBlocks.find((block: any) => block.type === 'teacher_talk' || block.type === 'load_interaction' || block.type === 'pause');
+      if (firstScriptBlock) {
+        if (firstScriptBlock.openChatUI === true) {
+          shouldShowChatUI = true;
+        } else if (firstScriptBlock.minimizeChatUI === true) {
+          shouldShowChatUI = false;
+        }
+      }
     }
+    
+    // Minimize AI Teacher UI when interaction loads unless explicitly configured to show
+    setTimeout(() => {
+      if (this.teacherWidget) {
+        if (shouldShowChatUI === true) {
+          this.teacherWidget.openWidget();
+          console.log('[LessonView] ✅ Showing AI Teacher UI on video URL interaction load (interaction config: showAiTeacherUiOnLoad=true)');
+        } else if (shouldShowChatUI === false) {
+          this.teacherWidget.minimize();
+          console.log('[LessonView] ✅ Minimized AI Teacher UI on video URL interaction load (interaction config: showAiTeacherUiOnLoad=false or script block: minimizeChatUI=true)');
+        } else {
+          // Default: minimize
+          this.teacherWidget.minimize();
+          console.log('[LessonView] ✅ Minimized AI Teacher UI on video URL interaction load (default behavior)');
+        }
+      }
+    }, 100);
     
     this.isLoadingInteraction = true;
     this.interactionBuild = build;
@@ -6507,14 +6665,77 @@ ${escapedHtml}
 
     console.log('[LessonView] Playing teacher script:', script.text.substring(0, 50) + '...');
     this.currentTeacherScript = script;
-    this.teacherWidgetHidden = false; // Auto-show when script plays
-    // Reset unread count when widget is auto-shown
-    this.unreadMessageCount = 0;
-    this.lastReadMessageCount = this.chatMessages.length;
     
     // Use scriptBlock parameter if provided, otherwise use script object itself
     const block = scriptBlock || script;
+    
+    // Check chat UI behavior - interaction config takes precedence, then script block settings
+    const interactionConfig = (this.activeSubStage as any)?.interaction?.config || {};
+    const showAiTeacherUiOnLoad = interactionConfig.showAiTeacherUiOnLoad;
+    const configOpenChatUI = interactionConfig.openChatUI;
+    const configMinimizeChatUI = interactionConfig.minimizeChatUI;
+    
+    console.log('[LessonView] 🔍 Chat UI check:', {
+      showAiTeacherUiOnLoad,
+      configOpenChatUI,
+      configMinimizeChatUI,
+      blockOpenChatUI: block.openChatUI,
+      blockMinimizeChatUI: block.minimizeChatUI,
+      scriptOpenChatUI: (script as any).openChatUI,
+      scriptMinimizeChatUI: (script as any).minimizeChatUI,
+      blockKeys: Object.keys(block),
+      scriptKeys: Object.keys(script || {})
+    });
+    
+    // Determine if chat UI should be shown
+    // Priority: 1) showAiTeacherUiOnLoad, 2) config openChatUI/minimizeChatUI, 3) script block settings
+    let shouldShowChatUI = false;
+    if (showAiTeacherUiOnLoad === true) {
+      shouldShowChatUI = true;
+      console.log('[LessonView] ✅ Chat UI: SHOW (interaction config: showAiTeacherUiOnLoad=true)');
+    } else if (showAiTeacherUiOnLoad === false) {
+      shouldShowChatUI = false;
+      console.log('[LessonView] ✅ Chat UI: MINIMIZE (interaction config: showAiTeacherUiOnLoad=false)');
+    } else if (configOpenChatUI === true) {
+      shouldShowChatUI = true;
+      console.log('[LessonView] ✅ Chat UI: SHOW (interaction config: openChatUI=true)');
+    } else if (configMinimizeChatUI === true) {
+      shouldShowChatUI = false;
+      console.log('[LessonView] ✅ Chat UI: MINIMIZE (interaction config: minimizeChatUI=true)');
+    } else {
+      // Interaction config doesn't specify, check script block settings
+      if (block.openChatUI === true || (script as any).openChatUI === true) {
+        shouldShowChatUI = true;
+        console.log('[LessonView] ✅ Chat UI: SHOW (script block: openChatUI=true)');
+      } else if (block.minimizeChatUI === true || (script as any).minimizeChatUI === true) {
+        shouldShowChatUI = false;
+        console.log('[LessonView] ✅ Chat UI: MINIMIZE (script block: minimizeChatUI=true)');
+      } else {
+        // Default: show widget when script plays (for backward compatibility)
+        shouldShowChatUI = true;
+        console.log('[LessonView] ✅ Chat UI: SHOW (default behavior)');
+      }
+    }
+    
+    // Only show widget if it should be shown
+    if (shouldShowChatUI) {
+      this.teacherWidgetHidden = false; // Auto-show when script plays
+      // Reset unread count when widget is auto-shown
+      this.unreadMessageCount = 0;
+      this.lastReadMessageCount = this.chatMessages.length;
+      if (this.teacherWidget) {
+        this.teacherWidget.openWidget();
+      }
+    } else {
+      // Keep widget hidden/minimized
+      this.teacherWidgetHidden = true;
+      if (this.teacherWidget) {
+        this.teacherWidget.minimize();
+      }
+    }
+    
     // Script blocks from DB may not have a 'type' field - default to 'teacher_talk' if it has text/content
+    // Note: 'block' is already declared above
     const blockType = block.type || (script as any).type || (block.text || block.content ? 'teacher_talk' : undefined);
     const blockContent = block.content || block.text || script.text || script.content || '';
     
@@ -6544,21 +6765,9 @@ ${escapedHtml}
       }
     }
     
-    // Chat UI controls - available for all script block types
-    // Open chat UI if configured
-    if ((block.openChatUI || (script as any).openChatUI) && this.teacherWidget) {
-      this.teacherWidget.openWidget();
-      // Reset unread count when chat UI is opened
-      this.unreadMessageCount = 0;
-      this.lastReadMessageCount = this.chatMessages.length;
-      console.log('[LessonView] ✅ Opening chat UI - unread count reset');
-    }
-    
-    // Minimize chat UI if configured
-    if ((block.minimizeChatUI || (script as any).minimizeChatUI) && this.teacherWidget) {
-      this.teacherWidget.minimize();
-      console.log('[LessonView] ✅ Minimizing chat UI');
-    }
+    // Chat UI controls - REMOVED: Already handled at the start of playTeacherScript
+    // This duplicate section was causing the widget to open even when minimizeChatUI was set
+    // The chat UI state is now determined once at the beginning of the function and applied there
     
     // Activate fullscreen if configured - available for all script block types
     if (block.activateFullscreen || (script as any).activateFullscreen) {

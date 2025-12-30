@@ -4156,7 +4156,11 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
                   startTime: block.startTime || 0,
                   endTime: block.endTime || block.startTime || 0,
                   estimatedDuration: (block.endTime || block.startTime || 0) - (block.startTime || 0) || 10,
-                  autoProgressAtEnd: block.autoProgressAtEnd !== undefined ? block.autoProgressAtEnd : true
+                  autoProgressAtEnd: block.autoProgressAtEnd !== undefined ? block.autoProgressAtEnd : true,
+                  // Include chat UI and fullscreen config for load_interaction blocks
+                  openChatUI: block.openChatUI || false,
+                  minimizeChatUI: block.minimizeChatUI || false,
+                  activateFullscreen: block.activateFullscreen || false
                 };
               } else if (block.type === 'pause') {
                 return {
@@ -4185,7 +4189,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
             // Include load_interaction block in the interaction data if it exists
             const loadInteractionBlock = allScriptBlocks.find(b => b.type === 'load_interaction');
             
-            // Include load_interaction block timing in interaction config if it exists
+            // Include load_interaction block timing and config in interaction config if it exists
             if (loadInteractionBlock && interactionData) {
               if (!interactionData.config) {
                 interactionData.config = {};
@@ -4194,6 +4198,16 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
               interactionData.config.endTime = loadInteractionBlock.endTime;
               interactionData.config.estimatedDuration = loadInteractionBlock.estimatedDuration;
               interactionData.config.autoProgressAtEnd = loadInteractionBlock.autoProgressAtEnd;
+              // Include chat UI and fullscreen config for load_interaction blocks
+              if (loadInteractionBlock.openChatUI !== undefined) {
+                interactionData.config.openChatUI = loadInteractionBlock.openChatUI;
+              }
+              if (loadInteractionBlock.minimizeChatUI !== undefined) {
+                interactionData.config.minimizeChatUI = loadInteractionBlock.minimizeChatUI;
+              }
+              if (loadInteractionBlock.activateFullscreen !== undefined) {
+                interactionData.config.activateFullscreen = loadInteractionBlock.activateFullscreen;
+              }
             }
 
             return {
@@ -7549,6 +7563,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
               const openChatUI = block.openChatUI !== undefined ? block.openChatUI : (playbackRules.openChatUI || false);
               const minimizeChatUI = block.minimizeChatUI !== undefined ? block.minimizeChatUI : (playbackRules.minimizeChatUI || false);
               const activateFullscreen = block.activateFullscreen !== undefined ? block.activateFullscreen : (playbackRules.activateFullscreen || false);
+              const autoProgressAtEnd = block.autoProgressAtEnd !== undefined ? block.autoProgressAtEnd : (playbackRules.autoProgressAtEnd !== undefined ? playbackRules.autoProgressAtEnd : true);
               
               // Ensure block ID is unique and doesn't match interaction pattern
               let blockId = block.id;
@@ -7570,7 +7585,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
                 snackDuration: snackDuration,
                 openChatUI: openChatUI,
                 minimizeChatUI: minimizeChatUI,
-                activateFullscreen: activateFullscreen
+                activateFullscreen: activateFullscreen,
+                autoProgressAtEnd: autoProgressAtEnd
               });
             });
           }
@@ -7579,12 +7595,27 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
           if (ssData.interaction) {
             console.log(`[LessonEditor]     Interaction:`, ssData.interaction.type);
             const interactionId = generateUniqueId('interaction', `interaction-${ssData.id}`);
+            const interactionConfig = ssData.interaction.config || {};
+            // Extract timing and config from interaction config or loadInteractionTiming
+            const loadInteractionTiming = (ssData as any).loadInteractionTiming;
+            const startTime = loadInteractionTiming?.startTime ?? interactionConfig.startTime ?? (scriptBlocks.length > 0 ? scriptBlocks[scriptBlocks.length - 1].endTime : 0);
+            const endTime = loadInteractionTiming?.endTime ?? interactionConfig.endTime ?? ((scriptBlocks.length > 0 ? scriptBlocks[scriptBlocks.length - 1].endTime : 0) + 60);
+            const autoProgressAtEnd = loadInteractionTiming?.autoProgressAtEnd ?? interactionConfig.autoProgressAtEnd ?? true;
+            // Extract chat UI and fullscreen config from interaction config
+            const openChatUI = interactionConfig.openChatUI !== undefined ? interactionConfig.openChatUI : false;
+            const minimizeChatUI = interactionConfig.minimizeChatUI !== undefined ? interactionConfig.minimizeChatUI : false;
+            const activateFullscreen = interactionConfig.activateFullscreen !== undefined ? interactionConfig.activateFullscreen : false;
+            
             scriptBlocks.push({
               id: interactionId,
               type: 'load_interaction',
               content: '',
-              startTime: scriptBlocks.length > 0 ? scriptBlocks[scriptBlocks.length - 1].endTime : 0,
-              endTime: (scriptBlocks.length > 0 ? scriptBlocks[scriptBlocks.length - 1].endTime : 0) + 60,
+              startTime: startTime,
+              endTime: endTime,
+              autoProgressAtEnd: autoProgressAtEnd,
+              openChatUI: openChatUI,
+              minimizeChatUI: minimizeChatUI,
+              activateFullscreen: activateFullscreen,
               metadata: {
                 interactionType: ssData.interaction.type,
                 interactionConfig: ssData.interaction.config
@@ -7602,6 +7633,9 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
               const showInSnack = block.showInSnack !== undefined ? block.showInSnack : (playbackRules.showInSnack || false);
               const snackDuration = block.snackDuration !== undefined ? block.snackDuration : playbackRules.snackDuration;
               const openChatUI = block.openChatUI !== undefined ? block.openChatUI : (playbackRules.openChatUI || false);
+              const minimizeChatUI = block.minimizeChatUI !== undefined ? block.minimizeChatUI : (playbackRules.minimizeChatUI || false);
+              const activateFullscreen = block.activateFullscreen !== undefined ? block.activateFullscreen : (playbackRules.activateFullscreen || false);
+              const autoProgressAtEnd = block.autoProgressAtEnd !== undefined ? block.autoProgressAtEnd : (playbackRules.autoProgressAtEnd !== undefined ? playbackRules.autoProgressAtEnd : true);
               
               // Ensure block ID is unique and doesn't match interaction pattern
               let blockId = block.id;
@@ -7621,7 +7655,10 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
                 // Include display configuration at top level for editor
                 showInSnack: showInSnack,
                 snackDuration: snackDuration,
-                openChatUI: openChatUI
+                openChatUI: openChatUI,
+                minimizeChatUI: minimizeChatUI,
+                activateFullscreen: activateFullscreen,
+                autoProgressAtEnd: autoProgressAtEnd
               });
             });
           }

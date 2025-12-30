@@ -66,6 +66,18 @@ export class ImageGeneratorService {
 
       try {
         const config = JSON.parse(configPrompt.content);
+        // Log API key info for debugging (without exposing full key)
+        if (config.apiKey) {
+          this.logger.log('[ImageGenerator] API config loaded from database:', {
+            apiEndpoint: config.apiEndpoint,
+            apiKeyLength: config.apiKey.length,
+            apiKeyStartsWith: config.apiKey.substring(0, 4),
+            apiKeyEndsWith: config.apiKey.substring(config.apiKey.length - 4),
+            isMasked: config.apiKey.includes('••••••••'),
+            isPlaceholder: config.apiKey === 'your-api-key-here',
+            fullApiKeyPreview: config.apiKey.substring(0, 20) + '...' + config.apiKey.substring(config.apiKey.length - 4),
+          });
+        }
         return config;
       } catch (error) {
         this.logger.error('[ImageGenerator] Failed to parse API config JSON:', error);
@@ -116,6 +128,36 @@ export class ImageGeneratorService {
         error: 'Image generator API not configured. Please configure at /super-admin/ai-prompts?assistant=image-generator',
       };
     }
+    
+    // Check if API key is masked or placeholder
+    if (apiConfig.apiKey.includes('••••••••') || 
+        apiConfig.apiKey === 'your-api-key-here' ||
+        apiConfig.apiKey.length < 20) {
+      this.logger.error('[ImageGenerator] ❌ API key appears to be masked or invalid:', {
+        keyLength: apiConfig.apiKey.length,
+        isMasked: apiConfig.apiKey.includes('••••••••'),
+        isPlaceholder: apiConfig.apiKey === 'your-api-key-here',
+        firstChars: apiConfig.apiKey.substring(0, 10),
+        fullKeyPreview: apiConfig.apiKey,
+      });
+      return {
+        success: false,
+        error: 'API key appears to be masked or invalid. Please update the API key in /super-admin/ai-prompts?assistant=image-generator with your actual Google API key (not the masked version).',
+      };
+    }
+    
+    this.logger.log('[ImageGenerator] ✅ API key validation passed:', {
+      keyLength: apiConfig.apiKey.length,
+      startsWith: apiConfig.apiKey.substring(0, 4),
+      lastChars: apiConfig.apiKey.substring(apiConfig.apiKey.length - 4),
+      preview: apiConfig.apiKey.substring(0, 8) + '...' + apiConfig.apiKey.substring(apiConfig.apiKey.length - 4),
+    });
+    
+    this.logger.debug('[ImageGenerator] API key validation passed:', {
+      keyLength: apiConfig.apiKey.length,
+      startsWith: apiConfig.apiKey.substring(0, 4),
+      lastChars: apiConfig.apiKey.substring(apiConfig.apiKey.length - 4),
+    });
 
     // 2. Get prompt template
     const promptTemplate = await this.getPromptTemplate();
@@ -143,7 +185,7 @@ export class ImageGeneratorService {
       fullPrompt += `\n\nCustom instructions: ${request.customInstructions}`;
     }
 
-    // 4. Build request payload for Google Gemini API
+    // 4. Build request payload for Google Gemini API (Nano-Banana is Gemini 2.5 Flash Image)
     // Format: { "contents": [{ "parts": [{ "text": "prompt" }] }] }
     const parts: any[] = [
       {
@@ -196,21 +238,32 @@ export class ImageGeneratorService {
       requestPayload.generationConfig = generationConfig;
     }
 
-    // 5. Determine API key header (Gemini uses x-goog-api-key)
+    // 5. Determine API key header (Google Gemini uses x-goog-api-key)
     const apiKeyHeader = apiConfig.apiKeyHeader || 'x-goog-api-key';
-    const apiKeyValue = apiConfig.apiKey; // Gemini doesn't use Bearer prefix
+    const apiKeyValue = apiConfig.apiKey; // Google API key doesn't use Bearer prefix
 
     // 6. Make API call
     try {
-      this.logger.log(`[ImageGenerator] Calling API: ${apiConfig.apiEndpoint}`);
+      const model = apiConfig.model || 'gemini-2.0-flash-exp';
+      this.logger.log(`[ImageGenerator] Calling API: ${apiConfig.apiEndpoint} with model: ${model}`);
+      this.logger.log(`[ImageGenerator] Using API key header: ${apiKeyHeader}`);
+      this.logger.log(`[ImageGenerator] API key value preview: ${apiKeyValue.substring(0, 8)}...${apiKeyValue.substring(apiKeyValue.length - 4)} (length: ${apiKeyValue.length})`);
+      this.logger.log(`[ImageGenerator] Full API key being sent: ${apiKeyValue}`);
+      this.logger.debug(`[ImageGenerator] Request payload:`, JSON.stringify(requestPayload, null, 2));
+      
+      const requestHeaders: Record<string, string> = {
+        [apiKeyHeader]: apiKeyValue,
+        'Content-Type': 'application/json',
+        ...(apiConfig.additionalHeaders || {}), // Allow custom headers
+      };
+      
+      this.logger.debug(`[ImageGenerator] Request headers:`, Object.keys(requestHeaders).map(key => 
+        key === apiKeyHeader ? `${key}: ${apiKeyValue.substring(0, 10)}...` : `${key}: ${requestHeaders[key]}`
+      ));
       
       const response = await fetch(apiConfig.apiEndpoint, {
         method: 'POST',
-        headers: {
-          [apiKeyHeader]: apiKeyValue,
-          'Content-Type': 'application/json',
-          ...(apiConfig.additionalHeaders || {}), // Allow custom headers
-        },
+        headers: requestHeaders,
         body: JSON.stringify(requestPayload),
       });
 
@@ -226,36 +279,105 @@ export class ImageGeneratorService {
 
       const data = await response.json();
       this.logger.log('[ImageGenerator] API response received');
+      this.logger.debug('[ImageGenerator] Full API response:', JSON.stringify(data, null, 2));
 
-      // 7. Parse Gemini API response format:
-      // { "candidates": [{ "content": { "parts": [{ "inlineData": { "mimeType": "image/png", "data": "BASE64" } }] } }] }
+      // 7. Parse Nano-Banana API response format
+      // Possible formats:
+      // - { "image": "base64_data" } or { "image_data": "base64_data" }
+      // - { "image_url": "https://..." }
+      // - { "data": { "image": "base64_data" } }
       
       let imageData: string | undefined;
 
       try {
-        if (data.candidates && data.candidates.length > 0) {
-          const candidate = data.candidates[0];
-          if (candidate.content && candidate.content.parts) {
-            for (const part of candidate.content.parts) {
-              if (part.inlineData && part.inlineData.data) {
-                // Convert base64 to data URL
-                const mimeType = part.inlineData.mimeType || 'image/png';
-                imageData = `data:${mimeType};base64,${part.inlineData.data}`;
-                break;
-              }
-            }
-          }
+        // Check for error in response first
+        if (data.error) {
+          this.logger.error('[ImageGenerator] API returned error:', JSON.stringify(data.error));
+          return {
+            success: false,
+            error: data.error.message || data.error.error || `API error: ${JSON.stringify(data.error)}`,
+          };
         }
 
-      if (!imageData) {
-        this.logger.error('[ImageGenerator] No image found in API response:', JSON.stringify(data).substring(0, 200));
-        return {
-          success: false,
-          error: 'API response did not contain an image in the expected format.',
-        };
-      }
+        // Try different possible response formats
+        // Google Gemini format: data.candidates[0].content.parts[0].inlineData.data
+        if (data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data) {
+          const inlineData = data.candidates[0].content.parts[0].inlineData;
+          const base64Data = inlineData.data;
+          const mimeType = inlineData.mimeType || 'image/png';
+          imageData = base64Data.startsWith('data:') 
+            ? base64Data 
+            : `data:${mimeType};base64,${base64Data}`;
+          this.logger.log('[ImageGenerator] ✅ Image extracted from Gemini candidates[0].content.parts[0].inlineData');
+        } else if (data.image) {
+          // Direct base64 image data
+          const base64Data = data.image;
+          const mimeType = data.mime_type || data.mimeType || 'image/png';
+          imageData = base64Data.startsWith('data:') 
+            ? base64Data 
+            : `data:${mimeType};base64,${base64Data}`;
+          this.logger.log('[ImageGenerator] ✅ Image extracted from data.image');
+        } else if (data.image_data) {
+          // Alternative field name
+          const base64Data = data.image_data;
+          const mimeType = data.mime_type || data.mimeType || 'image/png';
+          imageData = base64Data.startsWith('data:') 
+            ? base64Data 
+            : `data:${mimeType};base64,${base64Data}`;
+          this.logger.log('[ImageGenerator] ✅ Image extracted from data.image_data');
+        } else if (data.image_url || data.imageUrl) {
+          // Image URL instead of base64
+          const imageUrl = data.image_url || data.imageUrl;
+          this.logger.log('[ImageGenerator] ✅ Image URL received:', imageUrl);
+          return {
+            success: true,
+            imageUrl: imageUrl,
+            requestId: data.request_id || data.requestId || undefined,
+          };
+        } else if (data.data?.image) {
+          // Nested structure
+          const base64Data = data.data.image;
+          const mimeType = data.data.mime_type || data.data.mimeType || 'image/png';
+          imageData = base64Data.startsWith('data:') 
+            ? base64Data 
+            : `data:${mimeType};base64,${base64Data}`;
+          this.logger.log('[ImageGenerator] ✅ Image extracted from data.data.image');
+        } else if (data.result?.image) {
+          // Another possible nested structure
+          const base64Data = data.result.image;
+          const mimeType = data.result.mime_type || data.result.mimeType || 'image/png';
+          imageData = base64Data.startsWith('data:') 
+            ? base64Data 
+            : `data:${mimeType};base64,${base64Data}`;
+          this.logger.log('[ImageGenerator] ✅ Image extracted from data.result.image');
+        }
+
+        if (!imageData && !data.image_url && !data.imageUrl) {
+          this.logger.error('[ImageGenerator] No image found in API response');
+          this.logger.error('[ImageGenerator] Response keys:', Object.keys(data));
+          this.logger.error('[ImageGenerator] Response structure:', JSON.stringify(data).substring(0, 500));
+          
+          // Log more details about Gemini response structure
+          if (data.candidates) {
+            this.logger.error('[ImageGenerator] Gemini candidates structure:', {
+              candidatesLength: data.candidates.length,
+              firstCandidateKeys: data.candidates[0] ? Object.keys(data.candidates[0]) : [],
+              hasContent: !!data.candidates[0]?.content,
+              hasParts: !!data.candidates[0]?.content?.parts,
+              partsLength: data.candidates[0]?.content?.parts?.length,
+              firstPartKeys: data.candidates[0]?.content?.parts?.[0] ? Object.keys(data.candidates[0].content.parts[0]) : [],
+              hasInlineData: !!data.candidates[0]?.content?.parts?.[0]?.inlineData,
+            });
+          }
+          
+          return {
+            success: false,
+            error: 'API response did not contain an image in the expected format. Expected: candidates[0].content.parts[0].inlineData.data (Gemini), image, image_data, image_url, data.image, or result.image',
+          };
+        }
       } catch (parseError: any) {
         this.logger.error('[ImageGenerator] Error parsing API response:', parseError);
+        this.logger.error('[ImageGenerator] Response data:', JSON.stringify(data).substring(0, 500));
         return {
           success: false,
           error: `Failed to parse API response: ${parseError.message}`,
@@ -272,19 +394,36 @@ export class ImageGeneratorService {
         responsePayload: data,
         tokensUsed: this.estimateTokens(fullPrompt, request.screenshot),
         processingTimeMs,
-        model: apiConfig.model || 'gemini-2.5-flash-image',
+        model: apiConfig.model || 'gemini-2.0-flash-exp',
       });
 
       return {
         success: true,
-        imageData, // Gemini returns base64 data, not URLs
+        imageData, // Gemini returns base64 data
         requestId: data.candidates?.[0]?.finishReason || undefined,
       };
     } catch (error: any) {
-      this.logger.error('[ImageGenerator] API call failed:', error.message, error.stack);
+      this.logger.error('[ImageGenerator] API call failed:', error.message);
+      this.logger.error('[ImageGenerator] Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        cause: error.cause,
+      });
+      
+      // Provide more helpful error messages
+      let errorMessage = `API call failed: ${error.message}`;
+      if (error.message?.includes('fetch failed') || error.message?.includes('ECONNREFUSED')) {
+        errorMessage = `Failed to connect to API endpoint. Please check:\n1. The endpoint URL is correct: ${apiConfig.apiEndpoint}\n2. Your internet connection\n3. The API service is available`;
+      } else if (error.message?.includes('CORS')) {
+        errorMessage = `CORS error: The API server may not allow requests from this origin. Check API configuration.`;
+      } else if (error.message?.includes('certificate') || error.message?.includes('SSL')) {
+        errorMessage = `SSL/TLS error: There may be an issue with the API server's certificate.`;
+      }
+      
       return {
         success: false,
-        error: `API call failed: ${error.message}`,
+        error: errorMessage,
       };
     }
   }

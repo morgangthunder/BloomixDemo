@@ -8,7 +8,7 @@ import { environment } from './environments/environment';
 // ========================================
 // Version is read from package.json at build time
 // This will be replaced by the build process or read dynamically
-const FRONTEND_VERSION = '0.1.136'; // Added minimizeChatUI on interaction load, fixed image generator endpoint
+const FRONTEND_VERSION = '0.1.152'; // Fixed hasPromptChanged to use unmasked version for comparison when checking api-config changes
 const CACHE_BUST_ID = `v${FRONTEND_VERSION}-${Math.random().toString(36).substr(2, 9)}`;
 console.log('');
 console.log('═══════════════════════════════════════════════════════════');
