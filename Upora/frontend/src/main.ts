@@ -8,7 +8,7 @@ import { environment } from './environments/environment';
 // ========================================
 // Version is read from package.json at build time
 // This will be replaced by the build process or read dynamically
-const FRONTEND_VERSION = '0.1.111'; // Fixed video autoplay (pause in onStateChange) and timer display for video-url interactions
+const FRONTEND_VERSION = '0.1.136'; // Added minimizeChatUI on interaction load, fixed image generator endpoint
 const CACHE_BUST_ID = `v${FRONTEND_VERSION}-${Math.random().toString(36).substr(2, 9)}`;
 console.log('');
 console.log('═══════════════════════════════════════════════════════════');

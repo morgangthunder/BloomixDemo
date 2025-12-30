@@ -357,8 +357,8 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this structure:
           let subscriptionId = null;
           let requestCounter = 0;
 
-          const generateRequestId = () => \`req-\${Date.now()}-\${++requestCounter}\`;
-          const generateSubscriptionId = () => \`sub-\${Date.now()}-\${Math.random()}\`;
+          const generateRequestId = () => 'req-' + Date.now() + '-' + (++requestCounter);
+          const generateSubscriptionId = () => 'sub-' + Date.now() + '-' + Math.random();
 
           const sendMessage = (type, data, callback) => {
             const requestId = generateRequestId();
@@ -945,6 +945,488 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this structure:
 
     await this.interactionTypeRepository.save(sdkTest);
     console.log('[InteractionTypes] ✅ SDK Test Video URL interaction type seeded successfully');
+  }
+
+  /**
+   * Update SDK Test PixiJS interaction with latest code including image generation
+   */
+  async updateSDKTestPixiJSInteraction() {
+    // Embed the full code directly (since file may not be accessible in Docker)
+    // This code includes image generation functionality
+    const jsCode = `// SDK Test PixiJS Interaction
+// Tests all AI Teacher SDK functionality including image generation
+
+// Load PixiJS from CDN and initialize
+(function() {
+  console.log("[SDK Test] Starting initialization...");
+  
+  if (window.PIXI) {
+    console.log("[SDK Test] PixiJS already loaded");
+    setTimeout(initTestApp, 10);
+  } else {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/pixi.js@7.3.2/dist/pixi.min.js";
+    script.onload = () => {
+      console.log("[SDK Test] PixiJS loaded successfully");
+      setTimeout(initTestApp, 10);
+    };
+    script.onerror = () => {
+      console.error("[SDK Test] Failed to load PixiJS from CDN");
+      const errorDiv = document.createElement("div");
+      errorDiv.style.cssText = "padding: 20px; color: red; background: #1a1a1a;";
+      errorDiv.textContent = "Error: Failed to load PixiJS library";
+      document.body.appendChild(errorDiv);
+    };
+    document.head.appendChild(script);
+  }
+})();
+
+const createIframeAISDK = () => {
+  let subscriptionId = null;
+  let requestCounter = 0;
+  const generateRequestId = () => 'req-' + Date.now() + '-' + (++requestCounter);
+  const generateSubscriptionId = () => 'sub-' + Date.now() + '-' + Math.random();
+  const sendMessage = (type, data, callback) => {
+    const requestId = generateRequestId();
+    const message = { type, requestId, ...data };
+    if (callback) {
+      const listener = (event) => {
+        if (event.data.requestId === requestId) {
+          window.removeEventListener("message", listener);
+          callback(event.data);
+        }
+      };
+      window.addEventListener("message", listener);
+    }
+    window.parent.postMessage(message, "*");
+  };
+  return {
+    emitEvent: (event, processedContentId) => sendMessage("ai-sdk-emit-event", { event, processedContentId }),
+    updateState: (key, value) => sendMessage("ai-sdk-update-state", { key, value }),
+    getState: (callback) => sendMessage("ai-sdk-get-state", {}, (response) => callback(response.state)),
+    onResponse: (callback) => {
+      subscriptionId = generateSubscriptionId();
+      sendMessage("ai-sdk-subscribe", { subscriptionId }, () => {
+        const listener = (event) => {
+          if (event.data.type === "ai-sdk-response" && event.data.subscriptionId === subscriptionId) {
+            callback(event.data.response);
+          }
+        };
+        window.addEventListener("message", listener);
+        return () => {
+          window.removeEventListener("message", listener);
+          sendMessage("ai-sdk-unsubscribe", { subscriptionId });
+        };
+      });
+    },
+    isReady: (callback) => {
+      const listener = (event) => {
+        if (event.data.type === "ai-sdk-ready") {
+          window.removeEventListener("message", listener);
+          callback(true);
+        }
+      };
+      window.addEventListener("message", listener);
+    },
+    minimizeChatUI: () => sendMessage("ai-sdk-minimize-chat-ui", {}),
+    showChatUI: () => sendMessage("ai-sdk-show-chat-ui", {}),
+    activateFullscreen: () => sendMessage("ai-sdk-activate-fullscreen", {}),
+    deactivateFullscreen: () => sendMessage("ai-sdk-deactivate-fullscreen", {}),
+    postToChat: (content, role = "assistant", openChat = false) => sendMessage("ai-sdk-post-to-chat", { content, role, openChat }),
+    showScript: (text, openChat = false) => sendMessage("ai-sdk-show-script", { text, openChat }),
+    showSnack: (content, duration, hideFromChatUI, callback) => sendMessage("ai-sdk-show-snack", { content, duration, hideFromChatUI: hideFromChatUI || false }, (response) => { if (callback && response.snackId) callback(response.snackId); }),
+    hideSnack: () => sendMessage("ai-sdk-hide-snack", {}),
+    saveInstanceData: (data, callback) => sendMessage("ai-sdk-save-instance-data", { data }, (response) => { if (callback) callback(response.success, response.error); }),
+    getInstanceDataHistory: (filters, callback) => {
+      const filtersData = filters ? { dateFrom: filters.dateFrom?.toISOString(), dateTo: filters.dateTo?.toISOString(), limit: filters.limit } : {};
+      sendMessage("ai-sdk-get-instance-data-history", { filters: filtersData }, (response) => { if (callback) callback(response.data, response.error); });
+    },
+    saveUserProgress: (data, callback) => sendMessage("ai-sdk-save-user-progress", { data }, (response) => { if (callback) callback(response.progress, response.error); }),
+    getUserProgress: (callback) => sendMessage("ai-sdk-get-user-progress", {}, (response) => { if (callback) callback(response.progress, response.error); }),
+    markCompleted: (callback) => sendMessage("ai-sdk-mark-completed", {}, (response) => { if (callback) callback(response.progress, response.error); }),
+    incrementAttempts: (callback) => sendMessage("ai-sdk-increment-attempts", {}, (response) => { if (callback) callback(response.progress, response.error); }),
+    getUserPublicProfile: (userId, callback) => sendMessage("ai-sdk-get-user-public-profile", { userId }, (response) => { if (callback) callback(response.profile, response.error); }),
+    generateImage: (options, callback) => sendMessage("ai-sdk-generate-image", { options }, (response) => { if (callback) callback(response); }),
+  };
+};
+
+function initTestApp() {
+  console.log("[SDK Test] initTestApp called");
+  const container = document.getElementById("pixi-container");
+  if (!container) {
+    const newContainer = document.createElement("div");
+    newContainer.id = "pixi-container";
+    document.body.appendChild(newContainer);
+    setTimeout(initTestApp, 10);
+    return;
+  }
+  if (!window.PIXI) {
+    console.error("[SDK Test] PIXI is not available!");
+    return;
+  }
+  const app = new PIXI.Application({
+    width: Math.max(window.innerWidth, 800),
+    height: Math.max(window.innerHeight, 600),
+    backgroundColor: 0x0f0f23,
+    antialias: true,
+    autoDensity: true,
+    resolution: window.devicePixelRatio || 1,
+  });
+  container.appendChild(app.view);
+  container.style.overflow = 'auto';
+  container.style.width = '100%';
+  container.style.height = '100%';
+  const aiSDK = createIframeAISDK();
+  let sdkReady = false;
+  const isPreviewMode = !window.parent || window.parent === window || (window.parent.location && window.parent.location.href.includes('blob:'));
+  let statusText = null;
+  let statusYPos = 0;
+  let statusTextInitialized = false;
+  function updateStatus(message, color = 0xffffff) {
+    if (!statusTextInitialized) {
+      console.log("[SDK Test] " + message);
+      return;
+    }
+    if (!statusText) {
+      statusText = new PIXI.Text(message, { fontSize: 14, fill: color, wordWrap: true, wordWrapWidth: window.innerWidth - 40 });
+      statusText.x = 20;
+      statusText.y = statusYPos;
+      app.stage.addChild(statusText);
+    } else {
+      statusText.text = message;
+      statusText.style.fill = color;
+    }
+    console.log("[SDK Test] " + message);
+  }
+  let yPos = 80;
+  const buttonHeight = 40;
+  const buttonSpacing = 10;
+  const buttonWidth = 280;
+  function createButton(text, onClick, x = 20) {
+    const bg = new PIXI.Graphics();
+    bg.beginFill(0x00d4ff, 0.7);
+    bg.drawRect(0, 0, buttonWidth, buttonHeight);
+    bg.endFill();
+    bg.alpha = 0.7;
+    bg.eventMode = "static";
+    bg.cursor = "pointer";
+    const label = new PIXI.Text(text, { fontSize: 12, fill: 0x0f0f23, align: "center", wordWrap: true, wordWrapWidth: buttonWidth - 10 });
+    label.x = 5;
+    label.y = (buttonHeight - label.height) / 2;
+    const container = new PIXI.Container();
+    container.addChild(bg);
+    container.addChild(label);
+    container.x = x;
+    container.y = yPos;
+    bg.on("pointerdown", () => {
+      bg.alpha = 0.5;
+      setTimeout(() => { bg.alpha = 0.7; onClick(); }, 100);
+    });
+    app.stage.addChild(container);
+    yPos += buttonHeight + buttonSpacing;
+    return container;
+  }
+  const coreLabel = new PIXI.Text("CORE METHODS", { fontSize: 18, fill: 0x00d4ff, fontWeight: "bold" });
+  coreLabel.x = 20;
+  coreLabel.y = yPos;
+  app.stage.addChild(coreLabel);
+  yPos += 30;
+  createButton("Emit Event", () => {
+    aiSDK.emitEvent({ type: "user-selection", data: { test: true, timestamp: Date.now() }, requiresLLMResponse: true });
+    updateStatus("Event emitted", 0x00ff00);
+  });
+  createButton("Update State", () => {
+    aiSDK.updateState("testKey", { value: Math.random(), timestamp: Date.now() });
+    updateStatus("State updated", 0x00ff00);
+  });
+  createButton("Get State", () => {
+    aiSDK.getState((state) => { updateStatus("State: " + JSON.stringify(state).substring(0, 50), 0x00ff00); });
+  });
+  yPos += 20;
+  const uiLabel = new PIXI.Text("UI CONTROL METHODS", { fontSize: 18, fill: 0x00d4ff, fontWeight: "bold" });
+  uiLabel.x = 20;
+  uiLabel.y = yPos;
+  app.stage.addChild(uiLabel);
+  yPos += 30;
+  createButton("Minimize Chat UI", () => { aiSDK.minimizeChatUI(); updateStatus("Chat UI minimized", 0x00ff00); });
+  createButton("Show Chat UI", () => { aiSDK.showChatUI(); updateStatus("Chat UI shown", 0x00ff00); });
+  createButton("Activate Fullscreen", () => { aiSDK.activateFullscreen(); updateStatus("Fullscreen activated", 0x00ff00); });
+  createButton("Deactivate Fullscreen", () => { aiSDK.deactivateFullscreen(); updateStatus("Fullscreen deactivated", 0x00ff00); });
+  createButton("Post to Chat", () => {
+    aiSDK.postToChat("Test message from SDK Test interaction!", "assistant", true);
+    updateStatus("Posted to chat", 0x00ff00);
+  });
+  createButton("Show Script", () => {
+    aiSDK.showScript("This is a test script block.", true);
+    updateStatus("Script shown", 0x00ff00);
+  });
+  createButton("Show Snack (5s)", () => {
+    aiSDK.showSnack("Test snack message!", 5000, false, (snackId) => { updateStatus("Snack shown: " + snackId, 0x00ff00); });
+  });
+  createButton("Hide Snack", () => { aiSDK.hideSnack(); updateStatus("Snack hidden", 0x00ff00); });
+  yPos += 20;
+  const dataLabel = new PIXI.Text("DATA STORAGE METHODS", { fontSize: 18, fill: 0x00d4ff, fontWeight: "bold" });
+  dataLabel.x = 20;
+  dataLabel.y = yPos;
+  app.stage.addChild(dataLabel);
+  yPos += 30;
+  createButton("Save Instance Data", () => {
+    aiSDK.saveInstanceData({ testValue: Math.random(), timestamp: Date.now() }, (success, error) => {
+      if (success) updateStatus("Instance data saved", 0x00ff00);
+      else updateStatus("Error: " + error, 0xff0000);
+    });
+  });
+  createButton("Get Instance Data History", () => {
+    aiSDK.getInstanceDataHistory({ limit: 10 }, (data, error) => {
+      if (data) updateStatus("History: " + data.length + " records", 0x00ff00);
+      else updateStatus("Error: " + error, 0xff0000);
+    });
+  });
+  createButton("Save User Progress", () => {
+    aiSDK.saveUserProgress({ score: Math.floor(Math.random() * 100), completed: false }, (progress, error) => {
+      if (progress) updateStatus("Progress saved. Attempts: " + progress.attempts, 0x00ff00);
+      else updateStatus("Error: " + error, 0xff0000);
+    });
+  });
+  createButton("Get User Progress", () => {
+    aiSDK.getUserProgress((progress, error) => {
+      if (progress) updateStatus("Progress: Attempts=" + progress.attempts + ", Completed=" + progress.completed, 0x00ff00);
+      else if (error) updateStatus("Error: " + error, 0xff0000);
+      else updateStatus("No progress found", 0xffff00);
+    });
+  });
+  createButton("Mark Completed", () => {
+    aiSDK.markCompleted((progress, error) => {
+      if (progress) updateStatus("Marked as completed", 0x00ff00);
+      else updateStatus("Error: " + error, 0xff0000);
+    });
+  });
+  createButton("Increment Attempts", () => {
+    aiSDK.incrementAttempts((progress, error) => {
+      if (progress) updateStatus("Attempts: " + progress.attempts, 0x00ff00);
+      else updateStatus("Error: " + error, 0xff0000);
+    });
+  });
+  createButton("Get User Public Profile", () => {
+    aiSDK.getUserPublicProfile(undefined, (profile, error) => {
+      if (profile) updateStatus("Profile: " + (profile.displayName || "No name"), 0x00ff00);
+      else if (error) updateStatus("Error: " + error, 0xff0000);
+      else updateStatus("No profile found", 0xffff00);
+    });
+  });
+  yPos += 20;
+  const imageLabel = new PIXI.Text("IMAGE GENERATION", { fontSize: 18, fill: 0x00d4ff, fontWeight: "bold" });
+  imageLabel.x = 20;
+  imageLabel.y = yPos;
+  app.stage.addChild(imageLabel);
+  yPos += 30;
+  
+  // Get the HTML input field (added in HTML code section)
+  const promptInput = document.getElementById("image-prompt-input");
+  if (!promptInput) {
+    console.warn("[SDK Test] Image prompt input field not found. Make sure HTML code includes input element with id image-prompt-input");
+  }
+  
+  let imagePromptText = "";
+  let generatedImageUrl = null;
+  let generatedImageData = null;
+  let imageReady = false;
+  let displayedImageSprite = null;
+  
+  // Update prompt text when input changes (if input field exists)
+  if (promptInput) {
+    promptInput.addEventListener("input", (e) => {
+      imagePromptText = (e.target && e.target.value) ? e.target.value : "";
+      if (imagePromptText) {
+        updateStatus("Image prompt: " + imagePromptText.substring(0, 30) + "...", 0x00ff00);
+      }
+    });
+  }
+  
+  createButton("Request Image", () => {
+    imagePromptText = promptInput ? promptInput.value.trim() : "";
+    if (!imagePromptText) {
+      updateStatus("Please enter an image prompt first", 0xff0000);
+      return;
+    }
+    updateStatus("Generating image...", 0xffff00);
+    imageReady = false;
+    generatedImageUrl = null;
+    generatedImageData = null;
+    if (displayedImageSprite) {
+      app.stage.removeChild(displayedImageSprite);
+      displayedImageSprite = null;
+    }
+    aiSDK.generateImage({ prompt: imagePromptText, userInput: "Test input from SDK" }, (response) => {
+      if (response.success) {
+        if (response.imageUrl) {
+          generatedImageUrl = response.imageUrl;
+          imageReady = true;
+          updateStatus("Image ready! Loading...", 0x00ff00);
+          loadAndDisplayImage(response.imageUrl);
+        } else if (response.imageData) {
+          generatedImageData = response.imageData;
+          imageReady = true;
+          updateStatus("Image ready! Loading...", 0x00ff00);
+          loadAndDisplayImage(response.imageData);
+        } else {
+          updateStatus("Image generated but no URL/data returned", 0xffff00);
+        }
+        aiSDK.emitEvent({ type: "image-generated", data: { imageUrl: response.imageUrl, imageData: response.imageData, requestId: response.requestId }, requiresLLMResponse: false });
+      } else {
+        updateStatus("Error: " + (response.error || "Unknown error"), 0xff0000);
+        imageReady = false;
+      }
+    });
+  });
+  
+  // Function to load and display image in PixiJS canvas
+  function loadAndDisplayImage(imageSource) {
+    const dataUrl = imageSource.startsWith("data:") ? imageSource : (imageSource.startsWith("http") ? imageSource : "data:image/png;base64," + imageSource);
+    PIXI.Assets.load(dataUrl).then((texture) => {
+      // Remove old image if exists
+      if (displayedImageSprite) {
+        app.stage.removeChild(displayedImageSprite);
+      }
+      // Create sprite with max dimensions
+      const maxWidth = Math.min(window.innerWidth - 40, 600);
+      const maxHeight = 400;
+      let spriteWidth = texture.width;
+      let spriteHeight = texture.height;
+      const aspectRatio = texture.width / texture.height;
+      if (spriteWidth > maxWidth) {
+        spriteWidth = maxWidth;
+        spriteHeight = spriteWidth / aspectRatio;
+      }
+      if (spriteHeight > maxHeight) {
+        spriteHeight = maxHeight;
+        spriteWidth = spriteHeight * aspectRatio;
+      }
+      displayedImageSprite = new PIXI.Sprite(texture);
+      displayedImageSprite.width = spriteWidth;
+      displayedImageSprite.height = spriteHeight;
+      displayedImageSprite.x = 20;
+      displayedImageSprite.y = yPos + 50; // Below the input and button
+      app.stage.addChild(displayedImageSprite);
+      updateStatus("Image displayed!", 0x00ff00);
+      // Resize canvas to fit image
+      const currentHeight = app.screen.height;
+      const newHeight = Math.max(currentHeight, displayedImageSprite.y + displayedImageSprite.height + 100);
+      app.renderer.resize(Math.max(window.innerWidth, 800), newHeight);
+    }).catch((error) => {
+      console.error("[SDK Test] Failed to load image:", error);
+      updateStatus("Failed to load image: " + error.message, 0xff0000);
+    });
+  }
+  
+  const displayImageButton = createButton("Display Image (Not Ready)", () => {
+    if (!imageReady) {
+      updateStatus("Image not ready yet. Request image first.", 0xff0000);
+      return;
+    }
+    if (generatedImageUrl) {
+      loadAndDisplayImage(generatedImageUrl);
+    } else if (generatedImageData) {
+      loadAndDisplayImage(generatedImageData);
+    } else {
+      updateStatus("No image to display", 0xff0000);
+    }
+  });
+  
+  function updateDisplayButtonText() {
+    if (displayImageButton && displayImageButton.children && displayImageButton.children[1]) {
+      const label = displayImageButton.children[1];
+      if (imageReady) {
+        label.text = "Display Image (Ready)";
+        label.style.fill = 0x00ff00;
+      } else {
+        label.text = "Display Image (Not Ready)";
+        label.style.fill = 0x0f0f23;
+      }
+    }
+  }
+  setInterval(updateDisplayButtonText, 500);
+  statusYPos = yPos + 20;
+  statusTextInitialized = true;
+  updateStatus("SDK Test Interaction Loaded. Waiting for SDK ready...", 0xffff00);
+  const contentHeight = statusYPos + 100;
+  const minHeight = Math.max(window.innerHeight, 600);
+  const finalHeight = Math.max(contentHeight, minHeight);
+  app.renderer.resize(Math.max(window.innerWidth, 800), finalHeight);
+  window.addEventListener("resize", () => {
+    const newWidth = Math.max(window.innerWidth, 800);
+    const contentBasedHeight = Math.max(statusYPos + 100, Math.max(window.innerHeight, 600));
+    app.renderer.resize(newWidth, contentBasedHeight);
+    if (statusText) statusText.style.wordWrapWidth = newWidth - 40;
+  });
+  if (!isPreviewMode) {
+    aiSDK.isReady((ready) => {
+      sdkReady = ready;
+      updateStatus("SDK Ready: " + ready, ready ? 0x00ff00 : 0xff0000);
+    });
+    aiSDK.onResponse((response) => {
+      updateStatus("AI Response: " + (response.response || "No text"), 0x00d4ff);
+    });
+  } else {
+    sdkReady = true;
+    updateStatus("Preview Mode - SDK features limited", 0xffff00);
+  }
+  app.render();
+}`;
+
+    const existing = await this.interactionTypeRepository.findOne({
+      where: { id: 'sdk-test-pixijs' },
+    });
+
+    if (existing) {
+      // Update existing interaction
+      // Use save() instead of update() to ensure large text fields are persisted correctly
+      existing.jsCode = jsCode;
+      existing.htmlCode = '<div id="pixi-container"></div><input type="text" id="image-prompt-input" placeholder="Enter image generation prompt..." style="position: absolute; left: 20px; top: 20px; width: 280px; padding: 8px; border: 2px solid #00d4ff; border-radius: 4px; background: rgba(15, 15, 35, 0.9); color: #ffffff; font-size: 12px; z-index: 1000;" />';
+      existing.cssCode = '#pixi-container { width: 100%; height: 100%; } #image-prompt-input { font-family: inherit; }';
+      existing.description = 'Comprehensive test interaction for all AI Teacher SDK functionality including data storage, UI controls, events, responses, and image generation.';
+      const saved = await this.interactionTypeRepository.save(existing);
+      console.log('[InteractionTypes] ✅ Updated SDK Test PixiJS interaction with image generation code and HTML/CSS');
+      console.log('[InteractionTypes] 🔍 Verifying update - checking jsCode contains string concatenation...');
+      // Reload to get the updated entity
+      const updated = await this.interactionTypeRepository.findOne({ where: { id: 'sdk-test-pixijs' } });
+      if (updated && updated.jsCode) {
+        const hasTemplateLiteral = updated.jsCode.includes('`req-${Date.now()');
+        const hasStringConcat = updated.jsCode.includes("'req-' + Date.now()");
+        console.log('[InteractionTypes] 🔍 Database check - hasTemplateLiteral:', hasTemplateLiteral, 'hasStringConcat:', hasStringConcat);
+        if (hasTemplateLiteral && !hasStringConcat) {
+          console.error('[InteractionTypes] ❌ ERROR: Database still has template literals! Update may have failed.');
+        } else if (hasStringConcat) {
+          console.log('[InteractionTypes] ✅ Database correctly updated with string concatenation');
+        }
+      }
+      return updated || saved || existing;
+    } else {
+      // Create new if doesn't exist
+      const sdkTest = this.interactionTypeRepository.create({
+        id: 'sdk-test-pixijs',
+        name: 'SDK Test - PixiJS',
+        category: 'absorb-show',
+        description: 'Comprehensive test interaction for all AI Teacher SDK functionality including data storage, UI controls, events, responses, and image generation.',
+        schema: {},
+        generationPrompt: 'This is a test interaction for SDK functionality.',
+        interactionTypeCategory: 'pixijs',
+        htmlCode: '<div id="pixi-container"></div><input type="text" id="image-prompt-input" placeholder="Enter image generation prompt..." style="position: absolute; left: 20px; top: 20px; width: 280px; padding: 8px; border: 2px solid #00d4ff; border-radius: 4px; background: rgba(15, 15, 35, 0.9); color: #ffffff; font-size: 12px; z-index: 1000;" />',
+        cssCode: '#pixi-container { width: 100%; height: 100%; } #image-prompt-input { font-family: inherit; }',
+        jsCode: jsCode,
+        configSchema: {
+          fields: [],
+        },
+        sampleData: {
+          message: 'This is a test interaction for SDK functionality.',
+        },
+        isActive: true,
+      } as any);
+
+      await this.interactionTypeRepository.save(sdkTest);
+      console.log('[InteractionTypes] ✅ Created SDK Test PixiJS interaction with image generation code');
+      return sdkTest;
+    }
   }
 
   async findAll(): Promise<InteractionType[]> {

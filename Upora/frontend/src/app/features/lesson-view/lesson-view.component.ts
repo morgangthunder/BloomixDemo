@@ -1319,24 +1319,35 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       this.cdr.detectChanges();
     }, 0);
     
-    // Get lesson ID from route params
+    // Track if we have a route parameter to prevent activeLesson$ from overriding
+    let hasRouteParameter = false;
+    
+    // Get lesson ID from route params - this takes priority
     this.route.params.subscribe(params => {
       const lessonId = params['id'];
       console.log('[LessonView] Route lesson ID:', lessonId);
       
-      if (lessonId && !this.lesson) {
-        // Load lesson data from API if not already loaded
+      hasRouteParameter = !!lessonId;
+      
+      if (lessonId) {
+        // Always load from route parameter (takes priority over activeLesson$)
         this.loadLessonData(lessonId);
       }
     });
     
+    // Only use activeLesson$ if there's no route parameter (for programmatic navigation)
+    // This prevents mock lessons from overriding route-based loading
     this.lessonService.activeLesson$
       .pipe(takeUntil(this.destroy$))
       .subscribe(lesson => {
         console.log('[LessonView] activeLesson$ emitted:', lesson?.title || 'null');
         
-        if (lesson) {
+        // Only set lesson from activeLesson$ if we don't have a route parameter
+        if (!hasRouteParameter && lesson) {
+          console.log('[LessonView] No route parameter, using activeLesson$');
           this.setLessonData(lesson);
+        } else if (hasRouteParameter) {
+          console.log('[LessonView] Route parameter present, ignoring activeLesson$ to prevent mock lesson override');
         }
       });
 
@@ -1684,20 +1695,25 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   private loadLessonData(lessonId: string) {
     console.log('[LessonView] Loading lesson data for ID:', lessonId);
     
-    // Fetch lesson from API
-    fetch(`http://localhost:3000/api/lessons/${lessonId}`)
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+    // Check if this is a default/mock lesson ID
+    if (isDefaultLessonId(lessonId)) {
+      console.warn('[LessonView] ⚠️ Default/mock lesson ID detected, skipping API call');
+      return;
+    }
+    
+    // Fetch lesson from API using environment.apiUrl
+    this.http.get<Lesson>(`${environment.apiUrl}/lessons/${lessonId}`)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (lesson) => {
+          console.log('[LessonView] ✅ Loaded lesson from API:', lesson.title);
+          this.setLessonData(lesson);
+        },
+        error: (error) => {
+          console.error('[LessonView] ❌ Error loading lesson from API:', error);
+          // Don't fall back to mock data - show error instead
+          this.interactionError = `Failed to load lesson: ${error.message || 'Unknown error'}. Please ensure the lesson exists in the database.`;
         }
-        return response.json();
-      })
-      .then(lesson => {
-        console.log('[LessonView] Loaded lesson from API:', lesson.title);
-        this.setLessonData(lesson);
-      })
-      .catch(error => {
-        console.error('[LessonView] Error loading lesson:', error);
       });
   }
 
@@ -2597,6 +2613,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
             next: (fetchedBuild: any) => {
               console.log('[LessonView] 📥 Fetched interaction build from API:', fetchedBuild.id);
               console.log('[LessonView] 📥 Fetched iframeConfig:', JSON.stringify(fetchedBuild.iframeConfig, null, 2));
+              console.log('[LessonView] 📥 HTML Code length:', fetchedBuild.htmlCode?.length || 0);
+              console.log('[LessonView] 📥 HTML Code includes input:', fetchedBuild.htmlCode?.includes('image-prompt-input') || false);
+              console.log('[LessonView] 📥 CSS Code length:', fetchedBuild.cssCode?.length || 0);
               this.loadPixiJSHTMLIframeInteraction(fetchedBuild, subStage);
             },
             error: (error) => {
@@ -2608,6 +2627,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       }
       
       console.log('[LessonView] ✅ Loaded interaction build:', build.id);
+      console.log('[LessonView] 📝 HTML code length:', build.htmlCode?.length || 0);
+      console.log('[LessonView] 📝 HTML code includes input:', build.htmlCode?.includes('image-prompt-input') || false);
+      console.log('[LessonView] 📝 CSS code length:', build.cssCode?.length || 0);
       console.log('[LessonView] 📝 JS code length:', build.jsCode?.length || 0);
       console.log('[LessonView] 📝 JS code includes "Show Snack":', build.jsCode?.includes('Show Snack') || false);
       console.log('[LessonView] 🎛️ iFrame overlayMode:', build.iframeConfig?.overlayMode || 'overlay (default)');
@@ -2618,6 +2640,12 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       const processedContentId = this.normalizeContentOutputId(
         subStage.contentOutputId || (subStage.interaction as any)?.contentOutputId
       );
+      
+      // Minimize AI Teacher UI when interaction loads
+      if (this.teacherWidget) {
+        this.teacherWidget.minimize();
+        console.log('[LessonView] ✅ Minimized AI Teacher UI on interaction load');
+      }
       
       if (!processedContentId) {
         // No processed content - use sample data (no error, interactions can work without processed content)
@@ -2677,6 +2705,13 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   private loadMediaPlayerData(build: any, subStage: SubStage) {
     console.log('[LessonView] 🎬 Loading media player data for uploaded-media interaction');
     console.log('[LessonView] 🎬 Build ID:', build.id, 'SubStage ID:', subStage.id);
+    
+    // Minimize AI Teacher UI when interaction loads
+    if (this.teacherWidget) {
+      this.teacherWidget.minimize();
+      console.log('[LessonView] ✅ Minimized AI Teacher UI on media interaction load');
+    }
+    
     this.isLoadingInteraction = true;
     // Don't clear mediaPlayerData immediately - wait until we have new data
     // This prevents the player from disappearing during reload
@@ -2790,6 +2825,13 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   private loadVideoUrlPlayerData(build: any, subStage: SubStage) {
     console.log('[LessonView] 🎬 Loading video URL player data for video-url interaction');
     console.log('[LessonView] 🎬 Build ID:', build.id, 'SubStage ID:', subStage.id);
+    
+    // Minimize AI Teacher UI when interaction loads
+    if (this.teacherWidget) {
+      this.teacherWidget.minimize();
+      console.log('[LessonView] ✅ Minimized AI Teacher UI on video URL interaction load');
+    }
+    
     this.isLoadingInteraction = true;
     this.interactionBuild = build;
 
@@ -5229,14 +5271,26 @@ ${escapedCss}
     }
 
     // For HTML and PixiJS interactions, create full HTML document
-    const htmlCode = (build.htmlCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
-    const cssCode = (build.cssCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
-    let jsCode = (build.jsCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
+    // Normalize line endings first (handle \r\n and \r)
+    const normalizedHtml = (build.htmlCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
+    const normalizedCss = (build.cssCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
+    const normalizedJs = (build.jsCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
+    
+    // For HTML and CSS, escape for template literal injection
+    const escapedHtml = normalizedHtml ? normalizedHtml.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${').replace(/<\/script>/gi, '<\\/script>') : '';
+    const escapedCss = normalizedCss ? normalizedCss.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${') : '';
+    
+    // For JavaScript, use base64 encoding to safely embed code with template literals
+    // This avoids all template literal escaping issues
+    // JavaScript code is ASCII, so btoa() works directly
+    const jsCodeBase64 = normalizedJs ? btoa(normalizedJs) : '';
     
     // Debug: Log if snack buttons are in the code
-    console.log('[LessonView] 🔍 JS code includes "Show Snack (5s)":', jsCode.includes('Show Snack (5s)'));
-    console.log('[LessonView] 🔍 JS code includes "Show Snack (no chat)":', jsCode.includes('Show Snack (no chat)'));
-    console.log('[LessonView] 🔍 JS code length:', jsCode.length);
+    console.log('[LessonView] 🔍 JS code includes "Show Snack (5s)":', normalizedJs.includes('Show Snack (5s)'));
+    console.log('[LessonView] 🔍 JS code includes "Show Snack (no chat)":', normalizedJs.includes('Show Snack (no chat)'));
+    console.log('[LessonView] 🔍 JS code length:', normalizedJs.length);
+    console.log('[LessonView] 🔍 HTML code length:', normalizedHtml.length);
+    console.log('[LessonView] 🔍 HTML code includes input field:', normalizedHtml.includes('image-prompt-input'));
     
     // Inject interaction data and config
     const sampleDataJson = JSON.stringify(sampleData);
@@ -5265,11 +5319,12 @@ ${escapedCss}
     ::-webkit-scrollbar-thumb:hover {
       background: rgba(0, 212, 255, 0.5);
     }
-${cssCode}
   </style>
+  ${normalizedCss ? `<style>${escapedCss}</style>` : ''}
 </head>
 <body>
-${htmlCode}
+${escapedHtml}
+  <script type="text/plain" id="interaction-js-code" data-base64="${jsCodeBase64}"></script>
   <script type="text/javascript">
     (function() {
       try {
@@ -5293,7 +5348,65 @@ ${htmlCode}
         document.body.innerHTML = '<div style="padding: 20px; color: red;"><h3>Error: Interaction data not available</h3></div>';
       } else {
         console.log("[Interaction] About to run JS code");
-${jsCode}
+        try {
+          // Read the JavaScript code from the text/plain script tag
+          const jsCodeScript = document.getElementById('interaction-js-code');
+          if (!jsCodeScript) {
+            throw new Error('JavaScript code script tag not found');
+          }
+          // Decode from base64 if available, otherwise read as text
+          let jsCode = '';
+          if (jsCodeScript.dataset.base64) {
+            try {
+              // Decode base64 directly - JavaScript code is ASCII, so atob() works directly
+              jsCode = atob(jsCodeScript.dataset.base64);
+              console.log('[Interaction] ✅ Decoded base64 JavaScript code, length:', jsCode.length);
+            } catch (e) {
+              console.error('[Interaction] Error decoding base64 JavaScript code:', e);
+              jsCode = jsCodeScript.textContent || jsCodeScript.innerHTML || '';
+            }
+          } else {
+            jsCode = jsCodeScript.textContent || jsCodeScript.innerHTML || '';
+            console.log('[Interaction] Read JavaScript code as text, length:', jsCode.length);
+          }
+          if (!jsCode.trim()) {
+            console.warn("[Interaction] No JavaScript code to execute");
+            // Don't return - just skip execution
+          } else {
+            // Execute the code by directly creating a script element with textContent
+            // This is the most reliable way to execute code that may contain return statements in IIFEs
+            // The browser will execute it in the proper script context
+            try {
+              console.log('[Interaction] Creating script element and executing code...');
+              const scriptEl = document.createElement('script');
+              // Set textContent directly - this will execute when appended to the DOM
+              scriptEl.textContent = jsCode;
+              // Append to head - script executes immediately
+              document.head.appendChild(scriptEl);
+              console.log('[Interaction] ✅ Script element appended and executed');
+              // Remove the script element after execution to keep DOM clean
+              // Use a small delay to ensure execution completes
+              setTimeout(() => {
+                try {
+                  if (scriptEl.parentNode) {
+                    scriptEl.parentNode.removeChild(scriptEl);
+                    console.log('[Interaction] ✅ Script element removed from DOM');
+                  }
+                } catch (removeError) {
+                  // Ignore errors when removing - script may have already been removed
+                  console.warn("[Interaction] Could not remove script element:", removeError);
+                }
+              }, 100);
+            } catch (error) {
+              console.error("[Interaction] Error executing JS code:", error);
+              // Don't throw - allow the interaction to continue even if JS execution fails
+              // The error will be visible in console for debugging
+            }
+          }
+        } catch (e) {
+          console.error("[Interaction] Error executing JS code:", e);
+          throw e;
+        }
       }
     } catch (e) {
       console.error("[Interaction] Error in script:", e);

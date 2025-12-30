@@ -766,5 +766,43 @@ export class InteractionAISDK {
       console.error('[InteractionAISDK] ❌ Error hiding overlay:', error);
     }
   }
+
+  /**
+   * Generate an image using the image generator service
+   * @param prompt The main image generation prompt
+   * @param userInput Optional additional user input to append to prompt
+   * @param screenshot Optional base64-encoded screenshot to include
+   * @param customInstructions Optional custom instructions from interaction builder
+   * @returns Promise with image URL or base64 data
+   */
+  async generateImage(options: {
+    prompt: string;
+    userInput?: string;
+    screenshot?: string;
+    customInstructions?: string;
+  }): Promise<{ imageUrl?: string; imageData?: string; success: boolean; error?: string; requestId?: string }> {
+    try {
+      const response = await firstValueFrom(
+        this.http.post<{ imageUrl?: string; imageData?: string; success: boolean; error?: string; requestId?: string }>(
+          `${environment.apiUrl}/image-generator/generate`,
+          {
+            prompt: options.prompt,
+            userInput: options.userInput,
+            screenshot: options.screenshot,
+            customInstructions: options.customInstructions,
+          },
+          { headers: this.getHeaders() }
+        )
+      );
+      console.log('[InteractionAISDK] ✅ Image generated:', response.success ? 'success' : 'failed');
+      return response;
+    } catch (error: any) {
+      console.error('[InteractionAISDK] ❌ Failed to generate image:', error);
+      return {
+        success: false,
+        error: error?.message || 'Failed to generate image',
+      };
+    }
+  }
 }
 

@@ -451,6 +451,126 @@ if (profile) {
 
 **Returns:** Public profile object with `displayName`, `preferences`, `publicAvatarUrl`, etc., or `null` if not available.
 
+## Adding Input Fields for PixiJS Interactions
+
+For PixiJS category interactions, you can add HTML input fields that overlay on your PixiJS canvas. This allows users to enter text, prompts, or other data that your interaction can use.
+
+### Step 1: Add Input Field to HTML Code
+
+In the Interaction Builder, add your input field to the **HTML Code** section:
+
+```html
+<div id="pixi-container"></div>
+<input 
+  type="text" 
+  id="my-input-field" 
+  placeholder="Enter your text here..." 
+  style="position: absolute; left: 20px; top: 20px; width: 280px; padding: 8px; border: 2px solid #00d4ff; border-radius: 4px; background: rgba(15, 15, 35, 0.9); color: #ffffff; font-size: 12px; z-index: 1000;" 
+/>
+```
+
+**Important Styling:**
+- Use `position: absolute` to overlay the input on the canvas
+- Set `z-index: 1000` to ensure it appears above the PixiJS canvas
+- Position using `left` and `top` coordinates relative to the container
+- Style to match your interaction's theme
+
+### Step 2: Access Input in JavaScript Code
+
+In your **JavaScript Code** section, access the input field using `document.getElementById()`:
+
+```javascript
+// Get the input field
+const myInput = document.getElementById("my-input-field");
+
+if (!myInput) {
+  console.warn("Input field not found. Make sure HTML code includes the input element.");
+}
+
+// Listen for input changes
+if (myInput) {
+  myInput.addEventListener("input", (e) => {
+    const value = e.target.value;
+    console.log("User typed:", value);
+    // Update PixiJS UI, state, or trigger events
+  });
+  
+  // Get value when needed (e.g., when button is clicked)
+  const currentValue = myInput.value.trim();
+}
+```
+
+### Example: Image Generation with Input Field
+
+**HTML Code:**
+```html
+<div id="pixi-container"></div>
+<input 
+  type="text" 
+  id="image-prompt-input" 
+  placeholder="Enter image generation prompt..." 
+  style="position: absolute; left: 20px; top: 20px; width: 280px; padding: 8px; border: 2px solid #00d4ff; border-radius: 4px; background: rgba(15, 15, 35, 0.9); color: #ffffff; font-size: 12px; z-index: 1000;" 
+/>
+```
+
+**JavaScript Code:**
+```javascript
+// Initialize PixiJS
+const app = new PIXI.Application({ width: 800, height: 600 });
+document.getElementById("pixi-container").appendChild(app.view);
+
+// Get input field
+const promptInput = document.getElementById("image-prompt-input");
+
+// Create button in PixiJS
+const button = new PIXI.Graphics();
+button.beginFill(0x00d4ff);
+button.drawRect(0, 0, 200, 40);
+button.endFill();
+button.x = 20;
+button.y = 60;
+button.interactive = true;
+button.buttonMode = true;
+
+const buttonText = new PIXI.Text("Generate Image", { fill: 0xffffff });
+buttonText.x = 10;
+buttonText.y = 10;
+button.addChild(buttonText);
+
+button.on("pointerdown", () => {
+  if (!promptInput || !promptInput.value.trim()) {
+    alert("Please enter a prompt");
+    return;
+  }
+  
+  aiSDK.generateImage({
+    prompt: promptInput.value.trim()
+  }, (response) => {
+    if (response.success && response.imageData) {
+      // Load and display image in PixiJS
+      PIXI.Assets.load(response.imageData).then((texture) => {
+        const sprite = new PIXI.Sprite(texture);
+        sprite.x = 20;
+        sprite.y = 120;
+        sprite.width = 400;
+        sprite.height = 300;
+        app.stage.addChild(sprite);
+      });
+    }
+  });
+});
+
+app.stage.addChild(button);
+```
+
+### Best Practices
+
+1. **Always check if input exists**: Use `if (inputElement)` before accessing properties
+2. **Position carefully**: Use absolute positioning to avoid layout conflicts with PixiJS
+3. **Handle edge cases**: Check for empty values before using input data
+4. **Style consistently**: Match input styling to your PixiJS interaction theme
+5. **Multiple inputs**: Use unique IDs for each input field (e.g., `id="prompt-input"`, `id="name-input"`)
+
 ## Notes
 
 - The SDK uses `postMessage` to communicate with the parent window

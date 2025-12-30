@@ -176,6 +176,13 @@ const createIframeAISDK = () => {
         }
       });
     },
+    generateImage: (options, callback) => {
+      sendMessage("ai-sdk-generate-image", { options }, (response) => {
+        if (callback) {
+          callback(response);
+        }
+      });
+    },
   };
 };
 
@@ -525,6 +532,117 @@ function initTestApp() {
       }
     });
   });
+
+  // Image Generation Section
+  yPos += 20;
+  const imageLabel = new PIXI.Text("IMAGE GENERATION", {
+    fontSize: 18,
+    fill: 0x00d4ff,
+    fontWeight: "bold",
+  });
+  imageLabel.x = 20;
+  imageLabel.y = yPos;
+  app.stage.addChild(imageLabel);
+  yPos += 30;
+
+  // Image input field (using PixiJS text input simulation)
+  // For simplicity, we'll use a button that prompts for input
+  let imagePromptText = "";
+  let generatedImageUrl = null;
+  let generatedImageData = null;
+  let imageReady = false;
+
+  createButton("Set Image Prompt", () => {
+    const prompt = prompt("Enter image generation prompt:");
+    if (prompt) {
+      imagePromptText = prompt;
+      updateStatus("Image prompt set: " + prompt.substring(0, 30) + "...", 0x00ff00);
+    }
+  });
+
+  createButton("Request Image", () => {
+    if (!imagePromptText) {
+      updateStatus("Please set image prompt first", 0xff0000);
+      return;
+    }
+    updateStatus("Generating image...", 0xffff00);
+    imageReady = false;
+    generatedImageUrl = null;
+    generatedImageData = null;
+    
+    aiSDK.generateImage(
+      {
+        prompt: imagePromptText,
+        userInput: "Test input from SDK",
+      },
+      (response) => {
+        if (response.success) {
+          if (response.imageUrl) {
+            generatedImageUrl = response.imageUrl;
+            imageReady = true;
+            updateStatus("Image ready! URL: " + response.imageUrl.substring(0, 30) + "...", 0x00ff00);
+          } else if (response.imageData) {
+            generatedImageData = response.imageData;
+            imageReady = true;
+            updateStatus("Image ready! (base64 data)", 0x00ff00);
+          } else {
+            updateStatus("Image generated but no URL/data returned", 0xffff00);
+          }
+          // Emit event that image is ready
+          aiSDK.emitEvent({
+            type: "image-generated",
+            data: {
+              imageUrl: response.imageUrl,
+              imageData: response.imageData,
+              requestId: response.requestId,
+            },
+            requiresLLMResponse: false,
+          });
+        } else {
+          updateStatus("Error: " + (response.error || "Unknown error"), 0xff0000);
+          imageReady = false;
+        }
+      }
+    );
+  });
+
+  // Display Image button (shows "Ready" when image is ready)
+  const displayImageButton = createButton("Display Image (Not Ready)", () => {
+    if (!imageReady) {
+      updateStatus("Image not ready yet. Request image first.", 0xff0000);
+      return;
+    }
+    if (generatedImageUrl) {
+      window.open(generatedImageUrl, "_blank");
+      updateStatus("Opened image in new tab", 0x00ff00);
+    } else if (generatedImageData) {
+      // Create a data URL and open it
+      const dataUrl = generatedImageData.startsWith("data:") 
+        ? generatedImageData 
+        : "data:image/png;base64," + generatedImageData;
+      window.open(dataUrl, "_blank");
+      updateStatus("Opened image (base64) in new tab", 0x00ff00);
+    } else {
+      updateStatus("No image to display", 0xff0000);
+    }
+  });
+
+  // Function to update display button text based on readiness
+  function updateDisplayButtonText() {
+    if (displayImageButton && displayImageButton.children && displayImageButton.children[1]) {
+      const label = displayImageButton.children[1];
+      if (imageReady) {
+        label.text = "Display Image (Ready)";
+        label.style.fill = 0x00ff00;
+      } else {
+        label.text = "Display Image (Not Ready)";
+        label.style.fill = 0x0f0f23;
+      }
+    }
+  }
+
+  // Update button text periodically to reflect readiness
+  setInterval(updateDisplayButtonText, 500);
 
   // Position status text below all buttons
   statusYPos = yPos + 20;

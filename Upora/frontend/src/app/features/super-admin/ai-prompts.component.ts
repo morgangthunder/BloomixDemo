@@ -1194,8 +1194,21 @@ await aiSDK.saveUserProgress({
       prompts: {
         'default': {
           label: 'Image Generation Prompt',
-          content: 'Loading from database...',
-          placeholder: 'Enter the prompt for generating educational images...'
+          content: 'You are an image generation assistant. Generate high-quality educational images based on the following prompt:\n\n{prompt}\n\nGuidelines:\n- Create clear, educational, age-appropriate images\n- Focus on accuracy and clarity\n- Ensure images are suitable for educational contexts',
+          placeholder: 'Enter the prompt template for generating educational images. Use {prompt} as a placeholder for the user\'s prompt.'
+        },
+        'api-config': {
+          label: 'API Configuration (JSON)',
+          content: JSON.stringify({
+            apiEndpoint: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent',
+            apiKey: 'your-api-key-here',
+            apiKeyHeader: 'x-goog-api-key',
+            model: 'gemini-2.5-flash-image',
+            temperature: 0.7,
+            maxTokens: 1000,
+            additionalHeaders: {}
+          }, null, 2),
+          placeholder: 'Enter API configuration as JSON. Required fields: apiEndpoint, apiKey. Optional: apiKeyHeader (default: "x-goog-api-key"), model, temperature, maxTokens, additionalHeaders. NOTE: API key is stored securely in the database and never exposed to client-side code.'
         }
       }
     }

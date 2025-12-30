@@ -47,7 +47,14 @@ export class InteractionTypesController {
     await this.interactionTypesService.seedTrueFalseSelection();
     await this.interactionTypesService.seedVideoUrlInteraction();
     await this.interactionTypesService.seedSDKTestVideoUrlInteraction();
+    await this.interactionTypesService.updateSDKTestPixiJSInteraction();
     return { message: 'Interaction types seeded successfully' };
+  }
+
+  @Post('update-sdk-test-pixijs')
+  async updateSDKTestPixiJS() {
+    await this.interactionTypesService.updateSDKTestPixiJSInteraction();
+    return { message: 'SDK Test PixiJS interaction updated successfully' };
   }
 
   @Post('upload-document')

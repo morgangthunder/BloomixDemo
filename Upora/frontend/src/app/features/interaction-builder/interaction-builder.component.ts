@@ -426,13 +426,42 @@ interface ChatMessage {
                 <!-- PixiJS Type Code Editor -->
                 <div *ngIf="currentInteraction?.interactionTypeCategory === 'pixijs'" class="pixijs-editor">
                   <p class="editor-note">
-                    💡 For PixiJS interactions, write a single TypeScript/JavaScript file that exports your interaction.
+                    💡 For PixiJS interactions, you can add HTML/CSS for input fields and UI elements, plus JavaScript for the PixiJS canvas.
                   </p>
-                  <div class="code-editor-container">
+                  
+                  <!-- HTML Code Editor -->
+                  <div class="form-group">
+                    <label>HTML Code</label>
+                    <small class="hint">Add HTML elements like input fields, buttons, or containers. Use <code>&lt;div id="pixi-container"&gt;&lt;/div&gt;</code> for the PixiJS canvas.</small>
+                    <textarea [(ngModel)]="currentInteraction!.htmlCode"
+                              (ngModelChange)="markChanged()"
+                              class="code-textarea"
+                              rows="6"
+                              placeholder='<div id="pixi-container"></div>&#10;<input type="text" id="my-input" placeholder="Enter text..." />'
+                              spellcheck="false"></textarea>
+                  </div>
+
+                  <!-- CSS Code Editor -->
+                  <div class="form-group">
+                    <label>CSS Code</label>
+                    <small class="hint">Style your HTML elements. Use absolute positioning for overlays on the canvas.</small>
+                    <textarea [(ngModel)]="currentInteraction!.cssCode"
+                              (ngModelChange)="markChanged()"
+                              class="code-textarea"
+                              rows="4"
+                              placeholder="#pixi-container { width: 100%; height: 100%; }&#10;#my-input { position: absolute; z-index: 1000; }"
+                              spellcheck="false"></textarea>
+                  </div>
+
+                  <!-- JavaScript Code Editor -->
+                  <div class="form-group">
+                    <label>JavaScript Code</label>
+                    <small class="hint">Your PixiJS interaction code. Access HTML elements using <code>document.getElementById()</code>.</small>
                     <textarea [(ngModel)]="currentInteraction!.jsCode"
                               (ngModelChange)="markChanged()"
                               class="code-textarea"
-                              placeholder="// PixiJS TypeScript code"
+                              rows="20"
+                              placeholder="// PixiJS TypeScript/JavaScript code"
                               spellcheck="false"></textarea>
                   </div>
                 </div>

@@ -4,7 +4,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 // Read version from package.json
-let BACKEND_VERSION = '0.1.41'; // Reverted screenshot exclusion and ensured creator/channel is included in processed content outputData
+let BACKEND_VERSION = '0.1.61'; // Fixed image generator endpoint path (removed duplicate 'api' prefix)
 console.log(`🔍 [AppController VERSION DEBUG] __dirname: ${__dirname}`);
 console.log(`🔍 [AppController VERSION DEBUG] process.cwd(): ${process.cwd()}`);
 

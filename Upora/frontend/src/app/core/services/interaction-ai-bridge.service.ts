@@ -316,6 +316,25 @@ export class InteractionAIBridgeService {
           });
         break;
 
+      case 'ai-sdk-generate-image':
+        this.aiSDK.generateImage(message.options || {})
+          .then((response) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-generate-image-ack',
+              ...response,
+              requestId: message.requestId,
+            });
+          })
+          .catch((error) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-generate-image-ack',
+              success: false,
+              error: error.message,
+              requestId: message.requestId,
+            });
+          });
+        break;
+
       // Media Control Methods (for uploaded-media interactions)
       case 'ai-sdk-play-media':
         this.aiSDK.playMedia()
@@ -626,6 +645,14 @@ export const createIframeAISDK = () => {
       sendMessage('ai-sdk-get-user-public-profile', { userId }, (response) => {
         if (callback) {
           callback(response.profile, response.error);
+        }
+      });
+    },
+
+    generateImage: (options: { prompt: string; userInput?: string; screenshot?: string; customInstructions?: string }, callback?: (response: any) => void) => {
+      sendMessage('ai-sdk-generate-image', { options }, (response) => {
+        if (callback) {
+          callback(response);
         }
       });
     },

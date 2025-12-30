@@ -42,6 +42,7 @@ import { AutoPopulatorModule } from './services/auto-populator.module';
 import { WeaviateModule } from './services/weaviate.module';
 import { LessonDraftsModule } from './lesson-drafts/lesson-drafts.module';
 import { TestsModule } from './modules/tests/tests.module';
+import { ImageGeneratorModule } from './modules/image-generator/image-generator.module';
 
 @Module({
   imports: [
@@ -81,6 +82,7 @@ import { TestsModule } from './modules/tests/tests.module';
     InteractionDataModule,
     LessonDraftsModule,
     TestsModule,
+    ImageGeneratorModule,
   ],
   controllers: [AppController],
   providers: [AppService],
