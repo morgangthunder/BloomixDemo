@@ -354,6 +354,13 @@ export class InteractionAISDK {
   }
 
   /**
+   * Get current user ID (for use by lesson-view component)
+   */
+  getCurrentUserId(): string | null {
+    return this.currentUserId;
+  }
+
+  /**
    * Get HTTP headers with user/tenant info
    */
   private getHeaders(): HttpHeaders {
@@ -780,21 +787,60 @@ export class InteractionAISDK {
     userInput?: string;
     screenshot?: string;
     customInstructions?: string;
-  }): Promise<{ imageUrl?: string; imageData?: string; success: boolean; error?: string; requestId?: string }> {
+    width?: number; // Image width in pixels
+    height?: number; // Image height in pixels
+    lessonId?: string; // Optional: override current lesson ID
+    substageId?: string; // Optional: substage ID
+    interactionId?: string; // Optional: interaction ID
+    accountId?: string; // Optional: account ID (defaults to current user)
+  }): Promise<{ 
+    imageUrl?: string; 
+    imageData?: string; 
+    imageId?: string; // ID of saved image record
+    success: boolean; 
+    error?: string; 
+    requestId?: string;
+  }> {
     try {
+      const lessonId = options.lessonId || this.currentLessonId;
+      const accountId = options.accountId || this.currentUserId;
+      
       const response = await firstValueFrom(
-        this.http.post<{ imageUrl?: string; imageData?: string; success: boolean; error?: string; requestId?: string }>(
+        this.http.post<{ 
+          imageUrl?: string; 
+          imageData?: string; 
+          imageId?: string;
+          success: boolean; 
+          error?: string; 
+          requestId?: string;
+        }>(
           `${environment.apiUrl}/image-generator/generate`,
           {
             prompt: options.prompt,
             userInput: options.userInput,
             screenshot: options.screenshot,
             customInstructions: options.customInstructions,
+            width: options.width,
+            height: options.height,
+            lessonId: lessonId,
+            substageId: options.substageId || this.currentSubstageId,
+            interactionId: options.interactionId || this.currentInteractionTypeId,
+            accountId: accountId,
           },
           { headers: this.getHeaders() }
         )
       );
       console.log('[InteractionAISDK] ✅ Image generated:', response.success ? 'success' : 'failed');
+      console.log('[InteractionAISDK] Response keys:', Object.keys(response || {}));
+      console.log('[InteractionAISDK] Full response:', JSON.stringify(response, null, 2).substring(0, 500));
+      if (response.imageUrl) {
+        console.log('[InteractionAISDK] Image saved to:', response.imageUrl);
+      }
+      if (response.imageId) {
+        console.log('[InteractionAISDK] Image ID returned:', response.imageId);
+      } else {
+        console.warn('[InteractionAISDK] ⚠️ No imageId in response. Response keys:', Object.keys(response || {}));
+      }
       return response;
     } catch (error: any) {
       console.error('[InteractionAISDK] ❌ Failed to generate image:', error);
@@ -802,6 +848,119 @@ export class InteractionAISDK {
         success: false,
         error: error?.message || 'Failed to generate image',
       };
+    }
+  }
+
+  /**
+   * Get all images generated for the current lesson (or a specific lesson)
+   * @param lessonId Optional lesson ID (defaults to current lesson)
+   * @param accountId Optional account ID filter (defaults to current user)
+   * @returns Promise with array of generated images
+   */
+  async getLessonImages(lessonId?: string, accountId?: string, imageId?: string): Promise<Array<{
+    id: string;
+    lessonId: string;
+    accountId: string;
+    imageUrl: string;
+    mimeType: string;
+    width: number | null;
+    height: number | null;
+    prompt: string | null;
+    substageId: string | null;
+    interactionId: string | null;
+    metadata: Record<string, any> | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }>> {
+    try {
+      const targetLessonId = lessonId || this.currentLessonId;
+      if (!targetLessonId) {
+        console.warn('[InteractionAISDK] No lesson ID available for getLessonImages');
+        return [];
+      }
+
+      const params: any = {};
+      if (accountId || this.currentUserId) {
+        params.accountId = accountId || this.currentUserId;
+      }
+      if (imageId) {
+        params.imageId = imageId;
+      }
+
+      const response = await firstValueFrom(
+        this.http.get<Array<{
+          id: string;
+          lessonId: string;
+          accountId: string;
+          imageUrl: string;
+          mimeType: string;
+          width: number | null;
+          height: number | null;
+          prompt: string | null;
+          substageId: string | null;
+          interactionId: string | null;
+          metadata: Record<string, any> | null;
+          createdAt: Date;
+          updatedAt: Date;
+        }> | {
+          id: string;
+          lessonId: string;
+          accountId: string;
+          imageUrl: string;
+          mimeType: string;
+          width: number | null;
+          height: number | null;
+          prompt: string | null;
+          substageId: string | null;
+          interactionId: string | null;
+          metadata: Record<string, any> | null;
+          createdAt: Date;
+          updatedAt: Date;
+        }>(
+          `${environment.apiUrl}/image-generator/lesson/${targetLessonId}`,
+          { params, headers: this.getHeaders() }
+        )
+      );
+      
+      // If imageId was provided, response is a single object, wrap it in array
+      const images = Array.isArray(response) ? response : (response ? [response] : []);
+      
+      console.log(`[InteractionAISDK] ✅ Retrieved ${images.length} image(s) for lesson ${targetLessonId}${imageId ? ` (imageId: ${imageId})` : ''}`);
+      return images;
+    } catch (error: any) {
+      console.error('[InteractionAISDK] ❌ Failed to get lesson images:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get image IDs for a lesson (just the IDs, not full image data)
+   */
+  async getLessonImageIds(lessonId?: string, accountId?: string): Promise<string[]> {
+    try {
+      const targetLessonId = lessonId || this.currentLessonId;
+      if (!targetLessonId) {
+        console.warn('[InteractionAISDK] No lesson ID available for getLessonImageIds');
+        return [];
+      }
+
+      const params: any = {};
+      if (accountId || this.currentUserId) {
+        params.accountId = accountId || this.currentUserId;
+      }
+
+      const response = await firstValueFrom(
+        this.http.get<string[]>(
+          `${environment.apiUrl}/image-generator/lesson/${targetLessonId}/ids`,
+          { params, headers: this.getHeaders() }
+        )
+      );
+      
+      console.log(`[InteractionAISDK] ✅ Retrieved ${response.length} image IDs for lesson ${targetLessonId}`);
+      return response;
+    } catch (error: any) {
+      console.error('[InteractionAISDK] ❌ Failed to get lesson image IDs:', error);
+      return [];
     }
   }
 }

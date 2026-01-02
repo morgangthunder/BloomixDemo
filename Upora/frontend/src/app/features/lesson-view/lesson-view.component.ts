@@ -1561,7 +1561,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
           type: 'ai-sdk-ready',
           lessonId: this.lesson?.id,
           substageId: String(this.activeSubStageId),
-          interactionId: interactionId
+          interactionId: interactionId,
+          accountId: this.interactionAISDK.getCurrentUserId(),
         }, '*');
         console.log('[LessonView] ✅ Sent SDK ready message to iframe');
       }
@@ -2463,7 +2464,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       this.isLoadingInteraction = true;
       
       // First, fetch the interaction build to check its category
-      const cacheBuster = `?t=${Date.now()}`;
+      // Use a more aggressive cache buster to ensure we get the latest code
+      const cacheBuster = `?t=${Date.now()}&v=${Math.random()}`;
       this.http.get(`${environment.apiUrl}/interaction-types/${interactionTypeId}${cacheBuster}`)
         .pipe(takeUntil(this.destroy$))
         .subscribe({
@@ -4347,12 +4349,14 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // Create HTML document
     const htmlDoc = this.createInteractionHtmlDoc(this.interactionBuild, config, sampleData);
     
-    // Create blob URL
+    // Create blob URL with cache busting
     const blob = new Blob([htmlDoc], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     this.interactionBlobUrl = this.sanitizer.bypassSecurityTrustResourceUrl(url);
+    // Force iframe recreation by incrementing preview key
+    this.interactionPreviewKey++;
     
-    console.log('[LessonView] ✅ Created blob URL for interaction:', this.interactionBuild.id);
+    console.log('[LessonView] ✅ Created blob URL for interaction:', this.interactionBuild.id, 'Preview key:', this.interactionPreviewKey);
     
     // If overlayMode is 'section', inject the JavaScript separately after a delay
     // This ensures the section element is rendered in the DOM before we inject the script
@@ -4796,7 +4800,651 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         hideOverlayHtml: () => {
           sendMessage("ai-sdk-hide-overlay-html", {});
         },
+        // HTML/PixiJS Layering Utilities
+        // Store input-button pairs for dynamic repositioning on resize
+        _inputButtonPairs: [],
+        positionInputBesideButton: function(inputElement, buttonContainer, offsetX = 0, offsetY = 0, buttonWidth = 150) {
+          if (!inputElement || !buttonContainer) return;
+          // Get button position in screen coordinates
+          const buttonScreenX = buttonContainer.x + (buttonContainer.buttonX || 0);
+          const buttonScreenY = buttonContainer.y + (buttonContainer.buttonY || 0);
+          // Position input to the right of button (button width + spacing)
+          const inputX = buttonScreenX + buttonWidth + 10 + offsetX;
+          const inputY = buttonScreenY + offsetY;
+          inputElement.style.position = "absolute";
+          inputElement.style.left = inputX + "px";
+          inputElement.style.top = inputY + "px";
+          inputElement.style.zIndex = "1000"; // Ensure it's above PixiJS canvas
+          
+          // Store the pair for resize handling
+          this._inputButtonPairs.push({
+            input: inputElement,
+            button: buttonContainer,
+            offsetX: offsetX,
+            offsetY: offsetY,
+            buttonWidth: buttonWidth
+          });
+        },
+        repositionAllInputs: function() {
+          this._inputButtonPairs.forEach(pair => {
+            if (pair.input && pair.button) {
+              const buttonScreenX = pair.button.x + (pair.button.buttonX || 0);
+              const buttonScreenY = pair.button.y + (pair.button.buttonY || 0);
+              const inputX = buttonScreenX + pair.buttonWidth + 10 + pair.offsetX;
+              const inputY = buttonScreenY + pair.offsetY;
+              pair.input.style.left = inputX + "px";
+              pair.input.style.top = inputY + "px";
+            }
+          });
+        },
+        // HTML/PixiJS Coordinate Transformation System
+        _attachedHtmlElements: [],
+        convertPixiToScreen: function(pixiX, pixiY, pixiContainer) {
+          if (!pixiContainer) {
+            console.warn('[SDK] convertPixiToScreen: pixiContainer is required');
+            return { x: pixiX, y: pixiY };
+          }
+          
+          // Get the global position of the container
+          const globalPos = pixiContainer.getGlobalPosition();
+          const screenX = globalPos.x;
+          const screenY = globalPos.y;
+          
+          // Account for container's local position
+          return {
+            x: screenX + pixiX,
+            y: screenY + pixiY
+          };
+        },
+        convertScreenToPixi: function(screenX, screenY, pixiContainer) {
+          if (!pixiContainer) {
+            console.warn('[SDK] convertScreenToPixi: pixiContainer is required');
+            return { x: screenX, y: screenY };
+          }
+          
+          // Get the global position of the container
+          const globalPos = pixiContainer.getGlobalPosition();
+          
+          // Convert screen coordinates to local container coordinates
+          return {
+            x: screenX - globalPos.x,
+            y: screenY - globalPos.y
+          };
+        },
+        getViewTransform: function(pixiContainer) {
+          if (!pixiContainer) {
+            return { scale: { x: 1, y: 1 }, x: 0, y: 0, rotation: 0 };
+          }
+          
+          return {
+            scale: { x: pixiContainer.scale.x, y: pixiContainer.scale.y },
+            x: pixiContainer.x,
+            y: pixiContainer.y,
+            rotation: pixiContainer.rotation,
+            pivot: { x: pixiContainer.pivot.x, y: pixiContainer.pivot.y }
+          };
+        },
+        attachHtmlToPixiElement: function(htmlElement, pixiContainer, options = {}) {
+          if (!htmlElement || !pixiContainer) {
+            console.warn('[SDK] attachHtmlToPixiElement: htmlElement and pixiContainer are required');
+            return;
+          }
+          
+          const {
+            offsetX = 0,
+            offsetY = 0,
+            anchor = 'center',
+            updateOnTransform = true,
+            zIndex = 1000
+          } = options;
+          
+          // Set initial z-index
+          htmlElement.style.zIndex = zIndex;
+          htmlElement.style.position = 'absolute';
+          
+          // Calculate anchor offset
+          let anchorOffsetX = 0;
+          let anchorOffsetY = 0;
+          
+          if (pixiContainer.width && pixiContainer.height) {
+            const width = pixiContainer.width;
+            const height = pixiContainer.height;
+            
+            switch (anchor) {
+              case 'top-left':
+                anchorOffsetX = 0;
+                anchorOffsetY = 0;
+                break;
+              case 'top-right':
+                anchorOffsetX = width;
+                anchorOffsetY = 0;
+                break;
+              case 'bottom-left':
+                anchorOffsetX = 0;
+                anchorOffsetY = height;
+                break;
+              case 'bottom-right':
+                anchorOffsetX = width;
+                anchorOffsetY = height;
+                break;
+              case 'top':
+                anchorOffsetX = width / 2;
+                anchorOffsetY = 0;
+                break;
+              case 'bottom':
+                anchorOffsetX = width / 2;
+                anchorOffsetY = height;
+                break;
+              case 'left':
+                anchorOffsetX = 0;
+                anchorOffsetY = height / 2;
+                break;
+              case 'right':
+                anchorOffsetX = width;
+                anchorOffsetY = height / 2;
+                break;
+              case 'center':
+              default:
+                anchorOffsetX = width / 2;
+                anchorOffsetY = height / 2;
+                break;
+            }
+          }
+          
+          // Store attachment info
+          const attachment = {
+            htmlElement: htmlElement,
+            pixiContainer: pixiContainer,
+            offsetX: offsetX,
+            offsetY: offsetY,
+            anchorOffsetX: anchorOffsetX,
+            anchorOffsetY: anchorOffsetY,
+            updateOnTransform: updateOnTransform,
+            zIndex: zIndex
+          };
+          
+          this._attachedHtmlElements.push(attachment);
+          
+          // Initial positioning
+          this._updateHtmlElementPosition(attachment);
+          
+          return attachment;
+        },
+        _updateHtmlElementPosition: function(attachment) {
+          if (!attachment || !attachment.htmlElement || !attachment.pixiContainer) return;
+          
+          const screenPos = this.convertPixiToScreen(
+            attachment.anchorOffsetX + attachment.offsetX,
+            attachment.anchorOffsetY + attachment.offsetY,
+            attachment.pixiContainer
+          );
+          
+          attachment.htmlElement.style.left = screenPos.x + 'px';
+          attachment.htmlElement.style.top = screenPos.y + 'px';
+        },
+        updateAllAttachedHtml: function() {
+          this._attachedHtmlElements.forEach(attachment => {
+            if (attachment.updateOnTransform) {
+              this._updateHtmlElementPosition(attachment);
+            }
+          });
+        },
+        detachHtmlFromPixiElement: function(htmlElement) {
+          const index = this._attachedHtmlElements.findIndex(att => att.htmlElement === htmlElement);
+          if (index !== -1) {
+            this._attachedHtmlElements.splice(index, 1);
+            return true;
+          }
+          return false;
+        },
+        attachInputToImageArea: function(inputElement, imageSprite, options = {}) {
+          if (!inputElement || !imageSprite) {
+            console.warn('[SDK] attachInputToImageArea: inputElement and imageSprite are required');
+            return;
+          }
+          
+          const {
+            imageX = 0,
+            imageY = 0,
+            offsetX = 0,
+            offsetY = -30,
+            anchor = 'center',
+            updateOnZoom = true,
+            updateOnPan = true
+          } = options;
+          
+          // Create a temporary container at the image coordinates
+          const tempContainer = new PIXI.Container();
+          tempContainer.x = imageX;
+          tempContainer.y = imageY;
+          
+          // Add temp container to image sprite's parent at image's position
+          if (imageSprite.parent) {
+            imageSprite.parent.addChild(tempContainer);
+            // Position relative to image sprite
+            tempContainer.x = imageSprite.x + imageX;
+            tempContainer.y = imageSprite.y + imageY;
+          } else {
+            console.warn('[SDK] attachInputToImageArea: imageSprite must be added to stage first');
+            return;
+          }
+          
+          // Use the standard attachHtmlToPixiElement with the temp container
+          return this.attachHtmlToPixiElement(inputElement, tempContainer, {
+            offsetX: offsetX,
+            offsetY: offsetY,
+            anchor: anchor,
+            updateOnTransform: updateOnZoom || updateOnPan
+          });
+        },
+        _zoomPanInstances: new Map(),
+        setupZoomPan: function(pixiContainer, options = {}) {
+          if (!pixiContainer) {
+            console.warn('[SDK] setupZoomPan: pixiContainer is required');
+            return null;
+          }
+          
+          const {
+            minZoom = 0.5,
+            maxZoom = 3.0,
+            initialZoom = 1.0,
+            enablePinchZoom = true,
+            enableWheelZoom = true,
+            enableDrag = true,
+            showZoomControls = true,
+            zoomControlPosition = 'top-right',
+            onZoomChange = null,
+            onPanChange = null
+          } = options;
+          
+          const instanceId = 'zoomPan_' + Date.now() + '_' + Math.random();
+          const self = this;
+          let currentZoom = initialZoom;
+          let isDragging = false;
+          let dragStart = { x: 0, y: 0 };
+          let lastPan = { x: pixiContainer.x || 0, y: pixiContainer.y || 0 };
+          let lastPinchDistance = 0;
+          let touchStartPositions = [];
+          
+          // Initialize container
+          pixiContainer.scale.set(initialZoom);
+          pixiContainer.pivot.set(0, 0);
+          
+          // Create zoom controls UI if requested
+          let zoomControlsContainer = null;
+          if (showZoomControls) {
+            zoomControlsContainer = document.createElement('div');
+            zoomControlsContainer.id = 'zoom-controls-' + instanceId;
+            zoomControlsContainer.style.position = 'absolute';
+            zoomControlsContainer.style.zIndex = '1001';
+            zoomControlsContainer.style.padding = '10px';
+            zoomControlsContainer.style.background = 'rgba(15, 15, 35, 0.9)';
+            zoomControlsContainer.style.borderRadius = '4px';
+            zoomControlsContainer.style.border = '2px solid #00d4ff';
+            
+            // Position controls
+            if (zoomControlPosition.includes('top')) {
+              zoomControlsContainer.style.top = '20px';
+            } else {
+              zoomControlsContainer.style.bottom = '20px';
+            }
+            if (zoomControlPosition.includes('right')) {
+              zoomControlsContainer.style.right = '20px';
+            } else {
+              zoomControlsContainer.style.left = '20px';
+            }
+            
+            // Zoom in button
+            const zoomInBtn = document.createElement('button');
+            zoomInBtn.textContent = '+';
+            zoomInBtn.style.cssText = 'width: 30px; height: 30px; margin: 2px; background: #00d4ff; border: none; border-radius: 4px; color: #0f0f23; cursor: pointer; font-size: 18px;';
+            zoomInBtn.onclick = () => setZoom(currentZoom * 1.2);
+            
+            // Zoom out button
+            const zoomOutBtn = document.createElement('button');
+            zoomOutBtn.textContent = '−';
+            zoomOutBtn.style.cssText = 'width: 30px; height: 30px; margin: 2px; background: #00d4ff; border: none; border-radius: 4px; color: #0f0f23; cursor: pointer; font-size: 18px;';
+            zoomOutBtn.onclick = () => setZoom(currentZoom / 1.2);
+            
+            // Reset button
+            const resetBtn = document.createElement('button');
+            resetBtn.textContent = '⌂';
+            resetBtn.style.cssText = 'width: 30px; height: 30px; margin: 2px; background: #00d4ff; border: none; border-radius: 4px; color: #0f0f23; cursor: pointer; font-size: 14px;';
+            resetBtn.onclick = resetView;
+            
+            zoomControlsContainer.appendChild(zoomInBtn);
+            zoomControlsContainer.appendChild(zoomOutBtn);
+            zoomControlsContainer.appendChild(resetBtn);
+            document.body.appendChild(zoomControlsContainer);
+          }
+          
+          // Set zoom level
+          function setZoom(zoom, centerX = null, centerY = null) {
+            const newZoom = Math.max(minZoom, Math.min(maxZoom, zoom));
+            
+            if (centerX === null || centerY === null) {
+              centerX = pixiContainer.width / 2;
+              centerY = pixiContainer.height / 2;
+            }
+            
+            // Get current world position of center point
+            const worldPos = self.convertPixiToScreen(centerX, centerY, pixiContainer);
+            
+            // Update zoom
+            currentZoom = newZoom;
+            pixiContainer.scale.set(currentZoom);
+            
+            // Adjust position to keep center point in same screen position
+            const newWorldPos = self.convertPixiToScreen(centerX, centerY, pixiContainer);
+            pixiContainer.x += worldPos.x - newWorldPos.x;
+            pixiContainer.y += worldPos.y - newWorldPos.y;
+            
+            lastPan = { x: pixiContainer.x, y: pixiContainer.y };
+            
+            // Update attached HTML elements
+            self.updateAllAttachedHtml();
+            
+            if (onZoomChange) onZoomChange(currentZoom);
+          }
+          
+          // Set pan position
+          function setPan(x, y) {
+            pixiContainer.x = x;
+            pixiContainer.y = y;
+            lastPan = { x: x, y: y };
+            
+            // Update attached HTML elements
+            self.updateAllAttachedHtml();
+            
+            if (onPanChange) onPanChange(x, y);
+          }
+          
+          // Reset view
+          function resetView() {
+            currentZoom = initialZoom;
+            pixiContainer.scale.set(initialZoom);
+            pixiContainer.x = 0;
+            pixiContainer.y = 0;
+            lastPan = { x: 0, y: 0 };
+            
+            // Update attached HTML elements
+            self.updateAllAttachedHtml();
+            
+            if (onZoomChange) onZoomChange(currentZoom);
+            if (onPanChange) onPanChange(0, 0);
+          }
+          
+          // Mouse wheel zoom
+          if (enableWheelZoom) {
+            const canvas = pixiContainer.parent?.canvas || document;
+            const wheelHandler = (e) => {
+              e.preventDefault();
+              const rect = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : { left: 0, top: 0 };
+              const centerX = e.clientX - rect.left;
+              const centerY = e.clientY - rect.top;
+              const delta = e.deltaY > 0 ? 0.9 : 1.1;
+              setZoom(currentZoom * delta, centerX, centerY);
+            };
+            
+            if (canvas.addEventListener) {
+              canvas.addEventListener('wheel', wheelHandler, { passive: false });
+            }
+          }
+          
+          // Mouse drag to pan
+          if (enableDrag) {
+            const canvas = pixiContainer.parent?.canvas || document;
+            let mouseDown = false;
+            let mouseStart = { x: 0, y: 0 };
+            
+            const mouseDownHandler = (e) => {
+              mouseDown = true;
+              mouseStart = { x: e.clientX, y: e.clientY };
+              canvas.style.cursor = 'grabbing';
+            };
+            
+            const mouseMoveHandler = (e) => {
+              if (!mouseDown) return;
+              const dx = e.clientX - mouseStart.x;
+              const dy = e.clientY - mouseStart.y;
+              setPan(lastPan.x + dx, lastPan.y + dy);
+              mouseStart = { x: e.clientX, y: e.clientY };
+            };
+            
+            const mouseUpHandler = () => {
+              mouseDown = false;
+              canvas.style.cursor = 'grab';
+            };
+            
+            if (canvas.addEventListener) {
+              canvas.addEventListener('mousedown', mouseDownHandler);
+              canvas.addEventListener('mousemove', mouseMoveHandler);
+              canvas.addEventListener('mouseup', mouseUpHandler);
+              canvas.addEventListener('mouseleave', mouseUpHandler);
+              canvas.style.cursor = 'grab';
+            }
+          }
+          
+          // Touch pinch zoom and pan
+          if (enablePinchZoom) {
+            const canvas = pixiContainer.parent?.canvas || document;
+            
+            const touchStartHandler = (e) => {
+              touchStartPositions = Array.from(e.touches).map(t => ({ x: t.clientX, y: t.clientY }));
+              if (e.touches.length === 1) {
+                isDragging = true;
+                dragStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+              }
+            };
+            
+            const touchMoveHandler = (e) => {
+              e.preventDefault();
+              
+              if (e.touches.length === 2) {
+                // Pinch zoom
+                isDragging = false;
+                const touch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                const touch2 = { x: e.touches[1].clientX, y: e.touches[1].clientY };
+                const distance = Math.hypot(touch2.x - touch1.x, touch2.y - touch1.y);
+                
+                if (lastPinchDistance > 0) {
+                  const scale = distance / lastPinchDistance;
+                  const centerX = (touch1.x + touch2.x) / 2;
+                  const centerY = (touch1.y + touch2.y) / 2;
+                  setZoom(currentZoom * scale, centerX, centerY);
+                }
+                
+                lastPinchDistance = distance;
+              } else if (e.touches.length === 1 && isDragging) {
+                // Single touch pan
+                const dx = e.touches[0].clientX - dragStart.x;
+                const dy = e.touches[0].clientY - dragStart.y;
+                setPan(lastPan.x + dx, lastPan.y + dy);
+                dragStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+              }
+            };
+            
+            const touchEndHandler = (e) => {
+              if (e.touches.length === 0) {
+                isDragging = false;
+                lastPinchDistance = 0;
+                touchStartPositions = [];
+              } else if (e.touches.length === 1) {
+                lastPinchDistance = 0;
+              }
+            };
+            
+            if (canvas.addEventListener) {
+              canvas.addEventListener('touchstart', touchStartHandler, { passive: false });
+              canvas.addEventListener('touchmove', touchMoveHandler, { passive: false });
+              canvas.addEventListener('touchend', touchEndHandler);
+              canvas.addEventListener('touchcancel', touchEndHandler);
+            }
+          }
+          
+          const instance = {
+            id: instanceId,
+            setZoom: setZoom,
+            setPan: setPan,
+            resetView: resetView,
+            getZoom: () => currentZoom,
+            getPan: () => ({ x: pixiContainer.x, y: pixiContainer.y }),
+            destroy: () => {
+              if (zoomControlsContainer) {
+                zoomControlsContainer.remove();
+              }
+              self._zoomPanInstances.delete(instanceId);
+            }
+          };
+          
+          this._zoomPanInstances.set(instanceId, instance);
+          return instance;
+        },
+        _hotspotInstances: new Map(),
+        createHotspot: function(imageSprite, options = {}) {
+          if (!imageSprite) {
+            console.warn('[SDK] createHotspot: imageSprite is required');
+            return null;
+          }
+          
+          const {
+            x = 0,
+            y = 0,
+            radius = 20,
+            shape = 'circle',
+            width = null,
+            height = null,
+            points = null,
+            visible = false,
+            color = 0x00ff00,
+            alpha = 0.3,
+            cursor = 'pointer',
+            id = 'hotspot_' + Date.now() + '_' + Math.random(),
+            onHover = null,
+            onLeave = null,
+            onClick = null
+          } = options;
+          
+          // Create hotspot container
+          const hotspotContainer = new PIXI.Container();
+          hotspotContainer.x = x;
+          hotspotContainer.y = y;
+          hotspotContainer.eventMode = 'static';
+          hotspotContainer.cursor = cursor;
+          
+          // Create visual indicator if visible
+          let indicator = null;
+          if (visible) {
+            indicator = new PIXI.Graphics();
+            
+            if (shape === 'circle') {
+              indicator.beginFill(color, alpha);
+              indicator.drawCircle(0, 0, radius);
+              indicator.endFill();
+              hotspotContainer.hitArea = new PIXI.Circle(0, 0, radius);
+            } else if (shape === 'rect') {
+              const w = width || radius * 2;
+              const h = height || radius * 2;
+              indicator.beginFill(color, alpha);
+              indicator.drawRect(-w/2, -h/2, w, h);
+              indicator.endFill();
+              hotspotContainer.hitArea = new PIXI.Rectangle(-w/2, -h/2, w, h);
+            } else if (shape === 'polygon' && points) {
+              indicator.beginFill(color, alpha);
+              indicator.drawPolygon(points.map(p => new PIXI.Point(p.x, p.y)));
+              indicator.endFill();
+              hotspotContainer.hitArea = new PIXI.Polygon(points.map(p => new PIXI.Point(p.x, p.y)));
+            }
+            
+            if (indicator) {
+              hotspotContainer.addChild(indicator);
+            }
+          } else {
+            // Invisible hotspot still needs hit area
+            if (shape === 'circle') {
+              hotspotContainer.hitArea = new PIXI.Circle(0, 0, radius);
+            } else if (shape === 'rect') {
+              const w = width || radius * 2;
+              const h = height || radius * 2;
+              hotspotContainer.hitArea = new PIXI.Rectangle(-w/2, -h/2, w, h);
+            } else if (shape === 'polygon' && points) {
+              hotspotContainer.hitArea = new PIXI.Polygon(points.map(p => new PIXI.Point(p.x, p.y)));
+            }
+          }
+          
+          // Add event handlers
+          if (onHover) {
+            hotspotContainer.on('pointerenter', () => onHover(hotspot));
+          }
+          
+          if (onLeave) {
+            hotspotContainer.on('pointerleave', () => onLeave(hotspot));
+          }
+          
+          if (onClick) {
+            hotspotContainer.on('pointerdown', (event) => {
+              onClick(hotspot, event);
+            });
+          }
+          
+          // Add to image sprite's parent (or create parent container)
+          if (imageSprite.parent) {
+            imageSprite.parent.addChild(hotspotContainer);
+          } else {
+            console.warn('[SDK] createHotspot: imageSprite must be added to stage first');
+          }
+          
+          const hotspot = {
+            id: id,
+            container: hotspotContainer,
+            indicator: indicator,
+            imageSprite: imageSprite,
+            x: x,
+            y: y,
+            radius: radius,
+            shape: shape,
+            visible: visible,
+            setVisible: (visible) => {
+              if (indicator) {
+                indicator.visible = visible;
+              }
+              hotspot.visible = visible;
+            },
+            setPosition: (newX, newY) => {
+              hotspotContainer.x = newX;
+              hotspotContainer.y = newY;
+              hotspot.x = newX;
+              hotspot.y = newY;
+            },
+            destroy: () => {
+              if (hotspotContainer.parent) {
+                hotspotContainer.parent.removeChild(hotspotContainer);
+              }
+              hotspotContainer.destroy({ children: true });
+              this._hotspotInstances.delete(id);
+            }
+          };
+          
+          this._hotspotInstances.set(id, hotspot);
+          return hotspot;
+        },
+        createHotspots: function(imageSprite, hotspotConfigs) {
+          if (!Array.isArray(hotspotConfigs)) {
+            console.warn('[SDK] createHotspots: hotspotConfigs must be an array');
+            return [];
+          }
+          
+          return hotspotConfigs.map(config => this.createHotspot(imageSprite, config));
+        },
       };
+      
+      // Set up resize listeners for layering utilities
+      window.addEventListener("resize", () => {
+        if (window.createIframeAISDK && typeof window.createIframeAISDK === 'function') {
+          // This will be called when SDK is created, but we need to track instances
+          // For now, builders should call repositionAllInputs in their resize handlers
+        }
+      });
     };
     } // End of createIframeAISDK declaration check
     
@@ -5440,8 +6088,8 @@ ${escapedCss}
     
     // For JavaScript, use base64 encoding to safely embed code with template literals
     // This avoids all template literal escaping issues
-    // JavaScript code is ASCII, so btoa() works directly
-    const jsCodeBase64 = normalizedJs ? btoa(normalizedJs) : '';
+    // Use UTF-8 safe encoding to handle any Unicode characters in the code
+    const jsCodeBase64 = normalizedJs ? btoa(unescape(encodeURIComponent(normalizedJs))) : '';
     
     // Debug: Log if snack buttons are in the code
     console.log('[LessonView] 🔍 JS code includes "Show Snack (5s)":', normalizedJs.includes('Show Snack (5s)'));
@@ -5513,12 +6161,14 @@ ${escapedHtml}
             throw new Error('JavaScript code script tag not found');
           }
           // Decode from base64 if available, otherwise read as text
+          // Use UTF-8 safe decoding to handle Unicode characters
           let jsCode = '';
           if (jsCodeScript.dataset.base64) {
             try {
-              // Decode base64 directly - JavaScript code is ASCII, so atob() works directly
-              jsCode = atob(jsCodeScript.dataset.base64);
-              console.log('[Interaction] ✅ Decoded base64 JavaScript code, length:', jsCode.length);
+              // Decode base64 and then decode from UTF-8 to handle Unicode characters
+              // This reverses: btoa(unescape(encodeURIComponent(normalizedJs)))
+              jsCode = decodeURIComponent(escape(atob(jsCodeScript.dataset.base64)));
+              console.log('[Interaction] ✅ Decoded base64 JavaScript code (UTF-8 safe), length:', jsCode.length);
             } catch (e) {
               console.error('[Interaction] Error decoding base64 JavaScript code:', e);
               jsCode = jsCodeScript.textContent || jsCodeScript.innerHTML || '';

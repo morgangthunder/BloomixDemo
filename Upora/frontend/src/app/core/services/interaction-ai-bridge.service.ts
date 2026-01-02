@@ -319,6 +319,8 @@ export class InteractionAIBridgeService {
       case 'ai-sdk-generate-image':
         this.aiSDK.generateImage(message.options || {})
           .then((response) => {
+            console.log('[InteractionAIBridge] generateImage response keys:', Object.keys(response || {}));
+            console.log('[InteractionAIBridge] generateImage response.imageId:', response?.imageId);
             this.sendToIframe(sourceWindow, {
               type: 'ai-sdk-generate-image-ack',
               ...response,
@@ -328,6 +330,49 @@ export class InteractionAIBridgeService {
           .catch((error) => {
             this.sendToIframe(sourceWindow, {
               type: 'ai-sdk-generate-image-ack',
+              success: false,
+              error: error.message,
+              requestId: message.requestId,
+            });
+          });
+        break;
+
+      case 'ai-sdk-get-lesson-images':
+        this.aiSDK.getLessonImages(message.lessonId, message.accountId, message.imageId)
+          .then((images) => {
+            // getLessonImages returns an array directly
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-get-lesson-images-ack',
+              images: images || [],
+              success: true,
+              requestId: message.requestId,
+            });
+          })
+          .catch((error) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-get-lesson-images-ack',
+              images: [],
+              success: false,
+              error: error.message,
+              requestId: message.requestId,
+            });
+          });
+        break;
+
+      case 'ai-sdk-get-lesson-image-ids':
+        this.aiSDK.getLessonImageIds(message.lessonId, message.accountId)
+          .then((imageIds) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-get-lesson-image-ids-ack',
+              imageIds: imageIds || [],
+              success: true,
+              requestId: message.requestId,
+            });
+          })
+          .catch((error) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-get-lesson-image-ids-ack',
+              imageIds: [],
               success: false,
               error: error.message,
               requestId: message.requestId,

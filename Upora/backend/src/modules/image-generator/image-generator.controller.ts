@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Headers } from '@nestjs/common';
+import { Controller, Post, Body, Headers, Get, Param, Query } from '@nestjs/common';
 import { ImageGeneratorService } from '../../services/image-generator.service';
 import type { ImageGenerationRequest, ImageGenerationResponse } from '../../services/image-generator.service';
 
@@ -13,6 +13,37 @@ export class ImageGeneratorController {
     @Headers('x-tenant-id') tenantId?: string,
   ): Promise<ImageGenerationResponse> {
     return this.imageGeneratorService.generateImage(request, userId, tenantId);
+  }
+
+  @Get('lesson/:lessonId')
+  async getLessonImages(
+    @Param('lessonId') lessonId: string,
+    @Query('accountId') accountId?: string,
+    @Query('imageId') imageId?: string,
+  ) {
+    try {
+      // If imageId is provided, return only that image
+      if (imageId) {
+        return await this.imageGeneratorService.getImageById(imageId);
+      }
+      return await this.imageGeneratorService.getLessonImages(lessonId, accountId);
+    } catch (error: any) {
+      console.error('[ImageGeneratorController] Error in getLessonImages:', error);
+      throw error;
+    }
+  }
+
+  @Get('lesson/:lessonId/ids')
+  async getLessonImageIds(
+    @Param('lessonId') lessonId: string,
+    @Query('accountId') accountId?: string,
+  ) {
+    try {
+      return await this.imageGeneratorService.getLessonImageIds(lessonId, accountId);
+    } catch (error: any) {
+      console.error('[ImageGeneratorController] Error in getLessonImageIds:', error);
+      throw error;
+    }
   }
 }
 

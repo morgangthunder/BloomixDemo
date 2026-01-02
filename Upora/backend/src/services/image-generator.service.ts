@@ -4,20 +4,29 @@ import { Repository } from 'typeorm';
 import { AiPrompt } from '../entities/ai-prompt.entity';
 import { LlmGenerationLog } from '../entities/llm-generation-log.entity';
 import { LlmProvider } from '../entities/llm-provider.entity';
+import { GeneratedImage } from '../entities/generated-image.entity';
+import { FileStorageService } from './file-storage.service';
 
 export interface ImageGenerationRequest {
   prompt: string;
   userInput?: string; // Additional user input to append to prompt
   screenshot?: string; // Optional base64-encoded screenshot
   customInstructions?: string; // Builder-defined custom instructions
+  width?: number; // Image width in pixels
+  height?: number; // Image height in pixels
+  lessonId?: string; // Lesson ID to associate image with
+  substageId?: string; // Optional substage ID
+  interactionId?: string; // Optional interaction ID
+  accountId?: string; // Account ID that created the lesson or is generating the image
 }
 
 export interface ImageGenerationResponse {
-  imageUrl?: string; // URL to the generated image
-  imageData?: string; // Base64-encoded image data (if returned directly)
+  imageUrl?: string; // URL to the generated image (persisted in MinIO/S3)
+  imageData?: string; // Base64-encoded image data (if returned directly, for immediate display)
   success: boolean;
   error?: string;
   requestId?: string;
+  imageId?: string; // ID of the saved image record in database
 }
 
 /**
@@ -36,7 +45,18 @@ export class ImageGeneratorService {
     private llmLogRepository: Repository<LlmGenerationLog>,
     @InjectRepository(LlmProvider)
     private llmProviderRepository: Repository<LlmProvider>,
+    @InjectRepository(GeneratedImage)
+    private generatedImageRepository: Repository<GeneratedImage>,
+    private fileStorageService: FileStorageService,
   ) {}
+
+  /**
+   * Check if a string is a valid UUID
+   */
+  private isValidUUID(str: string): boolean {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(str);
+  }
 
   /**
    * Get API configuration from database
@@ -185,6 +205,22 @@ export class ImageGeneratorService {
       fullPrompt += `\n\nCustom instructions: ${request.customInstructions}`;
     }
 
+    // Note: Gemini API does NOT support width/height in generationConfig
+    // Instead, we add dimension instructions to the prompt if specified
+    if (request.width || request.height) {
+      const width = request.width || apiConfig.width;
+      const height = request.height || apiConfig.height;
+      if (width && height) {
+        fullPrompt += `\n\nGenerate an image with dimensions ${width}x${height} pixels.`;
+      }
+    } else if (apiConfig.width || apiConfig.height) {
+      const width = apiConfig.width;
+      const height = apiConfig.height;
+      if (width && height) {
+        fullPrompt += `\n\nGenerate an image with dimensions ${width}x${height} pixels.`;
+      }
+    }
+
     // 4. Build request payload for Google Gemini API (Nano-Banana is Gemini 2.5 Flash Image)
     // Format: { "contents": [{ "parts": [{ "text": "prompt" }] }] }
     const parts: any[] = [
@@ -234,6 +270,9 @@ export class ImageGeneratorService {
     if (apiConfig.maxTokens) {
       generationConfig.maxOutputTokens = apiConfig.maxTokens;
     }
+    // Note: width/height are already added to the prompt text above, not in generationConfig
+    // Gemini API does NOT support width/height in generationConfig
+    
     if (Object.keys(generationConfig).length > 0) {
       requestPayload.generationConfig = generationConfig;
     }
@@ -277,11 +316,33 @@ export class ImageGeneratorService {
         };
       }
 
-      const data = await response.json();
+      let data: any;
+      try {
+        data = await response.json();
+      } catch (jsonError: any) {
+        const textResponse = await response.text();
+        this.logger.error('[ImageGenerator] Failed to parse JSON response');
+        this.logger.error('[ImageGenerator] Response text:', textResponse.substring(0, 500));
+        return {
+          success: false,
+          error: `Failed to parse API response: ${jsonError.message}`,
+        };
+      }
+      
       this.logger.log('[ImageGenerator] API response received');
-      this.logger.debug('[ImageGenerator] Full API response:', JSON.stringify(data, null, 2));
+      this.logger.debug('[ImageGenerator] Response structure:', {
+        hasError: !!data.error,
+        topLevelKeys: Object.keys(data),
+        hasCandidates: !!data.candidates,
+        candidatesLength: data.candidates?.length,
+      });
+      
+      // Log full response for debugging (truncated)
+      if (process.env.LOG_LEVEL === 'debug') {
+        this.logger.debug('[ImageGenerator] Full API response:', JSON.stringify(data, null, 2).substring(0, 1000));
+      }
 
-      // 7. Parse Nano-Banana API response format
+      // 7. Parse Google Gemini API response format
       // Possible formats:
       // - { "image": "base64_data" } or { "image_data": "base64_data" }
       // - { "image_url": "https://..." }
@@ -300,15 +361,24 @@ export class ImageGeneratorService {
         }
 
         // Try different possible response formats
-        // Google Gemini format: data.candidates[0].content.parts[0].inlineData.data
-        if (data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data) {
-          const inlineData = data.candidates[0].content.parts[0].inlineData;
-          const base64Data = inlineData.data;
-          const mimeType = inlineData.mimeType || 'image/png';
-          imageData = base64Data.startsWith('data:') 
-            ? base64Data 
-            : `data:${mimeType};base64,${base64Data}`;
-          this.logger.log('[ImageGenerator] ✅ Image extracted from Gemini candidates[0].content.parts[0].inlineData');
+        // Google Gemini format: data.candidates[0].content.parts[].inlineData.data
+        // Note: parts array may contain multiple items (text, image, etc.) - we need to find the one with inlineData
+        if (data.candidates?.[0]?.content?.parts) {
+          const parts = data.candidates[0].content.parts;
+          // Find the part that contains inlineData (image)
+          const imagePart = Array.isArray(parts) 
+            ? parts.find((part: any) => part.inlineData?.data)
+            : null;
+          
+          if (imagePart?.inlineData?.data) {
+            const inlineData = imagePart.inlineData;
+            const base64Data = inlineData.data;
+            const mimeType = inlineData.mimeType || 'image/png';
+            imageData = base64Data.startsWith('data:') 
+              ? base64Data 
+              : `data:${mimeType};base64,${base64Data}`;
+            this.logger.log('[ImageGenerator] ✅ Image extracted from Gemini candidates[0].content.parts[].inlineData');
+          }
         } else if (data.image) {
           // Direct base64 image data
           const base64Data = data.image;
@@ -358,15 +428,28 @@ export class ImageGeneratorService {
           this.logger.error('[ImageGenerator] Response structure:', JSON.stringify(data).substring(0, 500));
           
           // Log more details about Gemini response structure
-          if (data.candidates) {
+          if (data.candidates && Array.isArray(data.candidates)) {
+            const parts = data.candidates[0]?.content?.parts;
+            const partsArray = Array.isArray(parts) ? parts : [];
+            
             this.logger.error('[ImageGenerator] Gemini candidates structure:', {
               candidatesLength: data.candidates.length,
               firstCandidateKeys: data.candidates[0] ? Object.keys(data.candidates[0]) : [],
               hasContent: !!data.candidates[0]?.content,
-              hasParts: !!data.candidates[0]?.content?.parts,
-              partsLength: data.candidates[0]?.content?.parts?.length,
-              firstPartKeys: data.candidates[0]?.content?.parts?.[0] ? Object.keys(data.candidates[0].content.parts[0]) : [],
-              hasInlineData: !!data.candidates[0]?.content?.parts?.[0]?.inlineData,
+              contentKeys: data.candidates[0]?.content ? Object.keys(data.candidates[0].content) : [],
+              hasParts: !!parts,
+              partsLength: partsArray.length,
+              partsTypes: partsArray.map((p: any, i: number) => ({
+                index: i,
+                keys: Object.keys(p),
+                hasText: !!p.text,
+                hasInlineData: !!p.inlineData,
+              })),
+            });
+            
+            // Log each part structure
+            partsArray.forEach((part: any, index: number) => {
+              this.logger.error(`[ImageGenerator] Part ${index} structure:`, JSON.stringify(part, null, 2).substring(0, 300));
             });
           }
           
@@ -397,11 +480,106 @@ export class ImageGeneratorService {
         model: apiConfig.model || 'gemini-2.0-flash-exp',
       });
 
-      return {
+      // 9. Save image to MinIO/S3 if lessonId and accountId are provided
+      let savedImageUrl: string | undefined;
+      let savedImageId: string | undefined;
+      this.logger.log(`[ImageGenerator] Checking save conditions - imageData: ${!!imageData}, lessonId: ${request.lessonId}, accountId: ${request.accountId}`);
+      if (imageData && request.lessonId && request.accountId) {
+        try {
+          // Extract base64 data and mime type
+          let base64Data = imageData;
+          let mimeType = 'image/png';
+          
+          if (imageData.startsWith('data:')) {
+            const mimeMatch = imageData.match(/data:([^;]+)/);
+            if (mimeMatch) {
+              mimeType = mimeMatch[1];
+            }
+            base64Data = imageData.split(',')[1];
+          }
+
+          // Convert base64 to buffer
+          const imageBuffer = Buffer.from(base64Data, 'base64');
+          
+          // Determine file extension from mime type
+          const extension = mimeType === 'image/jpeg' ? '.jpg' : 
+                           mimeType === 'image/png' ? '.png' : 
+                           mimeType === 'image/gif' ? '.gif' : '.png';
+          
+          // Save to MinIO/S3 in account-specific folder
+          const subfolder = `images/${request.accountId}`;
+          const savedFile = await this.fileStorageService.saveFile({
+            buffer: imageBuffer,
+            originalname: `generated-${Date.now()}${extension}`,
+            mimetype: mimeType,
+          }, subfolder);
+          
+          // Generate signed URL for access (valid for 7 days)
+          // This allows browser to access the image from MinIO/S3
+          let publicImageUrl = savedFile.url;
+          try {
+            const signedUrl = await this.fileStorageService.getSignedUrl(savedFile.url, 7 * 24 * 60 * 60); // 7 days
+            if (signedUrl) {
+              publicImageUrl = signedUrl;
+              this.logger.log(`[ImageGenerator] Generated signed URL for image: ${signedUrl.substring(0, 100)}...`);
+            }
+          } catch (signedUrlError: any) {
+            this.logger.warn(`[ImageGenerator] Failed to generate signed URL, using direct URL: ${signedUrlError.message}`);
+          }
+          
+          savedImageUrl = publicImageUrl;
+          
+          // Store metadata in database (store the original URL, not the signed URL)
+          const generatedImage = this.generatedImageRepository.create({
+            lessonId: request.lessonId,
+            accountId: request.accountId,
+            imageUrl: savedFile.url, // Store original URL, we'll generate signed URLs when retrieving
+            mimeType: mimeType,
+            width: request.width || null,
+            height: request.height || null,
+            prompt: fullPrompt,
+            substageId: request.substageId && this.isValidUUID(request.substageId) ? request.substageId : null,
+            interactionId: request.interactionId && this.isValidUUID(request.interactionId) ? request.interactionId : null,
+            metadata: {
+              model: apiConfig.model || 'gemini-2.0-flash-exp',
+              processingTimeMs,
+              tokensUsed: this.estimateTokens(fullPrompt, request.screenshot),
+              originalPrompt: request.prompt, // Store the original user prompt
+            },
+          });
+          
+          const savedImage = await this.generatedImageRepository.save(generatedImage);
+          
+          savedImageId = savedImage.id;
+          this.logger.log(`[ImageGenerator] ✅ Image saved to storage: ${savedImageUrl} (ID: ${savedImage.id})`);
+        } catch (saveError: any) {
+          this.logger.error(`[ImageGenerator] Failed to save image to storage: ${saveError.message}`);
+          // Continue and return imageData even if save fails
+        }
+      }
+
+      // Return result with imageId if available (even if save failed)
+      const result: any = {
         success: true,
-        imageData, // Gemini returns base64 data
-        requestId: data.candidates?.[0]?.finishReason || undefined,
+        imageData, // Gemini returns base64 data (always return for immediate display)
       };
+      
+      if (savedImageUrl) {
+        result.imageUrl = savedImageUrl;
+      }
+      
+      if (savedImageId) {
+        result.imageId = savedImageId;
+        this.logger.log(`[ImageGenerator] ✅ Returning imageId: ${savedImageId}`);
+      } else {
+        this.logger.warn(`[ImageGenerator] ⚠️ No imageId to return. lessonId: ${request.lessonId}, accountId: ${request.accountId}`);
+      }
+      
+      if (data.candidates?.[0]?.finishReason) {
+        result.requestId = data.candidates[0].finishReason;
+      }
+      
+      return result;
     } catch (error: any) {
       this.logger.error('[ImageGenerator] API call failed:', error.message);
       this.logger.error('[ImageGenerator] Error details:', {
@@ -496,6 +674,157 @@ export class ImageGeneratorService {
     } catch (error: any) {
       this.logger.error(`[ImageGenerator] Failed to log LLM usage: ${error.message}`, error.stack);
       // Don't throw - logging failure shouldn't break the request
+    }
+  }
+
+  /**
+   * Get all images generated for a lesson
+   * Returns images with signed URLs for browser access
+   */
+  async getLessonImages(lessonId: string, accountId?: string): Promise<any[]> {
+    try {
+      this.logger.log(`[ImageGenerator] Getting images for lesson: ${lessonId}, accountId: ${accountId || 'all'}`);
+      
+      // Use find() instead of query builder for simpler queries
+      const whereClause: any = { lessonId };
+      if (accountId) {
+        whereClause.accountId = accountId;
+      }
+      
+      const images = await this.generatedImageRepository.find({
+        where: whereClause,
+        order: { createdAt: 'DESC' },
+      });
+      
+      this.logger.log(`[ImageGenerator] Found ${images.length} images for lesson ${lessonId}`);
+      
+      if (images.length === 0) {
+        this.logger.log(`[ImageGenerator] No images found for lesson ${lessonId}`);
+        return [];
+      }
+      
+      // Generate signed URLs for each image
+      const imagesWithSignedUrls = await Promise.all(
+        images.map(async (image) => {
+          let publicImageUrl = image.imageUrl;
+          try {
+            // Generate signed URL valid for 7 days (only for S3/MinIO, returns null for local storage)
+            const signedUrl = await this.fileStorageService.getSignedUrl(image.imageUrl, 7 * 24 * 60 * 60);
+            if (signedUrl) {
+              publicImageUrl = signedUrl;
+              this.logger.debug(`[ImageGenerator] Generated signed URL for image ${image.id}`);
+            } else {
+              // Local storage - use the original URL
+              this.logger.debug(`[ImageGenerator] Using original URL for image ${image.id} (local storage)`);
+            }
+          } catch (error: any) {
+            this.logger.warn(`[ImageGenerator] Failed to generate signed URL for image ${image.id}: ${error.message}`);
+            // Continue with original URL if signed URL generation fails
+          }
+          
+          return {
+            id: image.id,
+            lessonId: image.lessonId,
+            accountId: image.accountId,
+            imageUrl: publicImageUrl, // Return signed URL (or original URL for local storage)
+            mimeType: image.mimeType,
+            width: image.width,
+            height: image.height,
+            prompt: image.prompt,
+            substageId: image.substageId,
+            interactionId: image.interactionId,
+            metadata: image.metadata,
+            createdAt: image.createdAt,
+            updatedAt: image.updatedAt,
+          };
+        })
+      );
+      
+      this.logger.log(`[ImageGenerator] ✅ Returning ${imagesWithSignedUrls.length} images with signed URLs`);
+      return imagesWithSignedUrls;
+    } catch (error: any) {
+      this.logger.error(`[ImageGenerator] ❌ Error getting lesson images: ${error.message}`);
+      this.logger.error(`[ImageGenerator] Error stack: ${error.stack}`);
+      if (error.response) {
+        this.logger.error(`[ImageGenerator] Error response:`, error.response);
+      }
+      if (error.query) {
+        this.logger.error(`[ImageGenerator] Failed query:`, error.query);
+      }
+      throw error; // Re-throw to let NestJS handle the 500 response
+    }
+  }
+
+  /**
+   * Get a single image by ID
+   */
+  async getImageById(imageId: string): Promise<any> {
+    try {
+      this.logger.log(`[ImageGenerator] Getting image by ID: ${imageId}`);
+      
+      const image = await this.generatedImageRepository.findOne({ where: { id: imageId } });
+      
+      if (!image) {
+        this.logger.log(`[ImageGenerator] Image not found: ${imageId}`);
+        return null;
+      }
+
+      // Generate signed URL if needed
+      let publicImageUrl = image.imageUrl;
+      try {
+        const signedUrl = await this.fileStorageService.getSignedUrl(image.imageUrl, 7 * 24 * 60 * 60);
+        if (signedUrl) {
+          publicImageUrl = signedUrl;
+        }
+      } catch (error: any) {
+        this.logger.warn(`[ImageGenerator] Failed to generate signed URL for image ${image.id}: ${error.message}`);
+      }
+
+      return {
+        id: image.id,
+        lessonId: image.lessonId,
+        accountId: image.accountId,
+        imageUrl: publicImageUrl,
+        mimeType: image.mimeType,
+        width: image.width,
+        height: image.height,
+        prompt: image.prompt,
+        substageId: image.substageId,
+        interactionId: image.interactionId,
+        metadata: image.metadata,
+        createdAt: image.createdAt,
+        updatedAt: image.updatedAt,
+      };
+    } catch (error: any) {
+      this.logger.error(`[ImageGenerator] ❌ Error getting image by ID: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Get only image IDs for a lesson (for listing purposes)
+   */
+  async getLessonImageIds(lessonId: string, accountId?: string): Promise<string[]> {
+    try {
+      this.logger.log(`[ImageGenerator] Getting image IDs for lesson: ${lessonId}, accountId: ${accountId || 'all'}`);
+      
+      const whereClause: any = { lessonId };
+      if (accountId) {
+        whereClause.accountId = accountId;
+      }
+      
+      const images = await this.generatedImageRepository.find({
+        where: whereClause,
+        select: ['id'],
+        order: { createdAt: 'DESC' },
+      });
+      
+      const imageIds = images.map(img => img.id);
+      this.logger.log(`[ImageGenerator] ✅ Returning ${imageIds.length} image IDs`);
+      return imageIds;
+    } catch (error: any) {
+      this.logger.error(`[ImageGenerator] ❌ Error getting lesson image IDs: ${error.message}`);
+      throw error;
     }
   }
 }

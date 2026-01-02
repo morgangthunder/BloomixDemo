@@ -8,7 +8,7 @@ import { environment } from './environments/environment';
 // ========================================
 // Version is read from package.json at build time
 // This will be replaced by the build process or read dynamically
-const FRONTEND_VERSION = '0.1.152'; // Fixed hasPromptChanged to use unmasked version for comparison when checking api-config changes
+const FRONTEND_VERSION = '0.1.168'; // Fixed inconsistent behavior: reload image IDs when 'Get Lesson Images' clicked, wait for all gallery images to load before repositioning.
 const CACHE_BUST_ID = `v${FRONTEND_VERSION}-${Math.random().toString(36).substr(2, 9)}`;
 console.log('');
 console.log('═══════════════════════════════════════════════════════════');
@@ -42,7 +42,7 @@ fetch(`${environment.apiUrl}/version`)
   })
   .catch(err => {
     console.warn('⚠️ Could not fetch backend version:', err.message);
-    console.warn('⚠️ Make sure the backend is running on http://localhost:3000');
+    console.warn('⚠️ Make sure the backend is running on http://127.0.0.1:3000');
   });
 
 // Force clear all caches

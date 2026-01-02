@@ -302,7 +302,7 @@ export class LessonBuilderComponent implements OnInit {
     this.loading = true;
     try {
       // Load lessons DIRECTLY from the API (bypass categories$ to get raw data)
-      const response = await fetch('http://localhost:3000/api/lessons?status=approved', {
+      const response = await fetch('http://127.0.0.1:3000/api/lessons?status=approved', {
         headers: {
           'x-tenant-id': '00000000-0000-0000-0000-000000000001'
         }

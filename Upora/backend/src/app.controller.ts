@@ -4,7 +4,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 // Read version from package.json
-let BACKEND_VERSION = '0.1.74'; // Fixed Gemini response parsing - extract image from candidates[0].content.parts[0].inlineData.data
+let BACKEND_VERSION = '0.1.97'; // Fixed inconsistent behavior: reload image IDs when 'Get Lesson Images' clicked, wait for all gallery images to load before repositioning inputs. displayImageGallery now accepts callback.
 console.log(`🔍 [AppController VERSION DEBUG] __dirname: ${__dirname}`);
 console.log(`🔍 [AppController VERSION DEBUG] process.cwd(): ${process.cwd()}`);
 

@@ -39,7 +39,8 @@ try {
 @Injectable()
 export class S3StorageAdapter implements IStorageAdapter, OnModuleInit {
   private readonly logger = new Logger(S3StorageAdapter.name);
-  private s3Client: any; // S3Client type (dynamically imported)
+  private s3Client: any; // S3Client type (dynamically imported) - for internal operations
+  private s3ClientPublic: any; // S3Client for generating signed URLs with public endpoint
   private readonly bucket: string;
   private readonly baseUrl: string;
 
@@ -71,8 +72,15 @@ export class S3StorageAdapter implements IStorageAdapter, OnModuleInit {
     
     this.baseUrl = `${publicUrl}/${this.bucket}`;
 
+    // Determine the endpoint for signed URLs
+    // For MinIO: use public endpoint (localhost) so browsers can access signed URLs
+    // For AWS S3: use undefined (default S3 endpoint) - signed URLs work with default endpoint
+    const signedUrlEndpoint = endpoint 
+      ? endpoint.replace(/:\/\/minio:/, '://localhost:') // MinIO: convert to localhost
+      : undefined; // AWS S3: use default endpoint
+
     this.s3Client = new S3Client({
-      endpoint: endpoint || undefined, // MinIO endpoint (internal Docker network)
+      endpoint: endpoint || undefined, // MinIO endpoint (internal Docker network) or AWS S3 default
       region,
       credentials: {
         accessKeyId,
@@ -81,8 +89,29 @@ export class S3StorageAdapter implements IStorageAdapter, OnModuleInit {
       forcePathStyle: !!endpoint, // Required for MinIO
     });
 
+    // Create a separate client for signed URLs if needed (only for MinIO)
+    // For AWS S3, we can use the same client since the endpoint is already public
+    if (endpoint && signedUrlEndpoint !== endpoint) {
+      // For MinIO: use public endpoint (localhost) for signed URLs
+      this.s3ClientPublic = new S3Client({
+        endpoint: signedUrlEndpoint,
+        region,
+        credentials: {
+          accessKeyId,
+          secretAccessKey,
+        },
+        forcePathStyle: true, // Required for MinIO
+      });
+    } else {
+      // For AWS S3: use the same client (no endpoint conversion needed)
+      this.s3ClientPublic = this.s3Client;
+    }
+
     this.logger.log(`S3 Storage initialized: ${endpoint ? 'MinIO' : 'AWS S3'} - Bucket: ${this.bucket}`);
     this.logger.log(`Public URL base: ${this.baseUrl}`);
+    if (endpoint) {
+      this.logger.log(`Signed URLs will use: ${signedUrlEndpoint}`);
+    }
   }
 
   async onModuleInit() {
@@ -192,7 +221,11 @@ export class S3StorageAdapter implements IStorageAdapter, OnModuleInit {
       Key: key,
     });
 
-    return getSignedUrl(this.s3Client, command, { expiresIn });
+    // Use the public client for signing (uses localhost for MinIO)
+    // This ensures the signature is valid for the public endpoint
+    const signedUrl = await getSignedUrl(this.s3ClientPublic, command, { expiresIn });
+    
+    return signedUrl;
   }
 
   private extractKeyFromUrl(url: string): string {
