@@ -217,6 +217,96 @@ aiSDK.isReady((ready) => {
 });
 ```
 
+## HTML Elements in PixiJS Interactions
+
+**Important:** When adding HTML elements (inputs, divs, etc.) to a PixiJS interaction, always use the **container-based positioning approach** to ensure perfect alignment and automatic scroll synchronization.
+
+### Container-Based Positioning Pattern
+
+1. **Create your PixiJS element** (button, sprite, container)
+2. **Create your HTML element**
+3. **Attach the HTML element to the PixiJS container** using `attachHtmlToPixiElement()`
+
+This ensures:
+- ✅ Perfect alignment (HTML position is calculated from container's world position)
+- ✅ Automatic scroll synchronization (containers move with canvas, so HTML moves too)
+- ✅ Transform support (rotations, scales, etc. handled automatically)
+- ✅ No coordinate conversion needed
+- ✅ No manual repositioning loops
+
+### Example: Input Field Beside a Button
+
+```javascript
+// 1. Create your PixiJS button
+const buttonContainer = createButton("Click Me", onClick);
+
+// 2. Create your HTML input
+const input = document.createElement('input');
+input.type = 'text';
+input.placeholder = 'Enter text...';
+input.style.width = '200px';
+input.style.padding = '8px';
+input.style.border = '2px solid #00d4ff';
+input.style.borderRadius = '4px';
+input.style.background = 'rgba(15, 15, 35, 0.9)';
+input.style.color = '#ffffff';
+document.body.appendChild(input);
+
+// 3. Attach HTML to PixiJS container
+aiSDK.attachHtmlToPixiElement(input, buttonContainer, {
+  offsetX: buttonContainer.width + 10, // Position to the right of button
+  offsetY: 0,
+  anchor: 'center-left', // Anchor point on the button
+  zIndex: 1000
+});
+
+// That's it! They're now perfectly synced forever.
+```
+
+### Helper: createInputForButton()
+
+For common cases, use the helper function:
+
+```javascript
+// Creates an input and attaches it automatically
+const input = aiSDK.createInputForButton(buttonContainer, {
+  placeholder: 'Enter text...',
+  width: 200,
+  inputId: 'my-input',
+  offsetX: 10, // Additional spacing
+  offsetY: 0
+});
+```
+
+### Helper: createHtmlElementForContainer()
+
+Create any HTML element and attach it:
+
+```javascript
+const div = aiSDK.createHtmlElementForContainer('div', pixiContainer, {
+  innerHTML: '<p>Some text</p>',
+  className: 'my-class',
+  id: 'my-element',
+  offsetX: 0,
+  offsetY: 0,
+  anchor: 'center',
+  zIndex: 1000,
+  styles: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    padding: '10px'
+  }
+});
+```
+
+### Anchor Points
+
+The `anchor` option determines which point on the PixiJS container the HTML element is positioned relative to:
+
+- `'center'` (default): Center of container
+- `'top-left'`, `'top-right'`, `'bottom-left'`, `'bottom-right'`: Corners
+- `'top'`, `'bottom'`, `'left'`, `'right'`: Edges
+- `'center-left'`, `'center-right'`, `'top-center'`, `'bottom-center'`: Center of edges
+
 ## Including the SDK in Your Interaction
 
 ### Option 1: Inline Script
@@ -453,11 +543,68 @@ if (profile) {
 
 ## Adding Input Fields for PixiJS Interactions
 
-For PixiJS category interactions, you can add HTML input fields that overlay on your PixiJS canvas. This allows users to enter text, prompts, or other data that your interaction can use.
+For PixiJS category interactions, you can add HTML input fields that are perfectly aligned with your PixiJS elements using the **container-based positioning approach**.
 
-### Step 1: Add Input Field to HTML Code
+### Recommended: Container-Based Positioning
 
-In the Interaction Builder, add your input field to the **HTML Code** section:
+**Always use container-based positioning** to ensure perfect alignment and automatic scroll synchronization:
+
+```javascript
+// 1. Create your PixiJS button
+const buttonContainer = createButton("Generate Image", onClick);
+
+// 2. Create input field in HTML (or via JavaScript)
+const input = document.createElement('input');
+input.type = 'text';
+input.id = 'my-input-field';
+input.placeholder = 'Enter prompt...';
+input.style.width = '280px';
+input.style.padding = '8px';
+input.style.border = '2px solid #00d4ff';
+input.style.borderRadius = '4px';
+input.style.background = 'rgba(15, 15, 35, 0.9)';
+input.style.color = '#ffffff';
+input.style.fontSize = '12px';
+document.body.appendChild(input);
+
+// 3. Attach input to button container
+aiSDK.attachHtmlToPixiElement(input, buttonContainer, {
+  offsetX: buttonContainer.width + 10, // Position to the right
+  offsetY: 0,
+  anchor: 'center-left',
+  zIndex: 1000
+});
+
+// 4. Listen for input changes
+input.addEventListener("input", (e) => {
+  const value = e.target.value;
+  console.log("User typed:", value);
+});
+```
+
+### Alternative: Using Helper Function
+
+For even simpler code, use the helper:
+
+```javascript
+// Creates input and attaches it automatically
+const input = aiSDK.createInputForButton(buttonContainer, {
+  placeholder: 'Enter prompt...',
+  width: 280,
+  inputId: 'my-input-field',
+  offsetX: 10
+});
+
+// Listen for changes
+input.addEventListener("input", (e) => {
+  const value = e.target.value;
+  // Use the value
+});
+```
+
+### Legacy: Manual Positioning (Not Recommended)
+
+If you must position inputs manually, add them to HTML:
 
 ```html
 <div id="pixi-container"></div>
@@ -465,40 +612,11 @@ In the Interaction Builder, add your input field to the **HTML Code** section:
   type="text" 
   id="my-input-field" 
   placeholder="Enter your text here..." 
-  style="position: absolute; left: 20px; top: 20px; width: 280px; padding: 8px; border: 2px solid #00d4ff; border-radius: 4px; background: rgba(15, 15, 35, 0.9); color: #ffffff; font-size: 12px; z-index: 1000;" 
+  style="position: absolute; left: 20px; top: 20px; width: 280px; padding: 8px; border: 2px solid #00d4ff; border-radius: 4px; background: rgba(15, 15, 35, 0.9); color: #ffffff; font-size: 12px; z-index: 1000; visibility: hidden;" 
 />
 ```
 
-**Important Styling:**
-- Use `position: absolute` to overlay the input on the canvas
-- Set `z-index: 1000` to ensure it appears above the PixiJS canvas
-- Position using `left` and `top` coordinates relative to the container
-- Style to match your interaction's theme
-
-### Step 2: Access Input in JavaScript Code
-
-In your **JavaScript Code** section, access the input field using `document.getElementById()`:
-
-```javascript
-// Get the input field
-const myInput = document.getElementById("my-input-field");
-
-if (!myInput) {
-  console.warn("Input field not found. Make sure HTML code includes the input element.");
-}
-
-// Listen for input changes
-if (myInput) {
-  myInput.addEventListener("input", (e) => {
-    const value = e.target.value;
-    console.log("User typed:", value);
-    // Update PixiJS UI, state, or trigger events
-  });
-  
-  // Get value when needed (e.g., when button is clicked)
-  const currentValue = myInput.value.trim();
-}
-```
+**Note:** Manual positioning requires complex coordinate conversion and doesn't handle scrolling well. Use container-based positioning instead.
 
 ### Example: Image Generation with Input Field
 

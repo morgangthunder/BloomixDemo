@@ -1262,22 +1262,56 @@ const createIframeAISDK = () => {
   const attachedHtmlElements = [];
   
   // Convert PixiJS world coordinates to HTML screen coordinates
+  // This properly accounts for canvas position, scroll, and viewport
   function convertPixiToScreen(pixiX, pixiY, pixiContainer) {
     if (!pixiContainer) {
       console.warn('[SDK] convertPixiToScreen: pixiContainer is required');
       return { x: pixiX, y: pixiY };
     }
     
-    // Get the global position of the container
-    const globalPos = pixiContainer.getGlobalPosition();
-    const screenX = globalPos.x;
-    const screenY = globalPos.y;
+    // Get the canvas element
+    const canvas = document.querySelector('canvas');
+    if (!canvas) {
+      console.warn('[SDK] convertPixiToScreen: canvas not found');
+      return { x: pixiX, y: pixiY };
+    }
     
-    // Account for container's local position
-    return {
-      x: screenX + pixiX,
-      y: screenY + pixiY
-    };
+    // Get the pixi-container element to account for scroll
+    const pixiContainerElement = document.getElementById('pixi-container');
+    const scrollX = pixiContainerElement ? pixiContainerElement.scrollLeft || 0 : 0;
+    const scrollY = pixiContainerElement ? pixiContainerElement.scrollTop || 0 : 0;
+    
+    // Get the global position of the container (in canvas coordinates)
+    const globalPos = pixiContainer.getGlobalPosition();
+    
+    // Get canvas bounding rect (accounts for viewport position)
+    const canvasRect = canvas.getBoundingClientRect();
+    
+    // Get pixi-container bounding rect to calculate relative position
+    const containerRect = pixiContainerElement ? pixiContainerElement.getBoundingClientRect() : null;
+    
+    // Convert canvas coordinates to screen coordinates
+    // For position: absolute within a scrolling container, positions are relative to the container's content
+    // The canvas is positioned within pixi-container, so we need: canvas offset in container + globalPos + local offset
+    // Note: We DON'T subtract scroll because absolute positioning within a scrolling container
+    // automatically accounts for scroll - the browser handles it
+    if (containerRect) {
+      // Calculate canvas position relative to pixi-container's content area (not viewport)
+      // canvasRect is viewport-relative, containerRect is viewport-relative
+      // We need the canvas position in the container's coordinate system
+      const canvasOffsetX = canvasRect.left - containerRect.left + scrollX;
+      const canvasOffsetY = canvasRect.top - containerRect.top + scrollY;
+      
+      // Position relative to pixi-container's content area
+      const relativeX = canvasOffsetX + globalPos.x + pixiX;
+      const relativeY = canvasOffsetY + globalPos.y + pixiY;
+      return { x: relativeX, y: relativeY };
+    } else {
+      // Fallback to viewport coordinates if container not found
+      const screenX = canvasRect.left + globalPos.x + pixiX;
+      const screenY = canvasRect.top + globalPos.y + pixiY;
+      return { x: screenX, y: screenY };
+    }
   }
   
   // Convert HTML screen coordinates to PixiJS world coordinates
@@ -1404,24 +1438,77 @@ const createIframeAISDK = () => {
   function updateHtmlElementPosition(attachment) {
     if (!attachment || !attachment.htmlElement || !attachment.pixiContainer) return;
     
+    // Check if HTML element is still in DOM
+    if (!attachment.htmlElement.isConnected) {
+      return; // Element removed from DOM
+    }
+    
     const screenPos = convertPixiToScreen(
       attachment.anchorOffsetX + attachment.offsetX,
       attachment.anchorOffsetY + attachment.offsetY,
       attachment.pixiContainer
     );
     
-    attachment.htmlElement.style.left = screenPos.x + 'px';
-    attachment.htmlElement.style.top = screenPos.y + 'px';
+    // Use absolute positioning relative to pixi-container so elements scroll with content
+    // The convertPixiToScreen function calculates position relative to pixi-container
+    const pixiContainerElement = document.getElementById('pixi-container');
+    if (pixiContainerElement) {
+      // Ensure pixi-container has position: relative for absolute positioning to work
+      if (window.getComputedStyle(pixiContainerElement).position === 'static') {
+        pixiContainerElement.style.position = 'relative';
+      }
+      
+      // Ensure the element is a child of pixi-container for proper scrolling
+      if (attachment.htmlElement.parentElement !== pixiContainerElement) {
+        pixiContainerElement.appendChild(attachment.htmlElement);
+      }
+      attachment.htmlElement.style.position = 'absolute';
+      attachment.htmlElement.style.left = screenPos.x + 'px';
+      attachment.htmlElement.style.top = screenPos.y + 'px';
+    } else {
+      // Fallback to fixed positioning if container not found
+      attachment.htmlElement.style.position = 'fixed';
+      attachment.htmlElement.style.left = screenPos.x + 'px';
+      attachment.htmlElement.style.top = screenPos.y + 'px';
+    }
+    attachment.htmlElement.style.zIndex = attachment.zIndex || 1000;
+    attachment.htmlElement.style.visibility = 'visible';
+    attachment.htmlElement.style.display = 'block';
   }
   
   // Update all attached HTML elements
   function updateAllAttachedHtml() {
     attachedHtmlElements.forEach(attachment => {
-      if (attachment.updateOnTransform) {
+      // Always update if updateOnTransform is true (default), or if explicitly set
+      if (attachment.updateOnTransform !== false) {
         updateHtmlElementPosition(attachment);
       }
     });
   }
+  
+  // Start automatic update loop for attached HTML elements
+  let htmlUpdateAnimationFrameId = null;
+  function startHtmlUpdateLoop() {
+    if (htmlUpdateAnimationFrameId !== null) {
+      return; // Already running
+    }
+    
+    function updateLoop() {
+      updateAllAttachedHtml();
+      htmlUpdateAnimationFrameId = requestAnimationFrame(updateLoop);
+    }
+    
+    htmlUpdateAnimationFrameId = requestAnimationFrame(updateLoop);
+    console.log('[SDK] Started HTML element update loop for container-based positioning');
+  }
+  
+  function stopHtmlUpdateLoop() {
+    if (htmlUpdateAnimationFrameId !== null) {
+      cancelAnimationFrame(htmlUpdateAnimationFrameId);
+      htmlUpdateAnimationFrameId = null;
+    }
+  }
+  
   
   // Detach HTML element from PixiJS element
   function detachHtmlFromPixiElement(htmlElement) {
@@ -1992,7 +2079,106 @@ const createIframeAISDK = () => {
         if (callback) callback(response, response.error); 
       });
     },
+    // HTML Element Positioning Helpers (Container-Based Approach)
+    // Helper: Create an input field positioned beside a button
+    createInputForButton: (buttonContainer, options = {}) => {
+      const {
+        placeholder = '',
+        width = 200,
+        inputId = null,
+        offsetX = 10,
+        offsetY = 0
+      } = options;
+      
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = placeholder;
+      input.style.width = width + 'px';
+      input.style.padding = '8px';
+      input.style.border = '2px solid #00d4ff';
+      input.style.borderRadius = '4px';
+      input.style.background = 'rgba(15, 15, 35, 0.9)';
+      input.style.color = '#ffffff';
+      input.style.fontSize = '12px';
+      
+      if (inputId) {
+        input.id = inputId;
+      }
+      
+      // Append to pixi-container so it scrolls with content
+      const pixiContainerElement = document.getElementById('pixi-container');
+      if (pixiContainerElement) {
+        pixiContainerElement.appendChild(input);
+      } else {
+        document.body.appendChild(input);
+      }
+      
+      // Attach to button container, positioned to the right
+      attachHtmlToPixiElement(input, buttonContainer, {
+        offsetX: (buttonContainer.width || 280) + offsetX,
+        offsetY: offsetY,
+        anchor: 'center-left',
+        zIndex: 1000
+      });
+      
+      return input;
+    },
+    // Helper: Create an HTML element and attach it to a PixiJS container
+    createHtmlElementForContainer: (tagName, pixiContainer, options = {}) => {
+      const {
+        className = '',
+        id = null,
+        innerHTML = '',
+        styles = {},
+        offsetX = 0,
+        offsetY = 0,
+        anchor = 'center',
+        zIndex = 1000
+      } = options;
+      
+      const element = document.createElement(tagName);
+      if (className) element.className = className;
+      if (id) element.id = id;
+      if (innerHTML) element.innerHTML = innerHTML;
+      
+      // Apply custom styles
+      Object.assign(element.style, {
+        padding: '8px',
+        background: 'rgba(15, 15, 35, 0.9)',
+        color: '#ffffff',
+        fontSize: '12px',
+        borderRadius: '4px',
+        ...styles
+      });
+      
+      // Append to pixi-container so it scrolls with content
+      const pixiContainerElement = document.getElementById('pixi-container');
+      if (pixiContainerElement) {
+        pixiContainerElement.appendChild(element);
+      } else {
+        document.body.appendChild(element);
+      }
+      
+      // Attach to container
+      attachHtmlToPixiElement(element, pixiContainer, {
+        offsetX: offsetX,
+        offsetY: offsetY,
+        anchor: anchor,
+        zIndex: zIndex
+      });
+      
+      return element;
+    },
+    // HTML Update Loop Control
+    startHtmlUpdateLoop: startHtmlUpdateLoop,
+    stopHtmlUpdateLoop: stopHtmlUpdateLoop,
+    updateAllAttachedHtml: updateAllAttachedHtml
   };
+  
+  // Start the HTML update loop automatically when SDK is created
+  startHtmlUpdateLoop();
+  
+  return aiSDK;
 };
 
 function initTestApp() {
@@ -2018,12 +2204,182 @@ function initTestApp() {
     resolution: window.devicePixelRatio || 1,
   });
   container.appendChild(app.view);
-  container.style.overflow = 'auto';
+  container.style.overflow = 'hidden'; // Prevent double scrollbars - scrolling handled by parent
   container.style.width = '100%';
   container.style.height = '100%';
+  
+  // Aggressively enforce overflow hidden on pixi-container
+  const pixiContainerElement = document.getElementById('pixi-container');
+  if (pixiContainerElement) {
+    pixiContainerElement.style.overflow = 'hidden';
+    pixiContainerElement.style.overflowX = 'hidden';
+    pixiContainerElement.style.overflowY = 'hidden';
+  }
+  
+  // Set up a MutationObserver to enforce overflow hidden if it gets changed
+  if (pixiContainerElement) {
+    const observer = new MutationObserver(() => {
+      if (pixiContainerElement.style.overflow !== 'hidden') {
+        pixiContainerElement.style.overflow = 'hidden';
+        pixiContainerElement.style.overflowX = 'hidden';
+        pixiContainerElement.style.overflowY = 'hidden';
+      }
+    });
+    observer.observe(pixiContainerElement, { attributes: true, attributeFilter: ['style'] });
+  }
+  
   const aiSDK = createIframeAISDK();
+  
+  // Restore image immediately if state exists and resize canvas
+  setTimeout(() => {
+    restoreDisplayedImage();
+    resizeCanvasToFitContent();
+  }, 100);
   // Make aiSDK available globally for debugging
   window.aiSDK = aiSDK;
+  
+  // HTML update loop is started automatically when SDK is created
+  // Update HTML elements when canvas resizes
+  app.renderer.on('resize', () => {
+    if (aiSDK && aiSDK.updateAllAttachedHtml) {
+      aiSDK.updateAllAttachedHtml();
+    }
+    // Ensure container overflow stays hidden
+    const pixiContainerElement = document.getElementById('pixi-container');
+    if (pixiContainerElement) {
+      pixiContainerElement.style.overflow = 'hidden';
+    }
+    // Restore displayed image after canvas resize
+    setTimeout(() => {
+      restoreDisplayedImage();
+      // Resize canvas to fit all content after restore
+      resizeCanvasToFitContent();
+    }, 100); // Delay to ensure resize is complete
+  });
+  
+  // Function to restore displayed image from stored state
+  function restoreDisplayedImage() {
+    // First check if sprite exists but was removed from stage
+    if (displayedImageSprite && app && app.stage && app.stage.children.indexOf(displayedImageSprite) === -1) {
+      console.log("[SDK Test] ⚠️ Re-adding displayed image to stage");
+      app.stage.addChild(displayedImageSprite);
+      app.render();
+      return;
+    }
+    
+    // Try to restore from localStorage if memory state is lost
+    if (!storedImageState) {
+      try {
+        const savedState = localStorage.getItem('sdk-test-image-state');
+        if (savedState) {
+          storedImageState = JSON.parse(savedState);
+          console.log("[SDK Test] 🔄 Restored image state from localStorage:", storedImageState);
+        }
+      } catch (e) {
+        console.warn("[SDK Test] ⚠️ Could not restore from localStorage:", e);
+      }
+    }
+    
+    // Then check if we need to restore from stored state
+    if (storedImageState && (!displayedImageSprite || (app && app.stage && app.stage.children.indexOf(displayedImageSprite) === -1))) {
+      console.log("[SDK Test] 🔄 Restoring displayed image from stored state:", storedImageState);
+      const dataUrl = storedImageState.url.startsWith("data:") ? storedImageState.url : (storedImageState.url.startsWith("http") ? storedImageState.url : "data:image/png;base64," + storedImageState.url);
+      PIXI.Assets.load(dataUrl).then((texture) => {
+        if (!app || !app.stage) {
+          console.warn("[SDK Test] ⚠️ App or stage not available for image restoration");
+          return;
+        }
+        displayedImageSprite = new PIXI.Sprite(texture);
+        displayedImageSprite.width = storedImageState.width;
+        displayedImageSprite.height = storedImageState.height;
+        displayedImageSprite.x = storedImageState.x;
+        displayedImageSprite.y = storedImageState.y;
+        app.stage.addChild(displayedImageSprite);
+        
+        // Resize canvas to fit restored image
+        const currentHeight = app.screen.height;
+        const newHeight = Math.max(currentHeight, displayedImageSprite.y + displayedImageSprite.height + 100);
+        app.renderer.resize(Math.max(window.innerWidth, 800), newHeight);
+        
+        app.render();
+        console.log("[SDK Test] ✅ Image restored successfully, canvas resized to:", newHeight);
+      }).catch((error) => {
+        console.error("[SDK Test] ❌ Error restoring image:", error);
+        storedImageState = null; // Clear invalid state
+        try {
+          localStorage.removeItem('sdk-test-image-state');
+        } catch (e) {
+          // Ignore
+        }
+      });
+    }
+  }
+  
+  // Function to resize canvas to fit all content
+  function resizeCanvasToFitContent() {
+    if (!app || !app.renderer) return;
+    
+    let contentBottom = 0;
+    
+    // Check displayed image
+    if (displayedImageSprite) {
+      contentBottom = Math.max(contentBottom, displayedImageSprite.y + displayedImageSprite.height);
+    }
+    
+    // Check gallery - calculate actual height based on number of images and rows
+    if (imageGalleryContainer && recalledImages.length > 0) {
+      const maxImagesPerRow = 3;
+      const imageSize = 200;
+      const rows = Math.ceil(recalledImages.length / maxImagesPerRow);
+      const rowHeight = imageSize + 110; // Height per row including spacing
+      const galleryTitleHeight = 50; // Title height
+      const actualGalleryHeight = galleryTitleHeight + (rows * rowHeight);
+      const galleryBottom = imageGalleryContainer.y + actualGalleryHeight;
+      contentBottom = Math.max(contentBottom, galleryBottom);
+      console.log("[SDK Test] 📐 Gallery height calculated:", actualGalleryHeight, "rows:", rows, "bottom:", galleryBottom);
+    }
+    
+    // Check image IDs container
+    if (imageIdsDisplayContainer) {
+      const idsBottom = imageIdsDisplayContainer.y + (imageIdsDisplayContainer.height || 0);
+      contentBottom = Math.max(contentBottom, idsBottom);
+    }
+    
+    // Add padding
+    const newHeight = Math.max(app.screen.height, contentBottom + 100);
+    app.renderer.resize(Math.max(window.innerWidth, 800), newHeight);
+    console.log("[SDK Test] 🔄 Canvas resized to fit content, height:", newHeight, "contentBottom:", contentBottom);
+  }
+  
+  // Update HTML elements on window resize
+  window.addEventListener('resize', () => {
+    if (aiSDK && aiSDK.updateAllAttachedHtml) {
+      aiSDK.updateAllAttachedHtml();
+    }
+    // Ensure container overflow stays hidden
+    const pixiContainerElement = document.getElementById('pixi-container');
+    if (pixiContainerElement) {
+      pixiContainerElement.style.overflow = 'hidden';
+    }
+    // Restore displayed image after window resize (handles mobile/desktop view switching)
+    setTimeout(() => {
+      restoreDisplayedImage();
+      // Resize canvas to fit all content after restore
+      resizeCanvasToFitContent();
+    }, 200); // Longer delay to ensure canvas is fully ready after viewport change
+  });
+  
+  // Update HTML elements when pixi-container scrolls
+  const pixiContainerElement = document.getElementById('pixi-container');
+  if (pixiContainerElement && aiSDK) {
+    pixiContainerElement.addEventListener('scroll', () => {
+      if (aiSDK && aiSDK.updateAllAttachedHtml) {
+        aiSDK.updateAllAttachedHtml();
+      }
+      // Restore displayed image during scroll if needed
+      restoreDisplayedImage();
+    }, { passive: true });
+  }
   let sdkReady = false;
   const isPreviewMode = !window.parent || window.parent === window || (window.parent.location && window.parent.location.href.includes('blob:'));
   let statusText = null;
@@ -2107,7 +2463,22 @@ function initTestApp() {
   let generatedImageUrl = null;
   let generatedImageData = null;
   let imageReady = false;
+  let isGenerating = false; // Track if image generation is in progress
   let displayedImageSprite = null;
+  // Store image state for restoration after viewport changes
+  let storedImageState = null; // { url, x, y, width, height }
+  
+  // Try to restore image state from localStorage on initialization
+  try {
+    const savedState = localStorage.getItem('sdk-test-image-state');
+    if (savedState) {
+      storedImageState = JSON.parse(savedState);
+      console.log("[SDK Test] 🔄 Restored image state from localStorage on init:", storedImageState);
+    }
+  } catch (e) {
+    console.warn("[SDK Test] ⚠️ Could not restore image state from localStorage:", e);
+  }
+  
   let recalledImages = [];
   let imageGalleryContainer = null;
   let lessonImageIds = []; // Track image IDs for this lesson
@@ -2131,12 +2502,20 @@ function initTestApp() {
       lowestY = Math.max(lowestY, statusBottom);
     }
     
-    // Check image IDs display
+    // Check image IDs display (both PixiJS container and HTML container)
     if (imageIdsDisplayContainer && imageIdsDisplayContainer.y !== undefined) {
       let containerHeight = 25; // Header height
-      lessonImageIds.forEach(() => {
-        containerHeight += 20; // Approximate height per ID line
-      });
+      // Account for the HTML container height (which is attached to the PixiJS container)
+      if (imageIdsHtmlContainer) {
+        // Get actual height of HTML container which includes all IDs
+        const htmlHeight = imageIdsHtmlContainer.getBoundingClientRect().height || 0;
+        containerHeight = htmlHeight + 25; // HTML height + header height
+      } else {
+        // Fallback: estimate based on number of IDs if HTML container not available
+        lessonImageIds.forEach(() => {
+          containerHeight += 20; // Approximate height per ID line
+        });
+      }
       const idsBottom = imageIdsDisplayContainer.y + containerHeight;
       lowestY = Math.max(lowestY, idsBottom);
     }
@@ -2197,7 +2576,7 @@ function initTestApp() {
     imageIdsDisplayContainer.x = 20;
     // Position below the lowest element with safe spacing to prevent overlap
     const lowestBottom = getLowestElementBottom();
-    imageIdsDisplayContainer.y = Math.max(currentYPos + 50, lowestBottom + 40); // 40px spacing after lowest element
+    imageIdsDisplayContainer.y = Math.max(currentYPos + 50, lowestBottom + 20); // 20px spacing after lowest element
     
     const labelText = new PIXI.Text("Lesson Image IDs:", { fontSize: 14, fill: 0x00d4ff, fontWeight: "bold" });
     labelText.x = 0;
@@ -2213,12 +2592,6 @@ function initTestApp() {
       return;
     }
     
-    const canvas = document.querySelector('canvas');
-    if (!canvas) {
-      console.error('[SDK Test] canvas not found!');
-      return;
-    }
-    
     console.log('[SDK Test] Creating image IDs HTML container, lessonImageIds.length:', lessonImageIds.length);
     console.log('[SDK Test] pixi-container styles:', {
       position: window.getComputedStyle(pixiContainer).position,
@@ -2227,49 +2600,10 @@ function initTestApp() {
       height: window.getComputedStyle(pixiContainer).height
     });
     
-    // Calculate position relative to canvas (not viewport)
-    // The header is at imageIdsDisplayContainer.y, so position HTML container below it
-    // Use the PixiJS container's position to convert canvas coordinates to DOM coordinates
-    const canvas = document.querySelector('canvas');
-    const canvasRect = canvas ? canvas.getBoundingClientRect() : null;
-    const pixiContainerRect = pixiContainer.getBoundingClientRect();
-    
-    // Get the PixiJS container's scroll position
-    const scrollTop = pixiContainer.scrollTop || 0;
-    const scrollLeft = pixiContainer.scrollLeft || 0;
-    
-    // Calculate header Y position in canvas coordinates
-    const headerY = imageIdsDisplayContainer.y + 25; // Below the header label
-    
-    // Convert to DOM coordinates: canvas Y + container scroll offset
-    // Since the HTML container is positioned relative to pixi-container, we need to account for scroll
-    const domTop = headerY + scrollTop;
-    
-    console.log('[SDK Test] Image IDs positioning:', {
-      pixiY: imageIdsDisplayContainer.y,
-      headerY: headerY,
-      scrollTop: scrollTop,
-      domTop: domTop,
-      canvasRect: canvasRect ? { top: canvasRect.top, left: canvasRect.left } : null,
-      pixiContainerRect: { top: pixiContainerRect.top, left: pixiContainerRect.left }
-    });
-    
+    // Create HTML container for selectable image IDs
+    // Use container-based positioning: attach HTML to the PixiJS container
     imageIdsHtmlContainer = document.createElement('div');
     imageIdsHtmlContainer.id = 'image-ids-html-container';
-    // Position relative to pixi-container so it scrolls with canvas content
-    imageIdsHtmlContainer.style.position = 'absolute';
-    imageIdsHtmlContainer.style.left = '50px'; // 30px (container x: 20) + 10px padding + 20px for alignment
-    imageIdsHtmlContainer.style.top = domTop + 'px'; // Position below header in DOM coordinates
-    // Use a low positive z-index - high enough to be visible, low enough to not block buttons
-    // But position it below buttons so it doesn't overlap
-    imageIdsHtmlContainer.style.zIndex = '10'; // Low positive z-index - visible but below inputs (1000)
-    // Use pointer-events: none on container, auto on text elements
-    // This allows clicks to pass through to buttons underneath while still allowing text selection
-    imageIdsHtmlContainer.style.pointerEvents = 'none'; // Allow clicks to pass through to canvas buttons
-    // Ensure container is visible
-    imageIdsHtmlContainer.style.visibility = 'visible';
-    imageIdsHtmlContainer.style.display = 'block';
-    imageIdsHtmlContainer.style.opacity = '1';
     imageIdsHtmlContainer.style.backgroundColor = 'rgba(15, 15, 35, 0.9)';
     imageIdsHtmlContainer.style.padding = '5px 10px';
     imageIdsHtmlContainer.style.borderRadius = '4px';
@@ -2277,9 +2611,10 @@ function initTestApp() {
     imageIdsHtmlContainer.style.fontSize = '12px';
     imageIdsHtmlContainer.style.color = '#ffffff';
     imageIdsHtmlContainer.style.lineHeight = '1.5';
-    imageIdsHtmlContainer.style.userSelect = 'text'; // Enable text selection
+    imageIdsHtmlContainer.style.userSelect = 'text';
     imageIdsHtmlContainer.style.cursor = 'text';
     imageIdsHtmlContainer.style.maxWidth = (window.innerWidth - 80) + 'px';
+    imageIdsHtmlContainer.style.pointerEvents = 'none'; // Allow clicks to pass through to canvas buttons
     
     // Add each image ID as a selectable line
     lessonImageIds.forEach((imageId, index) => {
@@ -2292,95 +2627,42 @@ function initTestApp() {
       imageIdsHtmlContainer.appendChild(idLine);
     });
     
-    // Ensure pixi-container has position: relative for absolute positioning to work
-    if (pixiContainer.style.position !== 'relative' && pixiContainer.style.position !== 'absolute') {
-      pixiContainer.style.position = 'relative';
-      console.log('[SDK Test] Set pixi-container position to relative');
+    // Append to body first (required for attachHtmlToPixiElement)
+    document.body.appendChild(imageIdsHtmlContainer);
+    
+    // Attach to the PixiJS container using container-based positioning
+    // This ensures perfect alignment and automatic scroll synchronization
+    if (aiSDK && aiSDK.attachHtmlToPixiElement) {
+      aiSDK.attachHtmlToPixiElement(imageIdsHtmlContainer, imageIdsDisplayContainer, {
+        offsetX: 30, // Align with container x position (20) + padding
+        offsetY: 25, // Position below header label
+        anchor: 'top-left',
+        zIndex: 100, // Higher z-index to ensure visibility above canvas
+        updateOnTransform: true // Update position during scroll
+      });
+      console.log('[SDK Test] ✅ Image IDs HTML container attached to PixiJS container using container-based positioning');
+    } else {
+      console.warn('[SDK Test] ⚠️ attachHtmlToPixiElement not available, falling back to manual positioning');
     }
     
-    // Check if container already exists and remove it first
-    const existing = document.getElementById('image-ids-html-container');
-    if (existing) {
-      console.log('[SDK Test] Removing existing image IDs HTML container');
-      existing.remove();
+    // Resize canvas to fit content, but preserve displayed image
+    // Calculate the bottom of all content including displayed image
+    let contentBottom = imageIdsDisplayContainer.y + (lessonImageIds.length * 20) + 30;
+    if (displayedImageSprite) {
+      // Include displayed image in height calculation
+      contentBottom = Math.max(contentBottom, displayedImageSprite.y + displayedImageSprite.height + 20);
     }
-    
-    // Append to pixi-container so it scrolls with the canvas
-    pixiContainer.appendChild(imageIdsHtmlContainer);
-    console.log('[SDK Test] Image IDs HTML container appended to pixi-container, parent:', imageIdsHtmlContainer.parentElement?.id);
-    console.log('[SDK Test] Container computed styles after append:', {
-      display: window.getComputedStyle(imageIdsHtmlContainer).display,
-      visibility: window.getComputedStyle(imageIdsHtmlContainer).visibility,
-      position: window.getComputedStyle(imageIdsHtmlContainer).position,
-      zIndex: window.getComputedStyle(imageIdsHtmlContainer).zIndex,
-      top: window.getComputedStyle(imageIdsHtmlContainer).top,
-      left: window.getComputedStyle(imageIdsHtmlContainer).left
-    });
-    
-    // Function to update HTML container position when canvas content moves
-    // (e.g., when new content is added above it)
-    function updateImageIdsHtmlPosition() {
-      if (!imageIdsHtmlContainer || !imageIdsDisplayContainer || !pixiContainer) return;
-      const scrollTop = pixiContainer.scrollTop || 0;
-      const headerY = imageIdsDisplayContainer.y + 25;
-      const domTop = headerY + scrollTop;
-      imageIdsHtmlContainer.style.top = domTop + 'px';
-      // Ensure it stays visible
-      imageIdsHtmlContainer.style.visibility = 'visible';
-      imageIdsHtmlContainer.style.display = 'block';
-      console.log('[SDK Test] Updated image IDs HTML position:', { headerY, scrollTop, domTop });
-    }
-    
-    // Update position when canvas resizes (content might shift)
-    if (app && app.renderer) {
-      app.renderer.on('resize', updateImageIdsHtmlPosition);
-    }
-    
-    // Resize canvas to fit content
-    const containerBottom = imageIdsDisplayContainer.y + (lessonImageIds.length * 20) + 30;
     const currentHeight = app.screen.height;
-    const newHeight = Math.max(currentHeight, containerBottom + 100);
+    const newHeight = Math.max(currentHeight, contentBottom + 100);
     app.renderer.resize(Math.max(window.innerWidth, 800), newHeight);
     
-    // Update position after canvas resize
-    setTimeout(updateImageIdsHtmlPosition, 100);
-    
-    // Force initial visibility check and verify it's in the DOM
-    setTimeout(() => {
-      if (imageIdsHtmlContainer) {
-        const rect = imageIdsHtmlContainer.getBoundingClientRect();
-        const isInDOM = document.body.contains(imageIdsHtmlContainer) || pixiContainer.contains(imageIdsHtmlContainer);
-        const computedStyle = window.getComputedStyle(imageIdsHtmlContainer);
-        console.log('[SDK Test] Image IDs HTML container status:', {
-          visible: imageIdsHtmlContainer.style.visibility,
-          display: imageIdsHtmlContainer.style.display,
-          computedDisplay: computedStyle.display,
-          zIndex: imageIdsHtmlContainer.style.zIndex,
-          top: imageIdsHtmlContainer.style.top,
-          left: imageIdsHtmlContainer.style.left,
-          parent: imageIdsHtmlContainer.parentElement?.id,
-          inDOM: isInDOM,
-          boundingRect: { width: rect.width, height: rect.height, top: rect.top, left: rect.left },
-          hasChildren: imageIdsHtmlContainer.children.length,
-          firstChildText: imageIdsHtmlContainer.children[0]?.textContent?.substring(0, 50)
-        });
-        
-        // If not visible, try to force it
-        if (rect.width === 0 || rect.height === 0 || !isInDOM || computedStyle.display === 'none') {
-          console.warn('[SDK Test] Image IDs container not visible, attempting to fix...');
-          imageIdsHtmlContainer.style.visibility = 'visible';
-          imageIdsHtmlContainer.style.display = 'block';
-          imageIdsHtmlContainer.style.opacity = '1';
-          if (!isInDOM) {
-            pixiContainer.appendChild(imageIdsHtmlContainer);
-          }
-          // Force a reflow
-          imageIdsHtmlContainer.offsetHeight;
-        }
-      } else {
-        console.error('[SDK Test] Image IDs HTML container is null!');
-      }
-    }, 200);
+    // Ensure displayed image is still visible after resize
+    if (displayedImageSprite && app.stage.children.indexOf(displayedImageSprite) === -1) {
+      // Image was accidentally removed, re-add it
+      console.log("[SDK Test] ⚠️ Re-adding displayed image after canvas resize");
+      app.stage.addChild(displayedImageSprite);
+      app.render();
+    }
   }
   
   // Create button with input field beside it
@@ -2391,6 +2673,15 @@ function initTestApp() {
       updateStatus("Please enter an image prompt first", 0xff0000);
       return;
     }
+    
+    // Prevent multiple simultaneous requests
+    if (isGenerating) {
+      console.log("[SDK Test] ⚠️ Image generation already in progress, ignoring duplicate click");
+      updateStatus("Image generation already in progress...", 0xffff00);
+      return;
+    }
+    
+    isGenerating = true;
     updateStatus("Generating image...", 0xffff00);
     imageReady = false;
     generatedImageUrl = null;
@@ -2399,6 +2690,12 @@ function initTestApp() {
     if (displayedImageSprite) {
       app.stage.removeChild(displayedImageSprite);
       displayedImageSprite = null;
+      storedImageState = null; // Clear stored state when generating new image
+      try {
+        localStorage.removeItem('sdk-test-image-state');
+      } catch (e) {
+        // Ignore
+      }
     }
     if (imageGalleryContainer) {
       console.log("[SDK Test] 🗑️ Removing gallery before generating new image");
@@ -2435,6 +2732,8 @@ function initTestApp() {
       // Input repositioning will happen AFTER image is loaded and displayed
       // (see loadAndDisplayImage function)
       
+      isGenerating = false; // Reset generation flag
+      
       if (response.success) {
         if (response.imageUrl) {
           generatedImageUrl = response.imageUrl;
@@ -2458,6 +2757,7 @@ function initTestApp() {
           loadAndDisplayImage(response.imageData);
         } else {
           updateStatus("Image generated but no URL/data returned", 0xffff00);
+          imageReady = false;
         }
         
         // Add image ID to the list if provided
@@ -2476,6 +2776,7 @@ function initTestApp() {
         
         aiSDK.emitEvent({ type: "image-generated", data: { imageUrl: response.imageUrl, imageData: response.imageData, requestId: response.requestId, imageId: response.imageId }, requiresLLMResponse: false });
       } else {
+        isGenerating = false; // Reset generation flag on error
         updateStatus("Error: " + (response.error || "Unknown error"), 0xff0000);
         imageReady = false;
         // Continuous positioning loop will handle repositioning automatically
@@ -2487,49 +2788,33 @@ function initTestApp() {
     });
   });
   
-  // Position the prompt input beside the button using SDK utility
-  // Use multiple timeouts to ensure button is fully rendered before positioning
-  console.log("[SDK Test] 🔍 About to position image prompt input - promptInput:", !!promptInput, "requestImageButton:", !!requestImageButton, "aiSDK:", !!aiSDK);
-  
-  const positionPromptInput = () => {
-    if (promptInput && requestImageButton && aiSDK) {
-      console.log("[SDK Test] 🎯 Executing positioning for image prompt input");
-      try {
-        if (!aiSDK.positionInputBesideButton) {
-          console.error("[SDK Test] ❌ aiSDK.positionInputBesideButton is not a function!");
-          // Fallback: make input visible at current position
-          promptInput.style.visibility = "visible";
-          console.log("[SDK Test] ✅ Made input visible as fallback");
-        } else {
-          aiSDK.positionInputBesideButton(promptInput, requestImageButton, 0, 2, buttonWidth);
-          promptInput.style.visibility = "visible";
-          promptInput.style.display = "block";
-          console.log("[SDK Test] ✅ Image prompt input positioned successfully");
-        }
-      } catch (e) {
-        console.error("[SDK Test] ❌ Error positioning image prompt input:", e);
-        // Fallback: make input visible at current position
-        promptInput.style.visibility = "visible";
-        promptInput.style.display = "block";
-        console.log("[SDK Test] ✅ Made input visible after error");
-      }
+    // Attach prompt input to button using container-based positioning
+    // This ensures perfect alignment and automatic scroll synchronization
+    if (promptInput && requestImageButton && aiSDK && aiSDK.attachHtmlToPixiElement) {
+      console.log("[SDK Test] ✅ Attaching prompt input to button using container-based positioning");
+      // Use 'right' anchor to position from the right edge of the button, then add 10px spacing
+      // 'right' anchor is at vertical center of button (buttonHeight/2 = 20px from top)
+      // For perfect alignment, we need to account for the input's own height
+      // The anchor point is at the button's center, so we offset by half the input height upward
+      // to align the input's center with the button's center
+      const buttonHeight = 40; // buttonHeight constant
+      // Force a reflow to ensure input is measured correctly
+      promptInput.style.display = 'block';
+      promptInput.style.visibility = 'visible';
+      // Move input up by half the button height (20px) to align with button center
+      const verticalOffset = -buttonHeight / 2; // -20px to move up by half button height
+      
+      aiSDK.attachHtmlToPixiElement(promptInput, requestImageButton, {
+        offsetX: 10, // 10px spacing after button right edge
+        offsetY: verticalOffset, // Center vertically with button (negative to align centers)
+        anchor: 'right', // Anchor to right edge of button for consistent alignment
+        zIndex: 1000,
+        updateOnTransform: true // Update position during scroll
+      });
+      console.log("[SDK Test] ✅ Prompt input attached to button container");
+    } else {
+      console.warn("[SDK Test] ⚠️ Cannot attach prompt input - missing dependencies");
     }
-  };
-  
-  // Try multiple times with increasing delays to ensure button is rendered
-  if (promptInput && requestImageButton && aiSDK) {
-    console.log("[SDK Test] ✅ All conditions met, scheduling positioning attempts");
-    setTimeout(positionPromptInput, 100);
-    setTimeout(positionPromptInput, 300);
-    setTimeout(positionPromptInput, 500);
-  } else {
-    console.warn("[SDK Test] ⚠️ Cannot position image prompt input - promptInput:", !!promptInput, "requestImageButton:", !!requestImageButton, "aiSDK:", !!aiSDK);
-    // Fallback: make input visible at current position
-    if (promptInput) {
-      promptInput.style.visibility = "visible";
-      console.log("[SDK Test] ✅ Made input visible as fallback (missing dependencies)");
-    }
-  }
   
   // IMAGE RECALL SECTION - Positioned right after image generation so buttons are visible together
   yPos += 20;
@@ -2626,103 +2911,67 @@ function initTestApp() {
         console.log("[SDK Test] Retrieved images:", recalledImages.length, recalledImages);
         updateStatus("Found " + recalledImages.length + " image(s)", 0x00ff00);
         
-        // Display gallery and wait for it to fully render before repositioning
+        // Display gallery - container-based positioning handles alignment automatically
         displayImageGallery(() => {
           // Gallery is fully rendered
-          // Continuous positioning loop will handle repositioning automatically
-          // Force immediate reposition to ensure inputs are aligned right away
-          if (aiSDK && aiSDK.repositionAllInputs) {
-            aiSDK.repositionAllInputs();
-          }
+          // Container-based positioning handles repositioning automatically
         });
       });
     });
   });
   
-  // Position input fields beside the button (stacked vertically) using SDK utilities
-  // Use setTimeout to ensure button is fully rendered before positioning
-  console.log("[SDK Test] About to position lesson/image ID inputs - lessonIdInput:", !!lessonIdInput, "imageIdInput:", !!imageIdInput, "getLessonImagesButton:", !!getLessonImagesButton, "aiSDK:", !!aiSDK);
-  
-  const positionLessonInputs = () => {
-    if (lessonIdInput && getLessonImagesButton) {
-      console.log("[SDK Test] Executing positioning for lesson ID input");
-      try {
-        if (aiSDK && aiSDK.positionInputBesideButton) {
-          aiSDK.positionInputBesideButton(lessonIdInput, getLessonImagesButton, 0, 2, buttonWidth);
-          lessonIdInput.style.visibility = "visible";
-          lessonIdInput.style.display = "block";
-          lessonIdInput.style.zIndex = "1000";
-          console.log("[SDK Test] ✅ Lesson ID input positioned using SDK");
-        } else {
-          console.warn("[SDK Test] ⚠️ aiSDK.positionInputBesideButton not available, using direct positioning");
-          const canvas = lessonIdInput.ownerDocument.querySelector('canvas');
-          if (canvas && getLessonImagesButton.getGlobalPosition) {
-            const canvasRect = canvas.getBoundingClientRect();
-            const globalPos = getLessonImagesButton.getGlobalPosition();
-            const buttonScreenX = canvasRect.left + globalPos.x;
-            const buttonScreenY = canvasRect.top + globalPos.y;
-            
-            let inputX = buttonScreenX + buttonWidth + 10;
-            let inputY = buttonScreenY + 2;
-            
-            lessonIdInput.style.position = "absolute";
-            lessonIdInput.style.left = inputX + "px";
-            lessonIdInput.style.top = inputY + "px";
-            lessonIdInput.style.zIndex = "1000";
-            lessonIdInput.style.visibility = "visible";
-            console.log("[SDK Test] ✅ Lesson ID input positioned directly at", inputX, inputY);
-          } else {
-            lessonIdInput.style.visibility = "visible";
-          }
-        }
-      } catch (e) {
-        console.error("[SDK Test] ❌ Error positioning lesson ID input:", e);
-        lessonIdInput.style.visibility = "visible";
-      }
-    }
+  // Attach input fields to button using container-based positioning for consistency
+  // This ensures all inputs are aligned horizontally and scroll together
+  if (lessonIdInput && getLessonImagesButton && aiSDK && aiSDK.attachHtmlToPixiElement) {
+    console.log("[SDK Test] ✅ Attaching lesson ID input to button using container-based positioning");
+    // Use 'right' anchor to position from the right edge of the button, then add 10px spacing
+    // Calculate vertical offset to center input with button
+    const buttonHeight = 40; // buttonHeight constant
+    lessonIdInput.style.display = 'block';
+    lessonIdInput.style.visibility = 'visible';
+    // Move input up by half the button height (20px) to align with button center
+    const verticalOffset = -buttonHeight / 2; // -20px to move up by half button height
     
-    if (imageIdInput && getLessonImagesButton) {
-      console.log("[SDK Test] Executing positioning for image ID input");
-      try {
-        if (aiSDK && aiSDK.positionInputBesideButton) {
-          aiSDK.positionInputBesideButton(imageIdInput, getLessonImagesButton, 0, 32, buttonWidth); // 32px below lesson ID input
-          imageIdInput.style.visibility = "visible";
-          imageIdInput.style.display = "block";
-          imageIdInput.style.zIndex = "1000";
-          console.log("[SDK Test] ✅ Image ID input positioned using SDK");
-        } else {
-          console.warn("[SDK Test] ⚠️ aiSDK.positionInputBesideButton not available, using direct positioning");
-          const canvas = imageIdInput.ownerDocument.querySelector('canvas');
-          if (canvas && getLessonImagesButton.getGlobalPosition) {
-            const canvasRect = canvas.getBoundingClientRect();
-            const globalPos = getLessonImagesButton.getGlobalPosition();
-            const buttonScreenX = canvasRect.left + globalPos.x;
-            const buttonScreenY = canvasRect.top + globalPos.y;
-            
-            let inputX = buttonScreenX + buttonWidth + 10;
-            let inputY = buttonScreenY + 32; // 30px below lesson ID input
-            
-            imageIdInput.style.position = "absolute";
-            imageIdInput.style.left = inputX + "px";
-            imageIdInput.style.top = inputY + "px";
-            imageIdInput.style.zIndex = "1000";
-            imageIdInput.style.visibility = "visible";
-            console.log("[SDK Test] ✅ Image ID input positioned directly at", inputX, inputY);
-          } else {
-            imageIdInput.style.visibility = "visible";
-          }
-        }
-      } catch (e) {
-        console.error("[SDK Test] ❌ Error positioning image ID input:", e);
-        imageIdInput.style.visibility = "visible";
-      }
-    }
-  };
+    aiSDK.attachHtmlToPixiElement(lessonIdInput, getLessonImagesButton, {
+      offsetX: 10, // 10px spacing after button right edge (same as prompt input)
+      offsetY: verticalOffset, // Center vertically with button (negative to align centers)
+      anchor: 'right', // Anchor to right edge of button for consistent alignment
+      zIndex: 1000,
+      updateOnTransform: true // Update position during scroll
+    });
+    console.log("[SDK Test] ✅ Lesson ID input attached to button container");
+  } else {
+    console.warn("[SDK Test] ⚠️ Cannot attach lesson ID input - missing dependencies");
+  }
   
-  // Wait for button to be fully rendered before positioning - use longer delays
-  setTimeout(positionLessonInputs, 100);
-  setTimeout(positionLessonInputs, 300);
-  setTimeout(positionLessonInputs, 500);
+  if (imageIdInput && getLessonImagesButton && aiSDK && aiSDK.attachHtmlToPixiElement) {
+    console.log("[SDK Test] ✅ Attaching image ID input to button using container-based positioning");
+    // Use 'right' anchor to position from the right edge of the button, then add 10px spacing
+    // Position below lesson ID input (which is at button center, so add input height + spacing)
+    const buttonHeight = 40; // buttonHeight constant
+    lessonIdInput.style.display = 'block';
+    lessonIdInput.style.visibility = 'visible';
+    imageIdInput.style.display = 'block';
+    imageIdInput.style.visibility = 'visible';
+    const lessonInputHeight = lessonIdInput ? (lessonIdInput.offsetHeight || 28) : 28;
+    const imageInputHeight = imageIdInput.offsetHeight || 28;
+    // Position below lesson ID input: button center + half lesson input height + spacing + half image input height
+    const verticalOffset = lessonInputHeight / 2 + 2 + imageInputHeight / 2;
+    
+    aiSDK.attachHtmlToPixiElement(imageIdInput, getLessonImagesButton, {
+      offsetX: 10, // 10px spacing after button right edge (same as prompt input)
+      offsetY: verticalOffset, // Position below lesson ID input
+      anchor: 'right', // Anchor to right edge of button for consistent alignment
+      zIndex: 1000,
+      updateOnTransform: true // Update position during scroll
+    });
+    console.log("[SDK Test] ✅ Image ID input attached to button container");
+  } else {
+    console.warn("[SDK Test] ⚠️ Cannot attach image ID input - missing dependencies");
+  }
+  
+  // Inputs are now attached using container-based positioning above
+  // No need for setTimeout calls - positioning happens automatically
   
   if (!lessonIdInput || !getLessonImagesButton) {
     console.warn("[SDK Test] ⚠️ Missing inputs or button - lessonIdInput:", !!lessonIdInput, "imageIdInput:", !!imageIdInput, "getLessonImagesButton:", !!getLessonImagesButton);
@@ -2783,26 +3032,49 @@ function initTestApp() {
     });
   });
   
-  // Position delete image input field beside the button
-  if (deleteImageIdInput && deleteImageButton) {
-    setTimeout(() => {
-      if (aiSDK && aiSDK.positionInputBesideButton) {
-        aiSDK.positionInputBesideButton(deleteImageIdInput, deleteImageButton, 0, 0, buttonWidth);
-        deleteImageIdInput.style.visibility = "visible";
-        deleteImageIdInput.style.display = "block";
-        deleteImageIdInput.style.zIndex = "1000";
-      }
-    }, 600);
+  // Attach delete image input field to button using container-based positioning
+  if (deleteImageIdInput && deleteImageButton && aiSDK && aiSDK.attachHtmlToPixiElement) {
+    console.log("[SDK Test] ✅ Attaching delete image ID input to button using container-based positioning");
+    // Use 'right' anchor to position from the right edge of the button, then add 10px spacing
+    // Calculate vertical offset to center input with button
+    const buttonHeight = 40; // buttonHeight constant
+    deleteImageIdInput.style.display = 'block';
+    deleteImageIdInput.style.visibility = 'visible';
+    // Move input up by half the button height (20px) to align with button center
+    const verticalOffset = -buttonHeight / 2; // -20px to move up by half button height
+    
+    aiSDK.attachHtmlToPixiElement(deleteImageIdInput, deleteImageButton, {
+      offsetX: 10, // 10px spacing after button right edge (same as other inputs)
+      offsetY: verticalOffset, // Center vertically with button (negative to align centers)
+      anchor: 'right', // Anchor to right edge of button for consistent alignment
+      zIndex: 1000,
+      updateOnTransform: true // Update position during scroll
+    });
+    console.log("[SDK Test] ✅ Delete image ID input attached to button container");
+  } else {
+    console.warn("[SDK Test] ⚠️ Cannot attach delete image ID input - missing dependencies");
   }
   
   // Function to load and display image in PixiJS canvas
   function loadAndDisplayImage(imageSource) {
+    if (!imageSource) {
+      console.error("[SDK Test] ❌ loadAndDisplayImage called with no image source");
+      updateStatus("Error: No image data to display", 0xff0000);
+      return;
+    }
+    
+    console.log("[SDK Test] 🖼️ Loading image from source:", imageSource.substring(0, 50) + "...");
     const dataUrl = imageSource.startsWith("data:") ? imageSource : (imageSource.startsWith("http") ? imageSource : "data:image/png;base64," + imageSource);
+    
     PIXI.Assets.load(dataUrl).then((texture) => {
+      console.log("[SDK Test] ✅ Image texture loaded, dimensions:", texture.width, "x", texture.height);
+      
       // Remove old image if exists
       if (displayedImageSprite) {
         app.stage.removeChild(displayedImageSprite);
+        displayedImageSprite = null;
       }
+      
       // Create sprite with max dimensions
       const maxWidth = Math.min(window.innerWidth - 40, 600);
       const maxHeight = 400;
@@ -2817,6 +3089,7 @@ function initTestApp() {
         spriteHeight = maxHeight;
         spriteWidth = spriteHeight * aspectRatio;
       }
+      
       displayedImageSprite = new PIXI.Sprite(texture);
       displayedImageSprite.width = spriteWidth;
       displayedImageSprite.height = spriteHeight;
@@ -2824,29 +3097,43 @@ function initTestApp() {
       
       // Position image below the lowest element with safe spacing to prevent overlap
       const lowestBottom = getLowestElementBottom();
-      const imageY = Math.max(yPos + 50, lowestBottom + 40); // 40px spacing after lowest element
+      const imageY = Math.max(yPos + 50, lowestBottom + 20); // 20px spacing after lowest element
       displayedImageSprite.y = imageY;
       app.stage.addChild(displayedImageSprite);
       
-      // Resize canvas to fit image FIRST
+      // Store image state for restoration after viewport changes (both in memory and localStorage)
+      storedImageState = {
+        url: imageSource,
+        x: displayedImageSprite.x,
+        y: displayedImageSprite.y,
+        width: spriteWidth,
+        height: spriteHeight
+      };
+      
+      // Also store in localStorage for persistence across reinitializations
+      try {
+        localStorage.setItem('sdk-test-image-state', JSON.stringify(storedImageState));
+        console.log("[SDK Test] ✅ Image state stored in localStorage:", storedImageState);
+      } catch (e) {
+        console.warn("[SDK Test] ⚠️ Could not store image state in localStorage:", e);
+      }
+      
+      console.log("[SDK Test] ✅ Image displayed at position:", displayedImageSprite.x, displayedImageSprite.y, "size:", spriteWidth, "x", spriteHeight);
+      
+      // Resize canvas to fit image
       const currentHeight = app.screen.height;
       const newHeight = Math.max(currentHeight, displayedImageSprite.y + displayedImageSprite.height + 100);
       app.renderer.resize(Math.max(window.innerWidth, 800), newHeight);
       
-      // Update status AFTER positioning to ensure it doesn't affect layout
-      updateStatus("Image displayed!", 0x00ff00);
-      
-      // Force a render to ensure canvas resize is complete before repositioning inputs
+      // Force a render to ensure image is visible
       app.render();
       
-      // Continuous positioning loop will handle repositioning automatically
-      // Force immediate reposition to ensure inputs are aligned right away
-      if (aiSDK && aiSDK.repositionAllInputs) {
-        aiSDK.repositionAllInputs();
-      }
+      updateStatus("Image displayed successfully", 0x00ff00);
     }).catch((error) => {
-      console.error("[SDK Test] Failed to load image:", error);
-      updateStatus("Failed to load image: " + error.message, 0xff0000);
+      console.error("[SDK Test] ❌ Error loading image:", error);
+      updateStatus("Error loading image: " + (error.message || "Unknown error"), 0xff0000);
+      imageReady = false;
+      isGenerating = false; // Reset generation flag on error
     });
   }
   
@@ -2896,22 +3183,11 @@ function initTestApp() {
       return;
     }
     
-    // Calculate starting Y position - find the bottom of the image IDs display or last button
-    let galleryStartY = 300; // Default start position
-    
-    // First, check if image IDs display exists and position gallery below it
-    if (imageIdsDisplayContainer && imageIdsDisplayContainer.y !== undefined) {
-      // Calculate the bottom of the image IDs container
-      const imageIdsBottom = imageIdsDisplayContainer.y + imageIdsDisplayContainer.height;
-      galleryStartY = imageIdsBottom + 40; // Increased from 30 to 40 - more spacing between image IDs and gallery title to prevent overlap
-    } else {
-      // Fallback: find the last button's Y position
-      const allButtons = app.stage.children.filter(child => child.buttonY !== undefined);
-      if (allButtons.length > 0) {
-        const lastButton = allButtons.reduce((prev, curr) => (curr.buttonY > prev.buttonY ? curr : prev));
-        galleryStartY = lastButton.buttonY + buttonHeight + buttonSpacing + 50;
-      }
-    }
+    // Use getLowestElementBottom() to naturally prevent overlapping
+    // This calculates the bottom of the lowest visible element (buttons, image IDs, displayed image, etc.)
+    // This is the "natural way" to prevent PixiJS containers from overlapping
+    const lowestBottom = getLowestElementBottom();
+    const galleryStartY = lowestBottom + 20; // 20px spacing after lowest element to prevent overlap
     
     // Create container for gallery
     imageGalleryContainer = new PIXI.Container();
@@ -3019,11 +3295,12 @@ function initTestApp() {
           
           // Check if all images have loaded
           imagesLoaded++;
-          if (imagesLoaded === totalImages && callback) {
+          if (imagesLoaded === totalImages) {
             // Force a render to ensure all images are rendered
             app.render();
-            // Wait a bit more for rendering to complete
+            // Resize canvas to fit gallery after all images are loaded
             setTimeout(() => {
+              resizeCanvasToFitContent();
               if (callback) callback();
             }, 100);
           }
@@ -3031,9 +3308,10 @@ function initTestApp() {
           console.error("[SDK Test] Failed to load recalled image:", error);
           // Still count as loaded to avoid hanging
           imagesLoaded++;
-          if (imagesLoaded === totalImages && callback) {
+          if (imagesLoaded === totalImages) {
             app.render();
             setTimeout(() => {
+              resizeCanvasToFitContent();
               if (callback) callback();
             }, 100);
           }
@@ -3043,22 +3321,14 @@ function initTestApp() {
     
     app.stage.addChild(imageGalleryContainer);
     
-    // Resize canvas to fit gallery - ensure all images are accessible via scrolling
-    // Calculate the actual bottom of the gallery (accounting for all rows)
-    const rows = Math.ceil(recalledImages.length / maxImagesPerRow);
-    const actualGalleryHeight = rows * (imageSize + 110) + galleryY; // galleryY is the starting Y position
-    const galleryBottom = imageGalleryContainer.y + actualGalleryHeight + 50; // Extra padding at bottom
-    
-    const currentHeight = app.screen.height;
-    const newHeight = Math.max(currentHeight, galleryBottom);
-    app.renderer.resize(Math.max(window.innerWidth, 800), newHeight);
-    
-    // Ensure the container is scrollable if content exceeds viewport
+    // Ensure the container overflow is set to hidden to prevent double scrollbars
     const container = document.getElementById('pixi-container');
     if (container) {
-      container.style.overflowY = 'auto';
+      container.style.overflow = 'hidden'; // Prevent double scrollbars - scrolling handled by parent
       container.style.height = '100%';
     }
+    
+    // Canvas will be resized after all images load (in the image loading callback)
   }
   
   yPos += 20;
@@ -3279,7 +3549,7 @@ function initTestApp() {
       
       existing.jsCode = jsCode;
       existing.htmlCode = '<div id="pixi-container"></div><input type="text" id="image-prompt-input" placeholder="Image prompt..." style="width: 280px; padding: 8px; border: 2px solid #00d4ff; border-radius: 4px; background: rgba(15, 15, 35, 0.9); color: #ffffff; font-size: 12px; z-index: 1000; position: absolute; left: 20px; top: 20px; visibility: hidden;" /><input type="text" id="lesson-id-input" placeholder="Lesson ID (optional)" style="width: 200px; padding: 8px; border: 2px solid #00d4ff; border-radius: 4px; background: rgba(15, 15, 35, 0.9); color: #ffffff; font-size: 12px; z-index: 1000; position: absolute; left: 20px; top: 50px; visibility: hidden;" /><input type="text" id="image-id-input" placeholder="Image ID (optional)" style="width: 200px; padding: 8px; border: 2px solid #00d4ff; border-radius: 4px; background: rgba(15, 15, 35, 0.9); color: #ffffff; font-size: 12px; z-index: 1000; position: absolute; left: 20px; top: 80px; visibility: hidden;" /><input type="text" id="delete-image-id-input" placeholder="Image ID to delete" style="width: 200px; padding: 8px; border: 2px solid #ff4444; border-radius: 4px; background: rgba(15, 15, 35, 0.9); color: #ffffff; font-size: 12px; z-index: 1000; position: absolute; left: 20px; top: 110px; visibility: hidden;" />';
-      existing.cssCode = '#pixi-container { width: 100%; height: 100%; overflow-y: auto; } #image-prompt-input, #lesson-id-input, #image-id-input, #delete-image-id-input { font-family: inherit; }';
+      existing.cssCode = '#pixi-container { width: 100%; height: 100%; overflow: hidden; position: relative; } #image-prompt-input, #lesson-id-input, #image-id-input, #delete-image-id-input { font-family: inherit; }';
       existing.description = 'Comprehensive test interaction for all AI Teacher SDK functionality including data storage, UI controls, events, responses, and image generation.';
       console.log('[InteractionTypes] Calling save() with jsCode length:', existing.jsCode.length);
       const saved = await this.interactionTypeRepository.save(existing);
@@ -3310,7 +3580,7 @@ function initTestApp() {
         generationPrompt: 'This is a test interaction for SDK functionality.',
         interactionTypeCategory: 'pixijs',
         htmlCode: '<div id="pixi-container"></div><input type="text" id="image-prompt-input" placeholder="Image prompt..." style="width: 280px; padding: 8px; border: 2px solid #00d4ff; border-radius: 4px; background: rgba(15, 15, 35, 0.9); color: #ffffff; font-size: 12px; z-index: 1000; position: absolute; left: 20px; top: 20px; visibility: hidden;" /><input type="text" id="lesson-id-input" placeholder="Lesson ID (optional)" style="width: 200px; padding: 8px; border: 2px solid #00d4ff; border-radius: 4px; background: rgba(15, 15, 35, 0.9); color: #ffffff; font-size: 12px; z-index: 1000; position: absolute; left: 20px; top: 50px; visibility: hidden;" /><input type="text" id="image-id-input" placeholder="Image ID (optional)" style="width: 200px; padding: 8px; border: 2px solid #00d4ff; border-radius: 4px; background: rgba(15, 15, 35, 0.9); color: #ffffff; font-size: 12px; z-index: 1000; position: absolute; left: 20px; top: 80px; visibility: hidden;" />',
-        cssCode: '#pixi-container { width: 100%; height: 100%; } #image-prompt-input, #lesson-id-input, #image-id-input { font-family: inherit; }',
+        cssCode: '#pixi-container { width: 100%; height: 100%; overflow: hidden; position: relative; } #image-prompt-input, #lesson-id-input, #image-id-input { font-family: inherit; }',
         jsCode: jsCode,
         configSchema: {
           fields: [],

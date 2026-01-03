@@ -287,33 +287,97 @@ if (result.success) {
 - This operation cannot be undone
 - Only images associated with the current lesson/account context can be deleted (enforced by backend)
 
-## Adding Input Fields for PixiJS Interactions
+## Adding HTML Elements to PixiJS Interactions
 
-For PixiJS category interactions, you can add HTML input fields that work seamlessly with your PixiJS canvas. This is useful for text inputs, prompts, and user data collection.
+For PixiJS category interactions, you can add HTML elements (inputs, divs, etc.) that are perfectly aligned with your PixiJS elements using the **container-based positioning approach**.
 
-### HTML/PixiJS Layering Strategy
+### Container-Based Positioning (Recommended)
 
-**Important:** HTML input fields will always appear on top of PixiJS canvas elements because they are separate DOM layers. To prevent inputs from overlapping PixiJS interactive elements:
+**Always use container-based positioning** to ensure perfect alignment and automatic scroll synchronization:
 
-1. **Position inputs beside buttons, not on top of interactive areas:**
-   - Calculate button positions in JavaScript
-   - Position inputs to the right or below buttons
-   - Use a helper function to align inputs with buttons
+1. **Create your PixiJS element** (button, sprite, container)
+2. **Create your HTML element**
+3. **Attach the HTML element to the PixiJS container** using `attachHtmlToPixiElement()`
 
-2. **Reserve specific areas for HTML inputs:**
-   - Keep a "control panel" area (e.g., top or side) for HTML inputs
-   - Avoid placing PixiJS interactive elements in the same area
-   - Use consistent spacing and alignment
+This ensures:
+- ✅ Perfect alignment (HTML position calculated from container's world position)
+- ✅ Automatic scroll synchronization (containers move with canvas, so HTML moves too)
+- ✅ Transform support (rotations, scales, etc. handled automatically)
+- ✅ No coordinate conversion needed
+- ✅ No manual repositioning loops
 
-3. **Use z-index appropriately:**
-   - HTML inputs: `z-index: 1000` (always on top)
-   - PixiJS canvas: default z-index (below HTML)
-   - This ensures inputs are always accessible
+### Example: Input Field Beside a Button
 
-4. **Position inputs dynamically:**
-   - Calculate button positions after PixiJS renders
-   - Update input positions if canvas resizes
-   - Use `position: absolute` with calculated coordinates
+```javascript
+// 1. Create your PixiJS button
+const buttonContainer = createButton("Click Me", onClick);
+
+// 2. Create your HTML input
+const input = document.createElement('input');
+input.type = 'text';
+input.placeholder = 'Enter text...';
+input.style.width = '200px';
+input.style.padding = '8px';
+input.style.border = '2px solid #00d4ff';
+input.style.borderRadius = '4px';
+input.style.background = 'rgba(15, 15, 35, 0.9)';
+input.style.color = '#ffffff';
+document.body.appendChild(input);
+
+// 3. Attach HTML to PixiJS container
+aiSDK.attachHtmlToPixiElement(input, buttonContainer, {
+  offsetX: buttonContainer.width + 10, // Position to the right of button
+  offsetY: 0,
+  anchor: 'center-left', // Anchor point on the button
+  zIndex: 1000
+});
+```
+
+### Helper: createInputForButton()
+
+For common cases, use the helper function:
+
+```javascript
+// Creates an input and attaches it automatically
+const input = aiSDK.createInputForButton(buttonContainer, {
+  placeholder: 'Enter text...',
+  width: 200,
+  inputId: 'my-input',
+  offsetX: 10, // Additional spacing
+  offsetY: 0
+});
+```
+
+### Helper: createHtmlElementForContainer()
+
+Create any HTML element and attach it:
+
+```javascript
+const div = aiSDK.createHtmlElementForContainer('div', pixiContainer, {
+  innerHTML: '<p>Some text</p>',
+  className: 'my-class',
+  id: 'my-element',
+  offsetX: 0,
+  offsetY: 0,
+  anchor: 'center',
+  zIndex: 1000
+});
+```
+
+### Anchor Points
+
+The `anchor` option determines which point on the PixiJS container the HTML element is positioned relative to:
+
+- `'center'` (default): Center of container
+- `'top-left'`, `'top-right'`, `'bottom-left'`, `'bottom-right'`: Corners
+- `'top'`, `'bottom'`, `'left'`, `'right'`: Edges
+- `'center-left'`, `'center-right'`, `'top-center'`, `'bottom-center'`: Center of edges
+
+### Z-Index Guidelines
+
+- **Input fields and interactive HTML**: `zIndex: 1000` (always on top)
+- **Text displays and labels**: `zIndex: 5-10` (above canvas, below inputs)
+- **PixiJS canvas**: default z-index (rendered on canvas, no HTML z-index)
 
 ### Step 1: Add Input Field to HTML Code
 
