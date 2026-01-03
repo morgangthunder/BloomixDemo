@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Headers, Get, Param, Query } from '@nestjs/common';
+import { Controller, Post, Body, Headers, Get, Param, Query, Delete } from '@nestjs/common';
 import { ImageGeneratorService } from '../../services/image-generator.service';
 import type { ImageGenerationRequest, ImageGenerationResponse } from '../../services/image-generator.service';
 
@@ -42,6 +42,20 @@ export class ImageGeneratorController {
       return await this.imageGeneratorService.getLessonImageIds(lessonId, accountId);
     } catch (error: any) {
       console.error('[ImageGeneratorController] Error in getLessonImageIds:', error);
+      throw error;
+    }
+  }
+
+  @Delete(':imageId')
+  async deleteImage(
+    @Param('imageId') imageId: string,
+    @Headers('x-user-id') userId?: string,
+    @Headers('x-tenant-id') tenantId?: string,
+  ) {
+    try {
+      return await this.imageGeneratorService.deleteImage(imageId, userId, tenantId);
+    } catch (error: any) {
+      console.error('[ImageGeneratorController] Error in deleteImage:', error);
       throw error;
     }
   }

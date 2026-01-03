@@ -4,7 +4,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 // Read version from package.json
-let BACKEND_VERSION = '0.1.97'; // Fixed inconsistent behavior: reload image IDs when 'Get Lesson Images' clicked, wait for all gallery images to load before repositioning inputs. displayImageGallery now accepts callback.
+let BACKEND_VERSION = '0.1.116'; // Fixed image ID list not appearing: changed from z-index -1 to 10 (visible but below inputs), added explicit visibility/display styles, ensured pixi-container has position:relative.
 console.log(`🔍 [AppController VERSION DEBUG] __dirname: ${__dirname}`);
 console.log(`🔍 [AppController VERSION DEBUG] process.cwd(): ${process.cwd()}`);
 

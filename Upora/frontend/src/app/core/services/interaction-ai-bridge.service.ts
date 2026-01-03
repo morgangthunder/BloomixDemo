@@ -380,6 +380,26 @@ export class InteractionAIBridgeService {
           });
         break;
 
+      case 'ai-sdk-delete-image':
+        this.aiSDK.deleteImage(message.imageId)
+          .then((result) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-delete-image-ack',
+              success: result.success,
+              error: result.error,
+              requestId: message.requestId,
+            });
+          })
+          .catch((error) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-delete-image-ack',
+              success: false,
+              error: error.message,
+              requestId: message.requestId,
+            });
+          });
+        break;
+
       // Media Control Methods (for uploaded-media interactions)
       case 'ai-sdk-play-media':
         this.aiSDK.playMedia()

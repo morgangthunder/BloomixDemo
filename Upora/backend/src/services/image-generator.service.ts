@@ -827,5 +827,42 @@ export class ImageGeneratorService {
       throw error;
     }
   }
+
+  /**
+   * Delete an image by ID
+   * Also deletes the image file from storage
+   */
+  async deleteImage(imageId: string, userId?: string, tenantId?: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      this.logger.log(`[ImageGenerator] Deleting image: ${imageId}`);
+      
+      // Find the image first
+      const image = await this.generatedImageRepository.findOne({ where: { id: imageId } });
+      
+      if (!image) {
+        this.logger.warn(`[ImageGenerator] Image not found: ${imageId}`);
+        return { success: false, error: 'Image not found' };
+      }
+
+      // Delete the image file from storage
+      try {
+        await this.fileStorageService.deleteFile(image.imageUrl);
+        this.logger.log(`[ImageGenerator] ✅ Deleted image file from storage: ${image.imageUrl}`);
+      } catch (error: any) {
+        this.logger.warn(`[ImageGenerator] Failed to delete image file from storage: ${error.message}`);
+        // Continue with database deletion even if file deletion fails
+      }
+
+      // Delete the database record
+      await this.generatedImageRepository.remove(image);
+      this.logger.log(`[ImageGenerator] ✅ Deleted image record from database: ${imageId}`);
+      
+      return { success: true };
+    } catch (error: any) {
+      this.logger.error(`[ImageGenerator] ❌ Error deleting image: ${error.message}`);
+      this.logger.error(`[ImageGenerator] Error stack: ${error.stack}`);
+      return { success: false, error: error.message };
+    }
+  }
 }
 

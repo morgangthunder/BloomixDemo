@@ -963,5 +963,35 @@ export class InteractionAISDK {
       return [];
     }
   }
+
+  /**
+   * Delete an image by ID
+   * @param imageId The ID of the image to delete
+   * @returns Promise with success status and optional error message
+   */
+  async deleteImage(imageId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      if (!imageId) {
+        console.warn('[InteractionAISDK] No image ID provided for deleteImage');
+        return { success: false, error: 'Image ID is required' };
+      }
+
+      const response = await firstValueFrom(
+        this.http.delete<{ success: boolean; error?: string }>(
+          `${environment.apiUrl}/image-generator/${imageId}`,
+          { headers: this.getHeaders() }
+        )
+      );
+      
+      console.log('[InteractionAISDK] ✅ Image deleted:', response.success ? 'success' : 'failed');
+      return response;
+    } catch (error: any) {
+      console.error('[InteractionAISDK] ❌ Failed to delete image:', error);
+      return {
+        success: false,
+        error: error?.message || 'Failed to delete image',
+      };
+    }
+  }
 }
 

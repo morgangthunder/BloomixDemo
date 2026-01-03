@@ -259,6 +259,34 @@ if (mostRecent) {
 
 **Note:** Images are automatically associated with the lesson when generated using `generateImage()`. The `lessonId` and `accountId` are automatically set from the current interaction context.
 
+### deleteImage(imageId)
+Delete an image by ID. This permanently removes the image from storage and the database.
+
+**Parameters:**
+- `imageId` (string, required): The ID of the image to delete
+
+**Returns:** Promise with `{ success: boolean, error?: string }`
+
+**Example:**
+```typescript
+// Delete a specific image
+const result = await aiSDK.deleteImage('image-id-here');
+
+if (result.success) {
+  console.log('Image deleted successfully');
+  // Update your UI (e.g., remove from gallery)
+  removeImageFromGallery('image-id-here');
+} else {
+  console.error('Failed to delete image:', result.error);
+}
+```
+
+**Note:** 
+- The image file is deleted from storage (MinIO/S3)
+- The image record is removed from the database
+- This operation cannot be undone
+- Only images associated with the current lesson/account context can be deleted (enforced by backend)
+
 ## Adding Input Fields for PixiJS Interactions
 
 For PixiJS category interactions, you can add HTML input fields that work seamlessly with your PixiJS canvas. This is useful for text inputs, prompts, and user data collection.
