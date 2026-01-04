@@ -19,6 +19,7 @@ export class InteractionTypesController {
     await this.interactionTypesService.seedVideoUrlInteraction();
     await this.interactionTypesService.seedSDKTestVideoUrlInteraction();
     await this.interactionTypesService.updateSDKTestPixiJSInteraction();
+    await this.interactionTypesService.updateSDKTestHTMLInteraction();
     return { message: 'Interaction types seeded successfully' };
   }
 
@@ -26,6 +27,19 @@ export class InteractionTypesController {
   async updateSDKTestPixiJS() {
     await this.interactionTypesService.updateSDKTestPixiJSInteraction();
     return { message: 'SDK Test PixiJS interaction updated successfully' };
+  }
+
+  @Post('update-sdk-test-html')
+  async updateSDKTestHTML() {
+    console.log('[Controller] 📥 POST /update-sdk-test-html received');
+    try {
+      const result = await this.interactionTypesService.updateSDKTestHTMLInteraction();
+      console.log('[Controller] ✅ updateSDKTestHTML completed successfully');
+      return { message: 'SDK Test HTML interaction updated successfully', id: result ? (result as any).id : undefined };
+    } catch (error) {
+      console.error('[Controller] ❌ Error in updateSDKTestHTML:', error);
+      throw error;
+    }
   }
 
   @Post('update-config-schemas')

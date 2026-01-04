@@ -259,6 +259,42 @@ if (mostRecent) {
 
 **Note:** Images are automatically associated with the lesson when generated using `generateImage()`. The `lessonId` and `accountId` are automatically set from the current interaction context.
 
+### getLessonImageIds(lessonId?, accountId?)
+Get an array of image IDs for a lesson. Useful for displaying a list of available images or checking if images exist.
+
+**Parameters:**
+- `lessonId` (optional): The ID of the lesson. If not provided, uses the current lesson ID.
+- `accountId` (optional): The ID of the account. If not provided, returns IDs from all accounts.
+
+**Returns:** Promise with array of image ID strings
+
+**Example:**
+```typescript
+// Get all image IDs for current lesson
+const imageIds = await aiSDK.getLessonImageIds();
+
+if (imageIds && imageIds.length > 0) {
+  console.log(`Found ${imageIds.length} image IDs:`, imageIds);
+  
+  // Display list of image IDs
+  imageIds.forEach((id) => {
+    console.log(`Image ID: ${id}`);
+    // Use ID to load specific image with getLessonImages()
+  });
+} else {
+  console.log('No image IDs found for this lesson');
+}
+
+// Get image IDs for a specific lesson and account
+const accountImageIds = await aiSDK.getLessonImageIds('some-lesson-id', 'some-account-id');
+```
+
+**Use Cases:**
+- Display a list of available images to the user
+- Check if any images exist for a lesson before calling `getLessonImages()`
+- Build a UI that lets users select which image to display
+- Track which images have been generated
+
 ### deleteImage(imageId)
 Delete an image by ID. This permanently removes the image from storage and the database.
 

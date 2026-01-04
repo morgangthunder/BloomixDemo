@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AiPrompt } from '../entities/ai-prompt.entity';
@@ -6,6 +6,7 @@ import { LlmGenerationLog } from '../entities/llm-generation-log.entity';
 import { LlmProvider } from '../entities/llm-provider.entity';
 import { GeneratedImage } from '../entities/generated-image.entity';
 import { FileStorageService } from './file-storage.service';
+import { UsersService } from '../modules/users/users.service';
 
 export interface ImageGenerationRequest {
   prompt: string;
@@ -48,6 +49,8 @@ export class ImageGeneratorService {
     @InjectRepository(GeneratedImage)
     private generatedImageRepository: Repository<GeneratedImage>,
     private fileStorageService: FileStorageService,
+    @Inject(forwardRef(() => UsersService))
+    private usersService: UsersService,
   ) {}
 
   /**
@@ -671,6 +674,26 @@ export class ImageGeneratorService {
       this.logger.log(
         `[ImageGenerator] Logged ${data.tokensUsed} tokens for user ${data.userId}`,
       );
+      
+      // Increment user's token usage counter
+      try {
+        // Only increment if userId is a valid UUID (not 'default-user')
+        if (data.userId && data.userId !== 'default-user' && this.isValidUUID(data.userId)) {
+          await this.usersService.incrementTokenUsage(data.userId, data.tokensUsed);
+          this.logger.log(
+            `[ImageGenerator] Incremented token usage for user ${data.userId}: +${data.tokensUsed} tokens`,
+          );
+        } else {
+          this.logger.warn(
+            `[ImageGenerator] Skipping token increment - invalid userId: ${data.userId}`,
+          );
+        }
+      } catch (incrementError: any) {
+        this.logger.error(
+          `[ImageGenerator] Failed to increment token usage for user ${data.userId}: ${incrementError.message}`,
+        );
+        // Don't throw - token increment failure shouldn't break the request
+      }
     } catch (error: any) {
       this.logger.error(`[ImageGenerator] Failed to log LLM usage: ${error.message}`, error.stack);
       // Don't throw - logging failure shouldn't break the request

@@ -7,10 +7,12 @@ import { LlmGenerationLog } from '../../entities/llm-generation-log.entity';
 import { LlmProvider } from '../../entities/llm-provider.entity';
 import { GeneratedImage } from '../../entities/generated-image.entity';
 import { FileStorageService } from '../../services/file-storage.service';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([AiPrompt, LlmGenerationLog, LlmProvider, GeneratedImage]),
+    UsersModule,
   ],
   controllers: [ImageGeneratorController],
   providers: [ImageGeneratorService, FileStorageService],

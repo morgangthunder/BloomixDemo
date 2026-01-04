@@ -429,6 +429,253 @@ Hide the current snack message.
 aiSDK.hideSnack();
 ```
 
+## Image Generation Methods
+
+The SDK provides methods to generate, retrieve, and manage images for lessons. These methods work in both HTML and PixiJS interactions.
+
+### `generateImage(options, callback?)`
+
+Generate images using the Google Gemini image generator. Images are automatically saved to storage and associated with the current lesson.
+
+**Parameters:**
+- `options` (object, required):
+  - `prompt` (string, required): Main image generation prompt
+  - `userInput` (string, optional): Additional user input to append to the prompt
+  - `screenshot` (string, optional): Base64-encoded screenshot to include for context
+  - `customInstructions` (string, optional): Builder-defined custom instructions from interaction configuration
+  - `width` (number, optional): Image width in pixels (e.g., 1024, 512)
+  - `height` (number, optional): Image height in pixels (e.g., 1024, 512)
+  - `lessonId` (string, optional): Override current lesson ID (defaults to current lesson)
+  - `substageId` (string, optional): Substage ID for tracking
+  - `interactionId` (string, optional): Interaction ID for tracking
+  - `accountId` (string, optional): Account ID (defaults to current user)
+- `callback` (function, optional): Callback function `(response) => {}`
+
+**Response:**
+- `success` (boolean): Whether generation was successful
+- `imageUrl` (string, optional): URL to the persisted image in MinIO/S3 (if saved)
+- `imageData` (string, optional): Base64-encoded image data (always returned for immediate display)
+- `imageId` (string, optional): Database ID of the saved image record (if persisted)
+- `error` (string, optional): Error message if generation failed
+- `requestId` (string): Unique request ID for tracking
+
+**Example (HTML Interaction):**
+```javascript
+// Generate an image from user input
+const promptInput = document.getElementById('image-prompt-input');
+const prompt = promptInput.value.trim();
+
+aiSDK.generateImage({
+  prompt: prompt,
+  userInput: 'Make it educational and colorful',
+  width: 1024,
+  height: 1024
+}, (response) => {
+  if (response.success) {
+    if (response.imageUrl) {
+      // Display image from URL
+      const img = document.createElement('img');
+      img.src = response.imageUrl;
+      img.style.maxWidth = '100%';
+      document.getElementById('image-display').appendChild(img);
+    } else if (response.imageData) {
+      // Display image from base64 data
+      const img = document.createElement('img');
+      img.src = response.imageData.startsWith('data:') 
+        ? response.imageData 
+        : `data:image/png;base64,${response.imageData}`;
+      img.style.maxWidth = '100%';
+      document.getElementById('image-display').appendChild(img);
+    }
+    
+    // Emit event that image is ready
+    aiSDK.emitEvent({
+      type: 'image-generated',
+      data: {
+        imageUrl: response.imageUrl,
+        imageData: response.imageData,
+        requestId: response.requestId,
+        imageId: response.imageId
+      },
+      requiresLLMResponse: false
+    });
+  } else {
+    console.error('Image generation failed:', response.error);
+    alert('Failed to generate image: ' + response.error);
+  }
+});
+```
+
+**Example (PixiJS Interaction):**
+```javascript
+aiSDK.generateImage({
+  prompt: 'A diagram showing the water cycle',
+  width: 1024,
+  height: 1024
+}, (response) => {
+  if (response.success && response.imageData) {
+    // Load and display image in PixiJS
+    PIXI.Assets.load(response.imageData).then((texture) => {
+      const sprite = new PIXI.Sprite(texture);
+      sprite.x = 20;
+      sprite.y = 120;
+      sprite.width = 400;
+      sprite.height = 300;
+      app.stage.addChild(sprite);
+    });
+  }
+});
+```
+
+**Configuration:**
+API configuration is managed in Super Admin at `/super-admin/ai-prompts?assistant=image-generator`:
+- **default**: Prompt template (use `{prompt}` placeholder for user prompt)
+- **api-config**: JSON configuration with `apiEndpoint`, `apiKey`, `apiKeyHeader`, `model`, `width`, `height`, etc.
+
+### `getLessonImages(lessonId?, accountId?, imageId?)`
+
+Retrieve images generated for a lesson, ordered by creation date (newest first). Returns all images associated with the lesson, or a specific image if `imageId` is provided.
+
+**Parameters:**
+- `lessonId` (string, optional): The ID of the lesson to retrieve images for. If not provided, uses the current lesson ID from the interaction context.
+- `accountId` (string, optional): The ID of the account that generated the images. If not provided, returns images from all accounts for the lesson.
+- `imageId` (string, optional): Specific image ID to retrieve. If provided, returns only that image.
+
+**Returns:** Array of image objects (or single image object if `imageId` is provided), each containing:
+- `id`: Unique image ID
+- `lessonId`: Lesson ID this image belongs to
+- `accountId`: Account ID that generated the image
+- `imageUrl`: URL to the image (signed URL for S3/MinIO, direct URL for local storage)
+- `mimeType`: Image MIME type (e.g., 'image/png')
+- `width`: Image width in pixels (or null)
+- `height`: Image height in pixels (or null)
+- `prompt`: The prompt used to generate the image
+- `substageId`: Substage ID where image was generated (or null)
+- `interactionId`: Interaction ID where image was generated (or null)
+- `metadata`: Additional metadata (model used, tokens, etc.)
+- `createdAt`: Creation timestamp
+- `updatedAt`: Last update timestamp
+
+**Example:**
+```javascript
+// Get all images for current lesson
+aiSDK.getLessonImages(null, null, (images, error) => {
+  if (error) {
+    console.error('Error getting images:', error);
+    return;
+  }
+  
+  if (images && images.length > 0) {
+    console.log(`Found ${images.length} images`);
+    
+    // Display all images in a gallery
+    images.forEach((image) => {
+      const img = document.createElement('img');
+      img.src = image.imageUrl;
+      img.style.maxWidth = '200px';
+      img.style.margin = '10px';
+      document.getElementById('image-gallery').appendChild(img);
+    });
+  } else {
+    console.log('No images found for this lesson');
+  }
+});
+
+// Get images for a specific lesson
+aiSDK.getLessonImages('some-lesson-id', null, (images, error) => {
+  // Handle response
+});
+
+// Get a specific image by ID
+aiSDK.getLessonImages(null, null, 'specific-image-id', (image, error) => {
+  if (image) {
+    console.log('Found image:', image.imageUrl);
+  }
+});
+```
+
+### `getLessonImageIds(lessonId?, accountId?, callback?)`
+
+Get an array of image IDs for a lesson. Useful for displaying a list of available images or checking if images exist.
+
+**Parameters:**
+- `lessonId` (string, optional): The ID of the lesson. If not provided, uses the current lesson ID.
+- `accountId` (string, optional): The ID of the account. If not provided, returns IDs from all accounts.
+- `callback` (function, optional): Callback function `(imageIds, error) => {}`
+
+**Returns:** Array of image ID strings (via callback)
+
+**Example:**
+```javascript
+// Get all image IDs for current lesson
+aiSDK.getLessonImageIds(null, null, (imageIds, error) => {
+  if (error) {
+    console.error('Error getting image IDs:', error);
+    return;
+  }
+  
+  console.log(`Found ${imageIds.length} image IDs:`, imageIds);
+  
+  // Display list of image IDs
+  const list = document.getElementById('image-ids-list');
+  imageIds.forEach((id) => {
+    const item = document.createElement('div');
+    item.textContent = id;
+    item.style.cursor = 'pointer';
+    item.onclick = () => {
+      // Load specific image
+      aiSDK.getLessonImages(null, null, id, (image) => {
+        displayImage(image);
+      });
+    };
+    list.appendChild(item);
+  });
+});
+```
+
+### `deleteImage(imageId, callback?)`
+
+Delete an image by ID. This permanently removes the image from storage and the database.
+
+**Parameters:**
+- `imageId` (string, required): The ID of the image to delete
+- `callback` (function, optional): Callback function `(result, error) => {}`
+
+**Returns:** Object with `{ success: boolean, error?: string }` (via callback)
+
+**Example:**
+```javascript
+// Delete a specific image
+const imageIdToDelete = 'image-id-here';
+
+aiSDK.deleteImage(imageIdToDelete, (result, error) => {
+  if (error || !result.success) {
+    console.error('Failed to delete image:', error || result.error);
+    alert('Failed to delete image: ' + (error || result.error));
+    return;
+  }
+  
+  console.log('Image deleted successfully');
+  
+  // Update UI (e.g., remove from gallery)
+  const imageElement = document.querySelector(`[data-image-id="${imageIdToDelete}"]`);
+  if (imageElement) {
+    imageElement.remove();
+  }
+  
+  // Refresh image IDs list
+  aiSDK.getLessonImageIds(null, null, (imageIds) => {
+    updateImageIdsDisplay(imageIds);
+  });
+});
+```
+
+**Note:**
+- The image file is deleted from storage (MinIO/S3)
+- The image record is removed from the database
+- This operation cannot be undone
+- Only images associated with the current lesson/account context can be deleted (enforced by backend)
+
 ## Data Storage Methods
 
 ### `saveInstanceData(data)`

@@ -3597,6 +3597,943 @@ function initTestApp() {
     }
   }
 
+  /**
+   * Update SDK Test HTML interaction with image generation functionality
+   */
+  async updateSDKTestHTMLInteraction(): Promise<InteractionType> {
+    console.log('[InteractionTypes] 🚀 updateSDKTestHTMLInteraction() called');
+    const functionStartTime = Date.now();
+    
+    // HTML code with input fields for image operations
+    console.log('[InteractionTypes] 📝 Building HTML code...');
+    const htmlCode = `<div id="sdk-test-container">
+  <div id="sdk-test-header">
+    <h1>AI Teacher SDK Test - HTML</h1>
+    <p id="status-text">Initializing...</p>
+  </div>
+  <div id="sdk-test-buttons"></div>
+  <div id="sdk-test-image-section" style="display: none;">
+    <div id="image-display-container" style="margin: 20px 0;"></div>
+    <div id="image-ids-display" style="margin: 20px 0; padding: 15px; background: rgba(0, 212, 255, 0.1); border-radius: 6px; font-family: monospace; font-size: 12px; color: #ffffff;"></div>
+    <div id="image-gallery-container" style="margin: 20px 0;"></div>
+  </div>
+</div>`;
+
+    // CSS code
+    const cssCode = `body {
+  margin: 0;
+  padding: 0;
+  background: #0f0f23;
+  color: #ffffff;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  overflow-y: auto;
+}
+#sdk-test-container {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+#sdk-test-header {
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid rgba(0, 212, 255, 0.3);
+}
+#sdk-test-header h1 {
+  color: #00d4ff;
+  margin: 0 0 10px 0;
+  font-size: 24px;
+}
+#status-text {
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0;
+  font-size: 14px;
+}
+.section-label {
+  color: #00d4ff;
+  font-size: 18px;
+  font-weight: bold;
+  margin: 30px 0 15px 0;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+.test-button {
+  display: inline-block;
+  min-width: 200px;
+  padding: 12px 20px;
+  margin: 8px 0;
+  background: rgba(0, 212, 255, 0.1);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 6px;
+  color: #00d4ff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  vertical-align: middle;
+}
+.test-button:hover {
+  background: rgba(0, 212, 255, 0.2);
+  border-color: #00d4ff;
+  transform: translateX(5px);
+}
+.test-button:active {
+  transform: translateX(2px);
+}
+.button-input-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0;
+  width: 100%;
+  max-width: 800px;
+}
+.button-input-group .test-button {
+  flex-shrink: 0;
+  margin: 0;
+}
+.button-input-group input {
+  flex: 1;
+  min-width: 200px;
+  padding: 10px;
+  border: 2px solid #00d4ff;
+  border-radius: 6px;
+  background: rgba(15, 15, 35, 0.9);
+  color: #ffffff;
+  font-size: 14px;
+  font-family: inherit;
+}
+.button-input-group input:focus {
+  outline: none;
+  border-color: #00d4ff;
+  box-shadow: 0 0 5px rgba(0, 212, 255, 0.5);
+}
+#image-display-container img {
+  max-width: 100%;
+  max-height: 600px;
+  border: 2px solid rgba(0, 212, 255, 0.5);
+  border-radius: 6px;
+  margin: 10px 0;
+}
+#image-gallery-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 15px;
+  margin-top: 20px;
+}
+.gallery-image-item {
+  background: rgba(15, 15, 35, 0.8);
+  border: 2px solid rgba(0, 212, 255, 0.3);
+  border-radius: 6px;
+  padding: 10px;
+}
+.gallery-image-item img {
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+.gallery-image-item .image-info {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  word-break: break-all;
+}
+#image-ids-display {
+  max-height: 200px;
+  overflow-y: auto;
+}
+#image-ids-display .image-id-item {
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: text;
+  user-select: text;
+}`;
+
+    // JavaScript code - includes createIframeAISDK with image functions
+    const jsCode = `(function() {
+  console.log("[SDK Test HTML] Starting initialization...");
+  
+  // Wait for DOM to be ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initTestApp);
+  } else {
+    setTimeout(initTestApp, 10);
+  }
+})();
+
+// Include createIframeAISDK function with image generation functions
+const createIframeAISDK = () => {
+  let subscriptionId = null;
+  let requestCounter = 0;
+  let currentLessonId = null; // Store lesson ID from ready message
+  let currentAccountId = null; // Store account ID from ready message
+  const generateRequestId = () => 'req-' + Date.now() + '-' + (++requestCounter);
+  const generateSubscriptionId = () => 'sub-' + Date.now() + '-' + Math.random();
+
+  const sendMessage = (type, data, callback) => {
+    const requestId = generateRequestId();
+    const message = { type, requestId, ...data };
+
+    if (callback) {
+      const listener = (event) => {
+        if (event.data.requestId === requestId) {
+          window.removeEventListener("message", listener);
+          callback(event.data);
+        }
+      };
+      window.addEventListener("message", listener);
+    }
+
+    window.parent.postMessage(message, "*");
+  };
+
+  // Listen for SDK ready message to store lesson ID and account ID
+  window.addEventListener("message", (event) => {
+    if (event.data.type === "ai-sdk-ready") {
+      if (event.data.lessonId) {
+        currentLessonId = event.data.lessonId;
+        console.log("[SDK Test HTML] SDK ready, lesson ID:", currentLessonId);
+      }
+      if (event.data.accountId) {
+        currentAccountId = event.data.accountId;
+        console.log("[SDK Test HTML] SDK ready, account ID:", currentAccountId);
+      }
+    }
+  });
+
+  return {
+    emitEvent: (event, processedContentId) => {
+      sendMessage("ai-sdk-emit-event", { event, processedContentId });
+    },
+    updateState: (key, value) => {
+      sendMessage("ai-sdk-update-state", { key, value });
+    },
+    getState: (callback) => {
+      sendMessage("ai-sdk-get-state", {}, (response) => {
+        callback(response.state);
+      });
+    },
+    onResponse: (callback) => {
+      subscriptionId = generateSubscriptionId();
+      sendMessage("ai-sdk-subscribe", { subscriptionId }, () => {
+        const listener = (event) => {
+          if (event.data.type === "ai-sdk-response" && event.data.subscriptionId === subscriptionId) {
+            callback(event.data.response);
+          }
+        };
+        window.addEventListener("message", listener);
+        return () => {
+          window.removeEventListener("message", listener);
+          sendMessage("ai-sdk-unsubscribe", { subscriptionId });
+        };
+      });
+    },
+    isReady: (callback) => {
+      const listener = (event) => {
+        if (event.data.type === "ai-sdk-ready") {
+          window.removeEventListener("message", listener);
+          callback(true);
+        }
+      };
+      window.addEventListener("message", listener);
+    },
+    minimizeChatUI: () => {
+      sendMessage("ai-sdk-minimize-chat-ui", {});
+    },
+    showChatUI: () => {
+      sendMessage("ai-sdk-show-chat-ui", {});
+    },
+    activateFullscreen: () => {
+      sendMessage("ai-sdk-activate-fullscreen", {});
+    },
+    deactivateFullscreen: () => {
+      sendMessage("ai-sdk-deactivate-fullscreen", {});
+    },
+    postToChat: (content, role, showInWidget) => {
+      sendMessage("ai-sdk-post-to-chat", { content, role, showInWidget });
+    },
+    showScript: (script, autoPlay) => {
+      sendMessage("ai-sdk-show-script", { script, autoPlay });
+    },
+    showSnack: (content, duration, hideFromChatUI, callback) => {
+      sendMessage("ai-sdk-show-snack", { content, duration, hideFromChatUI: hideFromChatUI || false }, (response) => {
+        if (callback && response.snackId) {
+          callback(response.snackId);
+        }
+      });
+    },
+    hideSnack: () => {
+      sendMessage("ai-sdk-hide-snack", {});
+    },
+    saveInstanceData: (data, callback) => {
+      sendMessage("ai-sdk-save-instance-data", { data }, (response) => {
+        if (callback) {
+          callback(response.success, response.error);
+        }
+      });
+    },
+    getInstanceDataHistory: (filters, callback) => {
+      sendMessage("ai-sdk-get-instance-data-history", { filters }, (response) => {
+        if (callback) {
+          callback(response.data, response.error);
+        }
+      });
+    },
+    saveUserProgress: (data, callback) => {
+      sendMessage("ai-sdk-save-user-progress", { data }, (response) => {
+        if (callback) {
+          callback(response.progress, response.error);
+        }
+      });
+    },
+    getUserProgress: (callback) => {
+      sendMessage("ai-sdk-get-user-progress", {}, (response) => {
+        if (callback) {
+          callback(response.progress, response.error);
+        }
+      });
+    },
+    markCompleted: (callback) => {
+      sendMessage("ai-sdk-mark-completed", {}, (response) => {
+        if (callback) {
+          callback(response.progress, response.error);
+        }
+      });
+    },
+    incrementAttempts: (callback) => {
+      sendMessage("ai-sdk-increment-attempts", {}, (response) => {
+        if (callback) {
+          callback(response.progress, response.error);
+        }
+      });
+    },
+    getUserPublicProfile: (userId, callback) => {
+      sendMessage("ai-sdk-get-user-public-profile", { userId }, (response) => {
+        if (callback) {
+          callback(response.profile, response.error);
+        }
+      });
+    },
+    // Image generation functions
+    generateImage: (options, callback) => {
+      const optionsWithIds = {
+        ...options,
+        lessonId: options.lessonId || currentLessonId,
+        accountId: options.accountId || currentAccountId,
+      };
+      console.log("[SDK Test HTML] Generating image with options:", { 
+        prompt: optionsWithIds.prompt, 
+        lessonId: optionsWithIds.lessonId, 
+        accountId: optionsWithIds.accountId 
+      });
+      sendMessage("ai-sdk-generate-image", { options: optionsWithIds }, (response) => { 
+        if (callback) callback(response); 
+      });
+    },
+    getLessonImages: (lessonId, accountId, imageId, callback) => {
+      const targetLessonId = lessonId || currentLessonId;
+      if (!targetLessonId) {
+        console.warn("[SDK Test HTML] No lesson ID available for getLessonImages");
+        if (callback) callback([], "No lesson ID available");
+        return;
+      }
+      sendMessage("ai-sdk-get-lesson-images", { lessonId: targetLessonId, accountId, imageId }, (response) => { 
+        if (callback) callback(response.images || [], response.error); 
+      });
+    },
+    getLessonImageIds: (lessonId, accountId, callback) => {
+      const targetLessonId = lessonId || currentLessonId;
+      if (!targetLessonId) {
+        console.warn("[SDK Test HTML] No lesson ID available for getLessonImageIds");
+        if (callback) callback([], "No lesson ID available");
+        return;
+      }
+      sendMessage("ai-sdk-get-lesson-image-ids", { lessonId: targetLessonId, accountId }, (response) => { 
+        if (callback) callback(response.imageIds || [], response.error); 
+      });
+    },
+    deleteImage: (imageId, callback) => {
+      sendMessage("ai-sdk-delete-image", { imageId }, (response) => { 
+        if (callback) callback(response, response.error); 
+      });
+    },
+  };
+};
+
+let aiSDK = null;
+let statusText = null;
+let buttonsContainer = null;
+let imageSection = null;
+let imageDisplayContainer = null;
+let imageIdsDisplay = null;
+let imageGalleryContainer = null;
+let lessonImageIds = [];
+let recalledImages = [];
+let displayedImage = null;
+
+function updateStatus(message, color = "#ffffff") {
+  if (statusText) {
+    statusText.textContent = message;
+    statusText.style.color = color;
+  }
+  console.log("[SDK Test HTML]", message);
+}
+
+function createButton(text, onClick) {
+  const button = document.createElement("button");
+  button.className = "test-button";
+  button.textContent = text;
+  button.onclick = onClick;
+  if (buttonsContainer) {
+    buttonsContainer.appendChild(button);
+  }
+  return button;
+}
+
+function createButtonWithInput(buttonText, onClick, inputId, inputPlaceholder, inputWidth = 280) {
+  // Create container group
+  const group = document.createElement("div");
+  group.className = "button-input-group";
+  
+  // Create button
+  const button = document.createElement("button");
+  button.className = "test-button";
+  button.textContent = buttonText;
+  button.onclick = onClick;
+  
+  // Create input
+  const input = document.createElement("input");
+  input.type = "text";
+  input.id = inputId;
+  input.placeholder = inputPlaceholder;
+  input.style.width = inputWidth + "px";
+  
+  // Append to group
+  group.appendChild(button);
+  group.appendChild(input);
+  
+  // Append group to container
+  if (buttonsContainer) {
+    buttonsContainer.appendChild(group);
+  }
+  
+  return { button, input, group };
+}
+
+function displayImage(imageSource) {
+  if (!imageDisplayContainer) return;
+  
+  // Clear previous image
+  imageDisplayContainer.innerHTML = '';
+  
+  const img = document.createElement('img');
+  img.src = imageSource.startsWith("data:") ? imageSource : (imageSource.startsWith("http") ? imageSource : "data:image/png;base64," + imageSource);
+  img.alt = "Generated image";
+  img.onload = () => {
+    updateStatus("Image displayed successfully", "#00ff00");
+  };
+  img.onerror = () => {
+    updateStatus("Error loading image", "#ff0000");
+  };
+  
+  imageDisplayContainer.appendChild(img);
+  displayedImage = img;
+}
+
+function updateImageIdsDisplay() {
+  if (!imageIdsDisplay) return;
+  
+  if (lessonImageIds.length === 0) {
+    imageIdsDisplay.innerHTML = '<div style="color: rgba(255,255,255,0.5);">No image IDs found. Generate an image or click "Refresh Image IDs".</div>';
+    return;
+  }
+  
+  let html = '<div style="font-weight: bold; margin-bottom: 10px; color: #00d4ff;">Lesson Image IDs (' + lessonImageIds.length + '):</div>';
+  lessonImageIds.forEach((imageId, index) => {
+    html += '<div class="image-id-item">' + (index + 1) + '. ' + imageId + '</div>';
+  });
+  imageIdsDisplay.innerHTML = html;
+}
+
+function displayImageGallery(images) {
+  if (!imageGalleryContainer) return;
+  
+  if (!images || images.length === 0) {
+    imageGalleryContainer.innerHTML = '<div style="color: rgba(255,255,255,0.5);">No images to display.</div>';
+    return;
+  }
+  
+  imageGalleryContainer.innerHTML = '<div class="section-label">Recalled Images (' + images.length + ')</div>';
+  
+  images.forEach((image, index) => {
+    const item = document.createElement('div');
+    item.className = 'gallery-image-item';
+    
+    const img = document.createElement('img');
+    const imageUrl = image.imageUrl || image.imageData || image.url;
+    img.src = imageUrl.startsWith("data:") ? imageUrl : (imageUrl.startsWith("http") ? imageUrl : "data:image/png;base64," + imageUrl);
+    img.alt = "Image " + (index + 1);
+    
+    const info = document.createElement('div');
+    info.className = 'image-info';
+    info.innerHTML = '<strong>ID:</strong> ' + (image.id || image.imageId || 'N/A') + '<br>' +
+                     '<strong>Prompt:</strong> ' + (image.prompt || 'N/A').substring(0, 50) + (image.prompt && image.prompt.length > 50 ? '...' : '');
+    
+    item.appendChild(img);
+    item.appendChild(info);
+    imageGalleryContainer.appendChild(item);
+  });
+}
+
+function initTestApp() {
+  console.log("[SDK Test HTML] Initializing app...");
+  
+  // Get or create container elements
+  buttonsContainer = document.getElementById("sdk-test-buttons");
+  statusText = document.getElementById("status-text");
+  imageSection = document.getElementById("sdk-test-image-section");
+  imageDisplayContainer = document.getElementById("image-display-container");
+  imageIdsDisplay = document.getElementById("image-ids-display");
+  imageGalleryContainer = document.getElementById("image-gallery-container");
+  
+  if (!buttonsContainer) {
+    console.error("[SDK Test HTML] Buttons container not found!");
+    return;
+  }
+
+  // Initialize SDK
+  aiSDK = createIframeAISDK();
+  
+  // Check if we're in preview mode (no parent window or parent is same origin)
+  const isPreviewMode = !window.parent || window.parent === window;
+  
+  if (isPreviewMode) {
+    updateStatus("Preview Mode - SDK will work when added to a lesson", "#ffff00");
+  } else {
+    updateStatus("SDK Test Interaction Loaded. Waiting for SDK ready...", "#ffff00");
+    
+    // Wait for SDK ready
+    aiSDK.isReady((ready) => {
+      if (ready) {
+        updateStatus("SDK Ready! All methods available.", "#00ff00");
+        // Show image section
+        if (imageSection) {
+          imageSection.style.display = 'block';
+        }
+        // Load existing image IDs
+        loadLessonImageIds();
+      }
+    });
+  }
+
+  // Core Methods Section
+  const coreLabel = document.createElement("div");
+  coreLabel.className = "section-label";
+  coreLabel.textContent = "CORE METHODS";
+  buttonsContainer.appendChild(coreLabel);
+
+  createButton("Emit Event", () => {
+    aiSDK.emitEvent({
+      type: "user-selection",
+      data: { test: true, timestamp: Date.now() },
+      requiresLLMResponse: true,
+    });
+    updateStatus("Event emitted", "#00ff00");
+  });
+
+  createButton("Update State", () => {
+    aiSDK.updateState("testKey", { value: Math.random(), timestamp: Date.now() });
+    updateStatus("State updated", "#00ff00");
+  });
+
+  createButton("Get State", () => {
+    aiSDK.getState((state) => {
+      updateStatus("State: " + JSON.stringify(state).substring(0, 50), "#00ff00");
+    });
+  });
+
+  // Image Generation Section
+  const imageLabel = document.createElement("div");
+  imageLabel.className = "section-label";
+  imageLabel.textContent = "IMAGE GENERATION";
+  buttonsContainer.appendChild(imageLabel);
+
+  // Request Image button with prompt input beside it
+  const requestImageGroup = createButtonWithInput("Request Image", () => {
+    const imagePromptText = requestImageGroup.input.value.trim();
+    if (!imagePromptText) {
+      updateStatus("Please enter an image prompt first", "#ff0000");
+      return;
+    }
+    
+    updateStatus("Generating image...", "#ffff00");
+    aiSDK.generateImage({ prompt: imagePromptText, userInput: "Test input from SDK", width: 1024, height: 1024 }, (response) => {
+      console.log("[SDK Test HTML] Image generation response:", response);
+      
+      if (response.success) {
+        if (response.imageUrl) {
+          displayImage(response.imageUrl);
+          updateStatus("Image generated successfully", "#00ff00");
+        } else if (response.imageData) {
+          displayImage(response.imageData);
+          updateStatus("Image generated successfully", "#00ff00");
+        } else {
+          updateStatus("Image generated but no URL/data returned", "#ffff00");
+        }
+        
+        // Add image ID to the list if provided
+        if (response.imageId) {
+          if (!lessonImageIds.includes(response.imageId)) {
+            lessonImageIds.push(response.imageId);
+            updateImageIdsDisplay();
+          }
+        }
+        
+        // Clear prompt input
+        requestImageGroup.input.value = "";
+        
+        aiSDK.emitEvent({ type: "image-generated", data: { imageUrl: response.imageUrl, imageData: response.imageData, requestId: response.requestId, imageId: response.imageId }, requiresLLMResponse: false });
+      } else {
+        updateStatus("Error: " + (response.error || "Unknown error"), "#ff0000");
+      }
+    });
+  }, "image-prompt-input", "Image prompt...", 280);
+
+  // Get Lesson Images button with lesson ID and image ID inputs beside it
+  const getLessonImagesGroup = createButtonWithInput("Get Lesson Images", () => {
+    const lessonId = getLessonImagesGroup.input.value.trim() || null;
+    const imageId = getLessonImagesGroup.secondInput ? getLessonImagesGroup.secondInput.value.trim() || null : null;
+    const accountId = null;
+    
+    updateStatus("Loading lesson images...", "#ffff00");
+    
+    // First reload image IDs
+    aiSDK.getLessonImageIds(lessonId, accountId, (imageIds, error) => {
+      if (error) {
+        console.warn("[SDK Test HTML] Could not reload lesson image IDs:", error);
+      } else {
+        lessonImageIds = imageIds || [];
+        updateImageIdsDisplay();
+      }
+      
+      // Then get the images
+      aiSDK.getLessonImages(lessonId, accountId, imageId, (images, error) => {
+        if (error) {
+          console.error("[SDK Test HTML] Error getting lesson images:", error);
+          updateStatus("Error: " + error, "#ff0000");
+          return;
+        }
+        recalledImages = images || [];
+        console.log("[SDK Test HTML] Retrieved images:", recalledImages.length);
+        updateStatus("Found " + recalledImages.length + " image(s)", "#00ff00");
+        
+        // Display gallery
+        displayImageGallery(recalledImages);
+      });
+    });
+  }, "lesson-id-input", "Lesson ID (optional)", 200);
+  
+  // Add second input for image ID to the same group
+  const imageIdInput = document.createElement("input");
+  imageIdInput.type = "text";
+  imageIdInput.id = "image-id-input";
+  imageIdInput.placeholder = "Image ID (optional)";
+  imageIdInput.style.width = "200px";
+  getLessonImagesGroup.group.appendChild(imageIdInput);
+  getLessonImagesGroup.secondInput = imageIdInput;
+
+  // Refresh Image IDs button with lesson ID input beside it
+  const refreshImageIdsGroup = createButtonWithInput("Refresh Image IDs", () => {
+    const lessonId = refreshImageIdsGroup.input.value.trim() || null;
+    const accountId = null;
+    
+    updateStatus("Refreshing image IDs...", "#ffff00");
+    aiSDK.getLessonImageIds(lessonId, accountId, (imageIds, error) => {
+      if (error) {
+        console.error("[SDK Test HTML] Error getting lesson image IDs:", error);
+        updateStatus("Error: " + error, "#ff0000");
+        return;
+      }
+      lessonImageIds = imageIds || [];
+      console.log("[SDK Test HTML] Retrieved image IDs:", lessonImageIds);
+      updateStatus("Found " + lessonImageIds.length + " image ID(s)", "#00ff00");
+      updateImageIdsDisplay();
+    });
+  }, "refresh-lesson-id-input", "Lesson ID (optional)", 200);
+
+  // Delete Image button with delete image ID input beside it
+  const deleteImageGroup = createButtonWithInput("Delete Image", () => {
+    const imageIdToDelete = deleteImageGroup.input.value.trim() || null;
+    if (!imageIdToDelete) {
+      updateStatus("Please enter an image ID to delete", "#ff0000");
+      return;
+    }
+    updateStatus("Deleting image...", "#ffff00");
+    aiSDK.deleteImage(imageIdToDelete, (result, error) => {
+      if (error || !result.success) {
+        console.error("[SDK Test HTML] Error deleting image:", error || result.error);
+        updateStatus("Error: " + (error || result.error || "Failed to delete image"), "#ff0000");
+        return;
+      }
+      console.log("[SDK Test HTML] Image deleted successfully:", imageIdToDelete);
+      updateStatus("Image deleted successfully", "#00ff00");
+      // Clear the input field
+      deleteImageGroup.input.value = "";
+      // Remove from local arrays
+      lessonImageIds = lessonImageIds.filter(id => id !== imageIdToDelete);
+      recalledImages = recalledImages.filter(img => (img.id || img.imageId) !== imageIdToDelete);
+      // Refresh displays
+      updateImageIdsDisplay();
+      displayImageGallery(recalledImages);
+    });
+  }, "delete-image-id-input", "Image ID to delete", 200);
+
+  function loadLessonImageIds() {
+    aiSDK.getLessonImageIds(null, null, (imageIds, error) => {
+      if (error) {
+        console.warn("[SDK Test HTML] Could not load lesson image IDs:", error);
+        return;
+      }
+      if (imageIds && imageIds.length > 0) {
+        lessonImageIds = imageIds;
+        console.log("[SDK Test HTML] Loaded existing image IDs:", lessonImageIds);
+        updateImageIdsDisplay();
+      }
+    });
+  }
+
+  // UI Control Methods Section
+  const uiLabel = document.createElement("div");
+  uiLabel.className = "section-label";
+  uiLabel.textContent = "UI CONTROL METHODS";
+  buttonsContainer.appendChild(uiLabel);
+
+  createButton("Minimize Chat UI", () => {
+    aiSDK.minimizeChatUI();
+    updateStatus("Chat UI minimized", "#00ff00");
+  });
+
+  createButton("Show Chat UI", () => {
+    aiSDK.showChatUI();
+    updateStatus("Chat UI shown", "#00ff00");
+  });
+
+  createButton("Activate Fullscreen", () => {
+    aiSDK.activateFullscreen();
+    updateStatus("Fullscreen activated", "#00ff00");
+  });
+
+  createButton("Deactivate Fullscreen", () => {
+    aiSDK.deactivateFullscreen();
+    updateStatus("Fullscreen deactivated", "#00ff00");
+  });
+
+  createButton("Post to Chat", () => {
+    const testMessage = "Test message from SDK Test interaction! This is a dummy message to test the postToChat functionality.";
+    aiSDK.postToChat(testMessage, "assistant", true);
+    updateStatus("Posted to chat: " + testMessage.substring(0, 30) + "...", "#00ff00");
+  });
+
+  createButton("Show Script", () => {
+    const testScript = "This is a test script block from the SDK Test interaction. It demonstrates the showScript functionality.";
+    aiSDK.showScript(testScript, true);
+    updateStatus("Script shown: " + testScript.substring(0, 30) + "...", "#00ff00");
+  });
+
+  createButton("Show Snack (5s)", () => {
+    aiSDK.showSnack("Test snack message! (also posts to chat)", 5000, false, (snackId) => {
+      updateStatus("Snack shown: " + snackId, "#00ff00");
+    });
+  });
+
+  createButton("Show Snack (no chat)", () => {
+    aiSDK.showSnack("Test snack message! (hidden from chat)", 5000, true, (snackId) => {
+      updateStatus("Snack shown (no chat): " + snackId, "#00ff00");
+    });
+  });
+
+  createButton("Hide Snack", () => {
+    aiSDK.hideSnack();
+    updateStatus("Snack hidden", "#00ff00");
+  });
+
+  // Data Storage Methods Section
+  const dataLabel = document.createElement("div");
+  dataLabel.className = "section-label";
+  dataLabel.textContent = "DATA STORAGE METHODS";
+  buttonsContainer.appendChild(dataLabel);
+
+  createButton("Save Instance Data", () => {
+    aiSDK.saveInstanceData(
+      {
+        testValue: Math.random(),
+        timestamp: Date.now(),
+        testArray: [1, 2, 3],
+      },
+      (success, error) => {
+        if (success) {
+          updateStatus("Instance data saved", "#00ff00");
+        } else {
+          updateStatus("Error: " + error, "#ff0000");
+        }
+      }
+    );
+  });
+
+  createButton("Get Instance Data History", () => {
+    aiSDK.getInstanceDataHistory(
+      { limit: 10 },
+      (data, error) => {
+        if (data) {
+          updateStatus("History: " + data.length + " records", "#00ff00");
+        } else {
+          updateStatus("Error: " + error, "#ff0000");
+        }
+      }
+    );
+  });
+
+  createButton("Save User Progress", () => {
+    aiSDK.saveUserProgress(
+      {
+        score: Math.floor(Math.random() * 100),
+        completed: false,
+        customData: {
+          testField: "test value",
+          testNumber: 42,
+        },
+      },
+      (progress, error) => {
+        if (progress) {
+          updateStatus("Progress saved. Attempts: " + progress.attempts, "#00ff00");
+        } else {
+          updateStatus("Error: " + error, "#ff0000");
+        }
+      }
+    );
+  });
+
+  createButton("Get User Progress", () => {
+    aiSDK.getUserProgress((progress, error) => {
+      if (progress) {
+        updateStatus(
+          "Progress: Attempts=" + progress.attempts + ", Completed=" + progress.completed,
+          "#00ff00"
+        );
+      } else if (error) {
+        updateStatus("Error: " + error, "#ff0000");
+      } else {
+        updateStatus("No progress found", "#ffff00");
+      }
+    });
+  });
+
+  createButton("Mark Completed", () => {
+    aiSDK.markCompleted((progress, error) => {
+      if (progress) {
+        updateStatus("Marked as completed", "#00ff00");
+      } else {
+        updateStatus("Error: " + error, "#ff0000");
+      }
+    });
+  });
+
+  createButton("Increment Attempts", () => {
+    aiSDK.incrementAttempts((progress, error) => {
+      if (progress) {
+        updateStatus("Attempts: " + progress.attempts, "#00ff00");
+      } else {
+        updateStatus("Error: " + error, "#ff0000");
+      }
+    });
+  });
+
+  createButton("Get User Public Profile", () => {
+    aiSDK.getUserPublicProfile(undefined, (profile, error) => {
+      if (profile) {
+        updateStatus("Profile: " + (profile.displayName || "No name"), "#00ff00");
+      } else if (error) {
+        updateStatus("Error: " + error, "#ff0000");
+      } else {
+        updateStatus("No profile found (this is OK)", "#ffff00");
+      }
+    });
+  });
+
+  console.log("[SDK Test HTML] All buttons created");
+}`;
+
+    // Find existing interaction
+    console.log('[InteractionTypes] 🔍 Checking if interaction exists...');
+    const existing = await this.interactionTypeRepository.findOne({
+      where: { id: 'sdk-test-html' },
+    });
+    console.log('[InteractionTypes] 📊 Found existing:', !!existing, 'jsCode length:', jsCode.length);
+
+    if (existing) {
+      // Update existing interaction
+      console.log('[InteractionTypes] 🔄 Updating SDK Test HTML interaction with image generation code');
+      console.log('[InteractionTypes] ⏱️ Starting database update at', new Date().toISOString());
+      
+      try {
+        // Use QueryBuilder for better performance with large text fields
+        console.log('[InteractionTypes] 📝 Executing database update...');
+        const updateResult = await this.interactionTypeRepository
+          .createQueryBuilder()
+          .update()
+          .set({
+            htmlCode: htmlCode,
+            cssCode: cssCode,
+            jsCode: jsCode,
+            description: 'Comprehensive test interaction for all AI Teacher SDK functionality including data storage, UI controls, events, responses, and image generation.',
+          })
+          .where('id = :id', { id: 'sdk-test-html' })
+          .execute();
+        
+        console.log('[InteractionTypes] ✅ Database update completed in', Date.now() - functionStartTime, 'ms');
+        console.log('[InteractionTypes] 📊 Update result:', updateResult);
+        
+        // Return updated entity
+        console.log('[InteractionTypes] 🔍 Fetching updated entity...');
+        const saved = await this.interactionTypeRepository.findOne({ where: { id: 'sdk-test-html' } });
+        if (!saved) {
+          throw new Error('Failed to retrieve updated interaction');
+        }
+        console.log('[InteractionTypes] ✅ Updated SDK Test HTML interaction. Total time:', Date.now() - functionStartTime, 'ms');
+        return saved;
+      } catch (error) {
+        console.error('[InteractionTypes] ❌ Error updating interaction:', error);
+        throw error;
+      }
+    } else {
+      // Create new if doesn't exist
+      const sdkTest = this.interactionTypeRepository.create({
+        id: 'sdk-test-html',
+        name: 'SDK Test - HTML',
+        category: 'absorb-show',
+        description: 'Comprehensive test interaction for all AI Teacher SDK functionality including data storage, UI controls, events, responses, and image generation.',
+        schema: {},
+        generationPrompt: 'This is a test interaction for SDK functionality.',
+        interactionTypeCategory: 'html',
+        htmlCode: htmlCode,
+        cssCode: cssCode,
+        jsCode: jsCode,
+        configSchema: {
+          fields: [],
+        },
+        sampleData: {
+          message: 'This is a test interaction for SDK functionality.',
+        },
+        isActive: true,
+      } as any);
+
+      const saved = await this.interactionTypeRepository.save(sdkTest);
+      console.log('[InteractionTypes] ✅ Created SDK Test HTML interaction with image generation code');
+      // TypeORM save can return array if passed array, but we pass single entity, so cast to single
+      return Array.isArray(saved) ? saved[0] : saved;
+    }
+  }
+
   async findAll(): Promise<InteractionType[]> {
     return this.interactionTypeRepository.find({
       where: { isActive: true },
