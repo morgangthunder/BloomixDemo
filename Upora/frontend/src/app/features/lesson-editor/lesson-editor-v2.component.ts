@@ -19,7 +19,6 @@ import { ContentLibraryModalComponent } from '../../shared/components/content-li
 import { AddTextContentModalComponent } from '../../shared/components/add-text-content-modal/add-text-content-modal.component';
 import { AddImageModalComponent } from '../../shared/components/add-image-modal/add-image-modal.component';
 import { AddPdfModalComponent } from '../../shared/components/add-pdf-modal/add-pdf-modal.component';
-import { TrueFalseSelectionComponent } from '../interactions/true-false-selection/true-false-selection.component';
 import { InteractionConfigureModalComponent } from '../../shared/components/interaction-configure-modal/interaction-configure-modal.component';
 import { ContentSourceViewModalComponent } from '../../shared/components/content-source-view-modal/content-source-view-modal.component';
 
@@ -91,7 +90,6 @@ interface ProcessedContentOutput {
     AddTextContentModalComponent,
     AddImageModalComponent,
     AddPdfModalComponent,
-    TrueFalseSelectionComponent,
     InteractionConfigureModalComponent,
     ContentSourceViewModalComponent
   ],
@@ -768,14 +766,7 @@ interface ProcessedContentOutput {
                           <p>This interaction has not been configured correctly yet. Select processed content and save the draft to preview it here.</p>
                         </div>
                       </div>
-                      <app-true-false-selection
-                        *ngIf="!showInteractionNotConfiguredWarning() && interactionPreviewData && getSelectedSubStage()?.interaction?.type === 'true-false-selection'"
-                        [data]="interactionPreviewData"
-                        [lessonId]="lesson?.id || null"
-                        [stageId]="getSelectedStage()?.id?.toString() || null"
-                        [substageId]="getSelectedSubStage()?.id?.toString() || null"
-                        (completed)="onPreviewCompleted($event)">
-                      </app-true-false-selection>
+                      <!-- True/False Selection is now an HTML interaction and will be rendered via HTML/PixiJS/iFrame Preview -->
                       <!-- HTML/PixiJS/iFrame Preview -->
                       <div *ngIf="!showInteractionNotConfiguredWarning() && interactionPreviewData && (interactionPreviewData.interactionCategory === 'html' || interactionPreviewData.interactionCategory === 'pixijs' || interactionPreviewData.interactionCategory === 'iframe') && interactionPreviewData.htmlCode" 
                            class="iframe-preview-container">

@@ -8,8 +8,6 @@ import { environment } from '../../../environments/environment';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 
-// Import the true-false selection component for preview
-import { TrueFalseSelectionComponent } from '../interactions/true-false-selection/true-false-selection.component';
 import { InteractionConfigureModalComponent } from '../../shared/components/interaction-configure-modal/interaction-configure-modal.component';
 import { MediaContentSelectorComponent } from '../../shared/components/media-content-selector/media-content-selector.component';
 import { UrlContentSelectorComponent } from '../../shared/components/url-content-selector/url-content-selector.component';
@@ -35,6 +33,15 @@ interface InteractionType {
   sampleData?: any; // New: sample JSON for preview
   mediaConfig?: any; // Media player configuration (autoplay, loop, etc.)
   contentOutputId?: string; // Selected processed content ID for media
+  config?: {
+    widgetConfigs?: {
+      [instanceId: string]: {
+        type: string;
+        config: any;
+      };
+    };
+    [key: string]: any;
+  }; // Configuration object with widget configs
 }
 
 interface SuggestedChanges {
@@ -55,7 +62,7 @@ interface ChatMessage {
 @Component({
   selector: 'app-interaction-builder',
   standalone: true,
-  imports: [CommonModule, FormsModule, TrueFalseSelectionComponent, InteractionConfigureModalComponent, MediaContentSelectorComponent, UrlContentSelectorComponent],
+  imports: [CommonModule, FormsModule, InteractionConfigureModalComponent, MediaContentSelectorComponent, UrlContentSelectorComponent],
   template: `
     <div class="interaction-builder">
       <!-- Header -->
@@ -397,6 +404,8 @@ interface ChatMessage {
                             (click)="activeCodeTab = 'css'">CSS</button>
                     <button [class.active]="activeCodeTab === 'js'" 
                             (click)="activeCodeTab = 'js'">JavaScript</button>
+                    <button [class.active]="activeCodeTab === 'widgets'" 
+                            (click)="activeCodeTab = 'widgets'">Widgets</button>
                   </div>
 
                   <div class="code-editor-container">
@@ -420,6 +429,238 @@ interface ChatMessage {
                               class="code-textarea"
                               placeholder="// Your JavaScript code"
                               spellcheck="false"></textarea>
+                    
+                    <!-- Widgets Tab -->
+                    <div *ngIf="activeCodeTab === 'widgets'" class="widgets-container">
+                      <div class="widgets-header">
+                        <h4>Widgets</h4>
+                        <p class="hint">Enable and configure widgets for this interaction. Widget SDK calls will be automatically added to the JavaScript tab.</p>
+                      </div>
+                      
+                      <div class="widgets-list">
+                        <div *ngFor="let widget of widgetRegistry" class="widget-item">
+                          <div class="widget-header">
+                            <div class="widget-info">
+                              <span class="widget-icon">{{ getWidgetIcon(widget.id) }}</span>
+                              <div class="widget-title-group">
+                                <h5 class="widget-title">{{ widget.name }}</h5>
+                                <p class="widget-description">{{ widget.description }}</p>
+                              </div>
+                            </div>
+                            <label class="widget-toggle">
+                              <input type="checkbox" 
+                                     [checked]="isWidgetEnabled(widget.id)"
+                                     (change)="toggleWidget(widget.id, $event)"
+                                     [disabled]="saving" />
+                              <span class="toggle-slider"></span>
+                            </label>
+                          </div>
+                          
+                          <!-- Widget Configuration (collapsible, shown when enabled) -->
+                          <div *ngIf="isWidgetEnabled(widget.id)" class="widget-config">
+                            <button class="widget-config-toggle" 
+                                    (click)="toggleWidgetConfig(widget.id)"
+                                    type="button">
+                              <span>{{ widgetConfigExpanded[widget.id] ? '▼' : '▶' }}</span>
+                              Configuration
+                            </button>
+                            
+                            <div *ngIf="widgetConfigExpanded[widget.id]" class="widget-config-content">
+                              <!-- Position Configuration (common to all widgets) -->
+                              <div class="config-section">
+                                <h6>Position</h6>
+                                <div class="form-row">
+                                  <div class="form-group">
+                                    <label>Position Type</label>
+                                    <select [(ngModel)]="getWidgetInstance(widget.id).config.position.type"
+                                            (ngModelChange)="onWidgetConfigChange()"
+                                            class="form-control">
+                                      <option value="top">Top</option>
+                                      <option value="bottom">Bottom</option>
+                                      <option value="center">Center</option>
+                                      <option value="top-left">Top Left</option>
+                                      <option value="top-right">Top Right</option>
+                                      <option value="bottom-left">Bottom Left</option>
+                                      <option value="bottom-right">Bottom Right</option>
+                                      <option value="custom">Custom</option>
+                                    </select>
+                                  </div>
+                                  <div class="form-group">
+                                    <label>Z-Index</label>
+                                    <input type="number" 
+                                           [(ngModel)]="getWidgetInstance(widget.id).config.position.zIndex"
+                                           (ngModelChange)="onWidgetConfigChange()"
+                                           class="form-control"
+                                           placeholder="1000" />
+                                  </div>
+                                </div>
+                                <div *ngIf="getWidgetInstance(widget.id).config.position.type === 'custom'" class="form-row">
+                                  <div class="form-group">
+                                    <label>X (px)</label>
+                                    <input type="number" 
+                                           [(ngModel)]="getWidgetInstance(widget.id).config.position.x"
+                                           (ngModelChange)="onWidgetConfigChange()"
+                                           class="form-control" />
+                                  </div>
+                                  <div class="form-group">
+                                    <label>Y (px)</label>
+                                    <input type="number" 
+                                           [(ngModel)]="getWidgetInstance(widget.id).config.position.y"
+                                           (ngModelChange)="onWidgetConfigChange()"
+                                           class="form-control" />
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <!-- Widget-specific configuration -->
+                              <!-- Image Carousel Widget Config -->
+                              <div *ngIf="widget.id === 'image-carousel'" class="widget-specific-config">
+                                <div class="config-section">
+                                  <h6>Carousel Settings</h6>
+                                  <div class="form-row">
+                                    <div class="form-group">
+                                      <label>Image IDs (comma-separated)</label>
+                                      <input type="text" 
+                                             [(ngModel)]="getWidgetInstance('image-carousel').config.imageIds"
+                                             (ngModelChange)="onWidgetConfigChange()"
+                                             class="form-control"
+                                             placeholder="img-1, img-2, img-3" />
+                                      <small class="hint">Enter image IDs from lesson images (will be converted to array)</small>
+                                    </div>
+                                  </div>
+                                  <div class="form-row">
+                                    <div class="form-group">
+                                      <label>
+                                        <input type="checkbox" 
+                                               [(ngModel)]="getWidgetInstance('image-carousel').config.autoplay"
+                                               (ngModelChange)="onWidgetConfigChange()" />
+                                        Autoplay
+                                      </label>
+                                    </div>
+                                    <div class="form-group">
+                                      <label>Interval (ms)</label>
+                                      <input type="number" 
+                                             [(ngModel)]="getWidgetInstance('image-carousel').config.interval"
+                                             (ngModelChange)="onWidgetConfigChange()"
+                                             class="form-control"
+                                             placeholder="3000" />
+                                    </div>
+                                  </div>
+                                  <div class="form-row">
+                                    <div class="form-group">
+                                      <label>
+                                        <input type="checkbox" 
+                                               [(ngModel)]="getWidgetInstance('image-carousel').config.showControls"
+                                               (ngModelChange)="onWidgetConfigChange()" />
+                                        Show Controls
+                                      </label>
+                                    </div>
+                                    <div class="form-group">
+                                      <label>
+                                        <input type="checkbox" 
+                                               [(ngModel)]="getWidgetInstance('image-carousel').config.showIndicators"
+                                               (ngModelChange)="onWidgetConfigChange()" />
+                                        Show Indicators
+                                      </label>
+                                    </div>
+                                  </div>
+                                  <!-- Container Configuration -->
+                                  <div class="config-section" style="margin-top: 20px;">
+                                    <h6>HTML Container</h6>
+                                    <div class="form-row">
+                                      <div class="form-group">
+                                        <label>
+                                          <input type="checkbox" 
+                                                 [(ngModel)]="getWidgetInstance('image-carousel').config.container.enabled"
+                                                 (ngModelChange)="onWidgetConfigChange()" />
+                                          Enable HTML Container Below Images
+                                        </label>
+                                      </div>
+                                    </div>
+                                    <div *ngIf="getWidgetInstance('image-carousel').config.container.enabled" class="form-row">
+                                      <div class="form-group">
+                                        <label>
+                                          <input type="checkbox" 
+                                                 [(ngModel)]="getWidgetInstance('image-carousel').config.container.defaultVisible"
+                                                 (ngModelChange)="onWidgetConfigChange()" />
+                                          Container Visible By Default
+                                        </label>
+                                      </div>
+                                      <div class="form-group">
+                                        <label>
+                                          <input type="checkbox" 
+                                                 [(ngModel)]="getWidgetInstance('image-carousel').config.container.showToggle"
+                                                 (ngModelChange)="onWidgetConfigChange()" />
+                                          Show Toggle Button
+                                        </label>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <!-- Timer Widget Config -->
+                              <div *ngIf="widget.id === 'timer'" class="widget-specific-config">
+                                <div class="config-section">
+                                  <h6>Timer Settings</h6>
+                                  <div class="form-row">
+                                    <div class="form-group">
+                                      <label>Initial Time (seconds)</label>
+                                      <input type="number" 
+                                             [(ngModel)]="getWidgetInstance('timer').config.initialTime"
+                                             (ngModelChange)="onWidgetConfigChange()"
+                                             class="form-control"
+                                             placeholder="60" />
+                                    </div>
+                                    <div class="form-group">
+                                      <label>Direction</label>
+                                      <select [(ngModel)]="getWidgetInstance('timer').config.direction"
+                                              (ngModelChange)="onWidgetConfigChange()"
+                                              class="form-control">
+                                        <option value="countdown">Countdown</option>
+                                        <option value="countup">Count Up</option>
+                                      </select>
+                                    </div>
+                                  </div>
+                                  <div class="form-row">
+                                    <div class="form-group">
+                                      <label>Format</label>
+                                      <input type="text" 
+                                             [(ngModel)]="getWidgetInstance('timer').config.format"
+                                             (ngModelChange)="onWidgetConfigChange()"
+                                             class="form-control"
+                                             placeholder="mm:ss" />
+                                    </div>
+                                    <div class="form-group">
+                                      <label>On Complete</label>
+                                      <select [(ngModel)]="getWidgetInstance('timer').config.onComplete"
+                                              (ngModelChange)="onWidgetConfigChange()"
+                                              class="form-control">
+                                        <option value="emit-event">Emit Event</option>
+                                        <option value="show-message">Show Message</option>
+                                        <option value="none">None</option>
+                                      </select>
+                                    </div>
+                                  </div>
+                                  <div class="form-group">
+                                    <label>
+                                      <input type="checkbox" 
+                                             [(ngModel)]="getWidgetInstance('timer').config.showMilliseconds"
+                                             (ngModelChange)="onWidgetConfigChange()" />
+                                      Show Milliseconds
+                                    </label>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div *ngIf="widgetRegistry.length === 0" class="empty-state">
+                          <p>Loading widgets...</p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -1072,14 +1313,6 @@ interface ChatMessage {
                       <p>Add overlay HTML/CSS/JS code in the Code tab to see a preview.</p>
                       <p *ngIf="!selectedVideoUrlId" style="margin-top: 10px; color: #ffaa00;">⚠️ Select a video URL content in the Code tab to test with actual video.</p>
                     </div>
-                  </div>
-
-                  <!-- Fallback: Use Angular component for true-false-selection if no HTML code -->
-                  <div *ngIf="(currentInteraction?.id === 'true-false-selection') && !currentInteraction?.htmlCode && currentInteraction?.sampleData" class="interaction-preview">
-                    <app-true-false-selection 
-                      [data]="currentInteraction?.sampleData"
-                      (interactionComplete)="onPreviewComplete($event)">
-                    </app-true-false-selection>
                   </div>
 
                   <!-- No Preview Available -->
@@ -2894,6 +3127,218 @@ interface ChatMessage {
       margin: 0;
       font-size: 1rem;
     }
+
+    /* Widgets Container */
+    .widgets-container {
+      padding: 1.5rem;
+      background: #0a0a0a;
+    }
+
+    .widgets-header {
+      margin-bottom: 1.5rem;
+    }
+
+    .widgets-header h4 {
+      margin: 0 0 0.5rem 0;
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #ffffff;
+    }
+
+    .widgets-header .hint {
+      margin: 0;
+      color: #999;
+      font-size: 0.875rem;
+    }
+
+    .widgets-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    /* Widget Item - Clear separation with borders */
+    .widget-item {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      overflow: hidden;
+      transition: all 0.2s ease;
+    }
+
+    .widget-item:hover {
+      border-color: #555;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Widget Header */
+    .widget-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid #333;
+      background: #1a1a1a;
+    }
+
+    .widget-info {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex: 1;
+    }
+
+    .widget-icon {
+      font-size: 1.5rem;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    .widget-title-group {
+      flex: 1;
+    }
+
+    .widget-title {
+      margin: 0 0 0.25rem 0;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #ffffff;
+    }
+
+    .widget-description {
+      margin: 0;
+      font-size: 0.875rem;
+      color: #999;
+      line-height: 1.4;
+    }
+
+    /* Widget Toggle Switch */
+    .widget-toggle {
+      position: relative;
+      display: inline-block;
+      width: 48px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+
+    .widget-toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #333;
+      transition: 0.3s;
+      border-radius: 24px;
+    }
+
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: #fff;
+      transition: 0.3s;
+      border-radius: 50%;
+    }
+
+    .widget-toggle input:checked + .toggle-slider {
+      background-color: #00d4ff;
+    }
+
+    .widget-toggle input:checked + .toggle-slider:before {
+      transform: translateX(24px);
+    }
+
+    .widget-toggle input:disabled + .toggle-slider {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Widget Config Section */
+    .widget-config {
+      border-top: 1px solid #333;
+      background: #1a1a1a;
+    }
+
+    .widget-config-toggle {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.25rem;
+      background: transparent;
+      border: none;
+      color: #ffffff;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.2s ease;
+    }
+
+    .widget-config-toggle:hover {
+      background: #2a2a2a;
+    }
+
+    .collapse-icon {
+      display: inline-block;
+      width: 16px;
+      text-align: center;
+      font-size: 0.75rem;
+      color: #999;
+      flex-shrink: 0;
+      transition: transform 0.2s ease;
+    }
+
+    .config-label {
+      flex: 1;
+    }
+
+    .widget-config-content {
+      padding: 1.25rem;
+      background: #0a0a0a;
+      border-top: 1px solid #333;
+    }
+
+    .config-section {
+      margin-bottom: 1.5rem;
+    }
+
+    .config-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .config-section h6 {
+      margin: 0 0 1rem 0;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #ffffff;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .widget-specific-config {
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid #2a2a2a;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 2rem;
+      color: #999;
+      font-size: 0.875rem;
+    }
   `]
 })
 export class InteractionBuilderComponent implements OnInit, OnDestroy {
@@ -2916,7 +3361,11 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
 
   // Tabs
   activeTab: 'settings' | 'code' | 'config' | 'sample' | 'preview' | 'ai' = 'settings';
-  activeCodeTab: 'html' | 'css' | 'js' = 'html';
+  activeCodeTab: 'html' | 'css' | 'js' | 'widgets' = 'html';
+
+  // Widget properties
+  widgetRegistry: any[] = [];
+  widgetConfigExpanded: { [widgetId: string]: boolean } = {};
 
   // JSON text fields (for editing)
   iframeConfigText = '';
@@ -3010,6 +3459,7 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.loadInteractions();
+    this.loadWidgetRegistry();
     
     // Start with sidebar hidden on mobile
     if (window.innerWidth <= 768) {
@@ -3098,6 +3548,11 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     console.log('[InteractionBuilder] ✅ Final currentInteraction.interactionTypeCategory:', this.currentInteraction.interactionTypeCategory);
     console.log('[InteractionBuilder] 🔍 Will Display Mode section show?', this.currentInteraction?.interactionTypeCategory === 'uploaded-media');
     console.log('[InteractionBuilder] 🔍 Active tab:', this.activeTab);
+    
+    // Initialize widget configs if widgets exist and registry is loaded
+    if (this.widgetRegistry.length > 0 && (this.currentInteraction as any).widgets) {
+      this.initializeWidgetConfigs();
+    }
     console.log('[InteractionBuilder] 🔍 Is settings tab active?', this.isTabActive('settings'));
     console.log('[InteractionBuilder] 🔍 currentInteraction object:', JSON.stringify({
       id: this.currentInteraction?.id,
@@ -6836,5 +7291,255 @@ overlayContent + '\n' +
       this.showSuccessSnackbar('Reset all to last working version');
     }
     this.markChanged();
+  }
+
+  /**
+   * Load widget registry from backend
+   */
+  loadWidgetRegistry() {
+    console.log('[InteractionBuilder] 📥 Loading widget registry...');
+    this.http.get<any[]>(`${environment.apiUrl}/interaction-types/widgets/registry`)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (data) => {
+          console.log('[InteractionBuilder] ✅ Loaded widget registry:', data.length, 'widgets');
+          this.widgetRegistry = data;
+          // Initialize widget configs for existing interaction if it has widgets
+          if (this.currentInteraction && (this.currentInteraction as any).widgets) {
+            this.initializeWidgetConfigs();
+          }
+        },
+        error: (err) => {
+          console.error('[InteractionBuilder] ❌ Failed to load widget registry:', err);
+        }
+      });
+  }
+
+  /**
+   * Initialize widget configurations for the current interaction
+   */
+  initializeWidgetConfigs() {
+    if (!this.currentInteraction || !(this.currentInteraction as any).widgets || !(this.currentInteraction as any).widgets.instances) {
+      console.log('[InteractionBuilder] ⚠️ No widgets to initialize for current interaction');
+      return;
+    }
+
+    // Ensure currentInteraction.config.widgetConfigs exists
+    if (!this.currentInteraction.config) {
+      this.currentInteraction.config = {};
+    }
+    if (!this.currentInteraction.config.widgetConfigs) {
+      this.currentInteraction.config.widgetConfigs = {};
+    }
+
+    (this.currentInteraction as any).widgets.instances.forEach((instance: any) => {
+      const widgetDef = this.widgetRegistry.find(w => w.id === instance.type);
+      if (!widgetDef) {
+        console.warn('[InteractionBuilder] ⚠️ Widget definition not found for instance type:', instance.type);
+        return;
+      }
+
+      // Initialize config for this widget instance if not already set
+      const currentInteraction = this.currentInteraction;
+      if (!currentInteraction?.config?.widgetConfigs) {
+        console.warn('[InteractionBuilder] ⚠️ Interaction, config, or widgetConfigs not initialized');
+        return;
+      }
+      // TypeScript now knows these are non-null after the optional chaining check
+      const widgetConfigs = currentInteraction.config.widgetConfigs;
+      const existingConfig = widgetConfigs[instance.id];
+      
+      if (!existingConfig) {
+        widgetConfigs[instance.id] = {
+          type: instance.type,
+          config: JSON.parse(JSON.stringify(widgetDef.interactionBuilderDefaultConfig || {}))
+        };
+      } else {
+        // Ensure type is set
+        if (!existingConfig.type) {
+          existingConfig.type = instance.type;
+        }
+        // If config is not nested, restructure it
+        if (!existingConfig.config) {
+          const oldConfig: any = { ...existingConfig };
+          if ('type' in oldConfig) {
+            delete oldConfig.type;
+          }
+          widgetConfigs[instance.id] = {
+            type: instance.type,
+            config: oldConfig
+          };
+        } else {
+          // Merge with defaults for any missing fields
+          const defaults = widgetDef.interactionBuilderDefaultConfig || {};
+          Object.keys(defaults).forEach(key => {
+            if (existingConfig.config && existingConfig.config[key] === undefined) {
+              existingConfig.config[key] = defaults[key];
+            }
+          });
+        }
+      }
+    });
+    console.log('[InteractionBuilder] ✅ Initialized widget configs:', this.currentInteraction.config?.widgetConfigs);
+  }
+
+  /**
+   * Check if a widget is enabled for the current interaction
+   */
+  isWidgetEnabled(widgetId: string): boolean {
+    if (!this.currentInteraction || !(this.currentInteraction as any).widgets) {
+      return false;
+    }
+    const widgets = (this.currentInteraction as any).widgets;
+    if (!widgets.instances || !Array.isArray(widgets.instances)) {
+      return false;
+    }
+    return widgets.instances.some((instance: any) => instance.type === widgetId && instance.enabled === true);
+  }
+
+  /**
+   * Toggle widget enabled state
+   */
+  toggleWidget(widgetId: string, event: any) {
+    if (!this.currentInteraction) {
+      return;
+    }
+
+    const isChecked = event.target.checked;
+    if (!(this.currentInteraction as any).widgets) {
+      (this.currentInteraction as any).widgets = { instances: [] };
+    }
+    if (!(this.currentInteraction as any).widgets.instances) {
+      (this.currentInteraction as any).widgets.instances = [];
+    }
+
+    let instance = (this.currentInteraction as any).widgets.instances.find((inst: any) => inst.type === widgetId);
+
+    if (isChecked) {
+      if (!instance) {
+        // Create a new instance with a unique ID
+        const newInstanceId = `${widgetId}-${Date.now()}`;
+        instance = { id: newInstanceId, type: widgetId, enabled: true, config: {} };
+        (this.currentInteraction as any).widgets.instances.push(instance);
+        
+        // Initialize its config with defaults
+        const widgetDef = this.widgetRegistry.find(w => w.id === widgetId);
+        if (widgetDef) {
+          if (!this.currentInteraction.config) this.currentInteraction.config = {};
+          if (!this.currentInteraction.config.widgetConfigs) this.currentInteraction.config.widgetConfigs = {};
+          this.currentInteraction.config.widgetConfigs![newInstanceId] = {
+            type: widgetId,
+            config: JSON.parse(JSON.stringify(widgetDef.interactionBuilderDefaultConfig || {}))
+          };
+        }
+      } else {
+        instance.enabled = true;
+      }
+      this.widgetConfigExpanded[widgetId] = true; // Expand config when enabled
+    } else {
+      if (instance) {
+        instance.enabled = false;
+        // Optionally remove its config from currentInteraction.config.widgetConfigs
+        if (this.currentInteraction.config && this.currentInteraction.config.widgetConfigs) {
+          delete this.currentInteraction.config.widgetConfigs![instance.id];
+        }
+      }
+      this.widgetConfigExpanded[widgetId] = false; // Collapse config when disabled
+    }
+    this.markChanged();
+    console.log(`[InteractionBuilder] Widget ${widgetId} ${isChecked ? 'enabled' : 'disabled'}. Current widgets:`, (this.currentInteraction as any).widgets.instances);
+  }
+
+  /**
+   * Get widget instance by ID (returns config structure for binding)
+   */
+  getWidgetInstance(widgetId: string): any {
+    if (!this.currentInteraction) {
+      return { config: { position: {} } }; // Return a default structure to prevent errors
+    }
+    if (!(this.currentInteraction as any).widgets) {
+      (this.currentInteraction as any).widgets = { instances: [] };
+    }
+    if (!(this.currentInteraction as any).widgets.instances) {
+      (this.currentInteraction as any).widgets.instances = [];
+    }
+
+    let instance = (this.currentInteraction as any).widgets.instances.find((inst: any) => inst.type === widgetId && inst.enabled);
+
+    if (!instance) {
+      // If no enabled instance, return a default structure for binding
+      return { config: { position: {} } };
+    }
+
+    // Ensure config structure exists for the instance
+    if (!this.currentInteraction.config) {
+      this.currentInteraction.config = {};
+    }
+    if (!this.currentInteraction.config.widgetConfigs) {
+      this.currentInteraction.config.widgetConfigs = {};
+    }
+    const widgetConfigs = this.currentInteraction.config.widgetConfigs;
+    if (!widgetConfigs) {
+      return { config: { position: {} } };
+    }
+    
+    let widgetConfig = widgetConfigs[instance.id];
+    
+    if (!widgetConfig) {
+      const widgetDef = this.widgetRegistry.find(w => w.id === widgetId);
+      widgetConfig = {
+        type: instance.type,
+        config: JSON.parse(JSON.stringify(widgetDef?.interactionBuilderDefaultConfig || {}))
+      };
+      widgetConfigs[instance.id] = widgetConfig;
+    }
+    
+    if (!widgetConfig.config) {
+      const oldConfig: any = { ...widgetConfig };
+      if ('type' in oldConfig) {
+        delete oldConfig.type;
+      }
+      widgetConfig.config = oldConfig;
+    }
+
+    // Ensure position config exists
+    if (widgetConfig.config && !widgetConfig.config.position) {
+      widgetConfig.config.position = {};
+    }
+
+    return widgetConfig;
+  }
+
+  /**
+   * Toggle widget configuration expansion
+   */
+  toggleWidgetConfig(widgetId: string) {
+    this.widgetConfigExpanded[widgetId] = !this.widgetConfigExpanded[widgetId];
+  }
+
+  /**
+   * Handle widget configuration change
+   */
+  onWidgetConfigChange() {
+    this.markChanged();
+  }
+
+  /**
+   * Get widget icon for display
+   */
+  getWidgetIcon(widgetId: string): string {
+    const icons: { [key: string]: string } = {
+      'image-carousel': '🖼️',
+      'timer': '⏱️',
+    };
+    return icons[widgetId] || '📦';
+  }
+
+  /**
+   * Get widget name for display
+   */
+  getWidgetName(widgetId: string): string {
+    const widgetDef = this.widgetRegistry.find(w => w.id === widgetId);
+    return widgetDef ? widgetDef.name : widgetId;
   }
 }

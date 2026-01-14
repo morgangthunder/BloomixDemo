@@ -337,6 +337,15 @@ export class InteractionAIBridgeService {
           });
         break;
 
+      case 'ai-sdk-complete-interaction':
+        // Dispatch custom event to trigger lesson progression
+        window.dispatchEvent(new CustomEvent('interaction-request-progress'));
+        this.sendToIframe(sourceWindow, {
+          type: 'ai-sdk-complete-interaction-ack',
+          requestId: message.requestId,
+        });
+        break;
+
       case 'ai-sdk-get-lesson-images':
         this.aiSDK.getLessonImages(message.lessonId, message.accountId, message.imageId)
           .then((images) => {
@@ -720,6 +729,13 @@ export const createIframeAISDK = () => {
           callback(response);
         }
       });
+    },
+
+    /**
+     * Complete the interaction and request progression to next sub-stage
+     */
+    completeInteraction: () => {
+      sendMessage('ai-sdk-complete-interaction', {});
     },
   };
 };

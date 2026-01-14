@@ -144,6 +144,16 @@ export class InteractionType {
     endTime?: number;
   } | null; // Video URL-specific configuration for video-url interactions
 
+  @Column('jsonb', { nullable: true })
+  widgets: {
+    instances: Array<{
+      id: string;
+      type: string;
+      enabled: boolean;
+      config: any;
+    }>;
+  } | null; // Widget instances configuration
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

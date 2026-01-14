@@ -17,7 +17,6 @@ import { takeUntil } from 'rxjs/operators';
 import { Lesson, Stage, SubStage } from '../../core/models/lesson.model';
 import { environment } from '../../../environments/environment';
 import { DEFAULT_LESSON_ID, isDefaultLessonId } from '../../core/constants/default-lesson-id';
-import { TrueFalseSelectionComponent } from '../interactions/true-false-selection/true-false-selection.component';
 import { FloatingTeacherWidgetComponent, ScriptBlock, ChatMessage as WidgetChatMessage } from '../../shared/components/floating-teacher/floating-teacher-widget.component';
 import { SnackMessageComponent } from '../../shared/components/snack-message/snack-message.component';
 import { MediaPlayerComponent } from '../../shared/components/media-player/media-player.component';
@@ -26,7 +25,7 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
 @Component({
   selector: 'app-lesson-view',
   standalone: true,
-  imports: [CommonModule, FormsModule, IonContent, TrueFalseSelectionComponent, FloatingTeacherWidgetComponent, SnackMessageComponent, MediaPlayerComponent, VideoUrlPlayerComponent],
+  imports: [CommonModule, FormsModule, IonContent, FloatingTeacherWidgetComponent, SnackMessageComponent, MediaPlayerComponent, VideoUrlPlayerComponent],
   template: `
     <div class="bg-brand-dark text-white overflow-hidden flex flex-col md:flex-row lesson-view-wrapper" [class.fullscreen-active]="isFullscreen">
       <!-- Mobile overlay -->
@@ -172,18 +171,6 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
               </div>
             </div>
 
-            <!-- True/False Selection Interaction -->
-            <div *ngIf="!isLoadingInteraction && interactionData?.interactionTypeId === 'true-false-selection'">
-              <app-true-false-selection
-                [data]="normalizedInteractionData"
-                [lessonId]="lesson?.id || null"
-                [stageId]="activeStageId?.toString() || null"
-                [substageId]="activeSubStageId?.toString() || null"
-                [processedContentId]="getProcessedContentIdForInteraction()"
-                (completed)="onInteractionCompleted($event)">
-              </app-true-false-selection>
-            </div>
-
             <!-- Uploaded Media Interactions -->
             <div *ngIf="!isLoadingInteraction && interactionBuild?.interactionTypeCategory === 'uploaded-media' && mediaPlayerData && !interactionError" class="media-interaction-container">
               <app-media-player
@@ -298,8 +285,8 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
               </div>
             </div>
 
-            <!-- Embedded Interaction (from JSON) -->
-            <div *ngIf="!isLoadingInteraction && !interactionData && getEmbeddedInteraction()">
+            <!-- Embedded Interaction (from JSON) - Only show for non-HTML interactions -->
+            <div *ngIf="!isLoadingInteraction && !interactionData && !interactionBuild && getEmbeddedInteraction()">
               <!-- Error message if config is empty -->
               <div *ngIf="getEmbeddedInteraction()?.type === 'true-false-selection' && !hasValidInteractionConfig(getEmbeddedInteraction()?.config)" 
                    class="bg-red-900/20 border-2 border-red-500 rounded-lg p-8 text-center">
@@ -309,15 +296,7 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
                 <p class="text-red-200 text-sm mt-2">Please contact the lesson creator to fix this issue.</p>
               </div>
               
-              <!-- Show interaction if config is valid -->
-              <app-true-false-selection
-                *ngIf="getEmbeddedInteraction()?.type === 'true-false-selection' && hasValidInteractionConfig(getEmbeddedInteraction()?.config)"
-                [data]="normalizedEmbeddedInteractionData"
-                [lessonId]="lesson?.id || null"
-                [stageId]="activeStageId?.toString() || null"
-                [substageId]="activeSubStageId?.toString() || null"
-                (completed)="onInteractionCompleted($event)">
-              </app-true-false-selection>
+              <!-- True/False Selection is now an HTML interaction and will be rendered via iframe -->
             </div>
 
             <!-- Fallback for no interaction data -->
@@ -1236,6 +1215,12 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         overlayContainer.classList.add('media-playing');
         console.log('[LessonView] ✅ Overlay HTML hidden');
       }
+    }) as EventListener);
+    
+    // Listen for interaction completion requests (from iframe interactions)
+    window.addEventListener('interaction-request-progress', (() => {
+      console.log('[LessonView] 📨 Received interaction-request-progress event, calling onNextButtonClick');
+      this.onNextButtonClick();
     }) as EventListener);
     
     // Listen for ai-sdk-message custom events from video-url section SDK
@@ -2452,7 +2437,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     this.interactionError = null;
     
     // Check if this is an uploaded-media interaction
-    if (interactionTypeId && interactionTypeId !== 'true-false-selection') {
+    if (interactionTypeId) {
       // If we're already on the same media interaction, don't reload it
       if (isSameMediaInteraction) {
         console.log('[LessonView] Already on same media interaction, skipping reload');
@@ -2493,14 +2478,6 @@ export class LessonViewComponent implements OnInit, OnDestroy {
             this.isLoadingInteraction = false;
           }
         });
-      return;
-    }
-    
-    // Legacy check for PixiJS/HTML/iframe (for backward compatibility)
-    if (interactionTypeId && interactionTypeId !== 'true-false-selection') {
-      console.log('[LessonView] Loading interaction build for type:', interactionTypeId);
-      this.isLoadingInteraction = true;
-      this.loadPixiJSHTMLIframeInteraction(null, subStage);
       return;
     }
 
@@ -2769,8 +2746,20 @@ export class LessonViewComponent implements OnInit, OnDestroy {
               return;
             }
             
+            // Normalize data structure for True/False interactions (extract from rankedInteractions if needed)
+            let normalizedData = processedData;
+            if (build.id === 'true-false-selection' && processedData.rankedInteractions && Array.isArray(processedData.rankedInteractions)) {
+              const matchingInteraction = processedData.rankedInteractions.find(
+                (interaction: any) => interaction.id === 'true-false-selection' || interaction.id === build.id
+              );
+              if (matchingInteraction && matchingInteraction.inputData) {
+                normalizedData = matchingInteraction.inputData;
+                console.log('[LessonView] ✅ Normalized data from rankedInteractions for True/False interaction');
+              }
+            }
+            
             // Use processed content (replace sample data)
-            this.interactionBuild = { ...build, sampleData: processedData };
+            this.interactionBuild = { ...build, sampleData: normalizedData };
             this.interactionPreviewKey++; // Force iframe recreation
             this.createInteractionBlobUrl();
             this.isLoadingInteraction = false;

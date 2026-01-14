@@ -4,7 +4,6 @@ import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { TrueFalseSelectionComponent } from '../../../features/interactions/true-false-selection/true-false-selection.component';
 import { ContentSourceService } from '../../../core/services/content-source.service';
 import { MediaContentSelectorComponent } from '../media-content-selector/media-content-selector.component';
 import { UrlContentSelectorComponent } from '../url-content-selector/url-content-selector.component';
@@ -13,7 +12,7 @@ import { environment } from '../../../../environments/environment';
 @Component({
   selector: 'app-interaction-configure-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, TrueFalseSelectionComponent, MediaContentSelectorComponent, UrlContentSelectorComponent],
+  imports: [CommonModule, FormsModule, MediaContentSelectorComponent, UrlContentSelectorComponent],
   template: `
     <div *ngIf="isOpen" class="modal-overlay-fullscreen" (click)="close()" style="z-index: 999999 !important; position: fixed !important;">
       <div class="modal-container-fullscreen" (click)="$event.stopPropagation()">
@@ -302,15 +301,10 @@ import { environment } from '../../../../environments/environment';
                   frameborder="0"></iframe>
               </div>
               
-              <!-- True/False Selection Preview (legacy component-based preview) -->
-              <app-true-false-selection
-                *ngIf="previewData && interactionType === 'true-false-selection' && interactionCategory !== 'html' && interactionCategory !== 'pixijs' && interactionCategory !== 'iframe' && interactionCategory !== 'uploaded-media' && interactionCategory !== 'video-url'"
-                [data]="previewData"
-                (interactionComplete)="onPreviewComplete($event)">
-              </app-true-false-selection>
+              <!-- True/False Selection is now an HTML interaction and will be rendered via HTML/PixiJS/iFrame Preview -->
               
               <!-- Placeholder for other types -->
-              <div *ngIf="previewData && interactionType && interactionCategory !== 'html' && interactionCategory !== 'pixijs' && interactionCategory !== 'iframe' && interactionCategory !== 'uploaded-media' && interactionType !== 'true-false-selection'" 
+              <div *ngIf="previewData && interactionType && interactionCategory !== 'html' && interactionCategory !== 'pixijs' && interactionCategory !== 'iframe' && interactionCategory !== 'uploaded-media'" 
                    class="preview-placeholder">
                 <p>Preview for {{interactionType}} ({{interactionCategory}}) not yet implemented</p>
                 <pre>{{previewDataJson}}</pre>

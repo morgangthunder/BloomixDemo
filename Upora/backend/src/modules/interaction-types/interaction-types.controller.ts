@@ -15,12 +15,24 @@ export class InteractionTypesController {
   // Specific routes must come before parameterized routes to avoid route conflicts
   @Post('seed')
   async seed() {
-    await this.interactionTypesService.seedTrueFalseSelection();
-    await this.interactionTypesService.seedVideoUrlInteraction();
-    await this.interactionTypesService.seedSDKTestVideoUrlInteraction();
-    await this.interactionTypesService.updateSDKTestPixiJSInteraction();
-    await this.interactionTypesService.updateSDKTestHTMLInteraction();
-    return { message: 'Interaction types seeded successfully' };
+    try {
+      await this.interactionTypesService.seedTrueFalseSelection();
+      await this.interactionTypesService.seedVideoUrlInteraction();
+      await this.interactionTypesService.seedSDKTestVideoUrlInteraction();
+      await this.interactionTypesService.updateSDKTestPixiJSInteraction();
+      await this.interactionTypesService.updateSDKTestHTMLInteraction();
+      await this.interactionTypesService.updateTrueFalseSelectionCompleteInteraction();
+      return { message: 'Interaction types seeded successfully' };
+    } catch (error) {
+      console.error('[InteractionTypesController] ❌ Seed error:', error);
+      throw error;
+    }
+  }
+
+  @Post('update-true-false-complete')
+  async updateTrueFalseComplete() {
+    await this.interactionTypesService.updateTrueFalseSelectionCompleteInteraction();
+    return { message: 'True/False Selection interaction updated with completeInteraction()' };
   }
 
   @Post('update-sdk-test-pixijs')
@@ -77,6 +89,33 @@ export class InteractionTypesController {
     }
 
     return this.interactionTypesService.uploadDocument(interactionId, file);
+  }
+
+  // Widget endpoints - must come before :id routes to avoid conflicts
+  @Get('widgets/registry')
+  async getWidgetRegistry() {
+    return this.interactionTypesService.getWidgetRegistry();
+  }
+
+  @Get('widgets/samples')
+  async getWidgetSampleConfigs() {
+    return this.interactionTypesService.getWidgetSampleConfigs();
+  }
+
+  @Get(':id/widgets')
+  async getWidgets(@Param('id') id: string) {
+    return this.interactionTypesService.getWidgets(id);
+  }
+
+  @Put(':id/widgets')
+  async updateWidgets(
+    @Param('id') id: string,
+    @Body() widgets: any,
+    @Headers('x-user-id') userId: string,
+    @Headers('x-tenant-id') tenantId: string,
+  ) {
+    // TODO: Add super-admin role check
+    return this.interactionTypesService.updateWidgets(id, widgets);
   }
 
   @Get(':id')

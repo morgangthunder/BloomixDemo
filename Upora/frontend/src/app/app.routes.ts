@@ -87,10 +87,6 @@ export const routes: Routes = [
     loadComponent: () => import('./features/super-admin/view-queries.component').then(m => m.ViewQueriesComponent)
   },
   {
-    path: 'test/true-false-selection',
-    loadComponent: () => import('./features/interactions/true-false-selection-test.component').then(m => m.TrueFalseSelectionTestComponent)
-  },
-  {
     path: '**',
     loadComponent: () => import('./shared/components/not-found/not-found.component').then(m => m.NotFoundComponent)
   }
