@@ -8,7 +8,7 @@ import { environment } from './environments/environment';
 // ========================================
 // Version is read from package.json at build time
 // This will be replaced by the build process or read dynamically
-const FRONTEND_VERSION = '0.1.170'; // Fixed image ID list visibility and positioning in SDK Test PixiJS interaction. Fixed coordinate conversion for HTML container positioning.
+const FRONTEND_VERSION = '0.1.175'; // Added widget configuration sections to interaction configure modal. Created widget developer guide. Updated SDK docs with widget usage information.
 const CACHE_BUST_ID = `v${FRONTEND_VERSION}-${Math.random().toString(36).substr(2, 9)}`;
 console.log('');
 console.log('═══════════════════════════════════════════════════════════');

@@ -31,8 +31,15 @@ export class InteractionTypesController {
 
   @Post('update-true-false-complete')
   async updateTrueFalseComplete() {
+    await this.interactionTypesService.fixTrueFalseDuplicateTotalTrue();
     await this.interactionTypesService.updateTrueFalseSelectionCompleteInteraction();
     return { message: 'True/False Selection interaction updated with completeInteraction()' };
+  }
+
+  @Post('fix-true-false-duplicate-totaltrue')
+  async fixTrueFalseDuplicateTotalTrue() {
+    await this.interactionTypesService.fixTrueFalseDuplicateTotalTrue();
+    return { message: 'Fixed duplicate totalTrue declarations in True/False Selection interaction' };
   }
 
   @Post('update-sdk-test-pixijs')
@@ -102,6 +109,18 @@ export class InteractionTypesController {
     return this.interactionTypesService.getWidgetSampleConfigs();
   }
 
+  @Post('widgets/generate-code')
+  async generateWidgetCode(@Body() body: { widgetId: string; config: any }) {
+    const { widgetId, config } = body;
+    if (!widgetId) {
+      throw new BadRequestException('widgetId is required');
+    }
+    const html = this.interactionTypesService.generateWidgetHTML(widgetId, config);
+    const css = this.interactionTypesService.generateWidgetCSS(widgetId);
+    const js = this.interactionTypesService.generateWidgetJS(widgetId, config);
+    return { html, css, js };
+  }
+
   @Get(':id/widgets')
   async getWidgets(@Param('id') id: string) {
     return this.interactionTypesService.getWidgets(id);
@@ -140,12 +159,29 @@ export class InteractionTypesController {
     @Headers('x-user-id') userId: string,
     @Headers('x-tenant-id') tenantId: string,
   ) {
-    // TODO: Add super-admin role check
-    // Remove fields that shouldn't be updated
-    const { id: bodyId, createdAt, updatedAt, contentOutputId, ...updateData } = dto;
-    // contentOutputId is for interaction instances, not interaction types
-    // It's used for testing in the builder but shouldn't be saved to the type
-    return this.interactionTypesService.update(id, updateData);
+    try {
+      // TODO: Add super-admin role check
+      // Remove fields that shouldn't be updated
+      // config is not a direct column - it's part of the interaction's configuration
+      // but stored elsewhere (e.g., in lesson-specific interaction instances)
+      const { id: bodyId, createdAt, updatedAt, contentOutputId, config, ...updateData } = dto;
+      // contentOutputId is for interaction instances, not interaction types
+      // It's used for testing in the builder but shouldn't be saved to the type
+      
+      // Remove null/undefined values to prevent database errors on non-nullable columns
+      Object.keys(updateData).forEach((key) => {
+        if (updateData[key] === null || updateData[key] === undefined) {
+          delete updateData[key];
+        }
+      });
+      
+      return await this.interactionTypesService.update(id, updateData);
+    } catch (error: any) {
+      console.error('[InteractionTypesController] ❌ Update error:', error);
+      console.error('[InteractionTypesController] Error stack:', error.stack);
+      console.error('[InteractionTypesController] Update data:', JSON.stringify(dto, null, 2));
+      throw error;
+    }
   }
 
   @Delete('document/:id')

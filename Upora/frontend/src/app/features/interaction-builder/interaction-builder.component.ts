@@ -5,7 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeResourceUrl, SafeHtml } from '@angular/platform-browser';
 import { environment } from '../../../environments/environment';
-import { Subject } from 'rxjs';
+import { Subject, firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 
 import { InteractionConfigureModalComponent } from '../../shared/components/interaction-configure-modal/interaction-configure-modal.component';
@@ -4403,6 +4403,32 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     
     delete saveData.contentOutputId;
     
+    // Sync widget configs between config.widgetConfigs and widgets.instances
+    // This ensures both locations have the same data when saving
+    if (saveData.config?.widgetConfigs && saveData.widgets?.instances) {
+      console.log('[InteractionBuilder] 🔄 Syncing widget configs before save...');
+      saveData.widgets.instances.forEach((instance: any) => {
+        const widgetConfig = saveData.config.widgetConfigs[instance.id];
+        if (widgetConfig && widgetConfig.config) {
+          // Convert imageIds from string (comma-separated) to array if needed
+          if (widgetConfig.config.imageIds && typeof widgetConfig.config.imageIds === 'string') {
+            const imageIdsStr = widgetConfig.config.imageIds.trim();
+            if (imageIdsStr) {
+              widgetConfig.config.imageIds = imageIdsStr.split(',').map((id: string) => id.trim()).filter((id: string) => id.length > 0);
+            } else {
+              widgetConfig.config.imageIds = [];
+            }
+          }
+          // Update instance.config from widgetConfig.config
+          instance.config = { ...widgetConfig.config };
+          console.log(`[InteractionBuilder] ✅ Synced widget config for ${instance.id}`, {
+            imageIds: instance.config.imageIds,
+            hasImageIds: Array.isArray(instance.config.imageIds)
+          });
+        }
+      });
+    }
+    
     // Add AI configuration
     saveData.aiPromptTemplate = this.aiPromptTemplateText.trim() || null;
     saveData.aiEventHandlers = this.aiEventHandlersText.trim() ? JSON.parse(this.aiEventHandlersText) : null;
@@ -4434,6 +4460,27 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
           
           // Update current and reload all related data
           this.currentInteraction = saved;
+          
+          // Re-initialize widget configs after save (this will restore widgetConfigs from saved data)
+          this.initializeWidgetConfigs();
+          
+          // Convert widget imageIds from array to string (comma-separated) for UI AFTER initialization
+          const widgetConfigs = this.currentInteraction.config?.widgetConfigs;
+          if (widgetConfigs) {
+            Object.keys(widgetConfigs).forEach((instanceId) => {
+              const widgetConfig = widgetConfigs[instanceId];
+              if (widgetConfig && widgetConfig.config) {
+                // Convert imageIds from array to string for display
+                if (Array.isArray(widgetConfig.config.imageIds)) {
+                  widgetConfig.config.imageIds = widgetConfig.config.imageIds.join(', ');
+                  console.log(`[InteractionBuilder] ✅ Converted imageIds array to string for ${instanceId}:`, widgetConfig.config.imageIds);
+                } else if (typeof widgetConfig.config.imageIds === 'string' && widgetConfig.config.imageIds.trim() === '') {
+                  // Empty string - ensure it's preserved
+                  widgetConfig.config.imageIds = '';
+                }
+              }
+            });
+          }
           
           // Reload media selection if it's an uploaded-media interaction
           if (saved.interactionTypeCategory === 'uploaded-media' && (saved as any).mediaConfig?.testMediaContentId) {
@@ -7319,6 +7366,14 @@ overlayContent + '\n' +
    * Initialize widget configurations for the current interaction
    */
   initializeWidgetConfigs() {
+    console.log('[InteractionBuilder] 🔧 initializeWidgetConfigs called', {
+      hasInteraction: !!this.currentInteraction,
+      hasWidgets: !!(this.currentInteraction as any)?.widgets,
+      hasInstances: !!(this.currentInteraction as any)?.widgets?.instances,
+      instanceCount: (this.currentInteraction as any)?.widgets?.instances?.length || 0,
+      registryLoaded: this.widgetRegistry.length > 0
+    });
+    
     if (!this.currentInteraction || !(this.currentInteraction as any).widgets || !(this.currentInteraction as any).widgets.instances) {
       console.log('[InteractionBuilder] ⚠️ No widgets to initialize for current interaction');
       return;
@@ -7332,7 +7387,10 @@ overlayContent + '\n' +
       this.currentInteraction.config.widgetConfigs = {};
     }
 
-    (this.currentInteraction as any).widgets.instances.forEach((instance: any) => {
+    const instances = (this.currentInteraction as any).widgets.instances;
+    console.log(`[InteractionBuilder] 🔧 Processing ${instances.length} widget instance(s)`);
+    
+    instances.forEach((instance: any) => {
       const widgetDef = this.widgetRegistry.find(w => w.id === instance.type);
       if (!widgetDef) {
         console.warn('[InteractionBuilder] ⚠️ Widget definition not found for instance type:', instance.type);
@@ -7349,12 +7407,26 @@ overlayContent + '\n' +
       const widgetConfigs = currentInteraction.config.widgetConfigs;
       const existingConfig = widgetConfigs[instance.id];
       
+      // Check if instance.config has saved data (from backend)
+      const instanceHasConfig = instance.config && Object.keys(instance.config).length > 0;
+      
       if (!existingConfig) {
-        widgetConfigs[instance.id] = {
-          type: instance.type,
-          config: JSON.parse(JSON.stringify(widgetDef.interactionBuilderDefaultConfig || {}))
-        };
+        // No saved config exists - create from instance.config or defaults
+        if (instanceHasConfig) {
+          widgetConfigs[instance.id] = {
+            type: instance.type,
+            config: JSON.parse(JSON.stringify(instance.config))
+          };
+          console.log(`[InteractionBuilder] ✅ Created widget config from instance.config for ${instance.id}`);
+        } else {
+          widgetConfigs[instance.id] = {
+            type: instance.type,
+            config: JSON.parse(JSON.stringify(widgetDef.interactionBuilderDefaultConfig || {}))
+          };
+          console.log(`[InteractionBuilder] ✅ Created widget config from defaults for ${instance.id}`);
+        }
       } else {
+        // Existing config found - preserve it, but merge with instance.config if available
         // Ensure type is set
         if (!existingConfig.type) {
           existingConfig.type = instance.type;
@@ -7367,9 +7439,13 @@ overlayContent + '\n' +
           }
           widgetConfigs[instance.id] = {
             type: instance.type,
-            config: oldConfig
+            config: instanceHasConfig ? { ...oldConfig, ...instance.config } : oldConfig
           };
         } else {
+          // Merge saved config with instance.config (instance.config takes precedence if present)
+          if (instanceHasConfig) {
+            existingConfig.config = { ...existingConfig.config, ...instance.config };
+          }
           // Merge with defaults for any missing fields
           const defaults = widgetDef.interactionBuilderDefaultConfig || {};
           Object.keys(defaults).forEach(key => {
@@ -7378,6 +7454,7 @@ overlayContent + '\n' +
             }
           });
         }
+        console.log(`[InteractionBuilder] ✅ Preserved existing widget config for ${instance.id}`);
       }
     });
     console.log('[InteractionBuilder] ✅ Initialized widget configs:', this.currentInteraction.config?.widgetConfigs);
@@ -7400,9 +7477,27 @@ overlayContent + '\n' +
   /**
    * Toggle widget enabled state
    */
-  toggleWidget(widgetId: string, event: any) {
+  async toggleWidget(widgetId: string, event: any) {
     if (!this.currentInteraction) {
+      console.error('[InteractionBuilder] ❌ Cannot toggle widget: currentInteraction is null');
       return;
+    }
+
+    // Ensure widget registry is loaded
+    if (this.widgetRegistry.length === 0) {
+      console.warn('[InteractionBuilder] ⚠️ Widget registry not loaded yet, loading now...');
+      await firstValueFrom(
+        this.http.get<any[]>(`${environment.apiUrl}/interaction-types/widgets/registry`)
+          .pipe(takeUntil(this.destroy$))
+      ).then(data => {
+        this.widgetRegistry = data;
+        console.log('[InteractionBuilder] ✅ Widget registry loaded:', data.length, 'widgets');
+      }).catch(err => {
+        console.error('[InteractionBuilder] ❌ Failed to load widget registry:', err);
+        this.showSuccessSnackbar('❌ Failed to load widget registry. Please refresh the page.');
+        event.target.checked = false; // Revert checkbox
+        return;
+      });
     }
 
     const isChecked = event.target.checked;
@@ -7434,11 +7529,37 @@ overlayContent + '\n' +
         }
       } else {
         instance.enabled = true;
+        console.log(`[InteractionBuilder] 🔍 Found existing instance:`, { id: instance.id, type: instance.type, enabled: instance.enabled });
+        console.log(`[InteractionBuilder] 🔍 Widget registry loaded:`, this.widgetRegistry.length > 0, `(${this.widgetRegistry.length} widgets)`);
+        // Ensure config exists in widgetConfigs (may be missing after reload)
+        if (!this.currentInteraction.config) this.currentInteraction.config = {};
+        if (!this.currentInteraction.config.widgetConfigs) this.currentInteraction.config.widgetConfigs = {};
+        if (!this.currentInteraction.config.widgetConfigs![instance.id]) {
+          // Config doesn't exist, create it from defaults
+          const widgetDef = this.widgetRegistry.find(w => w.id === widgetId);
+          console.log(`[InteractionBuilder] 🔍 Looking for widget def for ${widgetId}:`, widgetDef ? 'found' : 'NOT FOUND');
+          if (widgetDef) {
+            this.currentInteraction.config.widgetConfigs![instance.id] = {
+              type: widgetId,
+              config: JSON.parse(JSON.stringify(widgetDef.interactionBuilderDefaultConfig || {}))
+            };
+            console.log(`[InteractionBuilder] ✅ Recreated widget config for ${instance.id}:`, this.currentInteraction.config.widgetConfigs![instance.id]);
+          } else {
+            console.error(`[InteractionBuilder] ❌ Widget definition not found in registry for ${widgetId}. Registry has:`, this.widgetRegistry.map(w => w.id));
+          }
+        } else {
+          console.log(`[InteractionBuilder] ✅ Widget config already exists for ${instance.id}`);
+        }
       }
       this.widgetConfigExpanded[widgetId] = true; // Expand config when enabled
+      // Inject widget code
+      console.log(`[InteractionBuilder] 📞 About to call injectWidgetCode(${widgetId}, ${instance.id})`);
+      await this.injectWidgetCode(widgetId, instance.id);
     } else {
       if (instance) {
         instance.enabled = false;
+        // Remove widget code
+        this.removeWidgetCode(widgetId, instance.id);
         // Optionally remove its config from currentInteraction.config.widgetConfigs
         if (this.currentInteraction.config && this.currentInteraction.config.widgetConfigs) {
           delete this.currentInteraction.config.widgetConfigs![instance.id];
@@ -7541,5 +7662,197 @@ overlayContent + '\n' +
   getWidgetName(widgetId: string): string {
     const widgetDef = this.widgetRegistry.find(w => w.id === widgetId);
     return widgetDef ? widgetDef.name : widgetId;
+  }
+
+  /**
+   * Inject widget code into Code tab sections
+   */
+  async injectWidgetCode(widgetId: string, instanceId: string): Promise<void> {
+    if (!this.currentInteraction) {
+      console.error(`[InteractionBuilder] ❌ Cannot inject widget code: currentInteraction is null`);
+      return;
+    }
+
+    try {
+      console.log(`[InteractionBuilder] 🔧 Starting widget code injection for ${widgetId}, instanceId: ${instanceId}`);
+      
+      // Ensure config structure exists
+      if (!this.currentInteraction.config) this.currentInteraction.config = {};
+      if (!this.currentInteraction.config.widgetConfigs) this.currentInteraction.config.widgetConfigs = {};
+      
+      // Get widget config, create if missing
+      let widgetConfig = this.currentInteraction.config.widgetConfigs![instanceId];
+      if (!widgetConfig) {
+        console.warn(`[InteractionBuilder] ⚠️ Widget config not found for ${instanceId}, creating from defaults...`);
+        console.log(`[InteractionBuilder] Available widgetConfigs:`, Object.keys(this.currentInteraction.config.widgetConfigs || {}));
+        
+        // Try to find the widget instance to get the instance ID
+        const instance = (this.currentInteraction as any).widgets?.instances?.find((inst: any) => inst.id === instanceId || inst.type === widgetId);
+        const widgetDef = this.widgetRegistry.find(w => w.id === widgetId);
+        
+        if (widgetDef) {
+          widgetConfig = {
+            type: widgetId,
+            config: JSON.parse(JSON.stringify(widgetDef.interactionBuilderDefaultConfig || {}))
+          };
+          this.currentInteraction.config.widgetConfigs![instanceId] = widgetConfig;
+          console.log(`[InteractionBuilder] ✅ Created widget config for ${instanceId} from defaults`);
+        } else {
+          console.error(`[InteractionBuilder] ❌ Cannot create widget config: Widget definition not found for ${widgetId}`);
+          return;
+        }
+      }
+
+      console.log(`[InteractionBuilder] 📞 Calling backend to generate widget code...`);
+      console.log(`[InteractionBuilder] 📤 Request payload:`, { widgetId, config: { instanceId, ...widgetConfig.config } });
+      
+      // Call backend to generate widget code
+      let response: { html: string; css: string; js: string } | null = null;
+      try {
+        response = await firstValueFrom(
+          this.http.post<{ html: string; css: string; js: string }>(
+            `${environment.apiUrl}/interaction-types/widgets/generate-code`,
+            { widgetId, config: { instanceId, ...widgetConfig.config } }
+          )
+        );
+        console.log(`[InteractionBuilder] ✅ Backend call successful, response:`, response);
+      } catch (error: any) {
+        console.error(`[InteractionBuilder] ❌ Backend call failed:`, error);
+        console.error(`[InteractionBuilder] Error details:`, {
+          message: error?.message,
+          status: error?.status,
+          statusText: error?.statusText,
+          url: error?.url,
+          error: error
+        });
+        throw error; // Re-throw to be caught by outer try-catch
+      }
+
+      if (!response) {
+        console.error(`[InteractionBuilder] ❌ Failed to generate widget code for ${widgetId}: No response from backend`);
+        return;
+      }
+
+      console.log(`[InteractionBuilder] 📥 Received widget code:`, {
+        hasHtml: !!response.html,
+        htmlLength: response.html?.length || 0,
+        hasCss: !!response.css,
+        cssLength: response.css?.length || 0,
+        hasJs: !!response.js,
+        jsLength: response.js?.length || 0,
+        responseKeys: Object.keys(response)
+      });
+
+      // Inject code into respective sections (append to end)
+      if (response.html) {
+        const currentHtml = this.currentInteraction.htmlCode || '';
+        // Check if widget code already exists
+        const widgetMarker = `<!-- WIDGET:${widgetId}:START -->`;
+        if (!currentHtml.includes(widgetMarker)) {
+          const beforeLength = currentHtml.length;
+          this.currentInteraction.htmlCode = currentHtml + '\n' + response.html;
+          console.log(`[InteractionBuilder] ✅ Injected HTML code (${beforeLength} → ${this.currentInteraction.htmlCode.length} chars)`);
+        } else {
+          console.log(`[InteractionBuilder] ⚠️ HTML widget code already exists, skipping`);
+        }
+      }
+
+      if (response.css) {
+        const currentCss = this.currentInteraction.cssCode || '';
+        const widgetMarker = `/* WIDGET:${widgetId}:START */`;
+        if (!currentCss.includes(widgetMarker)) {
+          const beforeLength = currentCss.length;
+          this.currentInteraction.cssCode = currentCss + '\n' + response.css;
+          console.log(`[InteractionBuilder] ✅ Injected CSS code (${beforeLength} → ${this.currentInteraction.cssCode.length} chars)`);
+        } else {
+          console.log(`[InteractionBuilder] ⚠️ CSS widget code already exists, skipping`);
+        }
+      }
+
+      if (response.js) {
+        const currentJs = this.currentInteraction.jsCode || '';
+        const widgetMarker = `// WIDGET:${widgetId}:START`;
+        if (!currentJs.includes(widgetMarker)) {
+          const beforeLength = currentJs.length;
+          this.currentInteraction.jsCode = currentJs + '\n' + response.js;
+          console.log(`[InteractionBuilder] ✅ Injected JS code (${beforeLength} → ${this.currentInteraction.jsCode.length} chars)`);
+          console.log(`[InteractionBuilder] 📝 JS code preview (last 500 chars):`, this.currentInteraction.jsCode.substring(Math.max(0, this.currentInteraction.jsCode.length - 500)));
+          console.log(`[InteractionBuilder] 🔍 Verifying injection:`, {
+            jsCodeLength: this.currentInteraction.jsCode.length,
+            containsMarker: this.currentInteraction.jsCode.includes(widgetMarker),
+            containsWidgetEnd: this.currentInteraction.jsCode.includes(`// WIDGET:${widgetId}:END`)
+          });
+        } else {
+          console.log(`[InteractionBuilder] ⚠️ JS widget code already exists, skipping`);
+        }
+      }
+
+      this.markChanged();
+      
+      // Force switch to JS tab to show the injected code
+      if (response.js && this.activeCodeTab !== 'js') {
+        console.log(`[InteractionBuilder] 🔄 Switching to JavaScript tab to show injected widget code...`);
+        this.activeCodeTab = 'js';
+      }
+      
+      console.log(`[InteractionBuilder] ✅ Successfully injected widget code for ${widgetId}`);
+    } catch (error: any) {
+      console.error(`[InteractionBuilder] ❌ Failed to inject widget code for ${widgetId}:`, error);
+      console.error(`[InteractionBuilder] Error details:`, {
+        message: error?.message,
+        status: error?.status,
+        statusText: error?.statusText,
+        url: error?.url
+      });
+    }
+  }
+
+  /**
+   * Remove widget code from Code tab sections
+   */
+  removeWidgetCode(widgetId: string, instanceId: string): void {
+    if (!this.currentInteraction) {
+      return;
+    }
+
+    try {
+      // Remove HTML code (between markers)
+      if (this.currentInteraction.htmlCode) {
+        const htmlMarkerStart = `<!-- WIDGET:${widgetId}:START -->`;
+        const htmlMarkerEnd = `<!-- WIDGET:${widgetId}:END -->`;
+        const htmlRegex = new RegExp(
+          htmlMarkerStart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[\\s\\S]*?' + htmlMarkerEnd.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+          'g'
+        );
+        this.currentInteraction.htmlCode = this.currentInteraction.htmlCode.replace(htmlRegex, '').trim();
+      }
+
+      // Remove CSS code (between markers)
+      if (this.currentInteraction.cssCode) {
+        const cssMarkerStart = `/* WIDGET:${widgetId}:START */`;
+        const cssMarkerEnd = `/* WIDGET:${widgetId}:END */`;
+        const cssRegex = new RegExp(
+          cssMarkerStart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[\\s\\S]*?' + cssMarkerEnd.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+          'g'
+        );
+        this.currentInteraction.cssCode = this.currentInteraction.cssCode.replace(cssRegex, '').trim();
+      }
+
+      // Remove JS code (between markers)
+      if (this.currentInteraction.jsCode) {
+        const jsMarkerStart = `// WIDGET:${widgetId}:START`;
+        const jsMarkerEnd = `// WIDGET:${widgetId}:END`;
+        const jsRegex = new RegExp(
+          jsMarkerStart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[\\s\\S]*?' + jsMarkerEnd.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+          'g'
+        );
+        this.currentInteraction.jsCode = this.currentInteraction.jsCode.replace(jsRegex, '').trim();
+      }
+
+      this.markChanged();
+      console.log(`[InteractionBuilder] ✅ Removed widget code for ${widgetId}`);
+    } catch (error) {
+      console.error(`[InteractionBuilder] ❌ Failed to remove widget code for ${widgetId}:`, error);
+    }
   }
 }

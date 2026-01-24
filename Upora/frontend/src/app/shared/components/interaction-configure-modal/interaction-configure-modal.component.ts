@@ -18,7 +18,7 @@ import { environment } from '../../../../environments/environment';
       <div class="modal-container-fullscreen" (click)="$event.stopPropagation()">
         <div class="modal-header-sticky">
           <h2>⚙️ {{interactionName || 'Interaction'}} Configuration</h2>
-          <button (click)="close()" class="close-btn">✕</button>
+          <button (click)="close()" class="close-btn">✖</button>
         </div>
 
         <!-- Tab Navigation -->
@@ -79,6 +79,151 @@ import { environment } from '../../../../environments/environment';
               </div>
               <p class="hint">Choose which processed output powers this interaction.</p>
             </div>
+
+            <!-- Widget Configuration (for HTML/PixiJS/iframe interactions with enabled widgets) -->
+            <div *ngIf="!isBuilderMode && (interactionCategory === 'html' || interactionCategory === 'pixijs' || interactionCategory === 'iframe') && getEnabledWidgets().length > 0" class="widget-config-section">
+              <h3 class="section-title">🎛️ Widget Configuration</h3>
+              <p class="section-description">
+                Configure lesson-specific settings for widgets enabled in this interaction.
+              </p>
+              
+              <div *ngFor="let widget of getEnabledWidgets()" class="widget-config-item">
+                <div class="widget-config-header" (click)="toggleWidgetConfig(widget.id || widget.type)">
+                  <span class="widget-config-icon">{{getWidgetIcon(widget.type)}}</span>
+                  <span class="widget-config-name">{{getWidgetName(widget.type)}}</span>
+                  <span class="widget-config-toggle">{{widgetConfigExpanded[widget.id || widget.type] ? '▼' : '▶'}}</span>
+                </div>
+                
+                <div *ngIf="widgetConfigExpanded[widget.id || widget.type]" class="widget-config-content">
+                  <!-- Image Carousel Widget Configuration -->
+                  <div *ngIf="widget.type === 'image-carousel'" class="widget-config-fields">
+                    <div class="form-group">
+                      <label for="widget-carousel-image-ids">
+                        Image IDs
+                        <span class="hint">(comma-separated list of image IDs from this lesson)</span>
+                      </label>
+                      <input
+                        type="text"
+                        id="widget-carousel-image-ids"
+                        [value]="(getWidgetConfig(widget.id || widget.type)?.imageIds || []).join(', ')"
+                        (blur)="onWidgetConfigChange(widget.id || widget.type, 'imageIds', parseImageIds(getInputValue($event)))"
+                        placeholder="img-1, img-2, img-3"
+                        class="form-input" />
+                      <p class="hint">Enter comma-separated image IDs that were generated for this lesson.</p>
+                    </div>
+                    
+                    <div class="checkbox-group">
+                      <label class="checkbox-label">
+                        <input
+                          type="checkbox"
+                          [checked]="getWidgetConfig(widget.id || widget.type)?.autoplay || false"
+                          (change)="onWidgetConfigChange(widget.id || widget.type, 'autoplay', getCheckboxValue($event))"
+                          class="form-checkbox" />
+                        <span>Enable autoplay</span>
+                      </label>
+                    </div>
+                    
+                    <div *ngIf="getWidgetConfig(widget.id || widget.type)?.autoplay" class="form-group">
+                      <label for="widget-carousel-interval">Autoplay Interval (ms)</label>
+                      <input
+                        type="number"
+                        id="widget-carousel-interval"
+                        [value]="getWidgetConfig(widget.id || widget.type)?.interval || 3000"
+                        (blur)="onWidgetConfigChange(widget.id || widget.type, 'interval', parseIntValue(getInputValue($event), 3000))"
+                        min="500"
+                        step="500"
+                        class="form-input" />
+                    </div>
+                    
+                    <div class="checkbox-group">
+                      <label class="checkbox-label">
+                        <input
+                          type="checkbox"
+                          [checked]="getWidgetConfig(widget.id || widget.type)?.showControls !== false"
+                          (change)="onWidgetConfigChange(widget.id || widget.type, 'showControls', getCheckboxValue($event))"
+                          class="form-checkbox" />
+                        <span>Show navigation controls</span>
+                      </label>
+                    </div>
+                    
+                    <div class="checkbox-group">
+                      <label class="checkbox-label">
+                        <input
+                          type="checkbox"
+                          [checked]="getWidgetConfig(widget.id || widget.type)?.showIndicators !== false"
+                          (change)="onWidgetConfigChange(widget.id || widget.type, 'showIndicators', getCheckboxValue($event))"
+                          class="form-checkbox" />
+                        <span>Show image indicators</span>
+                      </label>
+                    </div>
+                  </div>
+                  
+                  <!-- Timer Widget Configuration -->
+                  <div *ngIf="widget.type === 'timer'" class="widget-config-fields">
+                    <div class="form-group">
+                      <label for="widget-timer-duration">Duration (seconds)</label>
+                      <input
+                        type="number"
+                        id="widget-timer-duration"
+                        [value]="getWidgetConfig(widget.id || widget.type)?.initialTime || getWidgetConfig(widget.id || widget.type)?.duration || getWidgetConfig(widget.id || widget.type)?.timeLimit || 60"
+                        (blur)="onWidgetConfigChange(widget.id || widget.type, 'initialTime', parseIntValue(getInputValue($event), 60))"
+                        min="1"
+                        class="form-input" />
+                    </div>
+                    
+                    <div class="form-group">
+                      <label for="widget-timer-direction">Direction</label>
+                      <select
+                        id="widget-timer-direction"
+                        [value]="getWidgetConfig(widget.id || widget.type)?.direction || 'countdown'"
+                        (change)="onWidgetConfigChange(widget.id || widget.type, 'direction', getSelectValue($event))"
+                        class="form-input">
+                        <option value="countdown">Countdown</option>
+                        <option value="countup">Count Up</option>
+                      </select>
+                    </div>
+                    
+                    <div class="form-group">
+                      <label for="widget-timer-format">Time Format</label>
+                      <select
+                        id="widget-timer-format"
+                        [value]="getWidgetConfig(widget.id || widget.type)?.format || 'mm:ss'"
+                        (change)="onWidgetConfigChange(widget.id || widget.type, 'format', getSelectValue($event))"
+                        class="form-input">
+                        <option value="mm:ss">MM:SS</option>
+                        <option value="hh:mm:ss">HH:MM:SS</option>
+                        <option value="ss">Seconds Only</option>
+                      </select>
+                    </div>
+                    
+                    <div class="checkbox-group">
+                      <label class="checkbox-label">
+                        <input
+                          type="checkbox"
+                          [checked]="getWidgetConfig(widget.id || widget.type)?.startOnLoad || false"
+                          (change)="onWidgetConfigChange(widget.id || widget.type, 'startOnLoad', getCheckboxValue($event))"
+                          class="form-checkbox" />
+                        <span>Start timer on load</span>
+                      </label>
+                    </div>
+                    
+                    <div class="checkbox-group">
+                      <label class="checkbox-label">
+                        <input
+                          type="checkbox"
+                          [checked]="getWidgetConfig(widget.id || widget.type)?.hideControls || false"
+                          (change)="onWidgetConfigChange(widget.id || widget.type, 'hideControls', getCheckboxValue($event))"
+                          class="form-checkbox" />
+                        <span>Hide controls</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <p *ngIf="getEnabledWidgets().length === 0" class="hint">No widgets enabled for this interaction type. Enable widgets in the Interaction Builder.</p>
+            </div>
+
             <!-- Dynamic config form based on configSchema -->
             <div *ngIf="configSchema && configSchema.fields && configSchema.fields.length > 0">
               <div *ngFor="let field of configSchema.fields" class="form-group">
@@ -226,13 +371,13 @@ import { environment } from '../../../../environments/environment';
                     class="file-input" />
                   <div class="file-upload-info" *ngIf="iframeGuideDocFile">
                     <span class="file-name">{{iframeGuideDocFile.name}}</span>
-                    <button type="button" (click)="removeDocumentFile()" class="btn-remove-file">✕</button>
+                    <button type="button" (click)="removeDocumentFile()" class="btn-remove-file">âœ–</button>
                   </div>
                   <div class="file-upload-info" *ngIf="!iframeGuideDocFile && config.iframeGuideDocUrl">
                     <span class="file-name">Current: {{config.iframeGuideDocFileName || 'Document'}}</span>
-                    <button type="button" (click)="removeDocumentFile()" class="btn-remove-file">✕</button>
+                    <button type="button" (click)="removeDocumentFile()" class="btn-remove-file">âœ–</button>
                   </div>
-                  <p *ngIf="uploadingDocument" class="upload-status">⏳ Uploading and processing...</p>
+                  <p *ngIf="uploadingDocument" class="upload-status">⌛ Uploading and processing...</p>
                 </div>
                 <!-- Read-only display in builder mode -->
                 <div *ngIf="isBuilderMode" class="readonly-field">
@@ -278,7 +423,7 @@ import { environment } from '../../../../environments/environment';
                   [title]="isWebpageProcessed ? 'This URL has already been processed' : 'Process and link this URL to the lesson'">
                   🔄 Process & Link to Lesson
                 </button>
-                <p *ngIf="processingWebpage" class="upload-status">⏳ Processing webpage...</p>
+                <p *ngIf="processingWebpage" class="upload-status">⌛ Processing webpage...</p>
                 <p *ngIf="isWebpageProcessed && !processingWebpage" class="hint" style="color: #00d4ff; margin-top: 0.5rem;">✅ URL has been processed and linked to lesson</p>
               </div>
             </div>
@@ -289,7 +434,7 @@ import { environment } from '../../../../environments/environment';
             <div class="interaction-preview-fullscreen">
               <!-- Loading state -->
               <div *ngIf="!previewData" class="preview-loading">
-                <p>⚠️ No sample data provided for preview</p>
+                <p>âš ï¸ No sample data provided for preview</p>
               </div>
               
               <!-- HTML/PixiJS/iFrame/Media Player/Video URL Preview -->
@@ -885,6 +1030,11 @@ export class InteractionConfigureModalComponent implements OnChanges {
   @Input() isBuilderMode: boolean = false; // true in interaction-builder, false in lesson-editor
   @Input() lessonId?: string; // Lesson ID for linking content sources
   @Input() selectedContentOutputName: string | null = null;
+  @Input() selectedUrlContentName: string | null = null;
+  @Input() selectedVideoUrlContentName: string | null = null;
+  @Input() selectedUrlContentId: string | null = null;
+  @Input() selectedVideoUrlContentId: string | null = null;
+  @Input() interactionWidgets: any[] = [];
 
   @Output() closed = new EventEmitter<void>();
   @Output() saved = new EventEmitter<any>();
@@ -908,13 +1058,13 @@ export class InteractionConfigureModalComponent implements OnChanges {
   
   // URL content selector (for iframe interactions)
   showUrlContentSelector = false;
-  selectedUrlContentId: string | null = null;
-  selectedUrlContentName = '';
   
   // Video URL content selector (for video-url interactions)
   showVideoUrlContentSelector = false;
-  selectedVideoUrlContentId: string | null = null;
-  selectedVideoUrlContentName = '';
+  
+  // Widget configuration
+  widgetRegistry: any[] = [];
+  widgetConfigExpanded: { [widgetId: string]: boolean } = {};
 
   constructor(
     private domSanitizer: DomSanitizer,
@@ -931,7 +1081,7 @@ export class InteractionConfigureModalComponent implements OnChanges {
   }
 
   onMediaSelected(processedContentId: string) {
-    console.log('[ConfigModal] 🎬 Media selected:', processedContentId);
+    console.log('[ConfigModal] ðŸŽ¬ Media selected:', processedContentId);
     this.selectedMediaId = processedContentId;
     
     // Fetch media details to display name
@@ -939,10 +1089,10 @@ export class InteractionConfigureModalComponent implements OnChanges {
       .subscribe({
         next: (media) => {
           this.selectedMediaName = media.outputName || media.contentSource?.title || 'Selected Media';
-          console.log('[ConfigModal] ✅ Media name set:', this.selectedMediaName);
+          console.log('[ConfigModal] âœ… Media name set:', this.selectedMediaName);
         },
         error: (err) => {
-          console.error('[ConfigModal] ❌ Failed to fetch media details:', err);
+          console.error('[ConfigModal] âŒ Failed to fetch media details:', err);
           this.selectedMediaName = 'Selected Media';
         }
       });
@@ -965,7 +1115,7 @@ export class InteractionConfigureModalComponent implements OnChanges {
   }
 
   onUrlContentSelected(processedContentId: string) {
-    console.log('[ConfigModal] 🔗 URL content selected:', processedContentId);
+    console.log('[ConfigModal] ðŸ”— URL content selected:', processedContentId);
     this.selectedUrlContentId = processedContentId;
     
     // Fetch content details to display name and URL
@@ -1001,10 +1151,10 @@ export class InteractionConfigureModalComponent implements OnChanges {
             this.updatePreviewData();
           }
           
-          console.log('[ConfigModal] ✅ URL content name set:', this.selectedUrlContentName, 'URL:', url);
+          console.log('[ConfigModal] âœ… URL content name set:', this.selectedUrlContentName, 'URL:', url);
         },
         error: (err) => {
-          console.error('[ConfigModal] ❌ Failed to fetch URL content details:', err);
+          console.error('[ConfigModal] âŒ Failed to fetch URL content details:', err);
           this.selectedUrlContentName = 'Selected URL';
         }
       });
@@ -1022,7 +1172,7 @@ export class InteractionConfigureModalComponent implements OnChanges {
   }
 
   onVideoUrlContentSelected(processedContentId: string) {
-    console.log('[ConfigModal] 🎥 Video URL content selected:', processedContentId);
+    console.log('[ConfigModal] ðŸ“¹ Video URL content selected:', processedContentId);
     this.selectedVideoUrlContentId = processedContentId;
     
     // Fetch content details to display name and video info
@@ -1066,10 +1216,10 @@ export class InteractionConfigureModalComponent implements OnChanges {
             this.updatePreviewData();
           }
           
-          console.log('[ConfigModal] ✅ Video URL content name set:', this.selectedVideoUrlContentName, 'URL:', url, 'videoId:', videoId);
+          console.log('[ConfigModal] âœ… Video URL content name set:', this.selectedVideoUrlContentName, 'URL:', url, 'videoId:', videoId);
         },
         error: (err) => {
-          console.error('[ConfigModal] ❌ Failed to fetch video URL content details:', err);
+          console.error('[ConfigModal] âŒ Failed to fetch video URL content details:', err);
           this.selectedVideoUrlContentName = 'Selected Video URL';
         }
       });
@@ -1114,17 +1264,17 @@ export class InteractionConfigureModalComponent implements OnChanges {
       // Initialize selectedMediaId from config if present
       if (this.config && this.config.contentOutputId) {
         this.selectedMediaId = this.config.contentOutputId;
-        console.log('[ConfigModal] 🎬 Initialized selectedMediaId from config:', this.selectedMediaId);
+        console.log('[ConfigModal] ðŸŽ¬ Initialized selectedMediaId from config:', this.selectedMediaId);
         // Fetch media name if not already set
         if (!this.selectedMediaName) {
           this.http.get<any>(`${environment.apiUrl}/lesson-editor/processed-outputs/${this.config.contentOutputId}`)
             .subscribe({
               next: (media) => {
                 this.selectedMediaName = media.outputName || media.contentSource?.title || 'Selected Media';
-                console.log('[ConfigModal] ✅ Media name loaded from config:', this.selectedMediaName);
+                console.log('[ConfigModal] âœ… Media name loaded from config:', this.selectedMediaName);
               },
               error: (err) => {
-                console.error('[ConfigModal] ❌ Failed to fetch media details:', err);
+                console.error('[ConfigModal] âŒ Failed to fetch media details:', err);
               }
             });
         }
@@ -1132,7 +1282,7 @@ export class InteractionConfigureModalComponent implements OnChanges {
         // Clear selectedMediaId if not in config
         this.selectedMediaId = null;
         this.selectedMediaName = '';
-        console.log('[ConfigModal] ⚠️ No media in config, cleared selectedMediaId');
+        console.log('[ConfigModal] âš ï¸ No media in config, cleared selectedMediaId');
       }
       
       // Merge sample data with config for preview
@@ -1141,17 +1291,17 @@ export class InteractionConfigureModalComponent implements OnChanges {
       // Hide page header and prevent scroll
       this.hidePageElements();
       
-      console.log('[ConfigModal] 🎯 Opened for:', this.interactionType);
-      console.log('[ConfigModal] 📋 Config Schema:', this.configSchema);
-      console.log('[ConfigModal] 📊 Sample Data:', this.sampleData);
-      console.log('[ConfigModal] ⚙️ Initial Config:', this.config);
-      console.log('[ConfigModal] 🏗️ Builder Mode:', this.isBuilderMode);
+      console.log('[ConfigModal] ðŸŽ¯ Opened for:', this.interactionType);
+      console.log('[ConfigModal] ðŸ“‹ Config Schema:', this.configSchema);
+      console.log('[ConfigModal] ðŸ“Š Sample Data:', this.sampleData);
+      console.log('[ConfigModal] âš™ï¸ Initial Config:', this.config);
+      console.log('[ConfigModal] ðŸ—ï¸ Builder Mode:', this.isBuilderMode);
     }
   }
 
   onConfigChange() {
     // Dynamically update preview data based on config changes
-    console.log('[ConfigModal] ⚙️ Config changed:', this.config);
+    console.log('[ConfigModal] âš™ï¸ Config changed:', this.config);
     this.updatePreviewData();
   }
 
@@ -1227,7 +1377,7 @@ export class InteractionConfigureModalComponent implements OnChanges {
   }
 
   onPreviewComplete(result: any) {
-    console.log('[ConfigModal] ✅ Preview completed:', result);
+    console.log('[ConfigModal] âœ… Preview completed:', result);
   }
 
   onProcessedContentSelect(event: Event) {
@@ -1315,7 +1465,7 @@ export class InteractionConfigureModalComponent implements OnChanges {
         this.config.iframeGuideWebpageUrl = url;
         // Trigger change detection
         this.onConfigChange();
-        console.log('[ConfigModal] ✅ Normalized URL:', url);
+        console.log('[ConfigModal] âœ… Normalized URL:', url);
       }
     }
   }
@@ -1327,7 +1477,7 @@ export class InteractionConfigureModalComponent implements OnChanges {
   }
 
   getInteractionPreviewBlobUrl(): SafeResourceUrl {
-    console.log('[ConfigModal] 🎬 Generating preview blob URL...');
+    console.log('[ConfigModal] ðŸŽ¬ Generating preview blob URL...');
     console.log('[ConfigModal] Category:', this.interactionCategory);
     console.log('[ConfigModal] Has HTML:', !!this.htmlCode);
     console.log('[ConfigModal] Config contentOutputId:', this.config?.contentOutputId);
@@ -1344,7 +1494,7 @@ export class InteractionConfigureModalComponent implements OnChanges {
     console.log('[ConfigModal] Has JS:', !!this.jsCode);
     
     if (!this.htmlCode && !this.jsCode) {
-      console.log('[ConfigModal] ⚠️ No code to render');
+      console.log('[ConfigModal] âš ï¸ No code to render');
       return this.domSanitizer.bypassSecurityTrustResourceUrl('');
     }
 
@@ -1368,7 +1518,7 @@ export class InteractionConfigureModalComponent implements OnChanges {
         if (url && !url.match(/^https?:\/\//i)) {
           url = 'https://' + url;
           normalizedConfig.url = url;
-          console.log('[ConfigModal] 🔗 Normalized config.url for iframe:', normalizedConfig.url);
+          console.log('[ConfigModal] ðŸ”— Normalized config.url for iframe:', normalizedConfig.url);
         }
       }
     }
@@ -1376,8 +1526,8 @@ export class InteractionConfigureModalComponent implements OnChanges {
     const sampleDataJson = this.sampleData ? JSON.stringify(this.sampleData) : '{}';
     const configJson = JSON.stringify(normalizedConfig);
 
-    console.log('[ConfigModal] 📋 Sample data for injection:', sampleDataJson.substring(0, 100) + '...');
-    console.log('[ConfigModal] ⚙️ Config for injection:', configJson);
+    console.log('[ConfigModal] ðŸ“‹ Sample data for injection:', sampleDataJson.substring(0, 100) + '...');
+    console.log('[ConfigModal] âš™ï¸ Config for injection:', configJson);
 
     // Use string concatenation - don't escape for template literals since we're not using them
     // For HTML and CSS, use directly; for JS, use JSON.stringify to safely embed
@@ -1395,10 +1545,10 @@ export class InteractionConfigureModalComponent implements OnChanges {
       if (mediaId) {
         // environment.apiUrl is 'http://localhost:3000/api', so we need to add '/content-sources' after '/api'
         mediaUrl = environment.apiUrl + '/content-sources/processed-content/' + mediaId + '/file';
-        console.log('[ConfigModal] 🎬 Using media URL from mediaId:', mediaId, 'URL:', mediaUrl);
+        console.log('[ConfigModal] ðŸŽ¬ Using media URL from mediaId:', mediaId, 'URL:', mediaUrl);
       } else {
         // Don't use default video - show placeholder instead
-        console.log('[ConfigModal] ⚠️ No media selected, will show placeholder');
+        console.log('[ConfigModal] âš ï¸ No media selected, will show placeholder');
         mediaUrl = ''; // Empty URL will show placeholder
       }
       if (this.config?.mediaType) {
@@ -1428,7 +1578,7 @@ export class InteractionConfigureModalComponent implements OnChanges {
         ? (mediaType === 'video' 
           ? '<video id="media-player" controls crossorigin="anonymous" preload="metadata" playsinline style="width: 100%; height: auto; max-height: 70vh; object-fit: contain;"><source src="' + mediaUrl.replace(/"/g, '&quot;') + '" type="' + mimeType + '">Your browser does not support the video tag.</video>'
           : '<audio id="media-player" controls crossorigin="anonymous" preload="metadata" style="width: 100%;"><source src="' + mediaUrl.replace(/"/g, '&quot;') + '" type="' + mimeType + '">Your browser does not support the audio tag.</audio>')
-        : '<div style="padding: 40px; text-align: center; color: #999; background: rgba(0,0,0,0.3); border: 2px dashed #444; border-radius: 8px; margin: 20px;"><p style="font-size: 16px; margin-bottom: 10px;">⚠️ No media selected</p><p style="font-size: 12px;">Select a media file in the Configure tab to preview</p></div>';
+        : '<div style="padding: 40px; text-align: center; color: #999; background: rgba(0,0,0,0.3); border: 2px dashed #444; border-radius: 8px; margin: 20px;"><p style="font-size: 16px; margin-bottom: 10px;">âš ï¸ No media selected</p><p style="font-size: 12px;">Select a media file in the Configure tab to preview</p></div>';
       
       const overlayContent = escapedHtml.trim() || '<div style="padding: 20px; color: #999; text-align: center;">No SDK test buttons configured</div>';
       
@@ -1552,10 +1702,10 @@ overlayContent + '\n' +
         ? `<div style="position: relative; width: 100%; height: 100%; min-height: 400px; background: #000;">
             <iframe id="video-url-player" src="${embedUrl.replace(/"/g, '&quot;')}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen style="width: 100%; height: 100%; min-height: 400px;" loading="lazy"></iframe>
             ${showPreviewNote ? `<div id="youtube-preview-note" style="position: absolute; bottom: 10px; left: 10px; right: 10px; background: rgba(255,193,7,0.95); color: #000; padding: 12px; border-radius: 4px; font-size: 12px; z-index: 10; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
-              <strong>ℹ️ Preview Note:</strong> If you see "Error 153" above, this is a known limitation in preview mode. The video will work properly when used in an actual lesson.
+              <strong>ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¹ÃƒÂ¯Ã‚Â¸Ã‚Â Preview Note:</strong> If you see "Error 153" above, this is a known limitation in preview mode. The video will work properly when used in an actual lesson.
             </div>` : ''}
           </div>`
-        : '<div style="padding: 40px; text-align: center; color: #999; background: rgba(0,0,0,0.3); border: 2px dashed #444; border-radius: 8px; margin: 20px;"><p style="font-size: 16px; margin-bottom: 10px;">⚠️ No video URL selected</p><p style="font-size: 12px;">Select a video URL content in the Configure tab to preview</p></div>';
+        : '<div style="padding: 40px; text-align: center; color: #999; background: rgba(0,0,0,0.3); border: 2px dashed #444; border-radius: 8px; margin: 20px;"><p style="font-size: 16px; margin-bottom: 10px;">âš ï¸ No video URL selected</p><p style="font-size: 12px;">Select a video URL content in the Configure tab to preview</p></div>';
       
       const overlayContent = escapedHtml.trim() || '<div style="padding: 20px; color: #999; text-align: center;">No SDK test buttons configured</div>';
       
@@ -1624,8 +1774,8 @@ escapedHtml + '\n' +
 '</html>';
     }
 
-    console.log('[ConfigModal] ✅ Complete HTML document generated');
-    console.log('[ConfigModal] 📄 HTML Document Length:', htmlDoc.length);
+    console.log('[ConfigModal] âœ… Complete HTML document generated');
+    console.log('[ConfigModal] ðŸ“„ HTML Document Length:', htmlDoc.length);
 
     // Create a Blob URL to bypass Angular's sanitization
     const blob = new Blob([htmlDoc], { type: 'text/html' });
@@ -1643,7 +1793,7 @@ escapedHtml + '\n' +
     
     // Use cached blob URL if available and key matches
     if (this.currentBlobUrl && this.currentBlobUrlKey === cacheKey) {
-      console.log('[ConfigModal] ♻️ Using cached preview blob URL');
+      console.log('[ConfigModal] ÃƒÂ¢Ã¢â€žÂ¢Ã‚Â»ÃƒÂ¯Ã‚Â¸Ã‚Â Using cached preview blob URL');
       return this.currentBlobUrl;
     }
     
@@ -1657,7 +1807,7 @@ escapedHtml + '\n' +
     
     this.currentBlobUrl = this.domSanitizer.bypassSecurityTrustResourceUrl(url);
     this.currentBlobUrlKey = cacheKey;
-    console.log('[ConfigModal] 🆕 Created new preview blob URL with key:', cacheKey);
+    console.log('[ConfigModal] ðŸ†• Created new preview blob URL with key:', cacheKey);
     return this.currentBlobUrl;
   }
 
@@ -1670,7 +1820,7 @@ escapedHtml + '\n' +
     const input = event.target as HTMLInputElement;
     if (input.files && input.files.length > 0) {
       this.iframeGuideDocFile = input.files[0];
-      console.log('[ConfigModal] 📄 Document selected:', this.iframeGuideDocFile.name);
+      console.log('[ConfigModal] ðŸ“„ Document selected:', this.iframeGuideDocFile.name);
       // Mark as changed when file is selected
       this.onConfigChange();
     }
@@ -1692,7 +1842,7 @@ escapedHtml + '\n' +
 
   async processWebpageUrl() {
     if (!this.config.iframeGuideWebpageUrl || !this.lessonId) {
-      console.warn('[ConfigModal] ⚠️ Cannot process webpage: missing URL or lessonId');
+      console.warn('[ConfigModal] âš ï¸ Cannot process webpage: missing URL or lessonId');
       return;
     }
 
@@ -1702,14 +1852,14 @@ escapedHtml + '\n' +
     this.processingWebpage = true;
     try {
       const normalizedUrl = this.config.iframeGuideWebpageUrl.trim();
-      console.log('[ConfigModal] 🌐 Processing webpage URL:', normalizedUrl);
+      console.log('[ConfigModal] ðŸŒ Processing webpage URL:', normalizedUrl);
       
       // Check if content source already exists for this URL
       const existingSource = await this.contentSourceService.findContentSourceByUrl(normalizedUrl);
       
       let contentSource: any;
       if (existingSource) {
-        console.log('[ConfigModal] 🔍 Found existing content source for URL:', existingSource.id);
+        console.log('[ConfigModal] ðŸ”Ž Found existing content source for URL:', existingSource.id);
         contentSource = existingSource;
         
         // Show info message that we're reusing existing content source
@@ -1717,7 +1867,7 @@ escapedHtml + '\n' +
       } else {
         // Create new content source only if it doesn't exist
         try {
-          console.log('[ConfigModal] 📝 Creating new content source for URL');
+          console.log('[ConfigModal] ðŸ“ Creating new content source for URL');
           contentSource = await this.contentSourceService.createContentSource({
             type: 'url',
             sourceUrl: normalizedUrl,
@@ -1727,13 +1877,13 @@ escapedHtml + '\n' +
               interactionType: this.interactionType,
             }
           });
-          console.log('[ConfigModal] ✅ Content source created:', contentSource.id);
+          console.log('[ConfigModal] âœ… Content source created:', contentSource.id);
         } catch (createError: any) {
           // If creation fails due to duplicate, try to find it again
           if (createError?.message?.includes('already exists')) {
             const foundSource = await this.contentSourceService.findContentSourceByUrl(normalizedUrl);
             if (foundSource) {
-              console.log('[ConfigModal] 🔍 Found existing content source after creation error:', foundSource.id);
+              console.log('[ConfigModal] ðŸ”Ž Found existing content source after creation error:', foundSource.id);
               contentSource = foundSource;
             } else {
               throw createError;
@@ -1747,14 +1897,14 @@ escapedHtml + '\n' +
       // Link to lesson (this will not create duplicate links - backend handles it)
       // This works even if the content source was already linked to another lesson
       await this.contentSourceService.linkToLesson(this.lessonId, contentSource.id);
-      console.log('[ConfigModal] ✅ Linked to lesson:', this.lessonId);
+      console.log('[ConfigModal] âœ… Linked to lesson:', this.lessonId);
 
       // Submit for approval only if not already approved
       if (contentSource.status === 'pending') {
         await this.contentSourceService.submitForApproval(contentSource.id);
-        console.log('[ConfigModal] ✅ Submitted for approval and processing');
+        console.log('[ConfigModal] âœ… Submitted for approval and processing');
       } else {
-        console.log('[ConfigModal] ℹ️ Content source already approved, skipping submission');
+        console.log('[ConfigModal] ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¹ÃƒÂ¯Ã‚Â¸Ã‚Â Content source already approved, skipping submission');
       }
 
       // Store the content source ID in config for reference (so we know it's been processed)
@@ -1763,7 +1913,7 @@ escapedHtml + '\n' +
       // Update initial snapshot since we've made a change
       this.initialConfigSnapshot = JSON.parse(JSON.stringify(this.config));
     } catch (error: any) {
-      console.error('[ConfigModal] ❌ Failed to process webpage:', error);
+      console.error('[ConfigModal] âŒ Failed to process webpage:', error);
       // Show user-friendly error message
       if (error?.message?.includes('already exists')) {
         throw new Error('This URL is already a content source. It has been linked to this lesson. You can find it in the Content Library.');
@@ -1817,7 +1967,7 @@ escapedHtml + '\n' +
     if (this.iframeGuideDocFile && this.lessonId) {
       this.uploadingDocument = true;
       try {
-        console.log('[ConfigModal] 📤 Auto-processing document:', this.iframeGuideDocFile.name);
+        console.log('[ConfigModal] ðŸ“¤ Auto-processing document:', this.iframeGuideDocFile.name);
         
         // Determine file type
         const fileName = this.iframeGuideDocFile.name.toLowerCase();
@@ -1844,7 +1994,7 @@ escapedHtml + '\n' +
 
         // Upload file and create content source in one request
         const uploadResponse = await this.http.post<any>(`${environment.apiUrl}/content-sources/upload-file`, contentFormData).toPromise();
-        console.log('[ConfigModal] ✅ File uploaded and content source created:', uploadResponse);
+        console.log('[ConfigModal] âœ… File uploaded and content source created:', uploadResponse);
 
         const contentSourceId = uploadResponse.id || uploadResponse.contentSourceId;
         
@@ -1854,11 +2004,11 @@ escapedHtml + '\n' +
 
         // Link to lesson
         await this.contentSourceService.linkToLesson(this.lessonId, contentSourceId);
-        console.log('[ConfigModal] ✅ Linked to lesson:', this.lessonId);
+        console.log('[ConfigModal] âœ… Linked to lesson:', this.lessonId);
 
         // Submit for approval (which triggers processing)
         await this.contentSourceService.submitForApproval(contentSourceId);
-        console.log('[ConfigModal] ✅ Submitted for approval and processing');
+        console.log('[ConfigModal] âœ… Submitted for approval and processing');
 
         // Store the content source ID in config for reference
         this.config.iframeGuideDocUrl = contentSourceId;
@@ -1871,13 +2021,13 @@ escapedHtml + '\n' +
         // Update initial snapshot since we've made a change
         this.initialConfigSnapshot = JSON.parse(JSON.stringify(this.config));
       } catch (error: any) {
-        console.error('[ConfigModal] ❌ Failed to upload document:', error);
+        console.error('[ConfigModal] âŒ Failed to upload document:', error);
         // If upload endpoint doesn't exist, try alternative approach
         if (error?.status === 404 || error?.error?.message?.includes('not found')) {
-          console.log('[ConfigModal] ⚠️ Upload endpoint not found, trying alternative approach...');
-          alert(`⚠️ File upload endpoint not available. Please use the Content Library to upload documents first, then link them to this lesson.`);
+          console.log('[ConfigModal] âš ï¸ Upload endpoint not found, trying alternative approach...');
+          alert(`âš ï¸ File upload endpoint not available. Please use the Content Library to upload documents first, then link them to this lesson.`);
         } else {
-          alert(`❌ Failed to upload document: ${error?.message || 'Unknown error'}`);
+          alert(`âŒ Failed to upload document: ${error?.message || 'Unknown error'}`);
         }
         this.uploadingDocument = false;
         return; // Don't save config if upload failed
@@ -1893,19 +2043,19 @@ escapedHtml + '\n' +
       
       if (!urlAlreadyProcessed) {
         try {
-          console.log('[ConfigModal] 🌐 Auto-processing webpage URL:', this.config.iframeGuideWebpageUrl);
+          console.log('[ConfigModal] ðŸŒ Auto-processing webpage URL:', this.config.iframeGuideWebpageUrl);
           await this.processWebpageUrl();
-          console.log('[ConfigModal] ✅ Webpage auto-processed and linked to lesson');
+          console.log('[ConfigModal] âœ… Webpage auto-processed and linked to lesson');
         } catch (error: any) {
-          console.error('[ConfigModal] ❌ Failed to auto-process webpage:', error);
+          console.error('[ConfigModal] âŒ Failed to auto-process webpage:', error);
           
           // Show user-friendly error message
           if (error?.message?.includes('already exists')) {
             // This is actually fine - the URL was found and linked, just show info
-            console.log('[ConfigModal] ℹ️ URL already exists, was linked to lesson');
+            console.log('[ConfigModal] ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¹ÃƒÂ¯Ã‚Â¸Ã‚Â URL already exists, was linked to lesson');
           } else {
             // Show error but continue with save - user can manually process later
-            alert(`⚠️ Failed to process webpage URL: ${error?.message || 'Unknown error'}\n\nYou can manually process it later or try again.`);
+            alert(`âš ï¸ Failed to process webpage URL: ${error?.message || 'Unknown error'}\n\nYou can manually process it later or try again.`);
           }
         }
       }
@@ -1915,14 +2065,167 @@ escapedHtml + '\n' +
     this.initialConfigSnapshot = JSON.parse(JSON.stringify(this.config));
     
     // Emit saved event with the full config including contentOutputId
-    console.log('[ConfigModal] 💾 Saving config with contentOutputId:', this.config.contentOutputId);
+    console.log('[ConfigModal] ðŸ’¾ Saving config with contentOutputId:', this.config.contentOutputId);
     this.saved.emit(this.config);
     
     // Show success message
-    console.log('[ConfigModal] ✅ Configuration saved successfully');
+    console.log('[ConfigModal] âœ… Configuration saved successfully');
     
     // Close modal after save
     this.close();
+  }
+
+  getInputValue(event: Event): string {
+    return (event.target as HTMLInputElement)?.value || '';
+  }
+
+  getSelectValue(event: Event): string {
+    return (event.target as HTMLSelectElement)?.value || '';
+  }
+
+  getCheckboxValue(event: Event): boolean {
+    return (event.target as HTMLInputElement)?.checked || false;
+  }
+
+  parseImageIds(value: string): string[] {
+    if (!value || !value.trim()) {
+      return [];
+    }
+    return value.split(',').map(id => id.trim()).filter(id => id.length > 0);
+  }
+
+  parseIntValue(value: string, defaultValue: number = 0): number {
+    const parsed = parseInt(value, 10);
+    return isNaN(parsed) ? defaultValue : parsed;
+  }
+
+  // Widget configuration methods
+  async loadWidgetData() {
+    // Load widgets from interactionWidgets input or fetch from backend if not provided
+    if (this.interactionWidgets && Array.isArray(this.interactionWidgets) && this.interactionWidgets.length > 0) {
+      console.log('[ConfigModal] âœ… Using provided interactionWidgets:', this.interactionWidgets);
+    } else if (this.interactionWidgets && typeof this.interactionWidgets === 'object' && (this.interactionWidgets as any).instances) {
+      // Handle case where interactionWidgets is an object with instances array
+      this.interactionWidgets = (this.interactionWidgets as any).instances;
+      console.log('[ConfigModal] âœ… Extracted widgets from instances:', this.interactionWidgets);
+    } else if (this.interactionType) {
+      // Fetch widgets from backend if not provided
+      try {
+        const widgets = await firstValueFrom(this.http.get<any>(`${environment.apiUrl}/interaction-types/${this.interactionType}/widgets`));
+        // Backend returns { instances: [...] }
+        this.interactionWidgets = widgets?.instances || [];
+        console.log('[ConfigModal] âœ… Loaded widgets from backend:', this.interactionWidgets);
+      } catch (error) {
+        console.error('[ConfigModal] âŒ Failed to load widgets:', error);
+        this.interactionWidgets = [];
+      }
+    } else {
+      this.interactionWidgets = [];
+    }
+
+    // Load widget registry
+    try {
+      this.widgetRegistry = await firstValueFrom(this.http.get<any[]>(`${environment.apiUrl}/interaction-types/widgets/registry`));
+      console.log('[ConfigModal] âœ… Widget registry loaded:', this.widgetRegistry.length);
+    } catch (error) {
+      console.error('[ConfigModal] âŒ Failed to load widget registry:', error);
+      this.widgetRegistry = [];
+    }
+
+    // Initialize widgetConfigExpanded state
+    if (this.interactionWidgets) {
+      (this.interactionWidgets as any[]).forEach(widget => {
+        if (this.config.widgetConfigs && this.config.widgetConfigs[widget.id]) {
+          this.widgetConfigExpanded[widget.id] = true; // Expand if config exists
+        } else {
+          this.widgetConfigExpanded[widget.id] = false; // Collapse by default
+        }
+      });
+    }
+
+    // Ensure widgetConfigs object exists in config
+    if (!this.config.widgetConfigs) {
+      this.config.widgetConfigs = {};
+    }
+
+    // Initialize lesson-specific widget configs if they don't exist
+    if (this.interactionWidgets) {
+      const widgets = Array.isArray(this.interactionWidgets) 
+        ? this.interactionWidgets 
+        : ((this.interactionWidgets as any).instances || []);
+      widgets.forEach((widget: any) => {
+        if (widget && !this.config.widgetConfigs[widget.id]) {
+          const widgetDef = this.widgetRegistry.find(w => w.id === widget.type);
+          if (widgetDef && widgetDef.lessonBuilderDefaultConfig) {
+            this.config.widgetConfigs[widget.id] = {
+              type: widget.type,
+              config: JSON.parse(JSON.stringify(widgetDef.lessonBuilderDefaultConfig))
+            };
+            console.log(`[ConfigModal] âœ… Initialized lesson-specific config for widget ${widget.id}`);
+          }
+        }
+      });
+    }
+    
+    this.onConfigChange(); // Trigger change detection
+  }
+
+  getEnabledWidgets(): any[] {
+    if (!this.interactionWidgets) {
+      return [];
+    }
+    const widgets = Array.isArray(this.interactionWidgets) 
+      ? this.interactionWidgets 
+      : ((this.interactionWidgets as any).instances || []);
+    // Filter to only show enabled widgets
+    return widgets.filter((w: any) => w.enabled);
+  }
+
+  getWidgetConfig(widgetId: string): any {
+    if (!this.config.widgetConfigs) {
+      this.config.widgetConfigs = {};
+    }
+    if (!this.config.widgetConfigs[widgetId]) {
+      // Fallback to default config if not found
+      const widgets = Array.isArray(this.interactionWidgets) 
+        ? this.interactionWidgets 
+        : ((this.interactionWidgets as any)?.instances || []);
+      const widget = widgets.find((iw: any) => (iw.id || iw.type) === widgetId);
+      const widgetDef = this.widgetRegistry.find((w: any) => w.id === (widget?.type || widgetId));
+      if (widgetDef && widgetDef.lessonBuilderDefaultConfig) {
+        this.config.widgetConfigs[widgetId] = {
+          type: widgetDef.id,
+          config: JSON.parse(JSON.stringify(widgetDef.lessonBuilderDefaultConfig))
+        };
+      } else {
+        this.config.widgetConfigs[widgetId] = { type: 'unknown', config: {} };
+      }
+    }
+    return this.config.widgetConfigs[widgetId].config;
+  }
+
+  onWidgetConfigChange(widgetId: string, key: string, value: any) {
+    const widgetConfig = this.getWidgetConfig(widgetId);
+    if (widgetConfig) {
+      widgetConfig[key] = value;
+      this.onConfigChange(); // Propagate change to parent
+    }
+  }
+
+  toggleWidgetConfig(widgetId: string) {
+    this.widgetConfigExpanded[widgetId] = !this.widgetConfigExpanded[widgetId];
+  }
+
+  getWidgetName(widgetType: string): string {
+    return this.widgetRegistry.find((w: any) => w.id === widgetType)?.name || widgetType;
+  }
+
+  getWidgetIcon(widgetType: string): string {
+    switch (widgetType) {
+      case 'image-carousel': return '🖼️';
+      case 'timer': return '⏱️';
+      default: return '🧩';
+    }
   }
 }
 

@@ -1117,6 +1117,7 @@ interface ProcessedContentOutput {
         [jsCode]="currentInteractionType?.jsCode || ''"
         [lessonId]="lesson?.id"
         [selectedContentOutputName]="getInteractionProcessedContentLabel()"
+        [interactionWidgets]="currentInteractionType?.widgets?.instances || []"
         (closed)="closeInteractionConfigModal()"
         (saved)="saveInteractionConfig($event)"
         (processedContentSelect)="openProcessedContentPicker('interaction')">

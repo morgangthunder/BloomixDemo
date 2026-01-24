@@ -4327,7 +4327,44 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     }
 
     // Get interaction config from sub-stage (lesson-builder configured values)
-    const config = (this.activeSubStage as any)?.interaction?.config || {};
+    const subStageConfig = (this.activeSubStage as any)?.interaction?.config || {};
+    
+    // Merge widget configs from build (interaction builder configured)
+    // Widget configs can be in build.config.widgetConfigs or build.widgets.instances
+    const widgetConfigs = this.interactionBuild.config?.widgetConfigs || {};
+    const buildWidgets = this.interactionBuild.widgets?.instances || [];
+    
+    // Ensure existing widgetConfigs have instanceId
+    Object.keys(widgetConfigs).forEach((instanceId) => {
+      if (widgetConfigs[instanceId] && widgetConfigs[instanceId].config && !widgetConfigs[instanceId].config.instanceId) {
+        widgetConfigs[instanceId].config.instanceId = instanceId;
+      }
+    });
+    
+    // Convert build.widgets.instances to widgetConfigs format if needed
+    if (buildWidgets.length > 0) {
+      buildWidgets.forEach((instance: any) => {
+        if (instance.enabled) {
+          console.log(`[LessonView] 📦 Adding widget config for ${instance.id} (${instance.type})`);
+          // Ensure instanceId is included in config (required by widget SDK)
+          const widgetConfig = instance.config || {};
+          if (!widgetConfig.instanceId) {
+            widgetConfig.instanceId = instance.id; // Add instanceId here
+          }
+          widgetConfigs[instance.id] = {
+            type: instance.type,
+            config: widgetConfig
+          };
+        }
+      });
+    }
+    
+    // Merge sub-stage config with widget configs
+    const config = {
+      ...subStageConfig,
+      widgetConfigs: widgetConfigs
+    };
+    
     const sampleData = this.interactionBuild.sampleData || {};
     
     // Log overlayMode before creating HTML (for debugging)
@@ -5425,6 +5462,317 @@ export class LessonViewComponent implements OnInit, OnDestroy {
           
           return hotspotConfigs.map(config => this.createHotspot(imageSprite, config));
         },
+        // Image methods
+        getLessonImages: function(lessonId, accountId, imageId, callback) {
+          sendMessage("ai-sdk-get-lesson-images", { lessonId, accountId, imageId }, (response) => {
+            if (callback) {
+              callback(response.images || [], response.error);
+            }
+          });
+        },
+        getLessonImageIds: function(lessonId, accountId, callback) {
+          sendMessage("ai-sdk-get-lesson-image-ids", { lessonId, accountId }, (response) => {
+            if (callback) {
+              callback(response.imageIds || [], response.error);
+            }
+          });
+        },
+        deleteImage: function(imageId, callback) {
+          sendMessage("ai-sdk-delete-image", { imageId }, (response) => {
+            if (callback) {
+              callback(response.success, response.error);
+            }
+          });
+        },
+        // Widget initialization methods
+        initImageCarousel: function(config) {
+          if (!config || !config.instanceId) {
+            console.warn('[SDK] initImageCarousel: config with instanceId is required');
+            return;
+          }
+          
+          const widgetId = 'widget-' + config.instanceId;
+          let widgetContainer = document.getElementById(widgetId);
+          
+          // Create widget container if it doesn't exist (should be created by injected HTML)
+          if (!widgetContainer) {
+            // Find widget marker in HTML or create container
+            const marker = document.querySelector('[data-widget-id="' + config.instanceId + '"]') || 
+                          document.querySelector('div[id*="' + config.instanceId + '"]');
+            if (marker) {
+              widgetContainer = marker;
+            } else {
+              // Create container at bottom of body
+              widgetContainer = document.createElement('div');
+              widgetContainer.id = widgetId;
+              widgetContainer.setAttribute('data-widget-id', config.instanceId);
+              widgetContainer.setAttribute('data-widget-type', 'image-carousel');
+              document.body.appendChild(widgetContainer);
+            }
+          }
+          
+          // Create collapsible section structure if not already present
+          let collapsibleSection = widgetContainer.querySelector('.widget-collapsible-section');
+          if (!collapsibleSection) {
+            collapsibleSection = document.createElement('div');
+            collapsibleSection.className = 'widget-collapsible-section';
+            collapsibleSection.innerHTML = \`
+              <div class="widget-collapsible-header" style="cursor: pointer; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 8px 8px 0 0; display: flex; align-items: center; gap: 10px;">
+                <span class="widget-collapsible-icon" style="transition: transform 0.3s;">▼</span>
+                <span class="widget-collapsible-title">Image Carousel</span>
+              </div>
+              <div class="widget-collapsible-content" style="padding: 15px; background: rgba(255,255,255,0.05); border-radius: 0 0 8px 8px; max-height: 500px; overflow-y: auto;">
+                <div class="carousel-container" style="position: relative; width: 100%; max-width: 800px; margin: 0 auto;">
+                  <div class="carousel-images" style="position: relative; width: 100%; min-height: 400px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.3); border-radius: 8px;"></div>
+                  <button class="carousel-prev" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.2); border: none; color: white; padding: 10px 15px; border-radius: 50%; cursor: pointer; font-size: 20px;">‹</button>
+                  <button class="carousel-next" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.2); border: none; color: white; padding: 10px 15px; border-radius: 50%; cursor: pointer; font-size: 20px;">›</button>
+                  <div class="carousel-controls" style="text-align: center; margin-top: 10px;">
+                    <button class="carousel-get-images" style="background: #ff3b3f; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-right: 10px;">Get Lesson Images</button>
+                    <div class="carousel-image-list" style="margin-top: 10px; max-height: 200px; overflow-y: auto; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 4px; font-size: 12px;"></div>
+                  </div>
+                </div>
+              </div>
+            \`;
+            widgetContainer.appendChild(collapsibleSection);
+            
+            // Toggle collapse/expand
+            const header = collapsibleSection.querySelector('.widget-collapsible-header');
+            const content = collapsibleSection.querySelector('.widget-collapsible-content');
+            const icon = collapsibleSection.querySelector('.widget-collapsible-icon');
+            let isExpanded = true;
+            
+            header.addEventListener('click', () => {
+              isExpanded = !isExpanded;
+              content.style.display = isExpanded ? 'block' : 'none';
+              icon.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)';
+            });
+            
+            // Carousel navigation
+            let currentImageIndex = 0;
+            const imagesContainer = collapsibleSection.querySelector('.carousel-images');
+            const prevBtn = collapsibleSection.querySelector('.carousel-prev');
+            const nextBtn = collapsibleSection.querySelector('.carousel-next');
+            const getImagesBtn = collapsibleSection.querySelector('.carousel-get-images');
+            const imageList = collapsibleSection.querySelector('.carousel-image-list');
+            let carouselImages = [];
+            
+            function renderCurrentImage() {
+              if (carouselImages.length === 0) {
+                imagesContainer.innerHTML = '<p style="color: rgba(255,255,255,0.5);">No images loaded</p>';
+                return;
+              }
+              const img = carouselImages[currentImageIndex];
+              imagesContainer.innerHTML = \`<img src="\${img.url}" style="max-width: 100%; max-height: 400px; border-radius: 8px;" />\`;
+              prevBtn.style.display = carouselImages.length > 1 ? 'block' : 'none';
+              nextBtn.style.display = carouselImages.length > 1 ? 'block' : 'none';
+            }
+            
+            prevBtn.addEventListener('click', () => {
+              if (carouselImages.length > 0) {
+                currentImageIndex = (currentImageIndex - 1 + carouselImages.length) % carouselImages.length;
+                renderCurrentImage();
+              }
+            });
+            
+            nextBtn.addEventListener('click', () => {
+              if (carouselImages.length > 0) {
+                currentImageIndex = (currentImageIndex + 1) % carouselImages.length;
+                renderCurrentImage();
+              }
+            });
+            
+            // Get lesson images
+            if (getImagesBtn && window.aiSDK && window.aiSDK.getLessonImages) {
+              getImagesBtn.addEventListener('click', () => {
+                window.aiSDK.getLessonImages((images) => {
+                  if (images && images.length > 0) {
+                    carouselImages = images;
+                    currentImageIndex = 0;
+                    renderCurrentImage();
+                    imageList.innerHTML = \`<strong>Image IDs:</strong><br>\${images.map((img, idx) => \`\${idx + 1}. \${img.id || 'No ID'}\`).join('<br>')}\`;
+                  } else {
+                    imageList.innerHTML = '<span style="color: rgba(255,255,255,0.5);">No images found</span>';
+                  }
+                });
+              });
+            }
+            
+            renderCurrentImage();
+          }
+          
+          console.log('[SDK] Image Carousel widget initialized:', config.instanceId);
+        },
+        initTimer: function(config) {
+          if (!config || !config.instanceId) {
+            console.warn('[SDK] initTimer: config with instanceId is required');
+            return;
+          }
+          
+          const widgetId = 'widget-' + config.instanceId;
+          let widgetContainer = document.getElementById(widgetId);
+          
+          // Create widget container if it doesn't exist
+          if (!widgetContainer) {
+            const marker = document.querySelector('[data-widget-id="' + config.instanceId + '"]') || 
+                          document.querySelector('div[id*="' + config.instanceId + '"]');
+            if (marker) {
+              widgetContainer = marker;
+            } else {
+              widgetContainer = document.createElement('div');
+              widgetContainer.id = widgetId;
+              widgetContainer.setAttribute('data-widget-id', config.instanceId);
+              widgetContainer.setAttribute('data-widget-type', 'timer');
+              document.body.appendChild(widgetContainer);
+            }
+          }
+          
+          // Create collapsible section structure
+          let collapsibleSection = widgetContainer.querySelector('.widget-collapsible-section');
+          if (!collapsibleSection) {
+            collapsibleSection = document.createElement('div');
+            collapsibleSection.className = 'widget-collapsible-section';
+            collapsibleSection.innerHTML = \`
+              <div class="widget-collapsible-header" style="cursor: pointer; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 8px 8px 0 0; display: flex; align-items: center; gap: 10px;">
+                <span class="widget-collapsible-icon" style="transition: transform 0.3s;">▼</span>
+                <span class="widget-collapsible-title">Timer</span>
+              </div>
+              <div class="widget-collapsible-content" style="padding: 15px; background: rgba(255,255,255,0.05); border-radius: 0 0 8px 8px;">
+                <div class="timer-display" style="text-align: center; font-size: 48px; font-weight: bold; color: #ff3b3f; margin: 20px 0;">00:00</div>
+                <div class="timer-controls" style="display: flex; gap: 10px; justify-content: center;">
+                  <button class="timer-start" style="background: #00d4ff; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">Start</button>
+                  <button class="timer-pause" style="background: #ff3b3f; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">Pause</button>
+                  <button class="timer-reset" style="background: rgba(255,255,255,0.2); color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">Reset</button>
+                </div>
+              </div>
+            \`;
+            widgetContainer.appendChild(collapsibleSection);
+            
+            // Toggle collapse/expand
+            const header = collapsibleSection.querySelector('.widget-collapsible-header');
+            const content = collapsibleSection.querySelector('.widget-collapsible-content');
+            const icon = collapsibleSection.querySelector('.widget-collapsible-icon');
+            let isExpanded = true;
+            
+            header.addEventListener('click', () => {
+              isExpanded = !isExpanded;
+              content.style.display = isExpanded ? 'block' : 'none';
+              icon.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)';
+            });
+            
+            // Timer logic
+            let seconds = 0;
+            let intervalId = null;
+            const display = collapsibleSection.querySelector('.timer-display');
+            const startBtn = collapsibleSection.querySelector('.timer-start');
+            const pauseBtn = collapsibleSection.querySelector('.timer-pause');
+            const resetBtn = collapsibleSection.querySelector('.timer-reset');
+            
+            function formatTime(secs) {
+              const mins = Math.floor(secs / 60);
+              const secsRemainder = secs % 60;
+              return \`\${String(mins).padStart(2, '0')}:\${String(secsRemainder).padStart(2, '0')}\`;
+            }
+            
+            function updateDisplay() {
+              display.textContent = formatTime(seconds);
+            }
+            
+            startBtn.addEventListener('click', () => {
+              if (!intervalId) {
+                intervalId = setInterval(() => {
+                  seconds++;
+                  updateDisplay();
+                }, 1000);
+              }
+            });
+            
+            pauseBtn.addEventListener('click', () => {
+              if (intervalId) {
+                clearInterval(intervalId);
+                intervalId = null;
+              }
+            });
+            
+            resetBtn.addEventListener('click', () => {
+              if (intervalId) {
+                clearInterval(intervalId);
+                intervalId = null;
+              }
+              seconds = 0;
+              updateDisplay();
+            });
+            
+            // Auto-start if configured
+            if (config.startOnLoad) {
+              setTimeout(() => {
+                if (startBtn) startBtn.click();
+              }, 100);
+            }
+            
+            // Hide controls if configured
+            if (config.hideControls) {
+              const controls = collapsibleSection.querySelector('.timer-controls');
+              if (controls) controls.style.display = 'none';
+            }
+            
+            updateDisplay();
+          }
+          
+          console.log('[SDK] Timer widget initialized:', config.instanceId);
+        },
+        completeInteraction: function() {
+          sendMessage("ai-sdk-complete-interaction", {});
+        },
+        initImageCarousel: function(config = {}) {
+          console.log('[Widget] 🖼️ Initializing Image Carousel widget with config:', config);
+          const widgetId = config.instanceId || 'image-carousel';
+          const container = document.getElementById('widget-' + widgetId);
+          if (!container) {
+            console.error('[Widget] ❌ Image Carousel container not found: widget-' + widgetId);
+            return;
+          }
+          const imageIds = config.imageIds || [];
+          if (!Array.isArray(imageIds) || imageIds.length === 0) {
+            const errorMsg = document.createElement('div');
+            errorMsg.className = 'widget-error';
+            errorMsg.style.cssText = 'padding: 20px; text-align: center; background: rgba(255, 0, 0, 0.1); border: 2px solid #ff3b3f; border-radius: 8px; color: #ff3b3f; margin: 10px 0;';
+            errorMsg.innerHTML = '<p style="margin: 0; font-weight: bold;">⚠️ Image Carousel Not Configured</p><p style="margin: 10px 0 0 0; font-size: 0.9em;">No image IDs have been added. Please configure the carousel in the Interaction Builder.</p>';
+            container.appendChild(errorMsg);
+            console.error('[Widget] ❌ Image Carousel: No image IDs configured. Add image IDs in the widget configuration.');
+            return;
+          }
+          console.log('[Widget] ✅ Image Carousel initialized with ' + imageIds.length + ' image(s)');
+        },
+        initTimer: function(config = {}) {
+          console.log('[Widget] ⏱️ Initializing Timer widget with config:', config);
+          const widgetId = config.instanceId || 'timer';
+          const container = document.getElementById('widget-' + widgetId);
+          if (!container) {
+            console.error('[Widget] ❌ Timer container not found: widget-' + widgetId);
+            return;
+          }
+          const duration = config.duration || config.timeLimit || 0;
+          if (!duration || duration <= 0) {
+            const errorMsg = document.createElement('div');
+            errorMsg.className = 'widget-error';
+            errorMsg.style.cssText = 'padding: 20px; text-align: center; background: rgba(255, 0, 0, 0.1); border: 2px solid #ff3b3f; border-radius: 8px; color: #ff3b3f; margin: 10px 0;';
+            errorMsg.innerHTML = '<p style="margin: 0; font-weight: bold;">⚠️ Timer Not Configured</p><p style="margin: 10px 0 0 0; font-size: 0.9em;">No time limit has been set. Please configure the timer duration in the Interaction Builder.</p>';
+            container.appendChild(errorMsg);
+            console.error('[Widget] ❌ Timer: No duration configured. Set a time limit in the widget configuration.');
+            return;
+          }
+          console.log('[Widget] ✅ Timer initialized with duration: ' + duration + ' seconds');
+        },
+        initWidget: function(widgetId, config = {}) {
+          console.log('[Widget] 🔧 Initializing widget: ' + widgetId + ' with config:', config);
+          if (widgetId === 'image-carousel') {
+            this.initImageCarousel(config);
+          } else if (widgetId === 'timer') {
+            this.initTimer(config);
+          } else {
+            console.warn('[Widget] ⚠️ Unknown widget type: ' + widgetId);
+          }
+        },
       };
       
       // Set up resize listeners for layering utilities
@@ -6078,7 +6426,6 @@ ${escapedCss}
     // For JavaScript, use base64 encoding to safely embed code with template literals
     // This avoids all template literal escaping issues
     // Use UTF-8 safe encoding to handle any Unicode characters in the code
-    const jsCodeBase64 = normalizedJs ? btoa(unescape(encodeURIComponent(normalizedJs))) : '';
     
     // Debug: Log if snack buttons are in the code
     console.log('[LessonView] 🔍 JS code includes "Show Snack (5s)":', normalizedJs.includes('Show Snack (5s)'));
@@ -6088,8 +6435,11 @@ ${escapedCss}
     console.log('[LessonView] 🔍 HTML code includes input field:', normalizedHtml.includes('image-prompt-input'));
     
     // Inject interaction data and config
-    const sampleDataJson = JSON.stringify(sampleData);
-    const configJson = JSON.stringify(config);
+    const sampleDataJsonBase64 = btoa(unescape(encodeURIComponent(JSON.stringify(sampleData || {}))));
+    const configJsonBase64 = btoa(unescape(encodeURIComponent(JSON.stringify(config || {}))));
+    const htmlBase64 = btoa(unescape(encodeURIComponent(normalizedHtml || '')));
+    const cssBase64 = btoa(unescape(encodeURIComponent(normalizedCss || '')));
+    const jsCodeBase64 = btoa(unescape(encodeURIComponent(normalizedJs || '')));
 
     return `<!DOCTYPE html>
 <html>
@@ -6114,26 +6464,952 @@ ${escapedCss}
     ::-webkit-scrollbar-thumb:hover {
       background: rgba(0, 212, 255, 0.5);
     }
+    
+    /* Widget Styles */
+    .widget-carousel-section {
+      background: rgba(0, 0, 0, 0.85);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+      font-family: sans-serif;
+      color: white;
+    }
+    .widget-carousel-header {
+      padding: 10px 15px !important;
+      background: rgba(255, 255, 255, 0.1) !important;
+      cursor: pointer !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 10px !important;
+      font-weight: bold !important;
+      user-select: none !important;
+    }
+    .widget-carousel-toggle {
+      display: inline-block !important;
+      transition: transform 0.3s !important;
+      font-size: 12px !important;
+    }
+    .widget-carousel-content {
+      padding: 15px !important;
+      border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
+    }
+    .carousel-image-container {
+      position: relative !important;
+      width: 100% !important;
+      height: 250px !important;
+      background: #000 !important;
+      border-radius: 4px !important;
+      overflow: hidden !important;
+      margin-bottom: 10px !important;
+    }
+    .carousel-image {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: contain !important;
+    }
+    .carousel-controls {
+      display: flex !important;
+      justify-content: space-between !important;
+      align-items: center !important;
+      margin-top: 10px !important;
+    }
+    .carousel-btn {
+      background: rgba(0, 212, 255, 0.2) !important;
+      border: 1px solid rgba(0, 212, 255, 0.4) !important;
+      color: white !important;
+      padding: 5px 15px !important;
+      border-radius: 4px !important;
+      cursor: pointer !important;
+    }
+    .carousel-btn:hover {
+      background: rgba(0, 212, 255, 0.4) !important;
+    }
+    .carousel-info {
+      font-size: 12px !important;
+      color: rgba(255, 255, 255, 0.7) !important;
+    }
   </style>
-  ${normalizedCss ? `<style>${escapedCss}</style>` : ''}
+  <div id="interaction-css-container"></div>
 </head>
 <body>
-${escapedHtml}
+  <div id="interaction-html-container"></div>
   <script type="text/plain" id="interaction-js-code" data-base64="${jsCodeBase64}"></script>
+  <script type="text/plain" id="interaction-html-base64" data-base64="${htmlBase64}"></script>
+  <script type="text/plain" id="interaction-css-base64" data-base64="${cssBase64}"></script>
+  <script type="text/plain" id="interaction-data-base64" data-base64="${sampleDataJsonBase64}"></script>
+  <script type="text/plain" id="interaction-config-base64" data-base64="${configJsonBase64}"></script>
   <script type="text/javascript">
     (function() {
       try {
-        var dataStr = ${JSON.stringify(sampleDataJson)};
-        var configStr = ${JSON.stringify(configJson)};
+        const decodeBase64 = (base64) => {
+          if (!base64) return '';
+          return decodeURIComponent(escape(window.atob(base64)));
+        };
+        
+        // Inject HTML
+        const htmlElem = document.getElementById('interaction-html-base64');
+        if (htmlElem) {
+          document.getElementById('interaction-html-container').innerHTML = decodeBase64(htmlElem.getAttribute('data-base64'));
+        }
+        
+        // Inject CSS
+        const cssElem = document.getElementById('interaction-css-base64');
+        if (cssElem) {
+          const css = decodeBase64(cssElem.getAttribute('data-base64'));
+          if (css) {
+            const style = document.createElement('style');
+            style.textContent = css;
+            document.head.appendChild(style);
+          }
+        }
+
+        // Parse Data and Config
+        const dataElem = document.getElementById('interaction-data-base64');
+        const configElem = document.getElementById('interaction-config-base64');
+        const dataStr = dataElem ? decodeBase64(dataElem.getAttribute('data-base64')) : '{}';
+        const configStr = configElem ? decodeBase64(configElem.getAttribute('data-base64')) : '{}';
         window.interactionData = JSON.parse(dataStr);
         window.interactionConfig = JSON.parse(configStr);
         console.log("[Interaction] Data injected:", window.interactionData);
         console.log("[Interaction] Config injected:", window.interactionConfig);
       } catch (e) {
         console.error("[Interaction] Error setting data:", e);
-        window.interactionData = {};
-        window.interactionConfig = {};
+        window.interactionData = window.interactionData || {};
+        window.interactionConfig = window.interactionConfig || {};
       }
+    })();
+  </script>
+  <script type="text/javascript">
+    // Initialize SDK for widget support (inject createIframeAISDK)
+    (function() {
+      if (typeof window.createIframeAISDK === 'undefined') {
+        window.createIframeAISDK = () => {
+          let subscriptionId = null;
+          let requestCounter = 0;
+          const generateRequestId = () => \`req-\${Date.now()}-\${++requestCounter}\`;
+          const sendMessage = (type, data, callback) => {
+            const requestId = generateRequestId();
+            const message = { type, requestId, ...data };
+            if (callback) {
+              const listener = (event) => {
+                if (event.data.requestId === requestId) {
+                  window.removeEventListener("message", listener);
+                  callback(event.data);
+                }
+              };
+              window.addEventListener("message", listener);
+            }
+            window.parent.postMessage(message, "*");
+          };
+          return {
+            isReady: (callback) => {
+              const listener = (event) => {
+                if (event.data.type === "ai-sdk-ready") {
+                  window.removeEventListener("message", listener);
+                  if (callback) callback(true);
+                }
+              };
+              window.addEventListener("message", listener);
+            },
+            emitEvent: (event, processedContentId) => {
+              sendMessage("ai-sdk-emit-event", { event, processedContentId });
+            },
+            updateState: (key, value) => {
+              sendMessage("ai-sdk-update-state", { key, value });
+            },
+            getState: (callback) => {
+              sendMessage("ai-sdk-get-state", {}, (response) => {
+                callback(response.state);
+              });
+            },
+            completeInteraction: function() {
+              sendMessage("ai-sdk-complete-interaction", {});
+            },
+            // Widget Management
+            _widgetInstances: new Map(),
+            _currentLessonId: null,
+            _currentAccountId: null,
+            // Widget Implementation Functions (from sdk-test-html)
+            _initImageCarousel: function(instanceId, config) {
+              const instance = this._widgetInstances.get(instanceId);
+              if (!instance) return;
+              
+              // Look for existing widget container in HTML (allows builders to position it)
+              let widgetSection = document.getElementById('widget-section-' + instanceId);
+              let contentContainer = document.getElementById('widget-carousel-content-' + instanceId);
+              let container = document.getElementById('widget-carousel-' + instanceId);
+              
+              // If container doesn't exist in HTML, create it dynamically
+              if (!container) {
+                console.log('[Widget] Container not found in HTML, creating dynamically for', instanceId);
+                
+                // Create collapsible widget section
+                widgetSection = document.createElement('div');
+                widgetSection.id = 'widget-section-' + instanceId;
+                widgetSection.className = 'widget-carousel-section';
+                
+                // Create header with toggle button
+                const header = document.createElement('div');
+                header.className = 'widget-carousel-header';
+                
+                const toggleIcon = document.createElement('span');
+                toggleIcon.className = 'widget-carousel-toggle';
+                toggleIcon.textContent = '▼';
+                
+                const headerTitle = document.createElement('span');
+                headerTitle.textContent = '🖼️ Image Carousel Widget';
+                
+                header.appendChild(toggleIcon);
+                header.appendChild(headerTitle);
+                
+                // Create content container (collapsible)
+                contentContainer = document.createElement('div');
+                contentContainer.id = 'widget-carousel-content-' + instanceId;
+                contentContainer.className = 'widget-carousel-content';
+                
+                // Create carousel container
+                container = document.createElement('div');
+                container.id = 'widget-carousel-' + instanceId;
+                container.style.position = 'relative';
+                container.style.width = '100%';
+                container.style.zIndex = '1';
+                
+                contentContainer.appendChild(container);
+                widgetSection.appendChild(header);
+                widgetSection.appendChild(contentContainer);
+                
+                // Toggle functionality (closed by default)
+                let isExpanded = false;
+                contentContainer.style.display = 'none';
+                toggleIcon.textContent = '▶';
+                toggleIcon.style.transform = 'rotate(-90deg)';
+                header.addEventListener('click', () => {
+                  isExpanded = !isExpanded;
+                  contentContainer.style.display = isExpanded ? 'block' : 'none';
+                  toggleIcon.textContent = isExpanded ? '▼' : '▶';
+                  toggleIcon.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)';
+                });
+                
+                // Position widget section (default: bottom center if no position specified)
+                widgetSection.style.position = 'fixed';
+                widgetSection.style.bottom = '20px';
+                widgetSection.style.left = '50%';
+                widgetSection.style.transform = 'translateX(-50%)';
+                widgetSection.style.zIndex = '2147483647';
+                widgetSection.style.maxWidth = '600px';
+                widgetSection.style.width = '90%';
+                
+                // Append to body
+                document.body.appendChild(widgetSection);
+              } else {
+                console.log('[Widget] Using existing widget container from HTML for', instanceId);
+                
+                // If container exists, find the section and content container
+                if (!widgetSection) {
+                  widgetSection = container.closest('#widget-section-' + instanceId);
+                }
+                if (!contentContainer) {
+                  contentContainer = document.getElementById('widget-carousel-content-' + instanceId);
+                }
+                
+                // Set up toggle functionality if header exists
+                const header = widgetSection?.querySelector('.widget-carousel-header');
+                if (header && contentContainer) {
+                  const toggleIcon = header.querySelector('.widget-carousel-toggle');
+                  let isExpanded = false;
+                  contentContainer.style.display = 'none';
+                  if (toggleIcon) {
+                    toggleIcon.textContent = '▶';
+                    toggleIcon.style.transform = 'rotate(-90deg)';
+                  }
+                  
+                  header.addEventListener('click', () => {
+                    isExpanded = !isExpanded;
+                    contentContainer.style.display = isExpanded ? 'block' : 'none';
+                    if (toggleIcon) {
+                      toggleIcon.textContent = isExpanded ? '▼' : '▶';
+                      toggleIcon.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)';
+                    }
+                  });
+                }
+              }
+              
+              instance.element = container;
+              instance.section = widgetSection;
+              instance.currentIndex = 0;
+              instance.images = [];
+              instance.containers = [];
+              instance.config = config || {};
+              
+              // Set defaults if not provided
+              if (instance.config.showControls === undefined) instance.config.showControls = true;
+              if (instance.config.showIndicators === undefined) instance.config.showIndicators = true;
+              
+              console.log('[Widget] initImageCarousel - config:', instance.config);
+              console.log('[Widget] initImageCarousel - imageIds:', config.imageIds);
+              
+              // Load images if imageIds provided
+              if (config.imageIds && config.imageIds.length > 0) {
+                console.log('[Widget] initImageCarousel - calling loadCarouselImages with', config.imageIds.length, 'image IDs');
+                this._loadCarouselImages(instanceId, config.imageIds);
+              } else {
+                container.innerHTML = '<div style="color: rgba(255,255,255,0.7); padding: 20px; text-align: center;">No image IDs configured. Add image IDs in the Interaction Builder.</div>';
+              }
+              
+              // Setup autoplay if enabled
+              if (config.autoplay) {
+                instance.autoplayInterval = setInterval(() => {
+                  instance.carouselNext();
+                }, config.interval || 3000);
+              }
+              
+              // Store methods in instance
+              const self = this;
+              instance.carouselNext = () => {
+                if (instance.images.length === 0) return;
+                instance.currentIndex = (instance.currentIndex + 1) % instance.images.length;
+                self._updateCarouselDisplay(instanceId);
+              };
+              
+              instance.carouselPrevious = () => {
+                if (instance.images.length === 0) return;
+                instance.currentIndex = (instance.currentIndex - 1 + instance.images.length) % instance.images.length;
+                self._updateCarouselDisplay(instanceId);
+              };
+              
+              instance.carouselGoTo = (index) => {
+                if (index >= 0 && index < instance.images.length) {
+                  instance.currentIndex = index;
+                  self._updateCarouselDisplay(instanceId);
+                }
+              };
+            },
+            _loadCarouselImages: function(instanceId, imageIds) {
+              console.log('[Widget] loadCarouselImages called for', instanceId, 'with', imageIds.length, 'image IDs');
+              const instance = this._widgetInstances.get(instanceId);
+              if (!instance) {
+                console.error('[Widget] loadCarouselImages - instance not found for', instanceId);
+                return;
+              }
+              
+              const self = this;
+              // Use sendMessage to load images
+              sendMessage("ai-sdk-get-lesson-images", { lessonId: this._currentLessonId, accountId: null, imageId: null }, (response) => {
+                console.log('[Widget] loadCarouselImages - response received:', {
+                  hasError: !!response.error,
+                  imagesCount: response.images ? response.images.length : 0
+                });
+                
+                if (response.error) {
+                  console.error('[Widget] Error loading carousel images:', response.error);
+                  return;
+                }
+                
+                const images = response.images || [];
+                console.log('[Widget] loadCarouselImages - loaded', images.length, 'total images');
+                
+                // Filter images by IDs
+                const filteredImages = images.filter(img => imageIds.includes(img.id));
+                console.log('[Widget] loadCarouselImages - filtered to', filteredImages.length, 'images');
+                instance.images = filteredImages;
+                
+                // Create carousel display
+                self._createCarouselDisplay(instanceId);
+              });
+            },
+            _createCarouselDisplay: function(instanceId) {
+              const instance = this._widgetInstances.get(instanceId);
+              if (!instance || !instance.element) return;
+              
+              // Ensure config exists and has defaults
+              if (!instance.config) {
+                instance.config = {};
+              }
+              if (instance.config.showControls === undefined) {
+                instance.config.showControls = true;
+              }
+              if (instance.config.showIndicators === undefined) {
+                instance.config.showIndicators = true;
+              }
+              
+              console.log('[Widget] createCarouselDisplay - images count:', instance.images.length);
+              
+              const container = instance.element;
+              container.innerHTML = '';
+              
+              // Create image container
+              const imageContainer = document.createElement('div');
+              imageContainer.style.position = 'relative';
+              imageContainer.style.width = '100%';
+              imageContainer.style.minHeight = '200px';
+              
+              // Create image element
+              const img = document.createElement('img');
+              img.style.width = '100%';
+              img.style.height = 'auto';
+              img.style.display = 'block';
+              imageContainer.appendChild(img);
+              
+              // Create controls if enabled
+              const showControls = instance.config.showControls !== false;
+              if (showControls && instance.images.length > 1) {
+                const prevBtn = document.createElement('button');
+                prevBtn.textContent = '◀';
+                prevBtn.style.position = 'absolute';
+                prevBtn.style.left = '10px';
+                prevBtn.style.top = '50%';
+                prevBtn.style.transform = 'translateY(-50%)';
+                prevBtn.style.backgroundColor = 'rgba(0, 212, 255, 0.8)';
+                prevBtn.style.border = '2px solid #00d4ff';
+                prevBtn.style.borderRadius = '50%';
+                prevBtn.style.width = '40px';
+                prevBtn.style.height = '40px';
+                prevBtn.style.color = '#ffffff';
+                prevBtn.style.fontSize = '18px';
+                prevBtn.style.fontWeight = 'bold';
+                prevBtn.style.cursor = 'pointer';
+                prevBtn.style.zIndex = '10';
+                prevBtn.style.display = 'flex';
+                prevBtn.style.alignItems = 'center';
+                prevBtn.style.justifyContent = 'center';
+                prevBtn.style.transition = 'all 0.2s ease';
+                prevBtn.onmouseover = () => {
+                  prevBtn.style.backgroundColor = 'rgba(0, 212, 255, 1)';
+                  prevBtn.style.transform = 'translateY(-50%) scale(1.1)';
+                };
+                prevBtn.onmouseout = () => {
+                  prevBtn.style.backgroundColor = 'rgba(0, 212, 255, 0.8)';
+                  prevBtn.style.transform = 'translateY(-50%) scale(1)';
+                };
+                prevBtn.onclick = (e) => {
+                  e.stopPropagation();
+                  if (instance.carouselPrevious) instance.carouselPrevious();
+                };
+                imageContainer.appendChild(prevBtn);
+                
+                const nextBtn = document.createElement('button');
+                nextBtn.textContent = '▶';
+                nextBtn.style.position = 'absolute';
+                nextBtn.style.right = '10px';
+                nextBtn.style.top = '50%';
+                nextBtn.style.transform = 'translateY(-50%)';
+                nextBtn.style.backgroundColor = 'rgba(0, 212, 255, 0.8)';
+                nextBtn.style.border = '2px solid #00d4ff';
+                nextBtn.style.borderRadius = '50%';
+                nextBtn.style.width = '40px';
+                nextBtn.style.height = '40px';
+                nextBtn.style.color = '#ffffff';
+                nextBtn.style.fontSize = '18px';
+                nextBtn.style.fontWeight = 'bold';
+                nextBtn.style.cursor = 'pointer';
+                nextBtn.style.zIndex = '10';
+                nextBtn.style.display = 'flex';
+                nextBtn.style.alignItems = 'center';
+                nextBtn.style.justifyContent = 'center';
+                nextBtn.style.transition = 'all 0.2s ease';
+                nextBtn.onmouseover = () => {
+                  nextBtn.style.backgroundColor = 'rgba(0, 212, 255, 1)';
+                  nextBtn.style.transform = 'translateY(-50%) scale(1.1)';
+                };
+                nextBtn.onmouseout = () => {
+                  nextBtn.style.backgroundColor = 'rgba(0, 212, 255, 0.8)';
+                  nextBtn.style.transform = 'translateY(-50%) scale(1)';
+                };
+                nextBtn.onclick = (e) => {
+                  e.stopPropagation();
+                  if (instance.carouselNext) instance.carouselNext();
+                };
+                imageContainer.appendChild(nextBtn);
+              }
+              
+              container.appendChild(imageContainer);
+              
+              // Create indicators if enabled
+              const showIndicators = instance.config.showIndicators !== false;
+              if (showIndicators && instance.images.length > 1) {
+                const indicators = document.createElement('div');
+                indicators.style.textAlign = 'center';
+                indicators.style.marginTop = '15px';
+                indicators.style.padding = '10px';
+                for (let i = 0; i < instance.images.length; i++) {
+                  const indicator = document.createElement('span');
+                  indicator.style.display = 'inline-block';
+                  indicator.style.width = '12px';
+                  indicator.style.height = '12px';
+                  indicator.style.borderRadius = '50%';
+                  indicator.style.backgroundColor = i === instance.currentIndex ? '#00d4ff' : 'rgba(255, 255, 255, 0.4)';
+                  indicator.style.border = '2px solid #00d4ff';
+                  indicator.style.margin = '0 5px';
+                  indicator.style.cursor = 'pointer';
+                  indicator.style.transition = 'all 0.2s ease';
+                  indicator.onmouseover = () => {
+                    if (i !== instance.currentIndex) {
+                      indicator.style.backgroundColor = 'rgba(0, 212, 255, 0.6)';
+                      indicator.style.transform = 'scale(1.2)';
+                    }
+                  };
+                  indicator.onmouseout = () => {
+                    if (i !== instance.currentIndex) {
+                      indicator.style.backgroundColor = 'rgba(255, 255, 255, 0.4)';
+                      indicator.style.transform = 'scale(1)';
+                    }
+                  };
+                  indicator.onclick = (e) => {
+                    e.stopPropagation();
+                    if (instance.carouselGoTo) instance.carouselGoTo(i);
+                  };
+                  indicators.appendChild(indicator);
+                }
+                container.appendChild(indicators);
+              }
+              
+              this._updateCarouselDisplay(instanceId);
+            },
+            _updateCarouselDisplay: function(instanceId) {
+              const instance = this._widgetInstances.get(instanceId);
+              if (!instance || !instance.element || instance.images.length === 0) return;
+              
+              const img = instance.element.querySelector('img');
+              if (img && instance.images[instance.currentIndex]) {
+                const image = instance.images[instance.currentIndex];
+                const imageUrl = image.imageUrl || image.url || '';
+                if (imageUrl) {
+                  img.src = imageUrl;
+                  img.alt = image.id || image.prompt || '';
+                  console.log('[Widget] Carousel displaying image:', instance.currentIndex, imageUrl);
+                } else {
+                  console.warn('[Widget] Carousel image has no URL:', image);
+                }
+              }
+              
+              // Update indicators
+              const indicatorsContainer = Array.from(instance.element.querySelectorAll('div')).find(div => {
+                const spans = div.querySelectorAll('span');
+                return spans.length > 0 && Array.from(spans).every(span => span.style.borderRadius === '50%');
+              });
+              if (indicatorsContainer) {
+                const indicators = indicatorsContainer.querySelectorAll('span');
+                indicators.forEach((indicator, index) => {
+                  if (index === instance.currentIndex) {
+                    indicator.style.backgroundColor = '#00d4ff';
+                    indicator.style.transform = 'scale(1.2)';
+                  } else {
+                    indicator.style.backgroundColor = 'rgba(255, 255, 255, 0.4)';
+                    indicator.style.transform = 'scale(1)';
+                  }
+                });
+              }
+            },
+            _initTimer: function(instanceId, config) {
+              console.log('[Widget] initTimer called with:', { instanceId, config });
+              const instance = this._widgetInstances.get(instanceId);
+              if (!instance) {
+                console.error('[Widget] initTimer - instance not found for', instanceId);
+                return;
+              }
+              
+              // Look for existing widget container in HTML
+              let widgetSection = document.getElementById('widget-section-' + instanceId);
+              let contentContainer = document.getElementById('widget-carousel-content-' + instanceId);
+              let container = document.getElementById('widget-timer-' + instanceId);
+              
+              // If container doesn't exist in HTML, create it dynamically
+              if (!container) {
+                console.log('[Widget] Timer container not found in HTML, creating dynamically for', instanceId);
+                
+                // Create collapsible widget section
+                widgetSection = document.createElement('div');
+                widgetSection.id = 'widget-section-' + instanceId;
+                widgetSection.className = 'widget-carousel-section';
+                
+                // Create header with toggle button
+                const header = document.createElement('div');
+                header.className = 'widget-carousel-header';
+                
+                const toggleIcon = document.createElement('span');
+                toggleIcon.className = 'widget-carousel-toggle';
+                toggleIcon.textContent = '▼';
+                
+                const headerTitle = document.createElement('span');
+                headerTitle.textContent = '⏱️ Timer Widget';
+                
+                header.appendChild(toggleIcon);
+                header.appendChild(headerTitle);
+                
+                // Create content container (collapsible)
+                contentContainer = document.createElement('div');
+                contentContainer.id = 'widget-carousel-content-' + instanceId;
+                contentContainer.className = 'widget-carousel-content';
+                
+                // Create timer container
+                container = document.createElement('div');
+                container.id = 'widget-timer-' + instanceId;
+                container.style.position = 'relative';
+                container.style.width = '100%';
+                container.style.zIndex = '1';
+                container.style.padding = '20px';
+                container.style.textAlign = 'center';
+                
+                contentContainer.appendChild(container);
+                widgetSection.appendChild(header);
+                widgetSection.appendChild(contentContainer);
+                
+                // Toggle functionality (closed by default)
+                let isExpanded = false;
+                contentContainer.style.display = 'none';
+                toggleIcon.textContent = '▶';
+                toggleIcon.style.transform = 'rotate(-90deg)';
+                header.addEventListener('click', () => {
+                  isExpanded = !isExpanded;
+                  contentContainer.style.display = isExpanded ? 'block' : 'none';
+                  toggleIcon.textContent = isExpanded ? '▼' : '▶';
+                  toggleIcon.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)';
+                });
+                
+                // Position widget section (default: bottom-right if no position specified)
+                widgetSection.style.position = 'fixed';
+                widgetSection.style.bottom = '20px';
+                widgetSection.style.right = '20px';
+                widgetSection.style.zIndex = '2147483647';
+                widgetSection.style.maxWidth = '400px';
+                widgetSection.style.width = 'auto';
+                
+                // Append to body
+                document.body.appendChild(widgetSection);
+              } else {
+                console.log('[Widget] Using existing timer container from HTML for', instanceId);
+                
+                // If container exists, find the section and content container
+                if (!widgetSection) {
+                  widgetSection = container.closest('#widget-section-' + instanceId);
+                }
+                if (!contentContainer) {
+                  contentContainer = document.getElementById('widget-carousel-content-' + instanceId);
+                }
+                
+                // Set up toggle functionality if header exists
+                const header = widgetSection?.querySelector('.widget-carousel-header');
+                if (header && contentContainer) {
+                  const toggleIcon = header.querySelector('.widget-carousel-toggle');
+                  let isExpanded = true;
+                  
+                  header.addEventListener('click', () => {
+                    isExpanded = !isExpanded;
+                    contentContainer.style.display = isExpanded ? 'block' : 'none';
+                    if (toggleIcon) {
+                      toggleIcon.textContent = isExpanded ? '▼' : '▶';
+                      toggleIcon.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)';
+                    }
+                  });
+                }
+              }
+              
+              // Check if container already has content to prevent duplicates
+              if (container.children.length > 0) {
+                console.log('[Widget] Timer container already has content, skipping initialization for', instanceId);
+                return;
+              }
+              
+              instance.element = container;
+              instance.section = widgetSection;
+              
+              // Config is already the nested config object when passed from initWidget
+              const configData = (config && config.config) ? config.config : (config || {});
+              instance.config = configData;
+              
+              instance.initialTime = configData.initialTime || configData.duration || configData.timeLimit || 60;
+              instance.remainingTime = instance.initialTime;
+              instance.direction = configData.direction || 'countdown';
+              instance.format = configData.format || 'mm:ss';
+              instance.showMilliseconds = configData.showMilliseconds || false;
+              instance.onComplete = configData.onComplete || 'emit-event';
+              instance.startOnLoad = configData.startOnLoad === true;
+              instance.hideControls = configData.hideControls === true;
+              
+              console.log('[Widget] initTimer - config values:', {
+                startOnLoad: instance.startOnLoad,
+                hideControls: instance.hideControls,
+                initialTime: instance.initialTime,
+                direction: instance.direction
+              });
+              
+              instance.isRunning = false;
+              instance.intervalId = null;
+              
+              // Create display element
+              const display = document.createElement('div');
+              display.style.fontSize = '32px';
+              display.style.fontFamily = 'monospace';
+              display.style.fontWeight = 'bold';
+              display.style.color = '#00d4ff';
+              display.style.padding = '20px';
+              display.style.backgroundColor = 'rgba(0, 212, 255, 0.1)';
+              display.style.border = '2px solid rgba(0, 212, 255, 0.3)';
+              display.style.borderRadius = '8px';
+              display.style.margin = '10px 0';
+              display.textContent = this._formatTime(instance.remainingTime, instance.format, instance.showMilliseconds);
+              container.appendChild(display);
+              instance.display = display;
+              
+              // Create control buttons (only if not hidden)
+              if (!instance.hideControls) {
+                const controlsContainer = document.createElement('div');
+                controlsContainer.style.display = 'flex';
+                controlsContainer.style.gap = '10px';
+                controlsContainer.style.justifyContent = 'center';
+                controlsContainer.style.marginTop = '15px';
+                
+                const self = this;
+                const startBtn = document.createElement('button');
+                startBtn.textContent = '▶ Start';
+                startBtn.style.padding = '10px 20px';
+                startBtn.style.backgroundColor = 'rgba(0, 212, 255, 0.2)';
+                startBtn.style.border = '2px solid #00d4ff';
+                startBtn.style.borderRadius = '6px';
+                startBtn.style.color = '#00d4ff';
+                startBtn.style.cursor = 'pointer';
+                startBtn.style.fontSize = '14px';
+                startBtn.style.fontWeight = '600';
+                startBtn.onclick = () => instance.timerStart();
+                controlsContainer.appendChild(startBtn);
+                
+                const stopBtn = document.createElement('button');
+                stopBtn.textContent = '⏸ Stop';
+                stopBtn.style.padding = '10px 20px';
+                stopBtn.style.backgroundColor = 'rgba(255, 100, 100, 0.2)';
+                stopBtn.style.border = '2px solid #ff6464';
+                stopBtn.style.borderRadius = '6px';
+                stopBtn.style.color = '#ff6464';
+                stopBtn.style.cursor = 'pointer';
+                stopBtn.style.fontSize = '14px';
+                stopBtn.style.fontWeight = '600';
+                stopBtn.onclick = () => instance.timerStop();
+                controlsContainer.appendChild(stopBtn);
+                
+                const resetBtn = document.createElement('button');
+                resetBtn.textContent = '↻ Reset';
+                resetBtn.style.padding = '10px 20px';
+                resetBtn.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                resetBtn.style.border = '2px solid rgba(255, 255, 255, 0.3)';
+                resetBtn.style.borderRadius = '6px';
+                resetBtn.style.color = '#ffffff';
+                resetBtn.style.cursor = 'pointer';
+                resetBtn.style.fontSize = '14px';
+                resetBtn.style.fontWeight = '600';
+                resetBtn.onclick = () => instance.timerReset();
+                controlsContainer.appendChild(resetBtn);
+                
+                container.appendChild(controlsContainer);
+                instance.controlsContainer = controlsContainer;
+              }
+              
+              // Start timer on load if configured
+              if (instance.startOnLoad) {
+                setTimeout(() => {
+                  instance.timerStart();
+                }, 100);
+              }
+              
+              // Store methods in instance
+              const self = this;
+              instance.timerStart = () => {
+                if (instance.isRunning) return;
+                instance.isRunning = true;
+                instance.intervalId = setInterval(() => {
+                  if (instance.direction === 'countdown') {
+                    instance.remainingTime--;
+                    if (instance.remainingTime <= 0) {
+                      instance.timerStop();
+                      self._handleTimerComplete(instanceId);
+                    }
+                  } else {
+                    instance.remainingTime++;
+                  }
+                  instance.display.textContent = self._formatTime(instance.remainingTime, instance.format, instance.showMilliseconds);
+                }, instance.showMilliseconds ? 10 : 1000);
+              };
+              
+              instance.timerStop = () => {
+                if (instance.intervalId) {
+                  clearInterval(instance.intervalId);
+                  instance.intervalId = null;
+                }
+                instance.isRunning = false;
+              };
+              
+              instance.timerReset = () => {
+                instance.timerStop();
+                instance.remainingTime = instance.initialTime;
+                instance.display.textContent = self._formatTime(instance.remainingTime, instance.format, instance.showMilliseconds);
+              };
+            },
+            _handleTimerComplete: function(instanceId) {
+              const instance = this._widgetInstances.get(instanceId);
+              if (!instance) return;
+              
+              if (instance.onComplete === 'emit-event') {
+                sendMessage("ai-sdk-emit-event", { event: { type: 'timer-complete', instanceId }, processedContentId: null });
+              } else if (instance.onComplete === 'show-message') {
+                sendMessage("ai-sdk-show-snack", { content: 'Timer completed!', duration: 3000, hideFromChatUI: false });
+              }
+            },
+            _formatTime: function(seconds, format, showMilliseconds) {
+              const hours = Math.floor(seconds / 3600);
+              const minutes = Math.floor((seconds % 3600) / 60);
+              const secs = Math.floor(seconds % 60);
+              
+              if (format === 'hh:mm:ss') {
+                return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+              } else if (format === 'mm:ss') {
+                return String(minutes).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+              } else {
+                return String(seconds);
+              }
+            },
+            // Widget API Methods
+            initWidget: function(widgetType, instanceId, config) {
+              console.log('[Widget] Initializing widget:', widgetType, instanceId);
+              this._widgetInstances.set(instanceId, { type: widgetType, config, element: null });
+              
+              // Initialize widget based on type
+              if (widgetType === 'image-carousel') {
+                this._initImageCarousel(instanceId, config);
+              } else if (widgetType === 'timer') {
+                this._initTimer(instanceId, config);
+              } else {
+                console.warn('[Widget] Unknown widget type:', widgetType);
+              }
+            },
+            initImageCarousel: function(config) {
+              // Backward compatibility wrapper - extract instanceId from config
+              const instanceId = config?.instanceId;
+              if (!instanceId) {
+                console.error('[Widget] ❌ Image Carousel: instanceId is required.');
+                return;
+              }
+              this._widgetInstances.set(instanceId, { type: 'image-carousel', config, element: null });
+              this._initImageCarousel(instanceId, config);
+            },
+            initTimer: function(config) {
+              // Backward compatibility wrapper - extract instanceId from config
+              const instanceId = config?.instanceId;
+              if (!instanceId) {
+                console.error('[Widget] ❌ Timer: instanceId is required.');
+                return;
+              }
+              this._widgetInstances.set(instanceId, { type: 'timer', config, element: null });
+              this._initTimer(instanceId, config);
+            },
+            getLessonImages: (lessonId, callback) => {
+              sendMessage("ai-sdk-get-lesson-images", { lessonId }, (response) => {
+                if (callback) callback(response.images || [], response.error);
+              });
+            },
+            getLessonImageIds: (lessonId, callback) => {
+              sendMessage("ai-sdk-get-lesson-image-ids", { lessonId }, (response) => {
+                if (callback) callback(response.imageIds || [], response.error);
+              });
+            },
+            deleteImage: (imageId, callback) => {
+              sendMessage("ai-sdk-delete-image", { imageId }, (response) => {
+                if (callback) callback(response.success, response.error);
+              });
+            }
+          };
+        };
+        const newSDK = window.createIframeAISDK();
+        // Preserve existing SDK methods if window.aiSDK already exists (from interaction code)
+        if (window.aiSDK && typeof window.aiSDK === 'object') {
+          console.log("[Interaction] ⚠️ Preserving existing SDK methods:", Object.keys(window.aiSDK));
+          // Merge widget methods into existing SDK
+          Object.assign(window.aiSDK, {
+            initWidget: newSDK.initWidget,
+            initImageCarousel: newSDK.initImageCarousel,
+            initTimer: newSDK.initTimer,
+            isReady: newSDK.isReady,
+            completeInteraction: newSDK.completeInteraction,
+            getLessonImages: newSDK.getLessonImages,
+            getLessonImageIds: newSDK.getLessonImageIds,
+            deleteImage: newSDK.deleteImage,
+            _currentLessonId: newSDK._currentLessonId,
+            _currentAccountId: newSDK._currentAccountId,
+            _widgetInstances: newSDK._widgetInstances
+          });
+        } else {
+          window.aiSDK = newSDK;
+        }
+        console.log("[Interaction] ✅ SDK initialized for widgets");
+        console.log("[Interaction] 🔍 SDK methods:", Object.keys(window.aiSDK));
+      } else {
+        // createIframeAISDK already exists - ensure widget methods are added
+        const existingSDK = window.createIframeAISDK();
+        // Preserve existing window.aiSDK if it exists
+        if (window.aiSDK && typeof window.aiSDK === 'object') {
+          console.log("[Interaction] ⚠️ Preserving existing SDK methods:", Object.keys(window.aiSDK));
+          Object.assign(window.aiSDK, {
+            initWidget: existingSDK.initWidget,
+            initImageCarousel: existingSDK.initImageCarousel,
+            initTimer: existingSDK.initTimer,
+            isReady: existingSDK.isReady,
+            completeInteraction: existingSDK.completeInteraction,
+            getLessonImages: existingSDK.getLessonImages,
+            getLessonImageIds: existingSDK.getLessonImageIds,
+            deleteImage: existingSDK.deleteImage
+          });
+        } else {
+          window.aiSDK = existingSDK;
+        }
+        console.log("[Interaction] ✅ SDK initialized from existing createIframeAISDK");
+        console.log("[Interaction] 🔍 SDK methods:", Object.keys(window.aiSDK));
+      }
+      
+      // Listen for SDK ready message to store lesson ID and account ID, and initialize widgets
+      window.addEventListener("message", (event) => {
+        if (event.data.type === "ai-sdk-ready") {
+          if (event.data.lessonId && window.aiSDK && window.aiSDK._currentLessonId !== undefined) {
+            window.aiSDK._currentLessonId = event.data.lessonId;
+            console.log("[Widget] SDK ready, lesson ID:", event.data.lessonId);
+          }
+          if (event.data.accountId && window.aiSDK && window.aiSDK._currentAccountId !== undefined) {
+            window.aiSDK._currentAccountId = event.data.accountId;
+            console.log("[Widget] SDK ready, account ID:", event.data.accountId);
+          }
+          
+          // Initialize widgets if widgetConfigs are available in interactionConfig
+          setTimeout(() => {
+            console.log('[Widget] 🔍 Checking widget initialization requirements...');
+            console.log('[Widget] window.interactionConfig:', window.interactionConfig);
+            console.log('[Widget] window.interactionConfig?.widgetConfigs:', window.interactionConfig?.widgetConfigs);
+            console.log('[Widget] window.aiSDK:', window.aiSDK);
+            console.log('[Widget] window.aiSDK?.initWidget:', window.aiSDK?.initWidget);
+            
+            if (window.interactionConfig && window.interactionConfig.widgetConfigs && window.aiSDK && window.aiSDK.initWidget) {
+              const widgetConfigs = window.interactionConfig.widgetConfigs;
+              console.log('[Widget] ✅ Initializing widgets from config:', widgetConfigs);
+              
+              Object.keys(widgetConfigs).forEach(instanceId => {
+                const widgetConfig = widgetConfigs[instanceId];
+                console.log('[Widget] 🔍 Processing widget config for', instanceId, ':', widgetConfig);
+                // Widget config should include type and merged config
+                if (widgetConfig.type && widgetConfig.config) {
+                  console.log('[Widget] ✅ Initializing widget:', widgetConfig.type, instanceId, 'with config:', widgetConfig.config);
+                  window.aiSDK.initWidget(widgetConfig.type, instanceId, widgetConfig.config);
+                } else {
+                  console.warn('[Widget] ⚠️ Widget config missing type or config:', widgetConfig);
+                }
+              });
+            } else {
+              console.warn('[Widget] ⚠️ Widget initialization skipped - missing requirements:', {
+                hasInteractionConfig: !!window.interactionConfig,
+                hasWidgetConfigs: !!(window.interactionConfig && window.interactionConfig.widgetConfigs),
+                hasAiSDK: !!window.aiSDK,
+                hasInitWidget: !!(window.aiSDK && window.aiSDK.initWidget)
+              });
+            }
+          }, 100);
+        }
+      });
     })();
   </script>
   <script type="text/javascript">
@@ -7291,25 +8567,29 @@ ${escapedHtml}
     return sdkCode;
   }
 
-  private playTeacherScript(script?: ScriptBlock | any, scriptBlock?: any) {
-    if (!script || !script.text) {
+  private playTeacherScript(scriptArg?: any, scriptBlock?: any) {
+    if (!scriptArg || !scriptArg.text) {
       console.log('[LessonView] No script to play');
       return;
     }
+
+    const script = scriptArg;
 
     // Auto-clear previous script when new one starts
     if (this.currentTeacherScript && this.currentTeacherScript !== script) {
       console.log('[LessonView] Replacing previous script with new script');
     }
 
-    console.log('[LessonView] Playing teacher script:', script.text.substring(0, 50) + '...');
+    console.log('[LessonView] Playing teacher script:', (script.text || '').substring(0, 50) + '...');
     this.currentTeacherScript = script;
     
     // Use scriptBlock parameter if provided, otherwise use script object itself
     const block = scriptBlock || script;
+    const blockAny = block as any;
     
     // Check chat UI behavior - interaction config takes precedence, then script block settings
-    const interactionConfig = (this.activeSubStage as any)?.interaction?.config || {};
+    const activeSubStageAny = this.activeSubStage as any;
+    const interactionConfig = activeSubStageAny?.interaction?.config || {};
     const showAiTeacherUiOnLoad = interactionConfig.showAiTeacherUiOnLoad;
     const configOpenChatUI = interactionConfig.openChatUI;
     const configMinimizeChatUI = interactionConfig.minimizeChatUI;
@@ -7318,16 +8598,15 @@ ${escapedHtml}
       showAiTeacherUiOnLoad,
       configOpenChatUI,
       configMinimizeChatUI,
-      blockOpenChatUI: block.openChatUI,
-      blockMinimizeChatUI: block.minimizeChatUI,
+      blockOpenChatUI: blockAny.openChatUI,
+      blockMinimizeChatUI: blockAny.minimizeChatUI,
       scriptOpenChatUI: (script as any).openChatUI,
       scriptMinimizeChatUI: (script as any).minimizeChatUI,
-      blockKeys: Object.keys(block),
+      blockKeys: Object.keys(block || {}),
       scriptKeys: Object.keys(script || {})
     });
     
     // Determine if chat UI should be shown
-    // Priority: 1) showAiTeacherUiOnLoad, 2) config openChatUI/minimizeChatUI, 3) script block settings
     let shouldShowChatUI = false;
     if (showAiTeacherUiOnLoad === true) {
       shouldShowChatUI = true;
@@ -7343,10 +8622,10 @@ ${escapedHtml}
       console.log('[LessonView] ✅ Chat UI: MINIMIZE (interaction config: minimizeChatUI=true)');
     } else {
       // Interaction config doesn't specify, check script block settings
-      if (block.openChatUI === true || (script as any).openChatUI === true) {
+      if (blockAny.openChatUI === true || (script as any).openChatUI === true) {
         shouldShowChatUI = true;
         console.log('[LessonView] ✅ Chat UI: SHOW (script block: openChatUI=true)');
-      } else if (block.minimizeChatUI === true || (script as any).minimizeChatUI === true) {
+      } else if (blockAny.minimizeChatUI === true || (script as any).minimizeChatUI === true) {
         shouldShowChatUI = false;
         console.log('[LessonView] ✅ Chat UI: MINIMIZE (script block: minimizeChatUI=true)');
       } else {
@@ -7360,8 +8639,10 @@ ${escapedHtml}
     if (shouldShowChatUI) {
       this.teacherWidgetHidden = false; // Auto-show when script plays
       // Reset unread count when widget is auto-shown
-      this.unreadMessageCount = 0;
-      this.lastReadMessageCount = this.chatMessages.length;
+      if (this.unreadMessageCount !== undefined) this.unreadMessageCount = 0;
+      if (this.lastReadMessageCount !== undefined && this.chatMessages) {
+        this.lastReadMessageCount = this.chatMessages.length;
+      }
       if (this.teacherWidget) {
         this.teacherWidget.openWidget();
       }
@@ -7374,43 +8655,42 @@ ${escapedHtml}
     }
     
     // Script blocks from DB may not have a 'type' field - default to 'teacher_talk' if it has text/content
-    // Note: 'block' is already declared above
-    const blockType = block.type || (script as any).type || (block.text || block.content ? 'teacher_talk' : undefined);
-    const blockContent = block.content || block.text || script.text || script.content || '';
+    const blockType = blockAny.type || (script as any).type || (blockAny.text || blockAny.content ? 'teacher_talk' : undefined);
+    const blockContent = blockAny.content || blockAny.text || (script as any).text || (script as any).content || '';
     
     console.log('[LessonView] 🔍 Script block debug:', {
       blockType,
-      showInSnack: block.showInSnack || (script as any).showInSnack,
-      snackDuration: block.snackDuration || (script as any).snackDuration,
-      blockKeys: Object.keys(block),
+      showInSnack: blockAny.showInSnack || (script as any).showInSnack,
+      snackDuration: blockAny.snackDuration || (script as any).snackDuration,
+      blockKeys: Object.keys(block || {}),
       scriptKeys: Object.keys(script || {}),
       block: JSON.stringify(block).substring(0, 200)
     });
     
     // Handle script block display configuration
     // Show in snack - only for teacher_talk blocks
-    if (blockType === 'teacher_talk' || (!blockType && (block.text || block.content || script.text))) {
+    if (blockType === 'teacher_talk' || (!blockType && (blockAny.text || blockAny.content || (script as any).text))) {
       // Show in snack if configured
-      const shouldShowInSnack = block.showInSnack || (script as any).showInSnack;
-      console.log('[LessonView] 🔍 Should show in snack?', shouldShowInSnack, 'block.showInSnack:', block.showInSnack, 'script.showInSnack:', (script as any).showInSnack);
+      const shouldShowInSnack = blockAny.showInSnack || (script as any).showInSnack;
+      console.log('[LessonView] 🔍 Should show in snack?', shouldShowInSnack, 'block.showInSnack:', blockAny.showInSnack, 'script.showInSnack:', (script as any).showInSnack);
       
       if (shouldShowInSnack) {
-        const duration = block.snackDuration || (script as any).snackDuration;
+        const duration = blockAny.snackDuration || (script as any).snackDuration;
         console.log('[LessonView] ✅ Showing snack message:', blockContent.substring(0, 50) + '...', 'duration:', duration);
-        this.snackService.show(blockContent, duration);
-        console.log('[LessonView] ✅ Snack service.show() called');
+        if (this.snackService) {
+          this.snackService.show(blockContent, duration);
+          console.log('[LessonView] ✅ Snack service.show() called');
+        }
       } else {
         console.log('[LessonView] ⚠️ Not showing snack - showInSnack is false/undefined');
       }
     }
     
     // Chat UI controls - REMOVED: Already handled at the start of playTeacherScript
-    // This duplicate section was causing the widget to open even when minimizeChatUI was set
-    // The chat UI state is now determined once at the beginning of the function and applied there
     
     // Activate fullscreen if configured - available for all script block types
-    if (block.activateFullscreen || (script as any).activateFullscreen) {
-      if (!this.isFullscreen) {
+    if (blockAny.activateFullscreen || (script as any)?.activateFullscreen) {
+      if (this.isFullscreen !== undefined && !this.isFullscreen) {
         this.toggleFullscreen();
         console.log('[LessonView] ✅ Activating fullscreen');
       }

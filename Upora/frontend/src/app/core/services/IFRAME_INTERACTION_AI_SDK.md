@@ -936,6 +936,297 @@ app.stage.addChild(button);
 4. **Style consistently**: Match input styling to your PixiJS interaction theme
 5. **Multiple inputs**: Use unique IDs for each input field (e.g., `id="prompt-input"`, `id="name-input"`)
 
+## Widgets
+
+Widgets are reusable UI components that can be added to interactions by interaction builders. They provide common functionality like image carousels, timers, and more.
+
+### Widget Overview
+
+- **Widgets are enabled** in the Interaction Builder (per interaction type)
+- **Widgets are configured** in the Lesson Builder (per lesson instance)
+- **Widget implementation** lives in the SDK (injected automatically)
+- **Widget configuration** is accessed via `window.interactionConfig.widgetConfigs[instanceId].config`
+
+### Default Behavior: Collapsible Sections
+
+**By default, widgets appear in collapsible sections** (closed by default) at a default position:
+
+- **Image Carousel**: Bottom center of interaction
+- **Timer**: Bottom right of interaction
+- **Other widgets**: Default to bottom center
+
+**Collapsible Section Structure:**
+```html
+<div id="widget-section-{instanceId}" class="widget-carousel-section">
+  <div class="widget-carousel-header">
+    <span class="widget-carousel-toggle">▶</span>  <!-- Click to expand/collapse -->
+    <span>Widget Name</span>
+  </div>
+  <div id="widget-carousel-content-{instanceId}" class="widget-carousel-content" style="display: none;">
+    <div id="widget-{widgetId}-{instanceId}">
+      <!-- Widget content here -->
+    </div>
+  </div>
+</div>
+```
+
+**Default Positioning:**
+- Section is `position: fixed`
+- Image Carousel: `bottom: 20px`, `left: 50%`, `transform: translateX(-50%)`
+- Timer: `bottom: 20px`, `right: 20px`
+
+### Custom Positioning: Avoiding Collapsible Section
+
+To position widgets **anywhere** in your interaction (not in a collapsible section), add a widget container in your **HTML code**:
+
+#### Method 1: Add HTML Container in Interaction Code
+
+**In Interaction Builder → HTML Code tab:**
+
+```html
+<!-- Place widget container where you want it -->
+<div id="widget-image-carousel-{instanceId}" style="margin: 20px; padding: 10px;">
+  <!-- Widget will render here instead of collapsible section -->
+</div>
+```
+
+**How it works:**
+1. Widget SDK checks for existing container: `document.getElementById('widget-image-carousel-' + instanceId)`
+2. If found → Uses existing container (no collapsible section created)
+3. If not found → Creates default collapsible section
+
+**Example: Position Image Carousel at Top of Interaction**
+
+```html
+<!-- HTML Code -->
+<div id="my-interaction-content">
+  <h1>My Interaction</h1>
+  
+  <!-- Widget container at top (no collapsible section) -->
+  <div id="widget-image-carousel-{instanceId}" style="margin: 20px 0; padding: 10px; border: 1px solid #00d4ff;">
+    <!-- Image carousel will appear here -->
+  </div>
+  
+  <div id="interaction-main-content">
+    <!-- Rest of your interaction -->
+  </div>
+</div>
+```
+
+**Note:** Replace `{instanceId}` with the actual instance ID. The instance ID is generated when the widget is enabled in Interaction Builder (format: `widget-id-timestamp`, e.g., `image-carousel-1768605625260`). You can:
+- Hardcode it if you know it
+- Or let the SDK create the default collapsible section and inspect the HTML to find the instance ID
+
+#### Method 2: Create Container Dynamically in JavaScript
+
+**In Interaction Builder → JavaScript Code tab:**
+
+```javascript
+// Wait for SDK to be ready
+if (window.aiSDK && window.aiSDK.isReady) {
+  window.aiSDK.isReady(() => {
+    // Get widget config to find instance ID
+    const widgetConfigs = window.interactionConfig?.widgetConfigs || {};
+    const instanceId = Object.keys(widgetConfigs).find(id => 
+      widgetConfigs[id].type === 'image-carousel'
+    );
+    
+    if (instanceId) {
+      // Create custom container
+      const customContainer = document.createElement('div');
+      customContainer.id = `widget-image-carousel-${instanceId}`;
+      customContainer.style.position = 'absolute';
+      customContainer.style.top = '50px';
+      customContainer.style.left = '50px';
+      customContainer.style.width = '400px';
+      customContainer.style.padding = '20px';
+      customContainer.style.backgroundColor = 'rgba(0, 212, 255, 0.1)';
+      customContainer.style.border = '2px solid #00d4ff';
+      customContainer.style.borderRadius = '8px';
+      document.body.appendChild(customContainer);
+      
+      // Widget will initialize in this container automatically
+      // (SDK checks for existing container before creating collapsible section)
+    }
+  });
+}
+```
+
+**Better Approach: Create Container in HTML, Then Style in CSS/JS**
+
+```html
+<!-- HTML Code -->
+<div id="custom-widget-container">
+  <div id="widget-image-carousel-{instanceId}">
+    <!-- Widget will appear here -->
+  </div>
+</div>
+```
+
+```css
+/* CSS Code */
+#custom-widget-container {
+  position: absolute;
+  top: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 500px;
+  padding: 20px;
+  background: rgba(0, 212, 255, 0.1);
+  border: 2px solid #00d4ff;
+  border-radius: 8px;
+}
+
+#widget-image-carousel-{instanceId} {
+  width: 100%;
+}
+```
+
+### Accessing Widget Configuration
+
+Widget configuration is passed via `window.interactionConfig.widgetConfigs[instanceId].config`:
+
+```javascript
+// Get widget config
+const widgetConfigs = window.interactionConfig?.widgetConfigs || {};
+const instanceId = Object.keys(widgetConfigs).find(id => 
+  widgetConfigs[id].type === 'image-carousel'
+);
+
+if (instanceId) {
+  const config = widgetConfigs[instanceId].config;
+  console.log('Image IDs:', config.imageIds);
+  console.log('Autoplay:', config.autoplay);
+  console.log('Interval:', config.interval);
+}
+```
+
+### Available Widgets
+
+#### Image Carousel Widget
+
+**Configuration (Lesson Builder):**
+- `imageIds` (array): Comma-separated list of image IDs from lesson
+- `autoplay` (boolean): Enable automatic image rotation
+- `interval` (number): Autoplay interval in milliseconds (default: 3000)
+- `showControls` (boolean): Show navigation arrows (default: true)
+- `showIndicators` (boolean): Show image indicators/dots (default: true)
+
+**Usage:**
+```javascript
+// Widget is automatically initialized when SDK is ready
+// Access carousel programmatically:
+const instanceId = Object.keys(window.interactionConfig.widgetConfigs)
+  .find(id => window.interactionConfig.widgetConfigs[id].type === 'image-carousel');
+
+if (instanceId && window.aiSDK) {
+  // Get current image index
+  window.aiSDK.carouselGetCurrentIndex(instanceId, (index) => {
+    console.log('Current image:', index);
+  });
+  
+  // Navigate programmatically
+  window.aiSDK.carouselNext(instanceId);
+  window.aiSDK.carouselPrevious(instanceId);
+  window.aiSDK.carouselGoTo(instanceId, 2); // Go to image at index 2
+}
+```
+
+**Custom Positioning Example:**
+```html
+<!-- HTML Code -->
+<div style="margin: 20px; border: 2px solid #00d4ff; padding: 20px;">
+  <h2>Lesson Images</h2>
+  <div id="widget-image-carousel-{instanceId}">
+    <!-- Carousel will appear here (no collapsible section) -->
+  </div>
+</div>
+```
+
+#### Timer Widget
+
+**Configuration (Lesson Builder):**
+- `initialTime` or `duration` or `timeLimit` (number): Duration in seconds (default: 60)
+- `direction` (string): 'countdown' or 'countup' (default: 'countdown')
+- `format` (string): 'mm:ss', 'hh:mm:ss', or 'ss' (default: 'mm:ss')
+- `showMilliseconds` (boolean): Show milliseconds (default: false)
+- `startOnLoad` (boolean): Start timer automatically when interaction loads (default: false)
+- `hideControls` (boolean): Hide start/stop/reset buttons (default: false)
+- `onComplete` (string): Action when timer completes - 'emit-event' or 'show-message' (default: 'emit-event')
+
+**Usage:**
+```javascript
+// Widget is automatically initialized when SDK is ready
+// Timer is automatically controlled by user (unless hideControls is true)
+
+// Programmatic control (if widget instance is available):
+// Timer controls are internal to the widget
+// You can listen for timer-complete events:
+window.addEventListener('message', (event) => {
+  if (event.data.type === 'ai-sdk-event' && event.data.event?.type === 'timer-complete') {
+    console.log('Timer completed!');
+  }
+});
+```
+
+**Custom Positioning Example:**
+```html
+<!-- HTML Code -->
+<div style="position: fixed; top: 20px; right: 20px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px;">
+  <div id="widget-timer-{instanceId}">
+    <!-- Timer will appear here (no collapsible section) -->
+  </div>
+</div>
+```
+
+### Programmatic Widget Control
+
+**Initialize Widget Manually:**
+```javascript
+// Initialize widget programmatically (if not auto-initialized)
+const config = window.interactionConfig?.widgetConfigs?.[instanceId]?.config || {};
+config.instanceId = instanceId;
+
+if (window.aiSDK && window.aiSDK.initWidget) {
+  window.aiSDK.initWidget('image-carousel', instanceId, config);
+}
+```
+
+**Check if Widget is Initialized:**
+```javascript
+// Check if widget instance exists
+const instance = window.aiSDK?._widgetInstances?.get(instanceId);
+if (instance && instance.element) {
+  console.log('Widget is initialized:', instance.element);
+}
+```
+
+### Widget Events
+
+Widgets can emit events that trigger AI Teacher responses:
+
+```javascript
+// Listen for widget events
+window.addEventListener('message', (event) => {
+  if (event.data.type === 'ai-sdk-event') {
+    const eventData = event.data.event;
+    
+    if (eventData.type === 'timer-complete') {
+      console.log('Timer completed:', eventData.instanceId);
+      // Handle timer completion
+    }
+  }
+});
+```
+
+### Best Practices
+
+1. **Use Default Collapsible Section** for most cases (clean, consistent UX)
+2. **Use Custom Positioning** when widget needs to be part of interaction flow (e.g., image carousel as part of a quiz)
+3. **Always provide fallback** if widget config is missing
+4. **Check for container existence** before manipulating widget DOM
+5. **Use instance IDs** consistently (from `window.interactionConfig.widgetConfigs`)
+
 ## Notes
 
 - The SDK uses `postMessage` to communicate with the parent window
@@ -943,4 +1234,5 @@ app.stage.addChild(button);
 - The SDK is initialized when the interaction becomes active
 - The SDK is destroyed when the interaction is no longer active
 - Processed content ID is automatically passed if available
+- Widgets are automatically initialized when SDK is ready (unless disabled or custom initialized)
 
