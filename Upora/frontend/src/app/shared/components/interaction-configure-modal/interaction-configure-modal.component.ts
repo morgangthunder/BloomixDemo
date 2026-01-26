@@ -89,9 +89,9 @@ import { environment } from '../../../../environments/environment';
               
               <div *ngFor="let widget of getEnabledWidgets()" class="widget-config-item">
                 <div class="widget-config-header" (click)="toggleWidgetConfig(widget.id || widget.type)">
+                  <span class="widget-config-toggle">{{widgetConfigExpanded[widget.id || widget.type] ? '▼' : '▶'}}</span>
                   <span class="widget-config-icon">{{getWidgetIcon(widget.type)}}</span>
                   <span class="widget-config-name">{{getWidgetName(widget.type)}}</span>
-                  <span class="widget-config-toggle">{{widgetConfigExpanded[widget.id || widget.type] ? '▼' : '▶'}}</span>
                 </div>
                 
                 <div *ngIf="widgetConfigExpanded[widget.id || widget.type]" class="widget-config-content">
