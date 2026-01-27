@@ -1432,18 +1432,26 @@ export class InteractionConfigureModalComponent implements OnChanges {
       (header as HTMLElement).style.zIndex = '';
     }
     
-    // Restore page-specific headers
+    // Restore page-specific headers - remove inline styles to let CSS take over
     const builderHeader = document.querySelector('.builder-header, .editor-header');
     if (builderHeader) {
-      (builderHeader as HTMLElement).style.display = 'flex';
+      const el = builderHeader as HTMLElement;
+      // Remove inline display and z-index styles to restore original CSS values
+      // Setting to empty string removes the inline style and lets CSS take over
+      el.style.display = '';
+      el.style.zIndex = '';
+      // Force browser to recalculate styles
+      void el.offsetHeight;
     }
     
     // Restore ion-header and ion-toolbar elements
-    const ionHeaders = document.querySelectorAll('ion-header, ion-toolbar');
+    const ionHeaders = document.querySelectorAll('ion-header, ion-toolbar, ion-nav');
     ionHeaders.forEach((el: any) => {
       if (el) {
         el.style.display = '';
         el.style.zIndex = '';
+        el.style.position = '';
+        el.style.top = '';
       }
     });
     

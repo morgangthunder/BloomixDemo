@@ -534,7 +534,7 @@ interface ChatMessage {
                                         <input type="checkbox" 
                                                [(ngModel)]="getWidgetInstance('image-carousel').config.autoplay"
                                                (ngModelChange)="onWidgetConfigChange()" />
-                                        Autoplay
+                                        Enable Autoplay
                                       </label>
                                     </div>
                                     <div class="form-group">
@@ -649,6 +649,15 @@ interface ChatMessage {
                                              (ngModelChange)="onWidgetConfigChange()" />
                                       Show Milliseconds
                                     </label>
+                                  </div>
+                                  <div class="form-group">
+                                    <label>
+                                      <input type="checkbox" 
+                                             [(ngModel)]="getWidgetInstance('timer').config.hideControls"
+                                             (ngModelChange)="onWidgetConfigChange()" />
+                                      Hide Controls
+                                    </label>
+                                    <p class="hint">When checked, the timer will display without Start/Stop/Reset buttons.</p>
                                   </div>
                                 </div>
                               </div>
@@ -7790,10 +7799,8 @@ overlayContent + '\n' +
       this.markChanged();
       
       // Force switch to JS tab to show the injected code
-      if (response.js && this.activeCodeTab !== 'js') {
-        console.log(`[InteractionBuilder] 🔄 Switching to JavaScript tab to show injected widget code...`);
-        this.activeCodeTab = 'js';
-      }
+      // Don't switch tabs - stay on Widgets tab to allow user to continue configuring
+      // Widget code is injected but user can view it later in the Code tab if needed
       
       console.log(`[InteractionBuilder] ✅ Successfully injected widget code for ${widgetId}`);
     } catch (error: any) {

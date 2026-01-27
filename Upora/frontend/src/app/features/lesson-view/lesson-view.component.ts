@@ -4355,6 +4355,17 @@ export class LessonViewComponent implements OnInit, OnDestroy {
           if (!widgetConfig.instanceId) {
             widgetConfig.instanceId = instance.id; // Add instanceId here
           }
+          
+          // Log hideControls value for timer widgets
+          if (instance.type === 'timer') {
+            console.log(`[LessonView] 🔍 Timer widget config from interaction builder:`, {
+              instanceId: instance.id,
+              hideControls: widgetConfig.hideControls,
+              hasHideControls: widgetConfig.hasOwnProperty('hideControls'),
+              allConfigKeys: Object.keys(widgetConfig)
+            });
+          }
+          
           widgetConfigs[instance.id] = {
             type: instance.type,
             config: widgetConfig
@@ -4441,11 +4452,43 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         
         if (targetInstanceId && widgetConfigs[targetInstanceId]) {
           // Merge lesson config into existing widget config
-          widgetConfigs[targetInstanceId].config = {
-            ...widgetConfigs[targetInstanceId].config,
-            ...lessonConfig.config
+          // Preserve interaction builder settings (like hideControls) unless lesson config explicitly overrides them
+          const interactionBuilderConfig = widgetConfigs[targetInstanceId].config || {};
+          const lessonSpecificConfig = lessonConfig.config || {};
+          
+          console.log(`[LessonView] 🔍 Merging config for ${targetInstanceId}:`, {
+            interactionBuilder: {
+              hideControls: interactionBuilderConfig.hideControls,
+              hasHideControls: interactionBuilderConfig.hasOwnProperty('hideControls')
+            },
+            lessonConfig: {
+              hideControls: lessonSpecificConfig.hideControls,
+              hasHideControls: lessonSpecificConfig.hasOwnProperty('hideControls'),
+              allKeys: Object.keys(lessonSpecificConfig)
+            }
+          });
+          
+          // Merge configs: lesson config overrides interaction builder config
+          // BUT: preserve interaction builder's hideControls if lesson config doesn't explicitly set it
+          const mergedConfig = {
+            ...interactionBuilderConfig,
+            ...lessonSpecificConfig
           };
-          console.log(`[LessonView] ✅ MERGED config for ${targetInstanceId}, imageIds:`, widgetConfigs[targetInstanceId].config.imageIds);
+          
+          // Special handling for hideControls: only override if lesson config explicitly sets it
+          // This ensures interaction builder settings are preserved unless lesson builder overrides
+          if (!lessonSpecificConfig.hasOwnProperty('hideControls') && interactionBuilderConfig.hasOwnProperty('hideControls')) {
+            mergedConfig.hideControls = interactionBuilderConfig.hideControls;
+            console.log(`[LessonView] 🔒 Preserving hideControls from interaction builder: ${interactionBuilderConfig.hideControls}`);
+          }
+          
+          widgetConfigs[targetInstanceId].config = mergedConfig;
+          
+          console.log(`[LessonView] ✅ MERGED config for ${targetInstanceId}:`, {
+            imageIds: widgetConfigs[targetInstanceId].config.imageIds,
+            hideControls: widgetConfigs[targetInstanceId].config.hideControls,
+            finalHideControls: mergedConfig.hideControls
+          });
         } else {
           console.log(`[LessonView] ⚠️ No matching widget found for lesson key "${lessonKey}" (type: ${lessonConfig.type || 'unknown'})`);
         }
@@ -7015,17 +7058,12 @@ ${escapedCss}
               const existingHtmlContainer = container.querySelector('.carousel-html-container');
               let htmlContainerClone = null;
               if (existingHtmlContainer) {
-                // Clone the container to preserve it
+                // Clone the container to preserve it (but don't clone event listeners)
                 htmlContainerClone = existingHtmlContainer.cloneNode(true);
               }
               
               // Clear all content
               container.innerHTML = '';
-              
-              // Restore HTML container if it existed
-              if (htmlContainerClone) {
-                container.appendChild(htmlContainerClone);
-              }
               
               // Create image container with responsive sizing to fit screen
               const imageContainer = document.createElement('div');
@@ -7166,8 +7204,35 @@ ${escapedCss}
               
               this._updateCarouselDisplay(instanceId);
               
-              // Create HTML container below images if enabled
-              if (instance.config.container && instance.config.container.enabled) {
+              // Restore HTML container AFTER all carousel content (image, controls, indicators)
+              // This ensures it appears BELOW the widget content, not above
+              if (htmlContainerClone) {
+                container.appendChild(htmlContainerClone);
+                // Re-attach toggle event listener since cloneNode doesn't preserve event listeners
+                const restoredContainer = container.querySelector('.carousel-html-container');
+                if (restoredContainer && instance.config.container && instance.config.container.showToggle) {
+                  const header = restoredContainer.querySelector('div[style*="cursor: pointer"]');
+                  const contentArea = restoredContainer.querySelector('.carousel-html-content');
+                  if (header && contentArea) {
+                    // Remove any existing listeners and add fresh one
+                    const newHeader = header.cloneNode(true);
+                    header.parentNode.replaceChild(newHeader, header);
+                    // Get toggle icon from the new header
+                    const newToggleIcon = newHeader.querySelector('span[style*="color: #00d4ff"]');
+                    newHeader.addEventListener('click', () => {
+                      const isCurrentlyVisible = contentArea.style.display !== 'none';
+                      contentArea.style.display = isCurrentlyVisible ? 'none' : 'block';
+                      if (newToggleIcon) {
+                        newToggleIcon.textContent = isCurrentlyVisible ? '▶' : '▼';
+                        newToggleIcon.style.transform = isCurrentlyVisible ? 'rotate(-90deg)' : 'rotate(0deg)';
+                      }
+                    });
+                  }
+                }
+              }
+              
+              // Create HTML container below images if enabled (only if it doesn't already exist)
+              if (instance.config.container && instance.config.container.enabled && !htmlContainerClone) {
                 this._createCarouselHTMLContainer(instanceId);
               }
             },
@@ -7320,6 +7385,13 @@ ${escapedCss}
             },
             _initTimer: function(instanceId, config) {
               console.log('[Widget] initTimer called with:', { instanceId, config });
+              console.log('[Widget] initTimer - config parameter details:', {
+                hasConfig: !!config,
+                hasConfigConfig: !!(config && config.config),
+                configKeys: config ? Object.keys(config) : [],
+                hideControls: config?.hideControls,
+                configHideControls: config?.config?.hideControls
+              });
               const instance = this._widgetInstances.get(instanceId);
               if (!instance) {
                 console.error('[Widget] initTimer - instance not found for', instanceId);
@@ -7458,6 +7530,12 @@ ${escapedCss}
               const configData = (config && config.config) ? config.config : (config || {});
               instance.config = configData;
               
+              console.log('[Widget] initTimer - extracted configData:', {
+                hideControls: configData.hideControls,
+                hasHideControls: configData.hasOwnProperty('hideControls'),
+                allKeys: Object.keys(configData)
+              });
+              
               instance.initialTime = configData.initialTime || configData.duration || configData.timeLimit || 60;
               instance.remainingTime = instance.initialTime;
               instance.direction = configData.direction || 'countdown';
@@ -7467,9 +7545,10 @@ ${escapedCss}
               instance.startOnLoad = configData.startOnLoad === true;
               instance.hideControls = configData.hideControls === true;
               
-              console.log('[Widget] initTimer - config values:', {
+              console.log('[Widget] initTimer - final instance values:', {
                 startOnLoad: instance.startOnLoad,
                 hideControls: instance.hideControls,
+                hideControlsSource: configData.hideControls,
                 initialTime: instance.initialTime,
                 direction: instance.direction
               });

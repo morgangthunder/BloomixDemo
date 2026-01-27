@@ -413,7 +413,7 @@
                                         <input type="checkbox" 
                                                [(ngModel)]="getWidgetInstance('image-carousel').config.autoplay"
                                                (ngModelChange)="onWidgetConfigChange()" />
-                                        Autoplay
+                                        Enable Autoplay
                                       </label>
                                     </div>
                                     <div class="form-group">
@@ -421,8 +421,10 @@
                                       <input type="number" 
                                              [(ngModel)]="getWidgetInstance('image-carousel').config.interval"
                                              (ngModelChange)="onWidgetConfigChange()"
+                                             [disabled]="!getWidgetInstance('image-carousel').config.autoplay"
                                              class="form-control"
                                              placeholder="3000" />
+                                      <small class="hint" *ngIf="!getWidgetInstance('image-carousel').config.autoplay">Enable autoplay to set interval</small>
                                     </div>
                                   </div>
                                   <div class="form-row">
@@ -464,6 +466,7 @@
                                                  (ngModelChange)="onWidgetConfigChange()" />
                                           Container Visible By Default
                                         </label>
+                                        <small class="hint">If checked, container is expanded when the lesson loads. If unchecked, container is collapsed (hidden) by default.</small>
                                       </div>
                                       <div class="form-group">
                                         <label>
@@ -472,6 +475,14 @@
                                                  (ngModelChange)="onWidgetConfigChange()" />
                                           Show Toggle Button
                                         </label>
+                                        <small class="hint">If checked, shows a toggle button in the container header to hide/show the container content.</small>
+                                      </div>
+                                    </div>
+                                    <div *ngIf="getWidgetInstance('image-carousel').config.container.enabled" class="form-row" style="margin-top: 10px;">
+                                      <div class="form-group" style="width: 100%;">
+                                        <small class="hint" style="display: block; padding: 10px; background: rgba(0, 212, 255, 0.1); border-radius: 4px;">
+                                          <strong>Note:</strong> A default HTML container with example content will be created below the carousel images. You can customize this content by adding HTML in your interaction code that targets elements with class "carousel-html-content".
+                                        </small>
                                       </div>
                                     </div>
                                   </div>
@@ -526,6 +537,15 @@
                                              (ngModelChange)="onWidgetConfigChange()" />
                                       Show Milliseconds
                                     </label>
+                                  </div>
+                                  <div class="form-group">
+                                    <label>
+                                      <input type="checkbox" 
+                                             [(ngModel)]="getWidgetInstance('timer').config.hideControls"
+                                             (ngModelChange)="onWidgetConfigChange()" />
+                                      Hide Controls
+                                    </label>
+                                    <p class="hint">When checked, the timer will display without Start/Stop/Reset buttons.</p>
                                   </div>
                                 </div>
                               </div>
