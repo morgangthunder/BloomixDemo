@@ -1,9 +1,10 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router } from '@angular/router';
+import { Router, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { IonContent } from '@ionic/angular/standalone';
 import { LessonService } from '../../core/services/lesson.service';
+import { AuthService } from '../../core/services/auth.service';
 import { CATEGORIES } from '../../core/data/lessons.data';
 
 interface LessonProgress {
@@ -20,7 +21,7 @@ interface LessonProgress {
 @Component({
   selector: 'app-profile',
   standalone: true,
-  imports: [CommonModule, FormsModule, IonContent],
+  imports: [CommonModule, FormsModule, IonContent, RouterModule],
   template: `
     <ion-content [scrollEvents]="true" (ionScroll)="onScroll($event)">
       <div class="bg-brand-black min-h-screen text-brand-light-gray font-sans pt-20">
@@ -39,21 +40,28 @@ interface LessonProgress {
           <div class="bg-brand-dark rounded-lg p-6 mb-8 border border-gray-700">
             <div class="flex items-center space-x-4 mb-6">
               <div class="w-20 h-20 rounded-full bg-blue-500 flex items-center justify-center text-3xl font-bold text-white">
-                {{ mockUser.username.charAt(0).toUpperCase() }}
+                {{ displayInitial() }}
               </div>
               <div>
-                <h2 class="text-2xl font-bold text-white">{{ mockUser.username }}</h2>
-                <p class="text-gray-400">{{ mockUser.email }}</p>
+                <h2 class="text-2xl font-bold text-white">{{ displayName() }}</h2>
+                <p class="text-gray-400">{{ displayEmail() }}</p>
                 <p class="text-sm text-brand-red font-semibold mt-1">{{ mockUser.subscription }}</p>
               </div>
+            </div>
+
+            <!-- Personalisation -->
+            <div class="mb-6">
+              <a routerLink="/onboarding" [queryParams]="{ returnUrl: '/profile' }" class="text-brand-red hover:underline font-medium">
+                Personalisation preferences →
+              </a>
             </div>
 
             <!-- Account Settings -->
             <div class="grid md:grid-cols-2 gap-4">
               <div>
-                <label class="block text-sm font-medium text-brand-gray mb-1">Username</label>
+                <label class="block text-sm font-medium text-brand-gray mb-1">Display Name</label>
                 <input 
-                  [(ngModel)]="mockUser.username"
+                  [(ngModel)]="editableDisplayName"
                   type="text"
                   class="w-full bg-brand-dark border border-gray-600 rounded-md p-2 text-white focus:outline-none focus:ring-2 focus:ring-brand-red"
                 />
@@ -61,9 +69,10 @@ interface LessonProgress {
               <div>
                 <label class="block text-sm font-medium text-brand-gray mb-1">Email</label>
                 <input 
-                  [(ngModel)]="mockUser.email"
+                  [value]="displayEmail()"
                   type="email"
-                  class="w-full bg-brand-dark border border-gray-600 rounded-md p-2 text-white focus:outline-none focus:ring-2 focus:ring-brand-red"
+                  readonly
+                  class="w-full bg-brand-dark border border-gray-600 rounded-md p-2 text-gray-400 cursor-not-allowed"
                 />
               </div>
               <div>
@@ -192,11 +201,25 @@ interface LessonProgress {
   `]
 })
 export class ProfileComponent implements OnInit {
+  editableDisplayName = '';
+
   mockUser = {
-    username: 'Alex_Learner',
-    email: 'alex.learner@example.com',
     subscription: 'Student: Premium Plan',
   };
+
+  displayName = computed(() => {
+    const u = this.auth.currentUser();
+    if (u?.name) return u.name;
+    if (u?.email) return u.email.split('@')[0].replace(/[._]/g, ' ');
+    return 'User';
+  });
+
+  displayEmail = computed(() => this.auth.currentUser()?.email ?? '—');
+
+  displayInitial = computed(() => {
+    const name = this.displayName();
+    return name.charAt(0).toUpperCase();
+  });
 
   subscriptionPlans = [
     'Student: Free Plan',
@@ -229,11 +252,14 @@ export class ProfileComponent implements OnInit {
 
   constructor(
     private lessonService: LessonService,
+    private auth: AuthService,
     private router: Router
   ) {}
 
   ngOnInit() {
     this.lessonService.setCurrentPage('profile');
+    const u = this.auth.currentUser();
+    this.editableDisplayName = u?.name ?? (u?.email ? u.email.split('@')[0].replace(/[._]/g, ' ') : '');
     
     // Merge lesson data with progress
     const allLessons = CATEGORIES.flatMap(c => c.lessons);

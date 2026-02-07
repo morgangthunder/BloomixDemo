@@ -1,12 +1,18 @@
-import { Body, Controller, Get, Param, Patch, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
 import { SuperAdminService } from './super-admin.service';
-
-// TODO: Add SuperAdminGuard to protect this route
-// For now, it's open for testing
+import { UserPersonalizationService } from '../user-personalization/user-personalization.service';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 @Controller('super-admin')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('super-admin')
 export class SuperAdminController {
-  constructor(private readonly superAdminService: SuperAdminService) {}
+  constructor(
+    private readonly superAdminService: SuperAdminService,
+    private readonly userPersonalizationService: UserPersonalizationService,
+  ) {}
 
   @Get('token-usage')
   async getTokenUsage() {
@@ -27,6 +33,24 @@ export class SuperAdminController {
     @Body('isPinned') isPinned: boolean,
   ) {
     return this.superAdminService.setLlmQueryPinned(id, !!isPinned);
+  }
+
+  @Get('onboarding/popular-selections')
+  async getOnboardingPopularSelections() {
+    return this.userPersonalizationService.getPopularSelections();
+  }
+
+  @Get('onboarding/options')
+  async getOnboardingOptions() {
+    return this.userPersonalizationService.getAllOptions();
+  }
+
+  @Patch('onboarding/options/:category')
+  async updateOnboardingOptions(
+    @Param('category') category: string,
+    @Body('options') options: { id: string; label: string }[],
+  ) {
+    return this.userPersonalizationService.updateOptions(category, options);
   }
 }
 

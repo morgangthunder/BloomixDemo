@@ -1,9 +1,8 @@
 // Development environment configuration
 export const environment = {
   production: false,
-  // Browser makes calls to backend via mapped Docker ports
-  // Using 127.0.0.1 instead of localhost to avoid IPv6 resolution issues on Windows
-  apiUrl: 'http://127.0.0.1:3000/api',
+  // Use relative /api so dev server proxy forwards to backend (avoids CORS preflight ERR_EMPTY_RESPONSE)
+  apiUrl: '/api',
   wsUrl: 'ws://127.0.0.1:3000',
   
   // Multi-tenancy configuration
@@ -24,5 +23,21 @@ export const environment = {
   
   // Logging
   logLevel: 'debug',
+
+  // Auth (Cognito) - optional for dev mock mode
+  auth: {
+    enabled: true,
+    userPoolId: 'eu-west-1_s8wGDQEac',
+    userPoolClientId: '6id0li18gnlh5il09g4erdcp22',
+    region: 'eu-west-1',
+    domain: 'eu-west-1s8wgdqeac.auth.eu-west-1.amazoncognito.com',
+  } as {
+    enabled: boolean;
+    userPoolId: string;
+    userPoolClientId: string;
+    region: string;
+    domain?: string;
+    identityPoolId?: string;
+  },
 };
 

@@ -1,8 +1,13 @@
-import { Controller, Get, Post, Put, Body, Param, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, Param, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
 import { AiPromptsService } from './ai-prompts.service';
 import { AiPrompt } from '../../entities/ai-prompt.entity';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 @Controller('ai-prompts')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('super-admin', 'admin')
 export class AiPromptsController {
   constructor(private readonly aiPromptsService: AiPromptsService) {}
 

@@ -94,6 +94,12 @@ export class ApiService {
       headers = headers.set('x-user-id', userId);
     }
 
+    // Add user role (required for backend guards in mock/Cognito mode)
+    const userRole = environment.userRole;
+    if (userRole) {
+      headers = headers.set('x-user-role', userRole);
+    }
+
     return headers;
   }
 

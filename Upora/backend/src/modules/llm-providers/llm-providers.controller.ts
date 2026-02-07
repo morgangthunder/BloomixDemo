@@ -1,9 +1,14 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, HttpCode, HttpStatus, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, HttpCode, HttpStatus, ParseUUIDPipe, UseGuards } from '@nestjs/common';
 import { LlmProvidersService } from './llm-providers.service';
 import { LlmProvider } from '../../entities/llm-provider.entity';
 import { MODEL_PRESETS, getProviderPresets, getModelPreset } from './model-presets';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 @Controller('super-admin/llm-providers')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('super-admin')
 export class LlmProvidersController {
   constructor(private readonly llmProvidersService: LlmProvidersService) {}
 

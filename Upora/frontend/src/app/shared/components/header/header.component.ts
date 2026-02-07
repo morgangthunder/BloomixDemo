@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { LessonService } from '../../../core/services/lesson.service';
 import { ApiService } from '../../../core/services/api.service';
 import { WebSocketService } from '../../../core/services/websocket.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { environment } from '../../../../environments/environment';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -144,6 +145,12 @@ interface TokenUsage {
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"></path>
                 </svg>
               </button>
+              <button *ngIf="auth.isAuthenticated()" (click)="signOut()" class="text-gray-400 hover:text-white text-sm">
+                Sign out
+              </button>
+              <button *ngIf="!auth.isAuthenticated()" (click)="navigateToLogin()" class="text-brand-red hover:text-red-400 text-sm font-medium">
+                Sign in
+              </button>
               <button (click)="navigateTo('profile')">
                 <svg 
                   class="h-8 w-8 transition-colors"
@@ -207,7 +214,8 @@ export class HeaderComponent implements OnInit, OnDestroy {
     private lessonService: LessonService,
     private router: Router,
     private apiService: ApiService,
-    private wsService: WebSocketService
+    private wsService: WebSocketService,
+    public auth: AuthService,
   ) {}
 
   ngOnInit() {
@@ -239,6 +247,17 @@ export class HeaderComponent implements OnInit, OnDestroy {
     this.router.navigate([`/${page}`]);
     this.isMobileMenuOpen = false;
     this.closeSearch();
+  }
+
+  async signOut() {
+    await this.auth.signOut();
+    this.navigateTo('home');
+  }
+
+  navigateToLogin() {
+    const returnUrl = this.router.url || '/home';
+    this.router.navigate(['/login'], { queryParams: { returnUrl } });
+    this.isMobileMenuOpen = false;
   }
 
   openSearch() {
@@ -284,17 +303,17 @@ export class HeaderComponent implements OnInit, OnDestroy {
   }
 
   isLessonBuilder(): boolean {
-    const role = environment.userRole;
+    const role = this.auth.getRole() || environment.userRole;
     return role === 'lesson-builder' || role === 'admin' || role === 'super-admin';
   }
 
   isInteractionBuilder(): boolean {
-    const role = environment.userRole;
+    const role = this.auth.getRole() || environment.userRole;
     return role === 'interaction-builder' || role === 'admin' || role === 'super-admin';
   }
 
   isSuperAdmin(): boolean {
-    const role = environment.userRole;
+    const role = this.auth.getRole() || environment.userRole;
     return role === 'super-admin';
   }
 }

@@ -10,12 +10,13 @@ services:
     environment:
       - NODE_ENV=development
       - API_URL=http://backend:3000/api
+      - API_PROXY_TARGET=http://backend:3000
       - WS_URL=ws://backend:3000
     volumes:
       - ./Upora/frontend/src:/app/src
       - ./Upora/frontend/angular.json:/app/angular.json
       - ./Upora/frontend/package.json:/app/package.json
-      - /app/node_modules
+      - ./Upora/frontend/proxy.conf.js:/app/proxy.conf.js
     depends_on:
       - backend
     networks:
@@ -51,6 +52,7 @@ services:
       - S3_USE_SSL=false
       - N8N_WEBHOOK_URL=http://n8n:5678/webhook
       - JWT_SECRET=dev-jwt-secret-change-in-production
+      - AUTH_PROVIDER=none
       - COGNITO_REGION=us-east-1
       - COGNITO_USER_POOL_ID=mock-pool-id
       - COGNITO_CLIENT_ID=mock-client-id
@@ -58,7 +60,7 @@ services:
       - GROK_API_URL=https://api.x.ai/v1
       - GROK_MOCK_MODE=false
       - YOUTUBE_API_KEY=AIzaSyBprurusg3XWfp83G2Cx-V3dz0aIADGSYQ
-      - CORS_ORIGINS=http://localhost:8100,http://localhost:4200
+      - CORS_ORIGINS=http://localhost:8100,http://localhost:4200,http://127.0.0.1:8100,http://127.0.0.1:4200
       - WEAVIATE_HOST=weaviate
       - WEAVIATE_PORT=8080
       - WEAVIATE_SCHEME=http
@@ -67,7 +69,6 @@ services:
       - ./Upora/backend/package.json:/app/package.json
       - ./Upora/lessons:/app/lessons
       - ./Upora/uploads:/app/uploads
-      - /app/node_modules
     depends_on:
       postgres:
         condition: service_healthy

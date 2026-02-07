@@ -1216,7 +1216,7 @@ interface ProcessedContentOutput {
       flex-shrink: 0;
       position: sticky;
       top: 0;
-      z-index: 1000;
+      z-index: 100;
     }
     .header-left {
       display: flex;
@@ -7134,10 +7134,6 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     this.interactionConfig = { ...config }; // Update local config too
     this.markAsChanged();
     
-    // CRITICAL: Force change detection immediately after updating config
-    // This ensures the header stays visible before any async operations
-    this.cdr.detectChanges();
-    
     // CRITICAL: Clear cached preview data so it reloads with the new config
     // This ensures the preview uses the updated (potentially normalized) URL
     this.interactionPreviewData = null;
@@ -7149,19 +7145,10 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     // Reload linked content sources in case iframe guide URLs or documents were processed
     this.loadLinkedContentSources();
     
-    // Force change detection again after showSnackbar and loadLinkedContentSources
-    this.cdr.detectChanges();
-    
     // After saving config, we need to save the draft and refresh pending status
     // This will update the button state correctly
     // Note: saveDraft() is async but doesn't return a promise, so we'll trigger save and refresh status
     this.saveDraft();
-    
-    // Force change detection immediately after saveDraft() call
-    // Use requestAnimationFrame to ensure it runs in the next frame
-    requestAnimationFrame(() => {
-      this.cdr.detectChanges();
-    });
     
     // Refresh status after a short delay to allow save to complete
     setTimeout(() => {
@@ -7170,8 +7157,6 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
         if (this.hasPendingDraft && this.pendingDraftData) {
           this.showingPendingChanges = true;
         }
-        // Force change detection again after status refresh
-        this.cdr.detectChanges();
       });
     }, 1000);
     
@@ -7180,15 +7165,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       this.ensurePreviewDataLoaded();
     }
     
-    // Additional change detection after a short delay to ensure UI updates
-    setTimeout(() => {
-      this.cdr.detectChanges();
-    }, 100);
-    
-    // Final change detection after modal operations complete
-    setTimeout(() => {
-      this.cdr.detectChanges();
-    }, 200);
+    this.cdr.detectChanges();
   }
 
   closeInteractionConfigModal() {
@@ -7197,12 +7174,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     this.interactionConfigTab = 'configure';
     this.interactionPreviewData = null;
     this.currentInteractionType = null;
-    
-    // Force change detection to ensure header is visible after modal closes
-    // The modal's restorePageElements() removes inline styles, but we need to ensure Angular updates the view
-    setTimeout(() => {
-      this.cdr.detectChanges();
-    }, 0);
+    this.cdr.detectChanges();
   }
 
   updatePreviewData() {

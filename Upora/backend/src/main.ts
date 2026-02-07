@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import * as express from 'express';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -8,7 +9,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-let BACKEND_VERSION = '0.1.147'; // Added updateSDKTestHTMLInteraction method to remove widget code (now in SDK). Created widget developer guide.
+let BACKEND_VERSION = '0.3.5'; // Onboarding popular selections API, update options.
 console.log(`🔍 [VERSION DEBUG] __dirname: ${__dirname}`);
 console.log(`🔍 [VERSION DEBUG] process.cwd(): ${process.cwd()}`);
 
@@ -58,12 +59,15 @@ async function bootstrap() {
   
   const app = await NestFactory.create(AppModule, {
     logger: ['log', 'error', 'warn', 'debug'],
+    bodyParser: false,
   });
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
   
   // Enable CORS for frontend (including WebSocket)
   const corsOrigins = process.env.CORS_ORIGINS 
     ? process.env.CORS_ORIGINS.split(',')
-    : ['http://localhost:4200', 'http://localhost:3000', 'http://localhost:8100'];
+    : ['http://localhost:4200', 'http://localhost:3000', 'http://localhost:8100', 'http://127.0.0.1:4200', 'http://127.0.0.1:3000', 'http://127.0.0.1:8100'];
   
   app.enableCors({
     origin: corsOrigins,
@@ -89,7 +93,8 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
   
   const port = process.env.PORT || 3000;
-  await app.listen(port);
+  // Bind to 0.0.0.0 so Docker port mapping works; 127.0.0.1 causes ERR_EMPTY_RESPONSE from host
+  await app.listen(port, '0.0.0.0');
   
   // ========================================
   // 🔥 BACKEND VERSION 0.0.7 - APPROVAL REQUIRES PROCESSED CONTENT & ALWAYS CREATES OUTPUT 🔥

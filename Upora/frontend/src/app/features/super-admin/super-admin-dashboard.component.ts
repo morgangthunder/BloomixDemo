@@ -107,6 +107,17 @@ import { ContentSourceService } from '../../core/services/content-source.service
             </div>
           </div>
 
+          <!-- Onboarding -->
+          <div class="dashboard-card" (click)="navigateTo('/super-admin/onboarding')">
+            <div class="card-icon">📋</div>
+            <div class="card-content">
+              <h3>Onboarding</h3>
+              <p>Popular selections, option configuration, and onboarding flow settings</p>
+              <div class="card-status active">Active</div>
+            </div>
+            <div class="card-arrow">→</div>
+          </div>
+
           <!-- Tests -->
           <div class="dashboard-card" (click)="navigateTo('/super-admin/tests')">
             <div class="card-icon">🧪</div>

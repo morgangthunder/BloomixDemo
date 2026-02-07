@@ -1,60 +1,62 @@
 {
-    "name":  "upora",
-    "version": "0.2.0",
-    "scripts":  {
-                    "ng":  "ng",
-                    "start":  "ng serve --poll 2000 --live-reload true",
-                    "start:docker":  "ng serve --host 0.0.0.0 --port 8100 --poll 2000 --live-reload true",
-                    "start:fresh":  "ng cache clean \u0026\u0026 ng serve --poll 2000 --live-reload true",
-                    "build":  "ng build",
-                    "build:dev":  "ng build --configuration development",
-                    "watch":  "ng build --watch --configuration development",
-                    "test":  "ng test",
-                    "cache:clear":  "ng cache clean"
-                },
-    "prettier":  {
-                     "printWidth":  100,
-                     "singleQuote":  true,
-                     "overrides":  [
-                                       {
-                                           "files":  "*.html",
-                                           "options":  {
-                                                           "parser":  "angular"
-                                                       }
-                                       }
-                                   ]
-                 },
-    "private":  true,
-    "dependencies":  {
-                         "@angular/common":  "^20.3.0",
-                         "@angular/compiler":  "^20.3.0",
-                         "@angular/core":  "^20.3.0",
-                         "@angular/forms":  "^20.3.0",
-                         "@angular/platform-browser":  "^20.3.0",
-                         "@angular/router":  "^20.3.0",
-                         "@google/genai":  "^1.25.0",
-                         "@ionic/angular":  "^8.7.7",
-                         "html2canvas":  "^1.4.1",
-                         "rxjs":  "~7.8.0",
-                         "socket.io-client":  "^4.8.1",
-                         "tslib":  "^2.3.0",
-                         "zone.js":  "~0.15.0"
-                     },
-    "devDependencies":  {
-                            "@angular/build":  "^20.3.6",
-                            "@angular/cli":  "^20.3.6",
-                            "@angular/compiler-cli":  "^20.3.0",
-                            "@ionic/angular-toolkit":  "latest",
-                            "@types/jasmine":  "~5.1.0",
-                            "autoprefixer":  "^10.4.20",
-                            "jasmine-core":  "~5.9.0",
-                            "karma":  "~6.4.0",
-                            "karma-chrome-launcher":  "~3.2.0",
-                            "karma-coverage":  "~2.2.0",
-                            "karma-jasmine":  "~5.1.0",
-                            "karma-jasmine-html-reporter":  "~2.1.0",
-                            "postcss":  "^8.4.47",
-                            "tailwindcss":  "^3.4.14",
-                            "typescript":  "~5.9.2"
-                        }
+    "name": "upora",
+    "version": "0.3.30",
+    "scripts": {
+        "ng": "ng",
+        "start": "ng serve --poll 2000 --live-reload true",
+        "start:docker": "ng serve --host 0.0.0.0 --port 8100 --poll 2000 --live-reload true",
+        "start:fresh": "ng cache clean && ng serve --poll 2000 --live-reload true",
+        "build": "ng build",
+        "build:dev": "ng build --configuration development",
+        "watch": "ng build --watch --configuration development",
+        "test": "ng test",
+        "cache:clear": "ng cache clean"
+    },
+    "prettier": {
+        "printWidth": 100,
+        "singleQuote": true,
+        "overrides": [
+            {
+                "files": "*.html",
+                "options": {
+                    "parser": "angular"
+                }
+            }
+        ]
+    },
+    "private": true,
+    "dependencies": {
+        "@angular/common": "^20.3.0",
+        "@angular/compiler": "^20.3.0",
+        "@angular/core": "^20.3.0",
+        "@angular/forms": "^20.3.0",
+        "@angular/platform-browser": "^20.3.0",
+        "@angular/router": "^20.3.0",
+        "@aws-amplify/auth": "^6.19.1",
+        "@aws-amplify/core": "^6.16.1",
+        "@google/genai": "^1.25.0",
+        "@ionic/angular": "^8.7.7",
+        "html2canvas": "^1.4.1",
+        "rxjs": "~7.8.0",
+        "socket.io-client": "^4.8.1",
+        "tslib": "^2.3.0",
+        "zone.js": "~0.15.0"
+    },
+    "devDependencies": {
+        "@angular/build": "^20.3.6",
+        "@angular/cli": "^20.3.6",
+        "@angular/compiler-cli": "^20.3.0",
+        "@ionic/angular-toolkit": "latest",
+        "@types/jasmine": "~5.1.0",
+        "autoprefixer": "^10.4.20",
+        "jasmine-core": "~5.9.0",
+        "karma": "~6.4.0",
+        "karma-chrome-launcher": "~3.2.0",
+        "karma-coverage": "~2.2.0",
+        "karma-jasmine": "~5.1.0",
+        "karma-jasmine-html-reporter": "~2.1.0",
+        "postcss": "^8.4.47",
+        "tailwindcss": "^3.4.14",
+        "typescript": "~5.9.2"
+    }
 }

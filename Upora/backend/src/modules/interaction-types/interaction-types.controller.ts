@@ -1,7 +1,28 @@
-import { Controller, Get, Param, Post, Put, Body, Headers, Delete, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Param, Post, Put, Body, Headers, Delete, UseInterceptors, UploadedFile, UsePipes, ValidationPipe, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InteractionTypesService } from './interaction-types.service';
 import { CreateInteractionTypeDto, UpdateInteractionTypeDto } from './dto/interaction-type.dto';
+
+/** Entity columns allowed in PUT update (excludes id, createdAt, updatedAt). */
+const UPDATE_ALLOWED_KEYS = new Set([
+  'name', 'category', 'description', 'schema', 'generationPrompt', 'pixiRenderer',
+  'interactionTypeCategory', 'htmlCode', 'cssCode', 'jsCode', 'iframeUrl', 'iframeConfig',
+  'iframeDocumentUrl', 'iframeDocumentFileName', 'configSchema', 'sampleData', 'minConfidence',
+  'teachStageFit', 'requiresResources', 'cognitiveLoad', 'estimatedDuration', 'assetRequirements',
+  'mobileAdaptations', 'scoringLogic', 'isActive', 'aiPromptTemplate', 'aiEventHandlers',
+  'aiResponseActions', 'instanceDataSchema', 'userProgressSchema', 'mediaConfig', 'videoUrlConfig',
+  'widgets',
+]);
+
+/** Sanitize value for JSONB: JSON round-trip strips undefined, functions, etc. */
+function sanitizeJsonb(val: any): any {
+  if (val === null || val === undefined) return val;
+  try {
+    return JSON.parse(JSON.stringify(val));
+  } catch {
+    return null;
+  }
+}
 
 @Controller('interaction-types')
 export class InteractionTypesController {
@@ -153,6 +174,7 @@ export class InteractionTypesController {
   }
 
   @Put(':id')
+  @UsePipes(new ValidationPipe({ whitelist: false, forbidNonWhitelisted: false, transform: false }))
   async update(
     @Param('id') id: string,
     @Body() dto: any, // Use any for now to avoid DTO validation issues
@@ -160,27 +182,75 @@ export class InteractionTypesController {
     @Headers('x-tenant-id') tenantId: string,
   ) {
     try {
+      console.log(`[InteractionTypesController] 📥 PUT /interaction-types/${id}`);
+      console.log(`[InteractionTypesController] 📦 Received data keys: ${Object.keys(dto).join(', ')}`);
+      if (dto.widgets) {
+        console.log(`[InteractionTypesController] 🔍 Widgets data:`, JSON.stringify(dto.widgets, null, 2));
+      }
       // TODO: Add super-admin role check
       // Remove fields that shouldn't be updated
       // config is not a direct column - it's part of the interaction's configuration
       // but stored elsewhere (e.g., in lesson-specific interaction instances)
-      const { id: bodyId, createdAt, updatedAt, contentOutputId, config, ...updateData } = dto;
+      const { id: bodyId, createdAt, updatedAt, contentOutputId, config, ...rest } = dto;
       // contentOutputId is for interaction instances, not interaction types
       // It's used for testing in the builder but shouldn't be saved to the type
       
-      // Remove null/undefined values to prevent database errors on non-nullable columns
-      Object.keys(updateData).forEach((key) => {
-        if (updateData[key] === null || updateData[key] === undefined) {
-          delete updateData[key];
-        }
-      });
+      // Build updateData: only allowed entity columns
+      const updateData: Record<string, any> = {};
+      for (const key of Object.keys(rest)) {
+        if (!UPDATE_ALLOWED_KEYS.has(key)) continue;
+        const v = rest[key];
+        if (v === null || v === undefined) continue;
+        updateData[key] = v;
+      }
       
+      // Validate and sanitize widgets
+      if (updateData.widgets) {
+        try {
+          const w = updateData.widgets;
+          if (!w.instances || !Array.isArray(w.instances)) {
+            console.warn('[InteractionTypesController] ⚠️ Invalid widgets.instances structure, removing widgets');
+            delete updateData.widgets;
+          } else {
+            const valid = w.instances.filter((i: any) => i && typeof i === 'object' && i.id && i.type);
+            if (valid.length === 0) {
+              updateData.widgets = null;
+            } else {
+              updateData.widgets = { instances: valid };
+            }
+          }
+        } catch (e: any) {
+          console.error('[InteractionTypesController] ❌ Error validating widgets:', e);
+          delete updateData.widgets;
+        }
+      }
+      
+      // Sanitize JSONB columns for safe DB write (strip undefined, functions, etc.)
+      const JSONB_KEYS = [
+        'schema', 'iframeConfig', 'configSchema', 'sampleData', 'assetRequirements', 'mobileAdaptations',
+        'aiEventHandlers', 'aiResponseActions', 'instanceDataSchema', 'userProgressSchema',
+        'mediaConfig', 'videoUrlConfig', 'widgets',
+      ];
+      for (const k of JSONB_KEYS) {
+        if (updateData[k] != null) {
+          const s = sanitizeJsonb(updateData[k]);
+          if (s === null && updateData[k] !== null) {
+            console.warn(`[InteractionTypesController] ⚠️ Failed to sanitize ${k}, omitting`);
+            delete updateData[k];
+          } else {
+            updateData[k] = s;
+          }
+        }
+      }
+      
+      console.log(`[InteractionTypesController] 📤 Sending keys: ${Object.keys(updateData).join(', ')}`);
       return await this.interactionTypesService.update(id, updateData);
     } catch (error: any) {
       console.error('[InteractionTypesController] ❌ Update error:', error);
-      console.error('[InteractionTypesController] Error stack:', error.stack);
-      console.error('[InteractionTypesController] Update data:', JSON.stringify(dto, null, 2));
-      throw error;
+      console.error('[InteractionTypesController] Error stack:', error?.stack);
+      const msg = error?.message || String(error);
+      const detail = error?.detail ? `; detail: ${error.detail}` : '';
+      throw new InternalServerErrorException(`Save failed: ${msg}${detail}`);
     }
   }
 

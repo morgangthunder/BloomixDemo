@@ -26,6 +26,8 @@ import { UserInteractionProgress } from './entities/user-interaction-progress.en
 import { UserPublicProfile } from './entities/user-public-profile.entity';
 import { LessonDraft } from './lesson-drafts/entities/lesson-draft.entity';
 import { GeneratedImage } from './entities/generated-image.entity';
+import { UserPersonalization } from './entities/user-personalization.entity';
+import { PersonalizationOption } from './entities/personalization-option.entity';
 import { UsersModule } from './modules/users/users.module';
 import { LessonsModule } from './modules/lessons/lessons.module';
 import { ChatModule } from './modules/chat/chat.module';
@@ -44,6 +46,8 @@ import { WeaviateModule } from './services/weaviate.module';
 import { LessonDraftsModule } from './lesson-drafts/lesson-drafts.module';
 import { TestsModule } from './modules/tests/tests.module';
 import { ImageGeneratorModule } from './modules/image-generator/image-generator.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { UserPersonalizationModule } from './modules/user-personalization/user-personalization.module';
 
 @Module({
   imports: [
@@ -61,11 +65,12 @@ import { ImageGeneratorModule } from './modules/image-generator/image-generator.
         username: configService.get('database.username'),
         password: configService.get('database.password'),
         database: configService.get('database.database'),
-        entities: [User, Lesson, InteractionType, Workflow, Usage, ContentSource, LessonDataLink, ProcessedContentOutput, ScriptBlock, Course, LlmGenerationLog, StudentTopicScore, StudentMistake, LlmProvider, AiPrompt, InteractionResult, InteractionAverage, InteractionInstanceData, UserInteractionProgress, UserPublicProfile, LessonDraft, GeneratedImage],
+        entities: [User, Lesson, InteractionType, Workflow, Usage, ContentSource, LessonDataLink, ProcessedContentOutput, ScriptBlock, Course, LlmGenerationLog, StudentTopicScore, StudentMistake, LlmProvider, AiPrompt, InteractionResult, InteractionAverage, InteractionInstanceData, UserInteractionProgress, UserPublicProfile, LessonDraft, GeneratedImage, UserPersonalization, PersonalizationOption],
         synchronize: configService.get('database.synchronize'),
         logging: configService.get('database.logging'),
       }),
     }),
+    AuthModule,
     WeaviateModule, // Global module with WeaviateService
     ContentAnalyzerModule, // LLM content analysis service
     AutoPopulatorModule, // LLM auto-population for content metadata
@@ -84,6 +89,7 @@ import { ImageGeneratorModule } from './modules/image-generator/image-generator.
     LessonDraftsModule,
     TestsModule,
     ImageGeneratorModule,
+    UserPersonalizationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -949,31 +949,33 @@ Widgets are reusable UI components that can be added to interactions by interact
 
 ### Default Behavior: Collapsible Sections
 
-**By default, widgets appear in collapsible sections** (closed by default) at a default position:
-
-- **Image Carousel**: Bottom center of interaction
-- **Timer**: Bottom right of interaction
-- **Other widgets**: Default to bottom center
+**By default, widgets appear in collapsible sections** (closed by default) at the end of the interaction document. Widgets are stacked vertically in a dedicated container that expands the document height (rather than overlaying content):
 
 **Collapsible Section Structure:**
 ```html
-<div id="widget-section-{instanceId}" class="widget-carousel-section">
-  <div class="widget-carousel-header">
-    <span class="widget-carousel-toggle">▶</span>  <!-- Click to expand/collapse -->
-    <span>Widget Name</span>
-  </div>
-  <div id="widget-carousel-content-{instanceId}" class="widget-carousel-content" style="display: none;">
-    <div id="widget-{widgetId}-{instanceId}">
-      <!-- Widget content here -->
+<div id="widgets-container">
+  <div id="widget-section-{instanceId}" class="widget-carousel-section">
+    <div class="widget-carousel-header">
+      <span class="widget-carousel-toggle">▶</span>  <!-- Click to expand/collapse -->
+      <span>Widget Name</span>
+    </div>
+    <div id="widget-carousel-content-{instanceId}" class="widget-carousel-content" style="display: none;">
+      <div id="widget-{widgetId}-{instanceId}">
+        <!-- Widget content here -->
+      </div>
     </div>
   </div>
+  <!-- Additional widgets are stacked here -->
 </div>
 ```
 
 **Default Positioning:**
-- Section is `position: fixed`
-- Image Carousel: `bottom: 20px`, `left: 50%`, `transform: translateX(-50%)`
-- Timer: `bottom: 20px`, `right: 20px`
+- Widgets container is positioned at the end of the document body
+- Each widget section uses `position: relative` (not `fixed`), so it expands the document height
+- Widgets are automatically stacked vertically with 20px spacing between them
+- All widgets are centered with `max-width: 800px` for optimal readability
+- The container expands when widgets are expanded, ensuring all content is visible and scrollable
+- Multiple widgets are neatly stacked without overlapping
 
 ### Custom Positioning: Avoiding Collapsible Section
 

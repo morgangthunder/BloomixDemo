@@ -74,9 +74,8 @@ export class InteractionTypesService implements OnModuleInit {
   }
 
   async updateSDKTestHTMLInteraction(): Promise<InteractionType> {
-    // Stub - actual implementation should be restored
     console.log(
-      '[InteractionTypes] ⚠️ SDK Test HTML interaction update not implemented in stub',
+      '[InteractionTypes] 🔧 Updating SDK Test HTML interaction to use new widget SDK approach',
     );
     const existing = await this.interactionTypeRepository.findOne({
       where: { id: 'sdk-test-html' },
@@ -84,6 +83,74 @@ export class InteractionTypesService implements OnModuleInit {
     if (!existing) {
       throw new Error('SDK Test HTML interaction not found');
     }
+
+    let jsCode = existing.jsCode || '';
+
+    // Remove widget implementation code (now in SDK)
+    // Remove: Widget Management section (_widgetInstances, _currentLessonId, _currentAccountId)
+    jsCode = jsCode.replace(
+      /\s*\/\/ Widget Management\s*const widgetInstances = new Map\(\);\s*let currentLessonId = null;\s*let currentAccountId = null;\s*/g,
+      '',
+    );
+
+    // Remove: initImageCarousel function and all its implementation
+    const initImageCarouselRegex = /\/\/ Widget Implementation Functions\s*function initImageCarousel\([^)]*\)\s*\{[\s\S]*?\}(?=\s*(?:\/\/|function|const|let|var|$))/g;
+    jsCode = jsCode.replace(initImageCarouselRegex, '');
+
+    // Remove: loadCarouselImages function
+    const loadCarouselImagesRegex = /\s*function loadCarouselImages\([^)]*\)\s*\{[\s\S]*?\}(?=\s*(?:\/\/|function|const|let|var|$))/g;
+    jsCode = jsCode.replace(loadCarouselImagesRegex, '');
+
+    // Remove: createCarouselDisplay function
+    const createCarouselDisplayRegex = /\s*function createCarouselDisplay\([^)]*\)\s*\{[\s\S]*?\}(?=\s*(?:\/\/|function|const|let|var|$))/g;
+    jsCode = jsCode.replace(createCarouselDisplayRegex, '');
+
+    // Remove: updateCarouselDisplay function
+    const updateCarouselDisplayRegex = /\s*function updateCarouselDisplay\([^)]*\)\s*\{[\s\S]*?\}(?=\s*(?:\/\/|function|const|let|var|$))/g;
+    jsCode = jsCode.replace(updateCarouselDisplayRegex, '');
+
+    // Remove: initTimer function and all its implementation
+    const initTimerRegex = /\s*function initTimer\([^)]*\)\s*\{[\s\S]*?\}(?=\s*(?:\/\/|function|const|let|var|$))/g;
+    jsCode = jsCode.replace(initTimerRegex, '');
+
+    // Remove: handleTimerComplete function
+    const handleTimerCompleteRegex = /\s*function handleTimerComplete\([^)]*\)\s*\{[\s\S]*?\}(?=\s*(?:\/\/|function|const|let|var|$))/g;
+    jsCode = jsCode.replace(handleTimerCompleteRegex, '');
+
+    // Remove: formatTime function
+    const formatTimeRegex = /\s*function formatTime\([^)]*\)\s*\{[\s\S]*?\}(?=\s*(?:\/\/|function|const|let|var|$))/g;
+    jsCode = jsCode.replace(formatTimeRegex, '');
+
+    // Remove: Widget initialization listener (the code that listens for SDK ready and initializes widgets)
+    // This is the block that starts with "// Listen for SDK ready message to store lesson ID and account ID, and initialize widgets"
+    const widgetInitListenerRegex =
+      /\s*\/\/ Listen for SDK ready message[\s\S]*?window\.aiSDK\.initWidget\([^)]*\);\s*\}\s*\}\);\s*\}, 100\);\s*\}\s*\}\);\s*/g;
+    jsCode = jsCode.replace(widgetInitListenerRegex, '');
+
+    // Remove: Widget methods from createIframeAISDK return object
+    // Remove: initWidget, initImageCarousel, initTimer, carouselNext, carouselPrevious, carouselGoTo, carouselGetCurrentIndex
+    const widgetMethodsRegex =
+      /,\s*\/\/ Widget Methods\s*initWidget:\s*function[^}]*\},\s*\/\/ Image Carousel Methods\s*carouselNext:\s*function[^}]*\},\s*carouselPrevious:\s*function[^}]*\},\s*carouselGoTo:\s*function[^}]*\},\s*carouselGetCurrentIndex:\s*function[^}]*\}/g;
+    jsCode = jsCode.replace(widgetMethodsRegex, '');
+
+    // Remove widget-related variables from initTestApp (imageSection, imageDisplayContainer, etc. if they're only for widgets)
+    // But keep them if they're used for image generation testing
+
+    // Remove widget toggle setup code from initTestApp
+    const widgetToggleSetupRegex =
+      /\s*\/\/ Set up widget carousel toggle functionality[\s\S]*?console\.log\('\[SDK Test HTML\] ✅ Widget timer toggle functionality initialized'\);\s*\}/g;
+    jsCode = jsCode.replace(widgetToggleSetupRegex, '');
+
+    // Clean up any double blank lines
+    jsCode = jsCode.replace(/\n\s*\n\s*\n/g, '\n\n');
+
+    // Update the interaction
+    existing.jsCode = jsCode;
+    await this.interactionTypeRepository.save(existing);
+
+    console.log(
+      '[InteractionTypes] ✅ SDK Test HTML interaction updated - widget implementation removed (now in SDK)',
+    );
     return existing;
   }
 
@@ -143,13 +210,14 @@ export class InteractionTypesService implements OnModuleInit {
       checkAnswersStart + 25,
     );
     const checkAnswersEnd =
-      nextFunctionStart === -1
-        ? jsCode.length
-        : nextFunctionStart;
+      nextFunctionStart === -1 ? jsCode.length : nextFunctionStart;
 
     // Split code into parts
     const beforeCheckAnswers = jsCode.substring(0, checkAnswersStart);
-    const checkAnswersCode = jsCode.substring(checkAnswersStart, checkAnswersEnd);
+    const checkAnswersCode = jsCode.substring(
+      checkAnswersStart,
+      checkAnswersEnd,
+    );
     const afterCheckAnswers = jsCode.substring(checkAnswersEnd);
 
     // Remove totalTrue declarations from before checkAnswers (handle multiline)
@@ -645,8 +713,8 @@ window.aiSDK = createIframeAISDK();
   generateWidgetHTML(widgetId: string, config: any): string {
     const widgetIdSafe = widgetId.replace(/[^a-zA-Z0-9-]/g, '-');
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    const instanceId = (config?.instanceId as string) ||
-      `${widgetIdSafe}-${Date.now()}`;
+    const instanceId =
+      (config?.instanceId as string) || `${widgetIdSafe}-${Date.now()}`;
 
     switch (widgetId) {
       case 'image-carousel':
@@ -673,45 +741,37 @@ window.aiSDK = createIframeAISDK();
    */
   generateWidgetJS(widgetId: string, config: any): string {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    const instanceId = (config?.instanceId as string) ||
+    const instanceId =
+      (config?.instanceId as string) ||
       `${widgetId.replace(/[^a-zA-Z0-9-]/g, '-')}-${Date.now()}`;
-    const configPath = `window.interactionConfig.widgetConfigs['${instanceId}'].config`;
+    const configPath = `window.interactionConfig?.widgetConfigs?.['${instanceId}']?.config || {}`;
 
-    // Wait for SDK to be ready, then initialize widget
+    // Wait for SDK to be ready before initializing widget
     const waitForSDK = `
 (function() {
   console.log('[Widget] Initializing ${widgetId} widget...');
   const initWidget = () => {
-    console.log('[Widget] Checking SDK ready...', {
-      hasSDK: !!window.aiSDK,
-      hasConfig: !!window.interactionConfig,
-      hasWidgetConfigs: !!(window.interactionConfig && window.interactionConfig.widgetConfigs)
+    console.log('[Widget] Checking SDK ready...', { 
+      hasSDK: !!window.aiSDK, 
+      hasConfig: !!window.interactionConfig, 
+      hasWidgetConfigs: !!(window.interactionConfig && window.interactionConfig.widgetConfigs) 
     });
     if (window.aiSDK && window.interactionConfig && window.interactionConfig.widgetConfigs) {
       console.log('[Widget] SDK ready, initializing ${widgetId}...');
 `;
-
-    const initCall = widgetId === 'image-carousel'
-      ? `      if (window.aiSDK.initImageCarousel) {
-        console.log('[Widget] Calling initImageCarousel with config:', ${configPath});
-        window.aiSDK.initImageCarousel(${configPath});
-      } else {
-        console.warn('[Widget] initImageCarousel method not found on aiSDK');
-      }`
-      : widgetId === 'timer'
-      ? `      if (window.aiSDK.initTimer) {
-        console.log('[Widget] Calling initTimer with config:', ${configPath});
-        window.aiSDK.initTimer(${configPath});
-      } else {
-        console.warn('[Widget] initTimer method not found on aiSDK');
-      }`
-      : `      if (window.aiSDK.initWidget) {
-        console.log('[Widget] Calling initWidget with config:', ${configPath});
-        window.aiSDK.initWidget('${widgetId}', ${configPath});
+    // Use initWidget for all widgets (unified approach)
+    const initCall = `      if (window.aiSDK && window.aiSDK.initWidget) {
+        console.log('[Widget] Calling initWidget for ${widgetId} with config:', ${configPath});
+        // Extract config from widgetConfigs[instanceId].config
+        const widgetConfig = ${configPath};
+        // Ensure instanceId is included in config
+        if (!widgetConfig.instanceId) {
+          widgetConfig.instanceId = '${instanceId}';
+        }
+        window.aiSDK.initWidget('${widgetId}', '${instanceId}', widgetConfig);
       } else {
         console.warn('[Widget] initWidget method not found on aiSDK');
       }`;
-
     const waitForSDKEnd = `
     } else {
       // SDK not ready yet, try again after a short delay
@@ -719,7 +779,7 @@ window.aiSDK = createIframeAISDK();
       setTimeout(initWidget, 100);
     }
   };
-
+  
   // Wait for DOM to be ready, then wait for SDK
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {

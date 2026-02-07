@@ -534,7 +534,7 @@ interface ChatMessage {
                                         <input type="checkbox" 
                                                [(ngModel)]="getWidgetInstance('image-carousel').config.autoplay"
                                                (ngModelChange)="onWidgetConfigChange()" />
-                                        Enable Autoplay
+                                        Autoplay
                                       </label>
                                     </div>
                                     <div class="form-group">
@@ -650,15 +650,6 @@ interface ChatMessage {
                                       Show Milliseconds
                                     </label>
                                   </div>
-                                  <div class="form-group">
-                                    <label>
-                                      <input type="checkbox" 
-                                             [(ngModel)]="getWidgetInstance('timer').config.hideControls"
-                                             (ngModelChange)="onWidgetConfigChange()" />
-                                      Hide Controls
-                                    </label>
-                                    <p class="hint">When checked, the timer will display without Start/Stop/Reset buttons.</p>
-                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -673,46 +664,62 @@ interface ChatMessage {
                   </div>
                 </div>
 
-                <!-- PixiJS Type Code Editor -->
+                <!-- PixiJS Type Code Editor (same lozenge UI as HTML: HTML, CSS, JavaScript, Widgets) -->
                 <div *ngIf="currentInteraction?.interactionTypeCategory === 'pixijs'" class="pixijs-editor">
-                  <p class="editor-note">
-                    💡 For PixiJS interactions, you can add HTML/CSS for input fields and UI elements, plus JavaScript for the PixiJS canvas.
-                  </p>
-                  
-                  <!-- HTML Code Editor -->
-                  <div class="form-group">
-                    <label>HTML Code</label>
-                    <small class="hint">Add HTML elements like input fields, buttons, or containers. Use <code>&lt;div id="pixi-container"&gt;&lt;/div&gt;</code> for the PixiJS canvas.</small>
-                    <textarea [(ngModel)]="currentInteraction!.htmlCode"
-                              (ngModelChange)="markChanged()"
-                              class="code-textarea"
-                              rows="6"
-                              placeholder='<div id="pixi-container"></div>&#10;<input type="text" id="my-input" placeholder="Enter text..." />'
-                              spellcheck="false"></textarea>
+                  <div class="editor-subtabs">
+                    <button [class.active]="activeCodeTab === 'html'" (click)="activeCodeTab = 'html'">HTML</button>
+                    <button [class.active]="activeCodeTab === 'css'" (click)="activeCodeTab = 'css'">CSS</button>
+                    <button [class.active]="activeCodeTab === 'js'" (click)="activeCodeTab = 'js'">JavaScript</button>
+                    <button [class.active]="activeCodeTab === 'widgets'" (click)="activeCodeTab = 'widgets'">Widgets</button>
                   </div>
-
-                  <!-- CSS Code Editor -->
-                  <div class="form-group">
-                    <label>CSS Code</label>
-                    <small class="hint">Style your HTML elements. Use absolute positioning for overlays on the canvas.</small>
-                    <textarea [(ngModel)]="currentInteraction!.cssCode"
-                              (ngModelChange)="markChanged()"
-                              class="code-textarea"
-                              rows="4"
-                              placeholder="#pixi-container { width: 100%; height: 100%; }&#10;#my-input { position: absolute; z-index: 1000; }"
-                              spellcheck="false"></textarea>
-                  </div>
-
-                  <!-- JavaScript Code Editor -->
-                  <div class="form-group">
-                    <label>JavaScript Code</label>
-                    <small class="hint">Your PixiJS interaction code. Access HTML elements using <code>document.getElementById()</code>.</small>
-                    <textarea [(ngModel)]="currentInteraction!.jsCode"
-                              (ngModelChange)="markChanged()"
-                              class="code-textarea"
-                              rows="20"
-                              placeholder="// PixiJS TypeScript/JavaScript code"
-                              spellcheck="false"></textarea>
+                  <div class="code-editor-container">
+                    <textarea *ngIf="activeCodeTab === 'html'" [(ngModel)]="currentInteraction!.htmlCode" (ngModelChange)="markChanged()" class="code-textarea" placeholder="<div id='pixi-container'></div>" spellcheck="false"></textarea>
+                    <textarea *ngIf="activeCodeTab === 'css'" [(ngModel)]="currentInteraction!.cssCode" (ngModelChange)="markChanged()" class="code-textarea" placeholder="#pixi-container { width: 100%; height: 100%; }" spellcheck="false"></textarea>
+                    <textarea *ngIf="activeCodeTab === 'js'" [(ngModel)]="currentInteraction!.jsCode" (ngModelChange)="markChanged()" class="code-textarea" placeholder="// PixiJS TypeScript/JavaScript code" spellcheck="false"></textarea>
+                    <div *ngIf="activeCodeTab === 'widgets'" class="widgets-container">
+                      <div class="widgets-header"><h4>Widgets</h4><p class="hint">Enable and configure widgets for this interaction. Widget SDK calls will be automatically added to the JavaScript tab.</p></div>
+                      <div class="widgets-list">
+                        <div *ngFor="let widget of widgetRegistry" class="widget-item">
+                          <div class="widget-header">
+                            <div class="widget-info"><span class="widget-icon">{{ getWidgetIcon(widget.id) }}</span><div class="widget-title-group"><h5 class="widget-title">{{ widget.name }}</h5><p class="widget-description">{{ widget.description }}</p></div></div>
+                            <label class="widget-toggle"><input type="checkbox" [checked]="isWidgetEnabled(widget.id)" (change)="toggleWidget(widget.id, $event)" [disabled]="saving" /><span class="toggle-slider"></span></label>
+                          </div>
+                          <div *ngIf="isWidgetEnabled(widget.id)" class="widget-config">
+                            <button class="widget-config-toggle" (click)="toggleWidgetConfig(widget.id)" type="button"><span class="collapse-icon">{{ widgetConfigExpanded[widget.id] ? '▼' : '▶' }}</span><span class="config-label">Configuration</span></button>
+                            <div *ngIf="widgetConfigExpanded[widget.id]" class="widget-config-content">
+                              <div class="config-section"><h6>Position</h6>
+                                <div class="form-row">
+                                  <div class="form-group"><label>Position Type</label><select [(ngModel)]="getWidgetInstance(widget.id).config.position.type" (ngModelChange)="onWidgetConfigChange()" class="form-control"><option value="top">Top</option><option value="bottom">Bottom</option><option value="center">Center</option><option value="top-left">Top Left</option><option value="top-right">Top Right</option><option value="bottom-left">Bottom Left</option><option value="bottom-right">Bottom Right</option><option value="custom">Custom</option></select></div>
+                                  <div class="form-group"><label>Z-Index</label><input type="number" [(ngModel)]="getWidgetInstance(widget.id).config.position.zIndex" (ngModelChange)="onWidgetConfigChange()" class="form-control" placeholder="1000" /></div>
+                                </div>
+                                <div *ngIf="getWidgetInstance(widget.id).config.position.type === 'custom'" class="form-row">
+                                  <div class="form-group"><label>X (px)</label><input type="number" [(ngModel)]="getWidgetInstance(widget.id).config.position.x" (ngModelChange)="onWidgetConfigChange()" class="form-control" /></div>
+                                  <div class="form-group"><label>Y (px)</label><input type="number" [(ngModel)]="getWidgetInstance(widget.id).config.position.y" (ngModelChange)="onWidgetConfigChange()" class="form-control" /></div>
+                                </div>
+                              </div>
+                              <div *ngIf="widget.id === 'image-carousel'" class="widget-specific-config">
+                                <div class="config-section"><h6>Carousel Settings</h6>
+                                  <div class="form-row"><div class="form-group"><label>Image IDs (comma-separated)</label><input type="text" [(ngModel)]="getWidgetInstance('image-carousel').config.imageIds" (ngModelChange)="onWidgetConfigChange()" class="form-control" placeholder="img-1, img-2, img-3" /><small class="hint">Enter image IDs from lesson images (will be converted to array)</small></div></div>
+                                  <div class="form-row"><div class="form-group"><label><input type="checkbox" [(ngModel)]="getWidgetInstance('image-carousel').config.autoplay" (ngModelChange)="onWidgetConfigChange()" /> Enable Autoplay</label></div><div class="form-group"><label>Interval (ms)</label><input type="number" [(ngModel)]="getWidgetInstance('image-carousel').config.interval" (ngModelChange)="onWidgetConfigChange()" [disabled]="!getWidgetInstance('image-carousel').config.autoplay" class="form-control" placeholder="3000" /><small class="hint" *ngIf="!getWidgetInstance('image-carousel').config.autoplay">Enable autoplay to set interval</small></div></div>
+                                  <div class="form-row"><div class="form-group"><label><input type="checkbox" [(ngModel)]="getWidgetInstance('image-carousel').config.showControls" (ngModelChange)="onWidgetConfigChange()" /> Show Controls</label></div><div class="form-group"><label><input type="checkbox" [(ngModel)]="getWidgetInstance('image-carousel').config.showIndicators" (ngModelChange)="onWidgetConfigChange()" /> Show Indicators</label></div></div>
+                                  <div class="config-section" style="margin-top: 20px;"><h6>HTML Container</h6><div class="form-row"><div class="form-group"><label><input type="checkbox" [(ngModel)]="getWidgetInstance('image-carousel').config.container.enabled" (ngModelChange)="onWidgetConfigChange()" /> Enable HTML Container Below Images</label></div></div>
+                                  <div *ngIf="getWidgetInstance('image-carousel').config.container.enabled" class="form-row"><div class="form-group"><label><input type="checkbox" [(ngModel)]="getWidgetInstance('image-carousel').config.container.defaultVisible" (ngModelChange)="onWidgetConfigChange()" /> Container Visible By Default</label><small class="hint">If checked, container is expanded when the lesson loads.</small></div><div class="form-group"><label><input type="checkbox" [(ngModel)]="getWidgetInstance('image-carousel').config.container.showToggle" (ngModelChange)="onWidgetConfigChange()" /> Show Toggle Button</label><small class="hint">Shows a toggle in the container header.</small></div></div></div>
+                                </div>
+                              </div>
+                              <div *ngIf="widget.id === 'timer'" class="widget-specific-config">
+                                <div class="config-section"><h6>Timer Settings</h6>
+                                  <div class="form-row"><div class="form-group"><label>Initial Time (seconds)</label><input type="number" [(ngModel)]="getWidgetInstance('timer').config.initialTime" (ngModelChange)="onWidgetConfigChange()" class="form-control" placeholder="60" /></div><div class="form-group"><label>Direction</label><select [(ngModel)]="getWidgetInstance('timer').config.direction" (ngModelChange)="onWidgetConfigChange()" class="form-control"><option value="countdown">Countdown</option><option value="countup">Count Up</option></select></div></div>
+                                  <div class="form-row"><div class="form-group"><label>Format</label><input type="text" [(ngModel)]="getWidgetInstance('timer').config.format" (ngModelChange)="onWidgetConfigChange()" class="form-control" placeholder="mm:ss" /></div><div class="form-group"><label>On Complete</label><select [(ngModel)]="getWidgetInstance('timer').config.onComplete" (ngModelChange)="onWidgetConfigChange()" class="form-control"><option value="emit-event">Emit Event</option><option value="show-message">Show Message</option><option value="none">None</option></select></div></div>
+                                  <div class="form-group"><label><input type="checkbox" [(ngModel)]="getWidgetInstance('timer').config.showMilliseconds" (ngModelChange)="onWidgetConfigChange()" /> Show Milliseconds</label></div>
+                                  <div class="form-group"><label><input type="checkbox" [(ngModel)]="getWidgetInstance('timer').config.hideControls" (ngModelChange)="onWidgetConfigChange()" /> Hide Controls</label><p class="hint">Timer displays without Start/Stop/Reset buttons.</p></div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div *ngIf="widgetRegistry.length === 0" class="empty-state"><p>Loading widgets...</p></div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -4438,6 +4445,41 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
       });
     }
     
+    // Validate and clean widgets structure before sending
+    if (saveData.widgets) {
+      try {
+        // Ensure widgets.instances is an array
+        if (!saveData.widgets.instances || !Array.isArray(saveData.widgets.instances)) {
+          console.warn('[InteractionBuilder] ⚠️ Invalid widgets.instances structure, removing widgets');
+          delete saveData.widgets;
+        } else {
+          // Filter out invalid instances and ensure required fields
+          saveData.widgets.instances = saveData.widgets.instances.filter((instance: any) => {
+            if (!instance || typeof instance !== 'object' || !instance.id || !instance.type) {
+              console.warn('[InteractionBuilder] ⚠️ Invalid widget instance, removing:', instance);
+              return false;
+            }
+            // Ensure config exists and is an object
+            if (!instance.config || typeof instance.config !== 'object') {
+              instance.config = {};
+            }
+            return true;
+          });
+          // If no valid instances, remove widgets
+          if (saveData.widgets.instances.length === 0) {
+            console.log('[InteractionBuilder] ℹ️ No valid widget instances, removing widgets');
+            delete saveData.widgets;
+          } else {
+            console.log(`[InteractionBuilder] ✅ Validated ${saveData.widgets.instances.length} widget instance(s)`);
+          }
+        }
+      } catch (error: any) {
+        console.error('[InteractionBuilder] ❌ Error validating widgets structure:', error);
+        // Remove invalid widgets data
+        delete saveData.widgets;
+      }
+    }
+    
     // Add AI configuration
     saveData.aiPromptTemplate = this.aiPromptTemplateText.trim() || null;
     saveData.aiEventHandlers = this.aiEventHandlersText.trim() ? JSON.parse(this.aiEventHandlersText) : null;
@@ -4474,8 +4516,8 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
           this.initializeWidgetConfigs();
           
           // Convert widget imageIds from array to string (comma-separated) for UI AFTER initialization
-          const widgetConfigs = this.currentInteraction.config?.widgetConfigs;
-          if (widgetConfigs) {
+          if (this.currentInteraction.config?.widgetConfigs) {
+            const widgetConfigs = this.currentInteraction.config.widgetConfigs;
             Object.keys(widgetConfigs).forEach((instanceId) => {
               const widgetConfig = widgetConfigs[instanceId];
               if (widgetConfig && widgetConfig.config) {
@@ -4536,8 +4578,17 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
           this.showSuccessSnackbar('✅ Saved successfully!');
         },
         error: (err) => {
-          console.error('Failed to save interaction:', err);
-          this.showSuccessSnackbar('❌ Save failed: ' + (err.error?.message || err.message));
+          console.error('[InteractionBuilder] Failed to save interaction:', err);
+          console.error('[InteractionBuilder] err.status:', err?.status);
+          console.error('[InteractionBuilder] err.error:', err?.error);
+          console.error('[InteractionBuilder] err.error (JSON):', err?.error ? JSON.stringify(err.error) : '');
+          const apiMsg = err?.error?.message;
+          const msg = typeof apiMsg === 'string'
+            ? apiMsg
+            : Array.isArray(apiMsg)
+              ? apiMsg.join(' ')
+              : err?.message || 'Unknown error';
+          this.showSuccessSnackbar('❌ Save failed: ' + msg);
           this.saving = false;
         }
       });
@@ -7560,7 +7611,13 @@ overlayContent + '\n' +
           console.log(`[InteractionBuilder] ✅ Widget config already exists for ${instance.id}`);
         }
       }
-      this.widgetConfigExpanded[widgetId] = true; // Expand config when enabled
+      // Expand config when enabled and ensure it stays expanded
+      this.widgetConfigExpanded[widgetId] = true;
+      // Use setTimeout to ensure the expansion state is preserved after any change detection
+      setTimeout(() => {
+        this.widgetConfigExpanded[widgetId] = true;
+      }, 0);
+      
       // Inject widget code
       console.log(`[InteractionBuilder] 📞 About to call injectWidgetCode(${widgetId}, ${instance.id})`);
       await this.injectWidgetCode(widgetId, instance.id);
@@ -7798,7 +7855,6 @@ overlayContent + '\n' +
 
       this.markChanged();
       
-      // Force switch to JS tab to show the injected code
       // Don't switch tabs - stay on Widgets tab to allow user to continue configuring
       // Widget code is injected but user can view it later in the Code tab if needed
       

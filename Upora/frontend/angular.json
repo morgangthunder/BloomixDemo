@@ -76,13 +76,13 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "500kB",
-                  "maximumError": "1MB"
+                  "maximumWarning": "800kB",
+                  "maximumError": "2MB"
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "4kB",
-                  "maximumError": "8kB"
+                  "maximumWarning": "16kB",
+                  "maximumError": "32kB"
                 }
               ],
               "outputHashing": "all"
@@ -101,7 +101,8 @@
             "poll": 2000,
             "liveReload": true,
             "hmr": false,
-            "watch": true
+            "watch": true,
+            "proxyConfig": "proxy.conf.js"
           },
           "configurations": {
             "production": {

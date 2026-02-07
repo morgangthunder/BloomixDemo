@@ -1,10 +1,33 @@
 import { Routes } from '@angular/router';
+import { authGuard } from './core/guards/auth.guard';
+import { onboardingGuard } from './core/guards/onboarding.guard';
 
 export const routes: Routes = [
   {
     path: '',
     redirectTo: '/home',
     pathMatch: 'full'
+  },
+  {
+    path: 'login',
+    loadComponent: () => import('./features/auth/login.component').then(m => m.LoginComponent)
+  },
+  {
+    path: 'signup',
+    loadComponent: () => import('./features/auth/signup.component').then(m => m.SignupComponent)
+  },
+  {
+    path: 'auth/verify',
+    loadComponent: () => import('./features/auth/auth-verify.component').then(m => m.AuthVerifyComponent)
+  },
+  {
+    path: 'auth/callback',
+    loadComponent: () => import('./features/auth/auth-callback.component').then(m => m.AuthCallbackComponent)
+  },
+  {
+    path: 'onboarding',
+    canActivate: [onboardingGuard],
+    loadComponent: () => import('./features/onboarding/onboarding-container.component').then(m => m.OnboardingContainerComponent)
   },
   {
     path: 'home',
@@ -32,26 +55,32 @@ export const routes: Routes = [
   },
   {
     path: 'lesson-builder',
+    canActivate: [authGuard],
     loadComponent: () => import('./features/lesson-builder/lesson-builder.component').then(m => m.LessonBuilderComponent)
   },
   {
     path: 'lesson-editor/:id',
+    canActivate: [authGuard],
     loadComponent: () => import('./features/lesson-editor/lesson-editor-v2.component').then(m => m.LessonEditorV2Component)
   },
   {
     path: 'interaction-builder',
+    canActivate: [authGuard],
     loadComponent: () => import('./features/interaction-builder/interaction-builder.component').then(m => m.InteractionBuilderComponent)
   },
   {
     path: 'content-library',
+    canActivate: [authGuard],
     loadComponent: () => import('./features/content-library/content-library.component').then(m => m.ContentLibraryComponent)
   },
   {
     path: 'content-approvals',
+    canActivate: [authGuard],
     loadComponent: () => import('./features/content-approvals/content-approvals.component').then(m => m.ContentApprovalsComponent)
   },
   {
     path: 'profile',
+    canActivate: [authGuard],
     loadComponent: () => import('./features/profile/profile.component').then(m => m.ProfileComponent)
   },
   {
@@ -60,30 +89,42 @@ export const routes: Routes = [
   },
   {
     path: 'super-admin',
+    canActivate: [authGuard],
     loadComponent: () => import('./features/super-admin/super-admin-dashboard.component').then(m => m.SuperAdminDashboardComponent)
   },
   {
     path: 'super-admin/llm-usage',
+    canActivate: [authGuard],
     loadComponent: () => import('./features/super-admin/llm-token-usage.component').then(m => m.LlmTokenUsageComponent)
   },
   {
     path: 'super-admin/ai-prompts',
+    canActivate: [authGuard],
     loadComponent: () => import('./features/super-admin/ai-prompts.component').then(m => m.AiPromptsComponent)
   },
   {
     path: 'super-admin/approval-queue',
+    canActivate: [authGuard],
     loadComponent: () => import('./features/super-admin/approval-queue.component').then(m => m.ApprovalQueueComponent)
   },
   {
+    path: 'super-admin/onboarding',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/super-admin/onboarding.component').then(m => m.OnboardingComponent)
+  },
+  {
     path: 'super-admin/tests',
+    canActivate: [authGuard],
     loadComponent: () => import('./features/super-admin/tests.component').then(m => m.TestsComponent)
   },
   {
     path: 'super-admin/view-screenshot',
+    canActivate: [authGuard],
     loadComponent: () => import('./features/super-admin/view-screenshot.component').then(m => m.ViewScreenshotComponent)
   },
   {
     path: 'super-admin/view-queries',
+    canActivate: [authGuard],
     loadComponent: () => import('./features/super-admin/view-queries.component').then(m => m.ViewQueriesComponent)
   },
   {
