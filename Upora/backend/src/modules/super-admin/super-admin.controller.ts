@@ -4,6 +4,7 @@ import { UserPersonalizationService } from '../user-personalization/user-persona
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { UpdateOnboardingOptionsDto } from './dto/update-onboarding-options.dto';
 
 @Controller('super-admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -48,15 +49,14 @@ export class SuperAdminController {
   @Patch('onboarding/options/:category')
   async updateOnboardingOptions(
     @Param('category') category: string,
-    @Body('options') options: { id: string; label: string }[],
-    @Body('ageRange') ageRange?: string,
-    @Body('gender') gender?: string,
+    @Body() dto: UpdateOnboardingOptionsDto,
   ) {
+    const options = Array.isArray(dto.options) ? dto.options : [];
     return this.userPersonalizationService.updateOptions(
       category,
       options,
-      ageRange || '',
-      gender || '',
+      dto.ageRange || '',
+      dto.gender || '',
     );
   }
 

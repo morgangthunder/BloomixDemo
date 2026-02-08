@@ -241,17 +241,22 @@ export class UserPersonalizationService implements OnModuleInit {
   async getAllOptionsForAdmin(): Promise<{
     [category: string]: { ageRange: string; gender: string; options: { id: string; label: string }[] }[];
   }> {
-    const rows = await this.optionsRepo.find({ order: { category: 'ASC', ageRange: 'ASC', gender: 'ASC' } });
-    const result: Record<string, { ageRange: string; gender: string; options: { id: string; label: string }[] }[]> = {};
-    for (const row of rows) {
-      if (!result[row.category]) result[row.category] = [];
-      result[row.category].push({
-        ageRange: row.ageRange || '',
-        gender: row.gender || '',
-        options: row.options as { id: string; label: string }[],
-      });
+    try {
+      const rows = await this.optionsRepo.find({ order: { category: 'ASC', ageRange: 'ASC', gender: 'ASC' } });
+      const result: Record<string, { ageRange: string; gender: string; options: { id: string; label: string }[] }[]> = {};
+      for (const row of rows) {
+        if (!result[row.category]) result[row.category] = [];
+        result[row.category].push({
+          ageRange: row.ageRange || '',
+          gender: row.gender || '',
+          options: row.options as { id: string; label: string }[],
+        });
+      }
+      return result;
+    } catch (err) {
+      console.error('[UserPersonalization] getAllOptionsForAdmin error:', (err as Error)?.message);
+      return { tv_movies: [], hobbies: [], learning_areas: [] };
     }
-    return result;
   }
 
   /**
@@ -273,24 +278,34 @@ export class UserPersonalizationService implements OnModuleInit {
    */
   async updateOptions(
     category: string,
-    options: { id: string; label: string }[],
+    options: { id: string; label: string }[] | undefined,
     ageRange = '',
     gender = '',
   ): Promise<PersonalizationOption> {
-    let row = await this.optionsRepo.findOne({
-      where: { category, ageRange: ageRange || '', gender: gender || '' },
-    });
-    if (!row) {
-      row = this.optionsRepo.create({
-        category,
-        ageRange: ageRange || '',
-        gender: gender || '',
-        options,
+    const opts = Array.isArray(options) ? options : [];
+    const age = ageRange?.trim() ?? '';
+    const gen = gender?.trim() ?? '';
+    try {
+      let row = await this.optionsRepo.findOne({
+        where: { category, ageRange: age, gender: gen },
       });
-    } else {
-      row.options = options;
+      if (!row) {
+        const { randomUUID } = await import('crypto');
+        row = this.optionsRepo.create({
+          id: randomUUID(),
+          category,
+          ageRange: age,
+          gender: gen,
+          options: opts,
+        });
+      } else {
+        row.options = opts;
+      }
+      return await this.optionsRepo.save(row);
+    } catch (err) {
+      console.error('[UserPersonalization] updateOptions error:', (err as Error)?.message, (err as Error)?.stack);
+      throw err;
     }
-    return await this.optionsRepo.save(row);
   }
 
   /**
@@ -322,35 +337,40 @@ export class UserPersonalizationService implements OnModuleInit {
     hobbies: { id: string; label: string; count: number }[];
     learning_areas: { id: string; label: string; count: number }[];
   }> {
-    const all = await this.personalizationRepo.find();
-    const tvCounts = new Map<string, number>();
-    const hobbyCounts = new Map<string, number>();
-    const learningCounts = new Map<string, number>();
-    const optionsMap = await this.getAllOptions();
+    try {
+      const all = await this.personalizationRepo.find();
+      const tvCounts = new Map<string, number>();
+      const hobbyCounts = new Map<string, number>();
+      const learningCounts = new Map<string, number>();
+      const optionsMap = await this.getAllOptions();
 
-    for (const pref of all) {
-      for (const id of pref.favouriteTvMovies || []) {
-        tvCounts.set(id, (tvCounts.get(id) || 0) + 1);
+      for (const pref of all) {
+        for (const id of pref.favouriteTvMovies || []) {
+          tvCounts.set(id, (tvCounts.get(id) || 0) + 1);
+        }
+        for (const id of pref.hobbiesInterests || []) {
+          hobbyCounts.set(id, (hobbyCounts.get(id) || 0) + 1);
+        }
+        for (const id of pref.learningAreas || []) {
+          learningCounts.set(id, (learningCounts.get(id) || 0) + 1);
+        }
       }
-      for (const id of pref.hobbiesInterests || []) {
-        hobbyCounts.set(id, (hobbyCounts.get(id) || 0) + 1);
-      }
-      for (const id of pref.learningAreas || []) {
-        learningCounts.set(id, (learningCounts.get(id) || 0) + 1);
-      }
+
+      const toSorted = (counts: Map<string, number>, opts: { id: string; label: string }[]) => {
+        const labelMap = new Map(opts.map((o) => [o.id, o.label]));
+        return Array.from(counts.entries())
+          .map(([id, count]) => ({ id, label: labelMap.get(id) || id, count }))
+          .sort((a, b) => b.count - a.count);
+      };
+
+      return {
+        tv_movies: toSorted(tvCounts, optionsMap.tv_movies || []),
+        hobbies: toSorted(hobbyCounts, optionsMap.hobbies || []),
+        learning_areas: toSorted(learningCounts, optionsMap.learning_areas || []),
+      };
+    } catch (err) {
+      console.error('[UserPersonalization] getPopularSelections error:', (err as Error)?.message);
+      return { tv_movies: [], hobbies: [], learning_areas: [] };
     }
-
-    const toSorted = (counts: Map<string, number>, opts: { id: string; label: string }[]) => {
-      const labelMap = new Map(opts.map((o) => [o.id, o.label]));
-      return Array.from(counts.entries())
-        .map(([id, count]) => ({ id, label: labelMap.get(id) || id, count }))
-        .sort((a, b) => b.count - a.count);
-    };
-
-    return {
-      tv_movies: toSorted(tvCounts, optionsMap.tv_movies || []),
-      hobbies: toSorted(hobbyCounts, optionsMap.hobbies || []),
-      learning_areas: toSorted(learningCounts, optionsMap.learning_areas || []),
-    };
   }
 }

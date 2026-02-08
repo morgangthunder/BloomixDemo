@@ -136,7 +136,7 @@ function slugify(label: string): string {
           <!-- Section: Option Configuration -->
           <section class="section">
             <h2 class="section-title">⚙️ Option Configuration</h2>
-            <p class="section-desc">Add or remove options for each category. Configure default list and age/gender variants. Fallback: age+gender → age → gender → default.</p>
+            <p class="section-desc">Add options to the default list (any age, any gender), or add variants for specific age/gender combinations. Click "Add variant" to create a new slot, choose age and/or gender, then Edit it to add options.</p>
             <div class="options-editor" *ngIf="optionsData">
               <div class="option-category" *ngFor="let cat of categoryKeys">
                 <h3 class="cat-title">{{ categoryLabels[cat] }}</h3>
@@ -442,12 +442,17 @@ function slugify(label: string): string {
       margin-top: 0.5rem;
     }
     .variant-select {
-      background: rgba(0,0,0,0.3);
-      border: 1px solid rgba(255,255,255,0.2);
+      background: #1a1a2e;
+      border: 1px solid rgba(255,255,255,0.3);
       border-radius: 6px;
       padding: 0.35rem 0.5rem;
       color: #fff;
       font-size: 0.85rem;
+      color-scheme: dark;
+    }
+    .variant-select option {
+      background: #1a1a2e;
+      color: #fff;
     }
     .cancel-btn {
       background: transparent;
@@ -680,17 +685,27 @@ export class OnboardingComponent implements OnInit {
   load() {
     this.loading = true;
     this.error = null;
-    Promise.all([
+    Promise.allSettled([
       this.http.get<PopularSelections>(`${environment.apiUrl}/super-admin/onboarding/popular-selections`).toPromise(),
       this.http.get<OnboardingOptionsResponse>(`${environment.apiUrl}/super-admin/onboarding/options`).toPromise(),
     ])
-      .then(([pop, opts]) => {
-        this.popular = pop ?? null;
-        this.optionsData = opts && Object.keys(opts).length ? opts : { tv_movies: [], hobbies: [], learning_areas: [] };
+      .then(([popResult, optsResult]) => {
+        const errors: string[] = [];
+        if (popResult.status === 'fulfilled' && popResult.value) {
+          this.popular = popResult.value;
+        } else if (popResult.status === 'rejected') {
+          errors.push('Popular selections');
+        }
+        if (optsResult.status === 'fulfilled' && optsResult.value && Object.keys(optsResult.value).length) {
+          this.optionsData = optsResult.value;
+        } else {
+          this.optionsData = { tv_movies: [], hobbies: [], learning_areas: [] };
+          if (optsResult.status === 'rejected') {
+            errors.push('Options');
+          }
+        }
         this.lastUpdated = new Date();
-      })
-      .catch((err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to load';
+        this.error = errors.includes('Options') ? `Failed to load options. Check backend logs.` : null;
       })
       .finally(() => {
         this.loading = false;
