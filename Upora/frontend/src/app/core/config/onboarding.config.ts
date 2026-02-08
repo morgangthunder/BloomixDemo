@@ -11,7 +11,8 @@ export interface OnboardingStepConfig {
 export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
   { id: 'welcome', required: true },
   { id: 'profile', required: false, skipLabel: 'Skip' },
-  { id: 'interests', required: false, skipLabel: 'Skip' },
+  { id: 'tv_movies', required: false, skipLabel: 'Skip' },
+  { id: 'hobbies', required: false, skipLabel: 'Skip' },
   { id: 'learning', required: false, skipLabel: 'Skip' },
   { id: 'done', required: true },
 ];

@@ -57,9 +57,18 @@ export class OnboardingService {
     );
   }
 
-  getOptions(category: string): Observable<PersonalizationOption[]> {
-    return this.api.get<PersonalizationOption[]>(
-      `/user-personalization/options/${category}`
+  getOptions(
+    category: string,
+    ageRange?: string,
+    gender?: string,
+  ): Observable<PersonalizationOption[]> {
+    let url = `/user-personalization/options/${category}`;
+    const params: string[] = [];
+    if (ageRange?.trim()) params.push(`ageRange=${encodeURIComponent(ageRange.trim())}`);
+    if (gender?.trim()) params.push(`gender=${encodeURIComponent(gender.trim())}`);
+    if (params.length) url += '?' + params.join('&');
+    return this.api.get<PersonalizationOption[]>(url).pipe(
+      catchError(() => of([]))
     );
   }
 

@@ -2,7 +2,9 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, ActivatedRoute, RouterModule } from '@angular/router';
 import { IonContent } from '@ionic/angular/standalone';
+import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
+import { OnboardingService } from '../../core/services/onboarding.service';
 
 const RETURN_URL_KEY = 'auth_return_url';
 
@@ -36,6 +38,7 @@ export class AuthCallbackComponent implements OnInit {
 
   constructor(
     private auth: AuthService,
+    private onboarding: OnboardingService,
     private router: Router,
     private route: ActivatedRoute,
   ) {}
@@ -86,8 +89,9 @@ export class AuthCallbackComponent implements OnInit {
           const returnUrl = sessionStorage.getItem(RETURN_URL_KEY) || params['state'] || '/home';
           sessionStorage.removeItem(RETURN_URL_KEY);
           const cleanUrl = returnUrl.startsWith('/') ? returnUrl : `/${returnUrl}`;
-          console.log('[AuthCallback] ✅ Sign-in successful, redirecting to:', cleanUrl);
-          setTimeout(() => this.router.navigateByUrl(cleanUrl, { replaceUrl: true }), 500);
+          const target = await this.resolvePostAuthRedirect(cleanUrl);
+          console.log('[AuthCallback] ✅ Sign-in successful, redirecting to:', target);
+          setTimeout(() => this.router.navigateByUrl(target, { replaceUrl: true }), 500);
         } else {
           this.error = result.error || 'Failed to complete sign-in.';
           console.error('[AuthCallback] ❌ Sign-in failed:', this.error);
@@ -106,8 +110,9 @@ export class AuthCallbackComponent implements OnInit {
         const returnUrl = sessionStorage.getItem(RETURN_URL_KEY) || params['state'] || '/home';
         sessionStorage.removeItem(RETURN_URL_KEY);
         const cleanUrl = returnUrl.startsWith('/') ? returnUrl : `/${returnUrl}`;
-        console.log('[AuthCallback] ✅ Sign-in successful, redirecting to:', cleanUrl);
-        setTimeout(() => this.router.navigateByUrl(cleanUrl, { replaceUrl: true }), 500);
+        const target = await this.resolvePostAuthRedirect(cleanUrl);
+        console.log('[AuthCallback] ✅ Sign-in successful, redirecting to:', target);
+        setTimeout(() => this.router.navigateByUrl(target, { replaceUrl: true }), 500);
       } else {
         this.error = result.error || 'Failed to complete sign-in.';
         console.error('[AuthCallback] ❌ Sign-in failed:', this.error);
@@ -117,5 +122,19 @@ export class AuthCallbackComponent implements OnInit {
       this.error = e instanceof Error ? e.message : 'An error occurred during sign-in.';
       console.error('[AuthCallback] ❌ Exception during sign-in:', e);
     }
+  }
+
+  /** If user has not completed onboarding, redirect to /onboarding with returnUrl. */
+  private async resolvePostAuthRedirect(returnUrl: string): Promise<string> {
+    try {
+      const prefs = await firstValueFrom(this.onboarding.getMine());
+      if (!this.onboarding.hasCompletedOnboarding(prefs)) {
+        this.onboarding.setReturnUrl(returnUrl);
+        return `/onboarding?returnUrl=${encodeURIComponent(returnUrl)}`;
+      }
+    } catch {
+      // If check fails, proceed to returnUrl
+    }
+    return returnUrl;
   }
 }

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
 import { SuperAdminService } from './super-admin.service';
 import { UserPersonalizationService } from '../user-personalization/user-personalization.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -42,15 +42,35 @@ export class SuperAdminController {
 
   @Get('onboarding/options')
   async getOnboardingOptions() {
-    return this.userPersonalizationService.getAllOptions();
+    return this.userPersonalizationService.getAllOptionsForAdmin();
   }
 
   @Patch('onboarding/options/:category')
   async updateOnboardingOptions(
     @Param('category') category: string,
     @Body('options') options: { id: string; label: string }[],
+    @Body('ageRange') ageRange?: string,
+    @Body('gender') gender?: string,
   ) {
-    return this.userPersonalizationService.updateOptions(category, options);
+    return this.userPersonalizationService.updateOptions(
+      category,
+      options,
+      ageRange || '',
+      gender || '',
+    );
+  }
+
+  @Delete('onboarding/options/:category')
+  async deleteOnboardingOptionsVariant(
+    @Param('category') category: string,
+    @Query('ageRange') ageRange?: string,
+    @Query('gender') gender?: string,
+  ) {
+    return this.userPersonalizationService.deleteVariant(
+      category,
+      ageRange || '',
+      gender || '',
+    );
   }
 }
 

@@ -74,13 +74,20 @@ export class AuthService {
         throw new Error('Additional steps required');
       }
       const session = await this.getAmplifySession();
+      const tokens = session?.tokens;
+      const payload = tokens?.idToken?.payload as Record<string, unknown> | undefined;
+      const sub = (payload?.['sub'] as string) ?? (session as { userSub?: string })?.userSub ?? '';
+      if (!sub) {
+        console.error('[AuthService] No sub/userSub in session after signIn. tokens:', !!tokens, 'payload keys:', payload ? Object.keys(payload) : []);
+        throw new Error('Sign-in succeeded but could not retrieve user ID. Please refresh and try again.');
+      }
       const user: AuthUser = {
-        userId: session?.userId ?? email,
+        userId: sub,
         email,
         tenantId: environment.tenantId,
-        role: (session as any)?.customRole ?? environment.userRole,
-        idToken: (session as any)?.idToken,
-        accessToken: (session as any)?.accessToken,
+        role: (payload?.['custom:role'] as string) ?? (session as any)?.customRole ?? environment.userRole,
+        idToken: tokens?.idToken?.toString(),
+        accessToken: tokens?.accessToken?.toString(),
       };
       this.setUser(user);
       return user;
@@ -147,6 +154,10 @@ export class AuthService {
 
   getRole(): string | null {
     return this.currentUserSig()?.role ?? environment.userRole ?? null;
+  }
+
+  getEmail(): string | null {
+    return this.currentUserSig()?.email ?? null;
   }
 
   private setUser(user: AuthUser): void {

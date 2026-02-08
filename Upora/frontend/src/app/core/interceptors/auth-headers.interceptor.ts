@@ -33,6 +33,10 @@ export const authHeadersInterceptor: HttpInterceptorFn = (
   if (role) {
     headers = headers.set('x-user-role', role);
   }
+  const email = auth.getEmail();
+  if (email) {
+    headers = headers.set('x-user-email', email);
+  }
   const token = auth.getToken();
   if (token) {
     headers = headers.set('Authorization', `Bearer ${token}`);

@@ -3,7 +3,9 @@ import { CommonModule } from '@angular/common';
 import { Router, ActivatedRoute, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { IonContent } from '@ionic/angular/standalone';
+import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
+import { OnboardingService } from '../../core/services/onboarding.service';
 import { environment } from '../../../environments/environment';
 
 /**
@@ -94,6 +96,7 @@ export class AuthVerifyComponent implements OnInit {
 
   constructor(
     private auth: AuthService,
+    private onboarding: OnboardingService,
     private router: Router,
     private route: ActivatedRoute,
     private cdr: ChangeDetectorRef,
@@ -166,7 +169,8 @@ export class AuthVerifyComponent implements OnInit {
         const { email, password } = JSON.parse(pending) as { email: string; password: string };
         if (email === this.username && password) {
           await this.auth.login(email, password);
-          setTimeout(() => this.router.navigateByUrl(this.returnUrl), 800);
+          const target = await this.resolvePostAuthRedirect(this.returnUrl);
+          setTimeout(() => this.router.navigateByUrl(target), 800);
           return;
         }
       } catch {
@@ -175,6 +179,20 @@ export class AuthVerifyComponent implements OnInit {
     }
     const loginUrl = `/login?verified=1&returnUrl=${encodeURIComponent(this.returnUrl)}`;
     setTimeout(() => this.router.navigateByUrl(loginUrl), 800);
+  }
+
+  /** If user has not completed onboarding, redirect to /onboarding with returnUrl. */
+  private async resolvePostAuthRedirect(returnUrl: string): Promise<string> {
+    try {
+      const prefs = await firstValueFrom(this.onboarding.getMine());
+      if (!this.onboarding.hasCompletedOnboarding(prefs)) {
+        this.onboarding.setReturnUrl(returnUrl);
+        return `/onboarding?returnUrl=${encodeURIComponent(returnUrl)}`;
+      }
+    } catch {
+      // If check fails, proceed to returnUrl
+    }
+    return returnUrl;
   }
 
   async resendCode() {

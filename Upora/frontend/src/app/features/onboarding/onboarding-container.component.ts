@@ -41,8 +41,8 @@ import { ONBOARDING_STEPS } from '../../core/config/onboarding.config';
           ></span>
         </div>
 
-        <!-- Step content (scrollable for interests step with many options) -->
-        <div class="step-content" [class.step-content-scrollable]="currentStepId === 'interests'">
+        <!-- Step content (scrollable for interests steps with many options) -->
+        <div class="step-content" [class.step-content-scrollable]="currentStepId === 'tv_movies' || currentStepId === 'hobbies'">
         <div *ngIf="checkingAuth()" class="checking-auth">Loading preferences...</div>
         <ng-container *ngIf="!checkingAuth()" [ngSwitch]="currentStepId">
           <app-onboarding-welcome-step *ngSwitchCase="'welcome'" />
@@ -54,24 +54,46 @@ import { ONBOARDING_STEPS } from '../../core/config/onboarding.config';
             (dataChange)="onProfileChange($event)"
           />
           <app-onboarding-interests-step
-            *ngSwitchCase="'interests'"
+            *ngSwitchCase="'tv_movies'"
+            category="tv_movies"
             [selectedTv]="formData.favouriteTvMovies ?? []"
             [selectedHobbies]="formData.hobbiesInterests ?? []"
+            [ageRange]="formData.ageRange ?? ''"
+            [gender]="formData.gender ?? ''"
+            (dataChange)="onInterestsChange($event)"
+          />
+          <app-onboarding-interests-step
+            *ngSwitchCase="'hobbies'"
+            category="hobbies"
+            [selectedTv]="formData.favouriteTvMovies ?? []"
+            [selectedHobbies]="formData.hobbiesInterests ?? []"
+            [ageRange]="formData.ageRange ?? ''"
+            [gender]="formData.gender ?? ''"
             (dataChange)="onInterestsChange($event)"
           />
           <app-onboarding-learning-step
             *ngSwitchCase="'learning'"
             [selected]="formData.learningAreas ?? []"
+            [ageRange]="formData.ageRange ?? ''"
+            [gender]="formData.gender ?? ''"
             (dataChange)="onLearningChange($event)"
           />
-          <app-onboarding-done-step *ngSwitchCase="'done'" />
+          <app-onboarding-done-step *ngSwitchCase="'done'" [isEditing]="isReturningUser" />
         </ng-container>
         </div>
 
         <!-- Actions (hidden on welcome and while checking - user uses Sign in / Create account) -->
         <div *ngIf="!checkingAuth() && currentStepId !== 'welcome'" class="mt-8 flex gap-3">
           <button
-            *ngIf="canSkip"
+            *ngIf="canGoBack"
+            type="button"
+            (click)="previous()"
+            class="flex-1 py-3 px-4 rounded text-gray-400 hover:text-white border border-gray-600 hover:border-gray-500 transition"
+          >
+            Previous
+          </button>
+          <button
+            *ngIf="canSkip && !canGoBack"
             type="button"
             (click)="skip()"
             class="flex-1 py-3 px-4 rounded text-gray-400 hover:text-white border border-gray-600 hover:border-gray-500 transition"
@@ -84,7 +106,7 @@ import { ONBOARDING_STEPS } from '../../core/config/onboarding.config';
             [disabled]="loading()"
             class="flex-1 bg-brand-red text-white font-bold py-3 px-4 rounded hover:bg-opacity-90 transition disabled:opacity-50"
           >
-            {{ loading() ? 'Saving...' : isLastStep ? 'Continue' : 'Next' }}
+            {{ primaryButtonLabel() }}
           </button>
         </div>
       </div>
@@ -132,6 +154,8 @@ export class OnboardingContainerComponent implements OnInit {
   loading = signal(false);
   /** True while checking if authenticated user has completed onboarding (prevents Sign In flash). Start true when authenticated so first paint never shows welcome. */
   checkingAuth = signal(inject(AuthService).isAuthenticated());
+  /** True when user has already completed onboarding (editing preferences). Starts at first content step, shows Save instead of Continue. */
+  isReturningUser = false;
   formData: Partial<UserPersonalization> = {
     fullName: '',
     ageRange: '',
@@ -154,6 +178,14 @@ export class OnboardingContainerComponent implements OnInit {
       this.currentStepId !== 'done'
     );
   }
+  get canGoBack() {
+    return this.currentIndex > 1;
+  }
+  primaryButtonLabel(): string {
+    if (this.loading()) return 'Saving...';
+    if (this.isLastStep) return this.isReturningUser ? 'Save' : 'Continue';
+    return 'Next';
+  }
 
   ngOnInit() {
     const returnUrl =
@@ -168,6 +200,8 @@ export class OnboardingContainerComponent implements OnInit {
         next: (prefs) => {
           this.checkingAuth.set(false);
           this.formData = { ...this.formData, ...prefs };
+          this.isReturningUser = this.onboarding.hasCompletedOnboarding(prefs);
+          // Returning users: start at first content step (profile). New users: same.
           this.currentIndex = 1;
           this.cdr.detectChanges();
         },
@@ -209,6 +243,13 @@ export class OnboardingContainerComponent implements OnInit {
 
     this.currentIndex++;
     this.cdr.detectChanges();
+  }
+
+  previous() {
+    if (this.currentIndex > 1) {
+      this.currentIndex--;
+      this.cdr.detectChanges();
+    }
   }
 
   async skip() {

@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 import { onboardingGuard } from './core/guards/onboarding.guard';
+import { requireOnboardingGuard } from './core/guards/require-onboarding.guard';
 
 export const routes: Routes = [
   {
@@ -31,26 +32,32 @@ export const routes: Routes = [
   },
   {
     path: 'home',
+    canActivate: [requireOnboardingGuard],
     loadComponent: () => import('./features/home/home.component').then(m => m.HomeComponent)
   },
   {
     path: 'categories',
+    canActivate: [requireOnboardingGuard],
     loadComponent: () => import('./features/categories/categories.component').then(m => m.CategoriesComponent)
   },
   {
     path: 'my-list',
+    canActivate: [requireOnboardingGuard],
     loadComponent: () => import('./features/my-list/my-list.component').then(m => m.MyListComponent)
   },
   {
     path: 'search',
+    canActivate: [requireOnboardingGuard],
     loadComponent: () => import('./features/search/search.component').then(m => m.SearchComponent)
   },
   {
     path: 'lesson-overview/:id',
+    canActivate: [requireOnboardingGuard],
     loadComponent: () => import('./features/lesson-overview/lesson-overview.component').then(m => m.LessonOverviewComponent)
   },
   {
     path: 'lesson-view/:id',
+    canActivate: [requireOnboardingGuard],
     loadComponent: () => import('./features/lesson-view/lesson-view.component').then(m => m.LessonViewComponent)
   },
   {
@@ -80,11 +87,12 @@ export const routes: Routes = [
   },
   {
     path: 'profile',
-    canActivate: [authGuard],
+    canActivate: [authGuard, requireOnboardingGuard],
     loadComponent: () => import('./features/profile/profile.component').then(m => m.ProfileComponent)
   },
   {
     path: 'course-details/:id',
+    canActivate: [requireOnboardingGuard],
     loadComponent: () => import('./features/course-details/course-details.component').then(m => m.CourseDetailsComponent)
   },
   {

@@ -4,6 +4,9 @@ import { Repository } from 'typeorm';
 import { User } from '../../entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UserRole } from '../../common/enums/approval-status.enum';
+
+const DEFAULT_TENANT_ID = '00000000-0000-0000-0000-000000000001';
 
 @Injectable()
 export class UsersService {
@@ -11,6 +14,45 @@ export class UsersService {
     @InjectRepository(User)
     private usersRepository: Repository<User>,
   ) {}
+
+  /**
+   * Ensures a user exists in the users table (for Cognito sub sync).
+   * Creates a placeholder row if missing. Call before creating UserPersonalization.
+   */
+  async ensureUserExists(
+    userId: string,
+    opts?: { email?: string; tenantId?: string },
+  ): Promise<User> {
+    if (!userId?.trim()) return null as any;
+    const existing = await this.usersRepository.findOne({ where: { id: userId } });
+    if (existing) return existing;
+    const tenantId = opts?.tenantId?.trim() || DEFAULT_TENANT_ID;
+    const email =
+      opts?.email?.trim() ||
+      `${userId.replace(/[^a-zA-Z0-9-]/g, '_')}@cognito-synced.local`;
+    try {
+      // Use raw query for PostgreSQL ON CONFLICT (id) DO NOTHING
+      await this.usersRepository
+        .createQueryBuilder()
+        .insert()
+        .into(User)
+        .values({
+          id: userId,
+          tenantId,
+          email,
+          role: UserRole.STUDENT,
+        })
+        .orIgnore()
+        .execute();
+    } catch (err) {
+      // Ignore duplicate key - user was created by another request
+      const msg = (err as Error)?.message || '';
+      if (!msg.includes('duplicate key') && !msg.includes('unique constraint')) {
+        throw err;
+      }
+    }
+    return (await this.usersRepository.findOne({ where: { id: userId } })) as User;
+  }
 
   async create(createUserDto: CreateUserDto): Promise<User> {
     const user = this.usersRepository.create(createUserDto);

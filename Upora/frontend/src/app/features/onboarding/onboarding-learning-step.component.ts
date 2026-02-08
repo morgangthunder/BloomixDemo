@@ -27,6 +27,8 @@ import { OnboardingService, PersonalizationOption } from '../../core/services/on
 })
 export class OnboardingLearningStepComponent implements OnInit {
   @Input() selected: string[] = [];
+  @Input() ageRange = '';
+  @Input() gender = '';
   @Output() dataChange = new EventEmitter<{ learningAreas: string[] }>();
 
   options: PersonalizationOption[] = [];
@@ -34,7 +36,9 @@ export class OnboardingLearningStepComponent implements OnInit {
   constructor(private onboarding: OnboardingService) {}
 
   ngOnInit() {
-    this.onboarding.getOptions('learning_areas').subscribe((opts) => (this.options = opts));
+    this.onboarding
+      .getOptions('learning_areas', this.ageRange || undefined, this.gender || undefined)
+      .subscribe((opts) => (this.options = opts));
   }
 
   toggle(id: string) {

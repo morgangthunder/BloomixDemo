@@ -4,6 +4,7 @@ import {
   Patch,
   Body,
   Param,
+  Query,
   Headers,
   UseGuards,
 } from '@nestjs/common';
@@ -20,8 +21,12 @@ export class UserPersonalizationController {
    */
   @Get('me')
   @UseGuards(JwtAuthGuard)
-  getMine(@Headers('x-user-id') userId: string) {
-    return this.service.getMine(userId);
+  getMine(
+    @Headers('x-user-id') userId: string,
+    @Headers('x-tenant-id') tenantId?: string,
+    @Headers('x-user-email') email?: string,
+  ) {
+    return this.service.getMine(userId || '', { tenantId, email });
   }
 
   /**
@@ -32,8 +37,10 @@ export class UserPersonalizationController {
   updateMine(
     @Headers('x-user-id') userId: string,
     @Body() dto: UpdateUserPersonalizationDto,
+    @Headers('x-tenant-id') tenantId?: string,
+    @Headers('x-user-email') email?: string,
   ) {
-    return this.service.updateMine(userId, dto);
+    return this.service.updateMine(userId, dto, { tenantId, email });
   }
 
   /**
@@ -41,8 +48,12 @@ export class UserPersonalizationController {
    */
   @Patch('me/complete-onboarding')
   @UseGuards(JwtAuthGuard)
-  completeOnboarding(@Headers('x-user-id') userId: string) {
-    return this.service.completeOnboarding(userId);
+  completeOnboarding(
+    @Headers('x-user-id') userId: string,
+    @Headers('x-tenant-id') tenantId?: string,
+    @Headers('x-user-email') email?: string,
+  ) {
+    return this.service.completeOnboarding(userId, { tenantId, email });
   }
 
   /**
@@ -50,8 +61,12 @@ export class UserPersonalizationController {
    */
   @Patch('me/skip-onboarding')
   @UseGuards(JwtAuthGuard)
-  skipOnboarding(@Headers('x-user-id') userId: string) {
-    return this.service.skipOnboarding(userId);
+  skipOnboarding(
+    @Headers('x-user-id') userId: string,
+    @Headers('x-tenant-id') tenantId?: string,
+    @Headers('x-user-email') email?: string,
+  ) {
+    return this.service.skipOnboarding(userId, { tenantId, email });
   }
 
   /**
@@ -65,10 +80,15 @@ export class UserPersonalizationController {
 
   /**
    * Get curated options for a category (tv_movies | hobbies | learning_areas).
+   * Optional query params: ageRange, gender - for fallback filtering.
    * Public - no auth required (used by onboarding form).
    */
   @Get('options/:category')
-  getOptions(@Param('category') category: string) {
-    return this.service.getOptions(category);
+  getOptions(
+    @Param('category') category: string,
+    @Query('ageRange') ageRange?: string,
+    @Query('gender') gender?: string,
+  ) {
+    return this.service.getOptions(category, ageRange, gender);
   }
 }

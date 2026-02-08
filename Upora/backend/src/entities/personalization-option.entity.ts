@@ -16,8 +16,14 @@ export class PersonalizationOption {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'varchar', length: 50, unique: true })
+  @Column({ type: 'varchar', length: 50 })
   category: string;
+
+  @Column({ name: 'age_range', type: 'varchar', length: 50, default: '' })
+  ageRange: string;
+
+  @Column({ type: 'varchar', length: 50, default: '' })
+  gender: string;
 
   @Column({ type: 'jsonb', default: [] })
   options: PersonalizationOptionItem[];

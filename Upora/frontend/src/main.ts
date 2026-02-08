@@ -409,7 +409,7 @@ if (authConfig?.enabled && authConfig?.userPoolId && authConfig?.userPoolClientI
 // ========================================
 // Version is read from package.json at build time
 // This will be replaced by the build process or read dynamically
-const FRONTEND_VERSION = '0.3.37'; // Reduce console noise when backend unavailable
+const FRONTEND_VERSION = '0.3.43'; // Onboarding: separate tv_movies/hobbies steps, options seed, getOptions catchError
 const CACHE_BUST_ID = `v${FRONTEND_VERSION}-${Math.random().toString(36).substr(2, 9)}`;
 console.log('');
 console.log('═══════════════════════════════════════════════════════════');
