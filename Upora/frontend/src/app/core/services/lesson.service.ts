@@ -131,9 +131,8 @@ export class LessonService {
           this.loadingSubject.next(false);
           console.log('[LessonService] ✅ Lessons loaded successfully from API!');
         }),
-        catchError(error => {
-          console.error('❌ [LessonService] Error loading lessons from API:', error);
-          console.warn('⚠️ [LessonService] Falling back to mock data');
+        catchError(() => {
+          console.info('[LessonService] Backend unavailable — using mock lessons. Start backend for real data.');
           this.errorSubject.next('Failed to load lessons. Using fallback data.');
           // Fallback to mock data on error
           this.categoriesSubject.next(CATEGORIES);

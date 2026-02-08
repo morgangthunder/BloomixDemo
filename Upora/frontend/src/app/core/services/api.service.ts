@@ -153,7 +153,12 @@ export class ApiService {
       }
     }
 
-    console.error('API Error:', errorMessage, error);
+    // Use warn for 5xx (backend down/unavailable) to reduce console noise in dev
+    if (error?.status >= 500) {
+      console.warn(`API ${error.status}:`, errorMessage);
+    } else {
+      console.error('API Error:', errorMessage, error);
+    }
     return throwError(() => new Error(errorMessage));
   }
 }

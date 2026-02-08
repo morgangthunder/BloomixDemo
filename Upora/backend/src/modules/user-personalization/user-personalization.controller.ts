@@ -1,0 +1,74 @@
+import {
+  Controller,
+  Get,
+  Patch,
+  Body,
+  Param,
+  Headers,
+  UseGuards,
+} from '@nestjs/common';
+import { UserPersonalizationService } from './user-personalization.service';
+import { UpdateUserPersonalizationDto } from './dto/update-user-personalization.dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+
+@Controller('user-personalization')
+export class UserPersonalizationController {
+  constructor(private readonly service: UserPersonalizationService) {}
+
+  /**
+   * Get current user's personalization preferences.
+   */
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  getMine(@Headers('x-user-id') userId: string) {
+    return this.service.getMine(userId);
+  }
+
+  /**
+   * Update current user's personalization preferences.
+   */
+  @Patch('me')
+  @UseGuards(JwtAuthGuard)
+  updateMine(
+    @Headers('x-user-id') userId: string,
+    @Body() dto: UpdateUserPersonalizationDto,
+  ) {
+    return this.service.updateMine(userId, dto);
+  }
+
+  /**
+   * Mark onboarding as completed.
+   */
+  @Patch('me/complete-onboarding')
+  @UseGuards(JwtAuthGuard)
+  completeOnboarding(@Headers('x-user-id') userId: string) {
+    return this.service.completeOnboarding(userId);
+  }
+
+  /**
+   * Mark onboarding as skipped.
+   */
+  @Patch('me/skip-onboarding')
+  @UseGuards(JwtAuthGuard)
+  skipOnboarding(@Headers('x-user-id') userId: string) {
+    return this.service.skipOnboarding(userId);
+  }
+
+  /**
+   * Get all curated options (all categories).
+   * Public - no auth required.
+   */
+  @Get('options')
+  getAllOptions() {
+    return this.service.getAllOptions();
+  }
+
+  /**
+   * Get curated options for a category (tv_movies | hobbies | learning_areas).
+   * Public - no auth required (used by onboarding form).
+   */
+  @Get('options/:category')
+  getOptions(@Param('category') category: string) {
+    return this.service.getOptions(category);
+  }
+}

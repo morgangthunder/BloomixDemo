@@ -3,6 +3,7 @@ import { appConfig } from './app/app.config';
 import { AppComponent } from './app/app.component';
 import { environment } from './environments/environment';
 import { Amplify, Hub } from '@aws-amplify/core';
+import { cognitoUserPoolsTokenProvider } from '@aws-amplify/auth/cognito';
 import { initOAuthCallbackHelper } from './app/core/services/oauth-callback-helper';
 
 // CRITICAL: OAuth listener MUST be imported BEFORE Amplify.configure()
@@ -206,6 +207,11 @@ if (authConfig?.enabled && authConfig?.userPoolId && authConfig?.userPoolClientI
   console.log('[Amplify Config] Auth.Cognito keys:', Object.keys(amplifyConfig.Auth?.Cognito || {}));
   console.log('[Amplify Config] Auth.Cognito.loginWith.oauth keys:', Object.keys(amplifyConfig.Auth?.Cognito?.loginWith?.oauth || {}));
   
+  // CRITICAL: Set up Cognito token provider BEFORE configure() - required for email/password (SRP) sign-in
+  // When using @aws-amplify/core directly (not aws-amplify), the token provider is not auto-configured.
+  // Without this, signIn() fails with "Auth UserPool not configured".
+  cognitoUserPoolsTokenProvider.setAuthConfig(amplifyConfig.Auth);
+  
   // Configure Amplify - this triggers the OAuth listener to check for callbacks
   // IMPORTANT: This MUST happen before Angular bootstraps to ensure config is ready
   // The OAuth listener runs synchronously during configure(), so config must be fully ready
@@ -231,7 +237,11 @@ if (authConfig?.enabled && authConfig?.userPoolId && authConfig?.userPoolClientI
       console.log('[Amplify Config] ✅ Config verified before configure() on callback');
     }
     
-    Amplify.configure(amplifyConfig);
+    Amplify.configure(amplifyConfig, {
+      Auth: {
+        tokenProvider: cognitoUserPoolsTokenProvider,
+      },
+    });
     console.log('[Amplify Config] ✅ Amplify.configure() completed without throwing');
   } catch (configureError: any) {
     console.error('[Amplify Config] ❌ Amplify.configure() threw error:', configureError);
@@ -374,6 +384,24 @@ if (authConfig?.enabled && authConfig?.userPoolId && authConfig?.userPoolClientI
       console.log('[Amplify Config] ✅ PKCE data present - Amplify should be able to complete OAuth');
     }
   }
+} else if (authConfig?.enabled && authConfig?.userPoolId && authConfig?.userPoolClientId) {
+  // Cognito configured but no OAuth domain - configure for email/password only
+  // Ensures "Auth UserPool not configured" doesn't occur for SRP sign-in
+  console.log('[Amplify Config] Configuring Cognito for email/password (no OAuth domain)');
+  const emailOnlyConfig = {
+    Auth: {
+      Cognito: {
+        userPoolId: authConfig.userPoolId,
+        userPoolClientId: authConfig.userPoolClientId,
+      },
+    },
+  };
+  cognitoUserPoolsTokenProvider.setAuthConfig(emailOnlyConfig.Auth);
+  Amplify.configure(emailOnlyConfig, {
+    Auth: {
+      tokenProvider: cognitoUserPoolsTokenProvider,
+    },
+  });
 }
 
 // ========================================
@@ -381,7 +409,7 @@ if (authConfig?.enabled && authConfig?.userPoolId && authConfig?.userPoolClientI
 // ========================================
 // Version is read from package.json at build time
 // This will be replaced by the build process or read dynamically
-const FRONTEND_VERSION = '0.3.30'; // Disabled Amplify OAuth listener to prevent code consumption race condition
+const FRONTEND_VERSION = '0.3.37'; // Reduce console noise when backend unavailable
 const CACHE_BUST_ID = `v${FRONTEND_VERSION}-${Math.random().toString(36).substr(2, 9)}`;
 console.log('');
 console.log('═══════════════════════════════════════════════════════════');
@@ -397,26 +425,18 @@ console.log(`🆔 Cache Bust ID: ${CACHE_BUST_ID}`);
 console.log('═══════════════════════════════════════════════════════════');
 console.log('');
 
-// Fetch and display backend version
+// Fetch and display backend version (optional - fails silently if backend unavailable)
 fetch(`${environment.apiUrl}/version`)
   .then(res => {
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
   })
   .then(data => {
-    if (data && data.version) {
+    if (data?.version) {
       console.log(`🔥🔥🔥 BACKEND VERSION ${data.version} 🔥🔥🔥`);
-      console.log(`📅 Backend Timestamp: ${data.timestamp}`);
-    } else {
-      console.warn('⚠️ Backend version endpoint returned invalid data:', data);
     }
   })
-  .catch(err => {
-    console.warn('⚠️ Could not fetch backend version:', err.message);
-    console.warn('⚠️ Make sure the backend is running and the dev server proxy is configured');
-  });
+  .catch(() => { /* Backend unavailable - expected when running frontend-only */ });
 
 // Force clear all caches
 if ('caches' in window) {
