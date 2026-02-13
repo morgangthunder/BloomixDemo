@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable, Subscription, Subscriber } from 'rxjs';
+import { Observable, Subscription, Subscriber, Subject } from 'rxjs';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import {
@@ -10,6 +10,7 @@ import {
   InteractionAIResponseEvent,
 } from './interaction-ai-context.service';
 import { SnackMessageService } from './snack-message.service';
+import { AuthService } from './auth.service';
 import { environment } from '../../../environments/environment';
 
 /**
@@ -83,6 +84,7 @@ export interface PublicProfile {
 export class InteractionAISDK {
   private snackService = inject(SnackMessageService);
   private http = inject(HttpClient);
+  private authService = inject(AuthService);
   private teacherWidgetRef: any = null; // Reference to FloatingTeacherWidgetComponent
   private mediaPlayerRef: any = null; // Reference to MediaPlayerComponent
 
@@ -95,6 +97,9 @@ export class InteractionAISDK {
   private currentUserId: string | null = null;
   private currentTenantId: string | null = null;
   private currentUserRole: string | null = null;
+
+  /** Emits events for lesson engagement transcript (lesson-view subscribes and pushes to transcript) */
+  readonly transcriptEvent$ = new Subject<{ type: string; content: string; metadata?: Record<string, unknown> }>();
 
   constructor(private contextService: InteractionAIContextService) {}
 
@@ -307,7 +312,7 @@ export class InteractionAISDK {
           this.teacherWidgetRef.openWidget();
         }
         this.teacherWidgetRef.showScript(text);
-        console.log('[InteractionAISDK] ✅ Showed script:', text.substring(0, 50));
+        console.log('[InteractionAISDK] ✅ Showed script:', (text ?? '').substring(0, 50));
       } else {
         console.warn('[InteractionAISDK] Teacher widget reference not set, cannot show script');
       }
@@ -322,7 +327,11 @@ export class InteractionAISDK {
    */
   showSnack(content: string, duration?: number, hideFromChatUI: boolean = false): string {
     const snackId = this.snackService.show(content, duration);
-    
+    this.transcriptEvent$.next({
+      type: 'snack',
+      content: (content || '').substring(0, 200),
+      metadata: { duration, hideFromChatUI, snackId },
+    });
     // By default, also post to chat UI unless hideFromChatUI is true
     if (!hideFromChatUI) {
       // Use postToChat which will ensure widget is visible
@@ -337,6 +346,7 @@ export class InteractionAISDK {
    */
   hideSnack(): void {
     this.snackService.hide();
+    this.transcriptEvent$.next({ type: 'snack', content: 'Snack hidden', metadata: {} });
   }
 
   /**
@@ -361,18 +371,50 @@ export class InteractionAISDK {
   }
 
   /**
+   * Refresh user context (userId, tenantId) from AuthService.
+   * Called by bridge before saveUserProgress to ensure we use the actual logged-in user.
+   * Always refreshes from AuthService, even if userId/tenantId are provided (for consistency).
+   */
+  refreshUserContext(userId?: string | null, tenantId?: string | null): void {
+    // Always refresh from AuthService to ensure we have the latest user context
+    const currentUser = this.authService.currentUser();
+    if (currentUser) {
+      this.currentUserId = currentUser.userId || userId || null;
+      this.currentTenantId = currentUser.tenantId || tenantId || environment.tenantId || null;
+      this.currentUserRole = currentUser.role || null;
+    } else {
+      // Fallback to provided values or environment defaults
+      this.currentUserId = userId || environment.defaultUserId || null;
+      this.currentTenantId = tenantId || environment.tenantId || null;
+      this.currentUserRole = environment.userRole || null;
+    }
+    console.log('[InteractionAISDK] ✅ Refreshed user context:', {
+      userId: this.currentUserId,
+      tenantId: this.currentTenantId,
+      role: this.currentUserRole,
+    });
+  }
+
+  /**
    * Get HTTP headers with user/tenant info
+   * Always refreshes from AuthService to ensure latest user context
    */
   private getHeaders(): HttpHeaders {
+    // Always refresh from AuthService before getting headers
+    const currentUser = this.authService.currentUser();
+    const userId = currentUser?.userId || this.currentUserId || environment.defaultUserId;
+    const tenantId = currentUser?.tenantId || this.currentTenantId || environment.tenantId;
+    const role = currentUser?.role || this.currentUserRole || environment.userRole;
+    
     const headers: { [key: string]: string } = {};
-    if (this.currentUserId) {
-      headers['x-user-id'] = this.currentUserId;
+    if (userId) {
+      headers['x-user-id'] = userId;
     }
-    if (this.currentTenantId) {
-      headers['x-tenant-id'] = this.currentTenantId;
+    if (tenantId) {
+      headers['x-tenant-id'] = tenantId;
     }
-    if (this.currentUserRole) {
-      headers['x-user-role'] = this.currentUserRole;
+    if (role) {
+      headers['x-user-role'] = role;
     }
     return new HttpHeaders(headers);
   }
@@ -398,6 +440,11 @@ export class InteractionAISDK {
         }, { headers: this.getHeaders() })
       );
       console.log('[InteractionAISDK] ✅ Instance data saved');
+      this.transcriptEvent$.next({
+        type: 'instance_data',
+        content: 'Instance data saved',
+        metadata: { keys: Object.keys(data || {}) },
+      });
     } catch (error: any) {
       console.error('[InteractionAISDK] ❌ Failed to save instance data:', error);
       throw error;
@@ -460,20 +507,77 @@ export class InteractionAISDK {
       throw new Error('Interaction context not set. Call setContext() first.');
     }
 
+    // Always refresh user context before saving
+    this.refreshUserContext();
+    const headers = this.getHeaders();
+    const userId = this.authService.currentUser()?.userId || this.currentUserId || environment.defaultUserId;
+
+    // Build payload - explicitly include score if it's a valid number (including 0)
+    const payload: any = {
+      lessonId: this.currentLessonId,
+      stageId: this.currentStageId,
+      substageId: this.currentSubstageId,
+      interactionTypeId: this.currentInteractionTypeId,
+    };
+    
+    // Only include score if it's a valid number (including 0)
+    if (data.score !== undefined && data.score !== null) {
+      const numScore = Number(data.score);
+      if (!isNaN(numScore) && isFinite(numScore)) {
+        payload.score = Math.round(numScore * 100) / 100;
+      }
+    }
+    
+    // Include other optional fields
+    if (data.timeTakenSeconds !== undefined) {
+      payload.timeTakenSeconds = data.timeTakenSeconds;
+    }
+    if (data.interactionEvents !== undefined) {
+      payload.interactionEvents = data.interactionEvents;
+    }
+    if (data.customData !== undefined) {
+      payload.customData = data.customData;
+    }
+    if (data.completed !== undefined) {
+      payload.completed = data.completed;
+    }
+
     try {
+      // Log the exact payload being sent
+      const payloadString = JSON.stringify(payload);
+      console.log('[InteractionAISDK] 💾 saveUserProgress called:', {
+        ...payload,
+        userId,
+        tenantId: this.currentTenantId || environment.tenantId,
+        scoreType: typeof payload.score,
+        hasScore: payload.score !== undefined && payload.score !== null,
+        scoreValue: payload.score,
+        payloadKeys: Object.keys(payload),
+        payloadJSON: payloadString,
+      });
       const response = await firstValueFrom(
-        this.http.post<{ saved: boolean; progress: UserProgress }>(`${environment.apiUrl}/interaction-data/user-progress`, {
-          lessonId: this.currentLessonId,
-          stageId: this.currentStageId,
-          substageId: this.currentSubstageId,
-          interactionTypeId: this.currentInteractionTypeId,
-          ...data,
-        }, { headers: this.getHeaders() })
+        this.http.post<{ saved: boolean; progress: UserProgress }>(`${environment.apiUrl}/interaction-data/user-progress`, payload, {
+          headers,
+        })
       );
-      console.log('[InteractionAISDK] ✅ User progress saved');
+      console.log('[InteractionAISDK] ✅ User progress saved successfully:', {
+        saved: response.saved,
+        progressId: response.progress?.id,
+        score: response.progress?.score,
+        completed: response.progress?.completed,
+      });
+      this.transcriptEvent$.next({
+        type: 'user_progress',
+        content: `Progress saved${response.progress?.score != null ? ` (score: ${response.progress.score})` : ''}${response.progress?.completed ? ' — completed' : ''}`,
+        metadata: { score: response.progress?.score, completed: response.progress?.completed },
+      });
       return response.progress;
     } catch (error: any) {
-      console.error('[InteractionAISDK] ❌ Failed to save user progress:', error);
+      console.error('[InteractionAISDK] ❌ Failed to save user progress:', {
+        error: error.message,
+        status: error.status,
+        payload: { ...payload, userId },
+      });
       throw error;
     }
   }

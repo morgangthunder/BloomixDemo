@@ -250,8 +250,11 @@ export class HeaderComponent implements OnInit, OnDestroy {
   }
 
   async signOut() {
-    await this.auth.signOut();
-    this.navigateTo('home');
+    const confirmed = confirm('Are you sure you want to sign out?');
+    if (confirmed) {
+      await this.auth.signOut();
+      this.navigateTo('home');
+    }
   }
 
   navigateToLogin() {

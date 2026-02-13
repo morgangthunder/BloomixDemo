@@ -14,7 +14,7 @@ import { RETURN_URL_KEY } from '../../core/guards/auth.guard';
   standalone: true,
   imports: [CommonModule, FormsModule, RouterModule, IonContent],
   template: `
-    <ion-content>
+    <ion-content [style.--padding-top]="'100px'" style="--background: #000000;">
       <div class="min-h-screen bg-brand-black flex items-center justify-center p-4">
         <div class="w-full max-w-md">
           <h1 class="text-2xl font-bold text-white mb-2">Sign in</h1>

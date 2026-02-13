@@ -5,6 +5,7 @@ import { IonContent } from '@ionic/angular/standalone';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { OnboardingService } from '../../core/services/onboarding.service';
+import { environment } from '../../../environments/environment';
 
 const RETURN_URL_KEY = 'auth_return_url';
 
@@ -74,13 +75,23 @@ export class AuthCallbackComponent implements OnInit {
       url: window.location.href?.slice(0, 100) + '...',
     });
 
+    // If immediate exchange already succeeded in constructor, skip ngOnInit processing
+    if (this.success || this.error) {
+      return;
+    }
+    
     try {
-      // For manual OAuth flow, run exchange immediately to prevent Amplify from consuming the code
-      const isManualOAuth = sessionStorage.getItem('upora_manual_oauth') === 'true';
+      // ALWAYS use manual OAuth exchange immediately to prevent Amplify from consuming the code
+      // Check if we have manual PKCE stored (which means we're using manual flow)
+      const cid = (window as any).__AMPLIFY_CONFIG__?.Auth?.Cognito?.userPoolClientId || 
+                  environment?.auth?.userPoolClientId || '';
+      const prefix = cid ? `CognitoIdentityServiceProvider.${cid}` : '';
+      const hasManualPKCE = sessionStorage.getItem(`${prefix}.oauthPKCE`) || localStorage.getItem(`${prefix}.oauthPKCE`);
+      const isManualOAuth = sessionStorage.getItem('upora_manual_oauth') === 'true' || hasManualPKCE;
       
-      if (isManualOAuth) {
-        console.log('[AuthCallback] Manual OAuth detected - running exchange immediately');
-        // Run immediately without delay to prevent Amplify from consuming the code
+      if (isManualOAuth || hasCode) {
+        console.log('[AuthCallback] Manual OAuth detected or code present - running exchange immediately to prevent Amplify consumption');
+        // Run immediately WITHOUT any delay to prevent Amplify from consuming the code
         const result = await this.auth.handleOAuthCallback();
         this.loading = false;
         
@@ -88,6 +99,7 @@ export class AuthCallbackComponent implements OnInit {
           this.success = true;
           const returnUrl = sessionStorage.getItem(RETURN_URL_KEY) || params['state'] || '/home';
           sessionStorage.removeItem(RETURN_URL_KEY);
+          sessionStorage.removeItem('upora_manual_oauth');
           const cleanUrl = returnUrl.startsWith('/') ? returnUrl : `/${returnUrl}`;
           const target = await this.resolvePostAuthRedirect(cleanUrl);
           console.log('[AuthCallback] ✅ Sign-in successful, redirecting to:', target);
@@ -99,7 +111,8 @@ export class AuthCallbackComponent implements OnInit {
         return;
       }
       
-      // For Amplify OAuth flow, give listener time to initialize
+      // Fallback: For Amplify OAuth flow (shouldn't happen if manual PKCE is set)
+      console.warn('[AuthCallback] No manual PKCE found - attempting Amplify flow (may fail)');
       await new Promise(r => setTimeout(r, 500));
       
       const result = await this.auth.handleOAuthCallback();

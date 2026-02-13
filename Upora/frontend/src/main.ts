@@ -409,17 +409,12 @@ if (authConfig?.enabled && authConfig?.userPoolId && authConfig?.userPoolClientI
 // ========================================
 // Version is read from package.json at build time
 // This will be replaced by the build process or read dynamically
-const FRONTEND_VERSION = '0.3.43'; // Onboarding: separate tv_movies/hobbies steps, options seed, getOptions catchError
+const FRONTEND_VERSION = '0.3.125'; // N8N: Tab rename, Installed first, Enter-search npm, needsRestart preserved, SendMail @n8n/ type
 const CACHE_BUST_ID = `v${FRONTEND_VERSION}-${Math.random().toString(36).substr(2, 9)}`;
 console.log('');
 console.log('═══════════════════════════════════════════════════════════');
 console.log(`🔥🔥🔥 FRONTEND VERSION ${FRONTEND_VERSION} LOADED 🔥🔥🔥`);
-console.log(`✅ Phase 4: SDK media control methods complete`);
-console.log(`✅ Fixed compilation errors for uploaded-media interactions`);
-console.log(`✅ Added playMedia, pauseMedia, seekMedia, setMediaVolume methods`);
-console.log(`✅ Added getMediaCurrentTime, getMediaDuration, isMediaPlaying methods`);
-console.log(`✅ Bridge service handles media control messages from iframes`);
-console.log(`✅ Lesson timer syncs with media playback time`);
+console.log(`✅ Phase 6: Lesson-view transcript capture → MinIO (chat, script, widget); flush on interval + destroy`);
 console.log(`📅 Timestamp: ${new Date().toISOString()}`);
 console.log(`🆔 Cache Bust ID: ${CACHE_BUST_ID}`);
 console.log('═══════════════════════════════════════════════════════════');

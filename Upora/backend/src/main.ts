@@ -102,8 +102,7 @@ async function bootstrap() {
   console.log('');
   console.log('═══════════════════════════════════════════════════════════');
   console.log(`🔥🔥🔥 BACKEND VERSION ${BACKEND_VERSION} STARTED 🔥🔥🔥`);
-  console.log(`✅ Approval now requires processed content creation - will not approve if processing fails`);
-  console.log('🔧 Transform API Response | Field Mapping for Frontend');
+  console.log(`✅ Phase 6: Transcripts in MinIO/S3; POST session/transcript; lesson-view capture + flush`);
   console.log(`🚀 API running on: http://localhost:${port}/api`);
   console.log(`📅 Timestamp: ${new Date().toISOString()}`);
   console.log('═══════════════════════════════════════════════════════════');

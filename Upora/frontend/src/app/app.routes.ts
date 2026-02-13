@@ -66,6 +66,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/lesson-builder/lesson-builder.component').then(m => m.LessonBuilderComponent)
   },
   {
+    path: 'lesson-editor/:lessonId/engagers/:userId',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/super-admin/user-dashboard/user-dashboard.component').then(m => m.UserDashboardComponent)
+  },
+  {
     path: 'lesson-editor/:id',
     canActivate: [authGuard],
     loadComponent: () => import('./features/lesson-editor/lesson-editor-v2.component').then(m => m.LessonEditorV2Component)
@@ -101,6 +106,16 @@ export const routes: Routes = [
     loadComponent: () => import('./features/super-admin/super-admin-dashboard.component').then(m => m.SuperAdminDashboardComponent)
   },
   {
+    path: 'super-admin/user-management',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/super-admin/user-management/user-management.component').then(m => m.UserManagementComponent)
+  },
+  {
+    path: 'super-admin/user-management/:userId',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/super-admin/user-dashboard/user-dashboard.component').then(m => m.UserDashboardComponent)
+  },
+  {
     path: 'super-admin/llm-usage',
     canActivate: [authGuard],
     loadComponent: () => import('./features/super-admin/llm-token-usage.component').then(m => m.LlmTokenUsageComponent)
@@ -119,6 +134,16 @@ export const routes: Routes = [
     path: 'super-admin/onboarding',
     canActivate: [authGuard],
     loadComponent: () => import('./features/super-admin/onboarding.component').then(m => m.OnboardingComponent)
+  },
+  {
+    path: 'super-admin/message-email-settings',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/super-admin/message-email-settings.component').then(m => m.MessageEmailSettingsComponent)
+  },
+  {
+    path: 'super-admin/n8n-flows',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/super-admin/n8n-flows.component').then(m => m.N8nFlowsComponent)
   },
   {
     path: 'super-admin/tests',

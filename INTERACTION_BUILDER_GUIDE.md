@@ -233,6 +233,73 @@ HTML interactions run in an iframe with the `sandbox` attribute:
 4. **URL Validation**: iFrame URLs should be validated (TODO)
 5. **Code Review**: Consider manual review for PixiJS code
 
+## Score Saving Requirements
+
+**⚠️ CRITICAL:** If your interaction delivers a score (quiz, assessment, game), you **MUST** implement score saving to ensure scores appear correctly in Engagement Details views.
+
+### Requirements for Scored Interactions
+
+1. **Initialize SDK Early:**
+   ```javascript
+   // At the start of your interaction initialization
+   if ((!window.aiSDK || typeof window.aiSDK.saveUserProgress !== "function") 
+       && typeof window.createIframeAISDK === "function") {
+     window.aiSDK = window.createIframeAISDK();
+   }
+   ```
+
+2. **Calculate Score Correctly:**
+   ```javascript
+   // Calculate score as a number (0-100)
+   const rawScore = (correctCount / totalQuestions) * 100;
+   
+   // Validate and round to 2 decimal places
+   const finalScore = (typeof rawScore === 'number' && !isNaN(rawScore) && isFinite(rawScore))
+     ? Math.round(rawScore * 100) / 100
+     : 0;
+   ```
+
+3. **Save Score When Interaction Completes:**
+   ```javascript
+   // When interaction finishes
+   if (window.aiSDK && typeof window.aiSDK.saveUserProgress === "function") {
+     window.aiSDK.saveUserProgress({
+       score: finalScore,
+       completed: true,
+       timeTakenSeconds: getTimeTakenSeconds(), // Optional
+     }, function(progress, error) {
+       if (error) {
+         console.error("[Interaction] Failed to save progress:", error);
+       } else {
+         console.log("[Interaction] ✅ Progress saved. Score:", progress?.score);
+       }
+     });
+   }
+   ```
+
+### Common Mistakes
+
+- ❌ **Forgetting to initialize SDK** - Always check `window.aiSDK` exists
+- ❌ **Passing undefined/null as score** - Validate score before saving
+- ❌ **Not rounding score** - Round to 2 decimal places for consistency
+- ❌ **Omitting score of 0** - 0 is a valid score, include it
+- ❌ **Not setting completed flag** - Set `completed: true` when done
+
+### Testing Score Saving
+
+After creating a scored interaction:
+
+1. **Complete the interaction** as a test user
+2. **Check browser console** for:
+   - `[Interaction] ✅ Progress saved. Score: X`
+   - No errors about SDK not available
+3. **Check Engagement Details:**
+   - Navigate to Lesson Editor → View Engagers → View Details
+   - Verify score appears (not "No score")
+   - Verify average score includes this interaction
+
+See `Upora/INTERACTION_SCORING_AUDIT.md` for complete audit checklist and best practices.
+
 ## Testing
 
 ### Manual Testing Steps
@@ -242,10 +309,12 @@ HTML interactions run in an iframe with the `sandbox` attribute:
    - Add HTML/CSS/JS code
    - Preview works correctly
    - Save and reload - data persists
+   - **If scored:** Verify score saving works (see Score Saving Requirements above)
 
 2. **Create PixiJS Interaction**
    - Add PixiJS class code
    - Save and reload - code persists
+   - **If scored:** Verify score saving works (see Score Saving Requirements above)
 
 3. **Create iFrame Interaction**
    - Add valid URL

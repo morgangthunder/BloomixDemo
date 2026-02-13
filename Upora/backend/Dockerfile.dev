@@ -6,7 +6,7 @@ WORKDIR /app
 # Install ffmpeg (includes ffprobe) for media metadata extraction
 RUN apk add --no-cache ffmpeg
 
-# Copy package files
+# Copy package files (after adding new deps, rebuild image: docker compose build backend)
 COPY package*.json ./
 
 # Install ALL dependencies (including dev dependencies)

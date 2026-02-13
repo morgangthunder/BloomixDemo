@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { LessonsService } from './lessons.service';
 import { LessonLoaderService } from './lesson-loader.service';
+import { SuperAdminUsersService } from '../super-admin/super-admin-users.service';
 import { CreateLessonDto } from './dto/create-lesson.dto';
 import { UpdateLessonDto } from './dto/update-lesson.dto';
 
@@ -21,6 +22,7 @@ export class LessonsController {
   constructor(
     private readonly lessonsService: LessonsService,
     private readonly lessonLoaderService: LessonLoaderService,
+    private readonly superAdminUsersService: SuperAdminUsersService,
   ) {}
 
   @Post()
@@ -38,6 +40,22 @@ export class LessonsController {
     const onlyApproved = status === 'approved' || approved === 'true';
     console.log(`[LessonsController] GET /lessons - tenantId: ${tenantId}, status: ${status}, onlyApproved: ${onlyApproved}`);
     return this.lessonsService.findAll(tenantId, onlyApproved);
+  }
+
+  /**
+   * Creator engagement view: get dashboard for one engager (lesson-creator scope).
+   * Must be declared before @Get(':id') so /lessons/:lessonId/engagers/:userId/dashboard matches.
+   */
+  @Get(':lessonId/engagers/:userId/dashboard')
+  async getEngagerDashboard(
+    @Param('lessonId', ParseUUIDPipe) lessonId: string,
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Headers('x-user-id') requestingUserId: string,
+    @Headers('x-tenant-id') tenantId?: string,
+    @Headers('x-user-role') userRole?: string,
+  ) {
+    await this.lessonsService.assertCanViewEngagers(lessonId, requestingUserId, tenantId, userRole);
+    return this.superAdminUsersService.getUserDashboard(userId, { viewerRole: 'lesson-creator', lessonId }, requestingUserId);
   }
 
   @Get(':id')
@@ -169,5 +187,34 @@ export class LessonsController {
         status: lesson.status,
       },
     };
+  }
+
+  // ====================================
+  // Creator Engagement View (Phase 6.5)
+  // ====================================
+
+  @Get(':id/engagers')
+  async getEngagers(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Headers('x-user-id') userId: string,
+    @Headers('x-tenant-id') tenantId?: string,
+    @Headers('x-user-role') userRole?: string,
+    @Query('q') searchQuery?: string,
+  ) {
+    console.log('[LessonsController] 📊 getEngagers called:', { lessonId: id, userId, tenantId, searchQuery, userRole });
+    const engagers = await this.lessonsService.getEngagers(id, userId, tenantId, searchQuery, userRole);
+    console.log('[LessonsController] ✅ Returning engagers:', engagers.length);
+    engagers.forEach((engager) => {
+      const interactionCount = engager.engagement?.interactions?.length ?? 0;
+      console.log(`[LessonsController]   - ${engager.name} (${engager.email}): ${interactionCount} interactions`);
+      if (interactionCount > 0) {
+        console.log(`[LessonsController]     Interactions:`, engager.engagement.interactions.map((i: any) => ({
+          interactionTypeId: i.interactionTypeId,
+          score: i.score,
+          completed: i.completed,
+        })));
+      }
+    });
+    return engagers;
   }
 }

@@ -153,6 +153,33 @@ export class S3StorageAdapter implements IStorageAdapter, OnModuleInit {
     };
   }
 
+  async saveBuffer(key: string, buffer: Buffer, contentType: string): Promise<{ url: string }> {
+    const command = new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      Body: buffer,
+      ContentType: contentType,
+    });
+    await this.s3Client.send(command);
+    const url = `${this.baseUrl}/${key}`;
+    this.logger.log(`Buffer saved to S3: ${key}`);
+    return { url };
+  }
+
+  async getByKey(key: string): Promise<Buffer> {
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+    });
+    const response = await this.s3Client.send(command);
+    const stream = response.Body as Readable;
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks);
+  }
+
   async deleteFile(url: string): Promise<void> {
     try {
       // Extract key from URL

@@ -1,0 +1,84 @@
+{
+  "name": "Upora – Send message as email",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "upora-message-email",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "upora-message-email"
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $json.fromAddress || 'noreply@yourdomain.com' }}",
+        "toEmail": "={{ $json.toUserEmail }}",
+        "subject": "={{ $json.title }}",
+        "text": "={{ $json.body }}",
+        "options": {
+          "allowUnauthorizedCerts": false
+        }
+      },
+      "id": "sendgrid-node",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.sendGrid",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "credentials": {
+        "sendGridApi": {
+          "id": "",
+          "name": "SendGrid API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"ok\": true, \"message\": \"Email sent\" } }}"
+      },
+      "id": "respond-node",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

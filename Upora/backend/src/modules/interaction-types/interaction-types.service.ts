@@ -7,6 +7,13 @@ import {
   CreateInteractionTypeDto,
   UpdateInteractionTypeDto,
 } from './dto/interaction-type.dto';
+import { TRUE_FALSE_FIXED_JS } from './true-false-fixed-js';
+import {
+  SDK_TEST_IFRAME_HTML,
+  SDK_TEST_IFRAME_CSS,
+  SDK_TEST_IFRAME_JS,
+  SDK_TEST_IFRAME_CONFIG,
+} from './sdk-test-iframe-overlay';
 
 @Injectable()
 export class InteractionTypesService implements OnModuleInit {
@@ -19,6 +26,26 @@ export class InteractionTypesService implements OnModuleInit {
   async onModuleInit() {
     // Seeding disabled - use POST /api/interaction-types/seed endpoint instead
     // This avoids race condition with TypeORM synchronize
+
+    // Ensure true-false-selection has the latest fixed code with score saving
+    try {
+      await this.replaceTrueFalseJsWithFixedScoring();
+    } catch (error) {
+      console.warn(
+        '[InteractionTypes] Failed to update true-false-selection on init:',
+        error,
+      );
+    }
+
+    // Ensure sdk-test-iframe has overlay code with score saving (audit fix)
+    try {
+      await this.ensureSDKTestIframeHasOverlayCode();
+    } catch (error) {
+      console.warn(
+        '[InteractionTypes] Failed to update sdk-test-iframe on init:',
+        error,
+      );
+    }
   }
 
   async seedTrueFalseSelection() {
@@ -281,6 +308,212 @@ export class InteractionTypesService implements OnModuleInit {
   /**
    * Update true-false-selection interaction to use aiSDK.completeInteraction()
    */
+  /**
+   * Update true-false interaction to save score before completing
+   */
+  async updateTrueFalseToSaveScore() {
+    const interaction = await this.interactionTypeRepository.findOne({
+      where: { id: 'true-false-selection' },
+    });
+
+    if (!interaction) {
+      console.log('[InteractionTypes] ⚠️ True/False Selection interaction not found');
+      return;
+    }
+
+    let jsCode = interaction.jsCode || '';
+    let updated = false;
+
+    // Find checkAnswers function and ensure it saves score before completing
+    // Pattern: function checkAnswers() { ... score = ...; ... }
+    const checkAnswersPattern = /function\s+checkAnswers\s*\([^)]*\)\s*\{([\s\S]*?)(?=\n\s*(?:function|const|let|var|$|nextBtn|playAgainBtn|closeScoreModal))/;
+    const match = jsCode.match(checkAnswersPattern);
+    
+    if (match) {
+      let checkAnswersBody = match[1];
+      
+      // Check if it already calls saveUserProgress
+      if (!checkAnswersBody.includes('saveUserProgress') && !checkAnswersBody.includes('aiSDK.saveUserProgress')) {
+        // Find where score is calculated and add saveUserProgress call right after
+        // Look for score calculation pattern
+        const scoreCalcPattern = /(score\s*=\s*[^;]+;)/;
+        const scoreMatch = checkAnswersBody.match(scoreCalcPattern);
+        
+        if (scoreMatch) {
+          // Insert saveUserProgress call after score calculation
+          const insertPoint = checkAnswersBody.indexOf(scoreMatch[0]) + scoreMatch[0].length;
+          const saveProgressCode = `
+        
+        // Save score before completing interaction
+        if (window.aiSDK && typeof window.aiSDK.saveUserProgress === "function") {
+            window.aiSDK.saveUserProgress({
+                score: score,
+                completed: true
+            }, (progress, error) => {
+                if (error) {
+                    console.error("[Interaction] ❌ Failed to save progress:", error);
+                } else {
+                    console.log("[Interaction] ✅ Progress saved with score:", score);
+                }
+            });
+        }`;
+          
+          checkAnswersBody = checkAnswersBody.slice(0, insertPoint) + saveProgressCode + checkAnswersBody.slice(insertPoint);
+          jsCode = jsCode.replace(checkAnswersPattern, `function checkAnswers() {${checkAnswersBody}`);
+          updated = true;
+          console.log('[InteractionTypes] ✅ Added saveUserProgress call to checkAnswers');
+        }
+      }
+    }
+
+    // Also ensure nextBtn calls saveUserProgress if score wasn't saved in checkAnswers
+    if (!jsCode.includes('nextBtn.addEventListener') || !jsCode.includes('saveUserProgress')) {
+      // Find nextBtn click handler and add saveUserProgress if score exists
+      const nextBtnPattern = /nextBtn\.addEventListener\s*\(\s*["']click["']\s*,\s*\([^)]*\)\s*=>\s*\{([\s\S]*?)\}\s*\)/;
+      const nextBtnMatch = jsCode.match(nextBtnPattern);
+      
+      if (nextBtnMatch && !nextBtnMatch[1].includes('saveUserProgress')) {
+        const nextBtnBody = nextBtnMatch[1];
+        const saveProgressCode = `
+        // Save score if not already saved
+        if (window.aiSDK && typeof window.aiSDK.saveUserProgress === "function" && typeof score !== "undefined") {
+            window.aiSDK.saveUserProgress({
+                score: score,
+                completed: true
+            }, (progress, error) => {
+                if (error) {
+                    console.error("[Interaction] ❌ Failed to save progress:", error);
+                } else {
+                    console.log("[Interaction] ✅ Progress saved with score:", score);
+                }
+            });
+        }`;
+        
+        // Insert before completeInteraction call
+        const insertPoint = nextBtnBody.indexOf('completeInteraction') > -1 
+          ? nextBtnBody.indexOf('completeInteraction')
+          : nextBtnBody.indexOf('closeScoreModal');
+        
+        if (insertPoint > -1) {
+          const newNextBtnBody = nextBtnBody.slice(0, insertPoint) + saveProgressCode + nextBtnBody.slice(insertPoint);
+          jsCode = jsCode.replace(nextBtnPattern, `nextBtn.addEventListener("click", () => {${newNextBtnBody}})`);
+          updated = true;
+          console.log('[InteractionTypes] ✅ Added saveUserProgress call to nextBtn handler');
+        }
+      }
+    }
+
+    // Fix totalTrue: use truthy isTrueInContext or isTrue so we don't get "0 out of 0 correct"
+    // !! coerces string "true", 1, etc. to boolean - handles various API/JSON formats
+    const beforeTotalTrue = jsCode;
+    // Match original and already-patched versions
+    jsCode = jsCode.replace(
+      /if\s*\(\s*fragment\.isTrueInContext\s*\)\s*totalTrue\+\+;/g,
+      'if (!!fragment.isTrueInContext || !!fragment.isTrue) totalTrue++;'
+    );
+    jsCode = jsCode.replace(
+      /if\s*\(\s*fragment\.isTrueInContext\s*===\s*true\s*\|\|\s*fragment\.isTrue\s*===\s*true\s*\)\s*totalTrue\+\+;/g,
+      'if (!!fragment.isTrueInContext || !!fragment.isTrue) totalTrue++;'
+    );
+    if (jsCode !== beforeTotalTrue) {
+      updated = true;
+      console.log(
+        '[InteractionTypes] ✅ Updated totalTrue to accept isTrueInContext or isTrue (truthy)'
+      );
+    }
+
+    // Also fix correctCount check to accept both isTrueInContext and isTrue (truthy)
+    const beforeCorrect = jsCode;
+    jsCode = jsCode.replace(
+      /if\s*\(\s*selectedFragments\.has\s*\(\s*index\s*\)\s*&&\s*fragment\.isTrueInContext\s*\)/g,
+      'if (selectedFragments.has(index) && (!!fragment.isTrueInContext || !!fragment.isTrue))'
+    );
+    if (jsCode !== beforeCorrect) {
+      updated = true;
+    }
+
+    // Fallback: if totalTrue is 0 but we have fragments, use fragments.length as denominator
+    // This fixes "X out of 0 correct" when fragments lack isTrueInContext/isTrue
+    if (!jsCode.includes('totalTrue === 0 && data.fragments')) {
+      // Pattern 1: score = totalTrue > 0 ? ... (older style)
+      const fallbackPattern1 = /(\n\s*score = totalTrue > 0)/;
+      // Pattern 2: score = (correctCount / totalTrue) * 100 (fix-true-false-complete-js style)
+      const fallbackPattern2 = /(\n\s*score = \(correctCount \/ totalTrue\) \* 100)/;
+      const fallbackCode =
+        '\n        if (totalTrue === 0 && data.fragments && data.fragments.length > 0) { totalTrue = data.fragments.length; }$1';
+      if (fallbackPattern1.test(jsCode)) {
+        jsCode = jsCode.replace(fallbackPattern1, fallbackCode);
+        updated = true;
+        console.log(
+          '[InteractionTypes] ✅ Added totalTrue fallback (pattern 1) for missing isTrueInContext'
+        );
+      } else if (fallbackPattern2.test(jsCode)) {
+        jsCode = jsCode.replace(fallbackPattern2, fallbackCode);
+        updated = true;
+        console.log(
+          '[InteractionTypes] ✅ Added totalTrue fallback (pattern 2) for missing isTrueInContext'
+        );
+      }
+    }
+
+    if (updated) {
+      await this.interactionTypeRepository.update(
+        { id: 'true-false-selection' },
+        { jsCode },
+      );
+      console.log('[InteractionTypes] ✅ Updated True/False Selection to save scores');
+    } else {
+      console.log('[InteractionTypes] ℹ️ True/False Selection already saves scores or no changes needed');
+    }
+  }
+
+  /**
+   * Ensure sdk-test-iframe has overlay code with score saving (Save User Progress, Mark Completed).
+   * Only updates if html_code is empty (avoids overwriting user edits).
+   */
+  async ensureSDKTestIframeHasOverlayCode(): Promise<void> {
+    const interaction = await this.interactionTypeRepository.findOne({
+      where: { id: 'sdk-test-iframe' },
+    });
+    if (!interaction) {
+      return;
+    }
+    const hasOverlayCode = !!(interaction.htmlCode && interaction.htmlCode.trim().length > 0);
+    if (hasOverlayCode) {
+      return;
+    }
+    await this.interactionTypeRepository.update(
+      { id: 'sdk-test-iframe' },
+      {
+        htmlCode: SDK_TEST_IFRAME_HTML,
+        cssCode: SDK_TEST_IFRAME_CSS,
+        jsCode: SDK_TEST_IFRAME_JS,
+        iframeConfig: SDK_TEST_IFRAME_CONFIG as any,
+        description:
+          'Comprehensive test interaction for all AI Teacher SDK functionality using an iframe with overlay mode. Includes Save User Progress and Mark Completed for scoring.',
+      },
+    );
+    console.log(
+      '[InteractionTypes] ✅ Added overlay code (with score saving) to sdk-test-iframe',
+    );
+  }
+
+  /**
+   * Full replace of true-false-selection jsCode with fixed scoring logic.
+   * Use when regex patches fail - overwrites entire jsCode with known-good version.
+   */
+  async replaceTrueFalseJsWithFixedScoring(): Promise<void> {
+    const result = await this.interactionTypeRepository.update(
+      { id: 'true-false-selection' },
+      { jsCode: TRUE_FALSE_FIXED_JS },
+    );
+    if (result.affected && result.affected > 0) {
+      console.log('[InteractionTypes] ✅ Replaced true-false-selection jsCode with fixed scoring');
+    } else {
+      console.log('[InteractionTypes] ⚠️ true-false-selection not found, no update');
+    }
+  }
+
   async updateTrueFalseSelectionCompleteInteraction() {
     const interaction = await this.interactionTypeRepository.findOne({
       where: { id: 'true-false-selection' },
@@ -510,9 +743,22 @@ window.aiSDK = createIframeAISDK();
   }
 
   async findOne(id: string): Promise<InteractionType | null> {
-    return this.interactionTypeRepository.findOne({
+    const interaction = await this.interactionTypeRepository.findOne({
       where: { id },
     });
+    if (!interaction) return null;
+    // Runtime safeguard: ensure true-false-selection always has saveUserProgress in checkAnswers
+    if (id === 'true-false-selection' && interaction.jsCode) {
+      const checkAnswersIdx = interaction.jsCode.indexOf('function checkAnswers()');
+      const hasSaveInCheckAnswers =
+        checkAnswersIdx >= 0 &&
+        interaction.jsCode.substring(checkAnswersIdx, checkAnswersIdx + 1500).includes('saveUserProgress');
+      if (!hasSaveInCheckAnswers) {
+        console.log('[InteractionTypes] ⚠️ true-false-selection missing saveUserProgress in checkAnswers, serving fixed JS');
+        return { ...interaction, jsCode: TRUE_FALSE_FIXED_JS };
+      }
+    }
+    return interaction;
   }
 
   async create(dto: CreateInteractionTypeDto): Promise<InteractionType> {

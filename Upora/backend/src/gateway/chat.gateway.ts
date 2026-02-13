@@ -119,6 +119,33 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   /**
+   * Join user-specific room for direct message notifications.
+   * Client should emit 'join-user' with { userId } after connect.
+   */
+  @SubscribeMessage('join-user')
+  handleJoinUser(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { userId: string },
+  ) {
+    const { userId } = payload;
+    if (!userId) return { success: false };
+    const roomName = `user-${userId}`;
+    client.join(roomName);
+    this.logger.log(`User ${userId} joined room ${roomName}`);
+    return { success: true, roomName };
+  }
+
+  /**
+   * Emit event to a specific user (e.g. new direct message).
+   * Call from MessagesService when a message is created.
+   */
+  emitToUser(userId: string, event: string, data: any) {
+    const roomName = `user-${userId}`;
+    this.server.to(roomName).emit(event, data);
+    this.logger.log(`Emitted ${event} to room ${roomName}`);
+  }
+
+  /**
    * Handle leaving a lesson room
    */
   @SubscribeMessage('leave-lesson')

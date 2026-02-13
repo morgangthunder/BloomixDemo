@@ -1,5 +1,5 @@
 import { Component, OnInit, computed } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { Router, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { IonContent } from '@ionic/angular/standalone';
@@ -253,7 +253,8 @@ export class ProfileComponent implements OnInit {
   constructor(
     private lessonService: LessonService,
     private auth: AuthService,
-    private router: Router
+    private router: Router,
+    private location: Location
   ) {}
 
   ngOnInit() {
@@ -292,6 +293,6 @@ export class ProfileComponent implements OnInit {
 
   goBack() {
     this.lessonService.exitProfile();
-    this.router.navigate(['/home']);
+    this.location.back();
   }
 }

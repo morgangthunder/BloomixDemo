@@ -21,38 +21,54 @@ You can configure this setting in the Interaction Builder under Settings → Ove
 Include this code at the top of your interaction's HTML/JavaScript:
 
 ```javascript
-// Create the AI SDK client for iframe interactions
-const aiSDK = createIframeAISDK();
+// Initialize SDK early - CRITICAL for interactions that save scores
+let aiSDK = null;
+
+// Check if SDK is already available
+if (window.aiSDK && typeof window.aiSDK.saveUserProgress === "function") {
+  aiSDK = window.aiSDK;
+  console.log('[Interaction] Using existing SDK');
+} else if (typeof window.createIframeAISDK === "function") {
+  aiSDK = window.createIframeAISDK();
+  window.aiSDK = aiSDK; // Store for future use
+  console.log('[Interaction] SDK initialized');
+} else {
+  console.error('[Interaction] SDK not available');
+}
 
 // Wait for SDK to be ready
-aiSDK.isReady((ready) => {
-  if (ready) {
-    console.log('AI SDK is ready!');
-    
-    // Subscribe to AI responses
-    const unsubscribe = aiSDK.onResponse((response) => {
-      console.log('AI Response:', response.response);
+if (aiSDK && aiSDK.isReady) {
+  aiSDK.isReady((ready) => {
+    if (ready) {
+      console.log('AI SDK is ready!');
       
-      // Handle actions from AI
-      if (response.actions) {
-        response.actions.forEach(action => {
-          switch (action.type) {
-            case 'highlight':
-              highlightElement(action.target);
-              break;
-            case 'show-hint':
-              showHint(action.data.message);
-              break;
-            case 'update-ui':
-              updateUI(action.data);
-              break;
-          }
-        });
-      }
-    });
-  }
-});
+      // Subscribe to AI responses
+      const unsubscribe = aiSDK.onResponse((response) => {
+        console.log('AI Response:', response.response);
+        
+        // Handle actions from AI
+        if (response.actions) {
+          response.actions.forEach(action => {
+            switch (action.type) {
+              case 'highlight':
+                highlightElement(action.target);
+                break;
+              case 'show-hint':
+                showHint(action.data.message);
+                break;
+              case 'update-ui':
+                updateUI(action.data);
+                break;
+            }
+          });
+        }
+      });
+    }
+  });
+}
 ```
+
+**⚠️ Important for Scored Interactions:** If your interaction calculates a score (quiz, assessment, game), you **must** ensure the SDK is initialized and call `saveUserProgress` with the score when the interaction completes. See the [`saveUserProgress`](#saveuserprogressdata) section below for complete examples.
 
 ## API Reference
 
@@ -709,7 +725,54 @@ const history = await aiSDK.getInstanceDataHistory({
 ### `saveUserProgress(data)`
 Save or update user progress for this interaction.
 
-**Example:**
+**⚠️ CRITICAL FOR SCORED INTERACTIONS:** If your interaction delivers a score (e.g., quiz, assessment, game), you **MUST** call `saveUserProgress` with a valid `score` value (0-100) when the interaction completes. This ensures scores appear correctly in Engagement Details and average score calculations.
+
+**Score Requirements:**
+- ✅ Score must be a **number** (0-100 scale, or percentage 0-1 converted to 0-100)
+- ✅ Score must be **valid** (not NaN, not Infinity)
+- ✅ Score should be **rounded to 2 decimal places** (e.g., `Math.round(score * 100) / 100`)
+- ✅ Score of **0 is valid** (don't omit it)
+- ✅ Call `saveUserProgress` **when interaction completes** or score changes
+
+**Example (Complete Interaction with Score):**
+```javascript
+function calculateAndSaveScore() {
+  // Calculate score (e.g., correct answers / total questions * 100)
+  const correctCount = getCorrectAnswers();
+  const totalQuestions = getTotalQuestions();
+  const rawScore = (correctCount / totalQuestions) * 100;
+  
+  // Validate and round score
+  const finalScore = (typeof rawScore === 'number' && !isNaN(rawScore) && isFinite(rawScore))
+    ? Math.round(rawScore * 100) / 100  // Round to 2 decimals
+    : 0;  // Default to 0 if invalid
+  
+  // Ensure SDK is initialized
+  if (!window.aiSDK && typeof window.createIframeAISDK === "function") {
+    window.aiSDK = window.createIframeAISDK();
+  }
+  
+  // Save progress with score
+  if (window.aiSDK && typeof window.aiSDK.saveUserProgress === "function") {
+    window.aiSDK.saveUserProgress({
+      score: finalScore,
+      completed: true,
+      timeTakenSeconds: getTimeTakenSeconds(),
+      // Optional: customData, interactionEvents
+    }, function(progress, error) {
+      if (error) {
+        console.error("[Interaction] Failed to save progress:", error);
+      } else {
+        console.log("[Interaction] ✅ Progress saved. Score:", progress?.score);
+      }
+    });
+  } else {
+    console.error("[Interaction] ❌ Cannot save progress - SDK not available");
+  }
+}
+```
+
+**Example (Basic Usage):**
 ```javascript
 await aiSDK.saveUserProgress({
   score: 85,
@@ -729,7 +792,13 @@ await aiSDK.saveUserProgress({
 });
 ```
 
-**Note:** Required fields (stage/substage IDs, timestamps, attempts, completed) are automatically tracked. Custom fields are defined by the interaction builder in the schema.
+**Common Mistakes to Avoid:**
+- ❌ **Don't pass `undefined` or `null` as score** - If score is invalid, either omit it or use 0
+- ❌ **Don't forget to initialize SDK** - Check `window.aiSDK` exists and has `saveUserProgress` method
+- ❌ **Don't skip score validation** - Always validate score is a number before saving
+- ❌ **Don't forget `completed: true`** - Set this when interaction is finished
+
+**Note:** Required fields (stage/substage IDs, timestamps, attempts, completed) are automatically tracked. Custom fields are defined by the interaction builder in the schema. Scores are used in Engagement Details views and average score calculations.
 
 ### `getUserProgress()`
 Get current user's progress for this interaction.

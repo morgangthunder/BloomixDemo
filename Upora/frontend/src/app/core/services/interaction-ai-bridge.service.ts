@@ -1,5 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { InteractionAISDK } from './interaction-ai-sdk.service';
+import { AuthService } from './auth.service';
+import { environment } from '../../../environments/environment';
 
 /**
  * Interaction AI Bridge Service
@@ -11,6 +13,7 @@ import { InteractionAISDK } from './interaction-ai-sdk.service';
 })
 export class InteractionAIBridgeService {
   private aiSDK = inject(InteractionAISDK);
+  private authService = inject(AuthService);
   private messageHandlers: Map<string, () => void> = new Map();
   private initialized = false;
 
@@ -227,7 +230,54 @@ export class InteractionAIBridgeService {
         break;
 
       case 'ai-sdk-save-user-progress':
-        this.aiSDK.saveUserProgress(message.data)
+        // Ensure SDK uses actual logged-in user (auth interceptor also adds header, but refresh for consistency)
+        const currentUser = this.authService.currentUser();
+        const userId = currentUser?.userId || environment.defaultUserId;
+        const tenantId = currentUser?.tenantId || environment.tenantId;
+        
+        // Extract data object - message.data should contain { score, completed, ... }
+        // The iframe SDK sends: { type: 'ai-sdk-save-user-progress', data: { score: 66, completed: true }, ... }
+        const progressData = message.data || {};
+        
+        // Validate and sanitize score - only include if it's a valid number (including 0)
+        let scoreToSave: number | undefined = undefined;
+        if (progressData.score !== undefined && progressData.score !== null) {
+          const numScore = Number(progressData.score);
+          if (!isNaN(numScore) && isFinite(numScore)) {
+            // Valid number (including 0) - round to 2 decimal places
+            scoreToSave = Math.round(numScore * 100) / 100;
+          } else {
+            console.warn('[Bridge] ⚠️ Invalid score value:', progressData.score, 'omitting from payload');
+          }
+        }
+        
+        // Only include score in sanitizedData if it's a valid number
+        const sanitizedData: any = {
+          ...progressData,
+        };
+        if (scoreToSave !== undefined) {
+          sanitizedData.score = scoreToSave;
+        } else {
+          // Explicitly remove score if invalid to ensure it's not sent
+          delete sanitizedData.score;
+        }
+        
+        console.log('[Bridge] 📨 ai-sdk-save-user-progress received:', {
+          messageType: message.type,
+          originalData: progressData,
+          sanitizedData: sanitizedData,
+          dataKeys: progressData ? Object.keys(progressData) : [],
+          originalScore: progressData.score,
+          sanitizedScore: sanitizedData.score,
+          scoreType: typeof sanitizedData.score,
+          hasScore: sanitizedData.score !== undefined && sanitizedData.score !== null,
+          completed: sanitizedData.completed,
+          _userId: userId,
+          _tenantId: tenantId,
+          fullMessageKeys: Object.keys(message),
+        });
+        this.aiSDK.refreshUserContext(userId, tenantId);
+        this.aiSDK.saveUserProgress(sanitizedData)
           .then((progress) => {
             this.sendToIframe(sourceWindow, {
               type: 'ai-sdk-save-user-progress-ack',
@@ -245,6 +295,8 @@ export class InteractionAIBridgeService {
         break;
 
       case 'ai-sdk-get-user-progress':
+        const gpUser = this.authService.currentUser();
+        this.aiSDK.refreshUserContext(gpUser?.userId || environment.defaultUserId, gpUser?.tenantId || environment.tenantId);
         this.aiSDK.getUserProgress()
           .then((progress) => {
             this.sendToIframe(sourceWindow, {
@@ -263,6 +315,8 @@ export class InteractionAIBridgeService {
         break;
 
       case 'ai-sdk-mark-completed':
+        const mcUser = this.authService.currentUser();
+        this.aiSDK.refreshUserContext(mcUser?.userId || environment.defaultUserId, mcUser?.tenantId || environment.tenantId);
         this.aiSDK.markCompleted()
           .then((progress) => {
             this.sendToIframe(sourceWindow, {
@@ -281,6 +335,8 @@ export class InteractionAIBridgeService {
         break;
 
       case 'ai-sdk-increment-attempts':
+        const iaUser = this.authService.currentUser();
+        this.aiSDK.refreshUserContext(iaUser?.userId || environment.defaultUserId, iaUser?.tenantId || environment.tenantId);
         this.aiSDK.incrementAttempts()
           .then((progress) => {
             this.sendToIframe(sourceWindow, {
@@ -684,7 +740,34 @@ export const createIframeAISDK = () => {
     },
 
     saveUserProgress: (data: { score?: number; timeTakenSeconds?: number; interactionEvents?: any[]; customData?: Record<string, any>; completed?: boolean }, callback?: (progress: any | null, error?: string) => void) => {
-      sendMessage('ai-sdk-save-user-progress', { data }, (response) => {
+      // Validate and sanitize score - only include if it's a valid number (including 0)
+      const sanitizedData: any = {
+        ...data,
+      };
+      
+      if (data.score !== undefined && data.score !== null) {
+        const numScore = Number(data.score);
+        if (!isNaN(numScore) && isFinite(numScore)) {
+          // Valid number (including 0) - round to 2 decimal places
+          sanitizedData.score = Math.round(numScore * 100) / 100;
+        } else {
+          // Invalid score - remove it from payload
+          delete sanitizedData.score;
+          console.warn('[IframeSDK] ⚠️ Invalid score value:', data.score, 'omitting from payload');
+        }
+      } else {
+        // Score is undefined/null - remove it from payload
+        delete sanitizedData.score;
+      }
+      
+      console.log('[IframeSDK] saveUserProgress called with:', {
+        originalScore: data.score,
+        sanitizedScore: sanitizedData.score,
+        scoreType: typeof sanitizedData.score,
+        hasScore: sanitizedData.score !== undefined,
+        completed: sanitizedData.completed,
+      });
+      sendMessage('ai-sdk-save-user-progress', { data: sanitizedData }, (response) => {
         if (callback) {
           callback(response.progress, response.error);
         }

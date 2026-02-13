@@ -6,9 +6,14 @@ import { LessonLoaderService } from './lesson-loader.service';
 import { Lesson } from '../../entities/lesson.entity';
 import { User } from '../../entities/user.entity';
 import { Usage } from '../../entities/usage.entity';
+import { UserInteractionProgress } from '../../entities/user-interaction-progress.entity';
+import { SuperAdminModule } from '../super-admin/super-admin.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Lesson, User, Usage])],
+  imports: [
+    TypeOrmModule.forFeature([Lesson, User, Usage, UserInteractionProgress]),
+    SuperAdminModule,
+  ],
   controllers: [LessonsController],
   providers: [LessonsService, LessonLoaderService],
   exports: [LessonsService, LessonLoaderService],

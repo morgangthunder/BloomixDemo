@@ -1,0 +1,71 @@
+{
+  "name": "Upora – Send Email via SendMail (v2)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "upora-sendmail-v2",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "upora-sendmail-v2"
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $json.fromAddress || $json.fromEmail || 'noreply@yourdomain.com' }}",
+        "toEmail": "={{ $json.toUserEmail || $json.toEmail }}",
+        "subject": "={{ $json.title || $json.subject }}",
+        "text": "={{ $json.body || $json.text || $json.message }}",
+        "options": {}
+      },
+      "id": "send-email-node",
+      "name": "Send Email",
+      "type": "@n8n/n8n-nodes-sendmail.sendMail10Kcodeurs",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"ok\": true, \"message\": \"Email sent successfully\", \"timestamp\": $now } }}"
+      },
+      "id": "respond-node",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

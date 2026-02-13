@@ -1,35 +1,15 @@
-import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class AddAISDKFieldsToInteractionTypes1734371654000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // Add ai_prompt_template column
-    await queryRunner.addColumn(
-      'interaction_types',
-      new TableColumn({
-        name: 'ai_prompt_template',
-        type: 'text',
-        isNullable: true,
-      }),
+    await queryRunner.query(
+      `ALTER TABLE interaction_types ADD COLUMN IF NOT EXISTS ai_prompt_template text`,
     );
-
-    // Add ai_event_handlers column
-    await queryRunner.addColumn(
-      'interaction_types',
-      new TableColumn({
-        name: 'ai_event_handlers',
-        type: 'jsonb',
-        isNullable: true,
-      }),
+    await queryRunner.query(
+      `ALTER TABLE interaction_types ADD COLUMN IF NOT EXISTS ai_event_handlers jsonb`,
     );
-
-    // Add ai_response_actions column
-    await queryRunner.addColumn(
-      'interaction_types',
-      new TableColumn({
-        name: 'ai_response_actions',
-        type: 'jsonb',
-        isNullable: true,
-      }),
+    await queryRunner.query(
+      `ALTER TABLE interaction_types ADD COLUMN IF NOT EXISTS ai_response_actions jsonb`,
     );
   }
 

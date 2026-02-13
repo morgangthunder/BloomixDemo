@@ -51,6 +51,20 @@ export interface IStorageAdapter {
    * @returns Signed URL
    */
   getSignedUrl?(url: string, expiresIn?: number): Promise<string>;
+
+  /**
+   * Save a buffer at a specific key (e.g. for transcripts: transcripts/tenant/user/session.json)
+   * @param key - Full storage key/path
+   * @param buffer - Content buffer
+   * @param contentType - MIME type (e.g. application/json)
+   * @returns URL to access the stored object
+   */
+  saveBuffer?(key: string, buffer: Buffer, contentType: string): Promise<{ url: string }>;
+
+  /**
+   * Read content by storage key (e.g. transcripts/tenant/user/session.json)
+   */
+  getByKey?(key: string): Promise<Buffer>;
 }
 
 

@@ -50,6 +50,8 @@ services:
       - S3_SECRET_ACCESS_KEY=minioadmin
       - S3_BUCKET=upora-uploads
       - S3_USE_SSL=false
+      - N8N_UI_URL=http://localhost:5678
+      - N8N_API_BASE_URL=http://n8n:5678
       - N8N_WEBHOOK_URL=http://n8n:5678/webhook
       - JWT_SECRET=dev-jwt-secret-change-in-production
       - AUTH_PROVIDER=none
@@ -69,6 +71,9 @@ services:
       - ./Upora/backend/package.json:/app/package.json
       - ./Upora/lessons:/app/lessons
       - ./Upora/uploads:/app/uploads
+      - ./Upora/n8n/workflows:/app/n8n-workflows:ro
+      # Docker socket for managing N8N containers (Linux/Mac)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -163,7 +168,7 @@ services:
 
   # n8n - Workflow Automation
   n8n:
-    image: n8nio/n8n:latest
+    image: n8nio/n8n:2.6.4
     container_name: upora-n8n
     ports:
       - "5678:5678"

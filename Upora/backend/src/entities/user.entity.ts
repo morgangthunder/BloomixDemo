@@ -37,6 +37,9 @@ export class User {
   @Column({ type: 'int', default: 10000, name: 'token_limit' })
   grokTokenLimit: number;
 
+  @Column({ name: 'subscription_renewal_at', type: 'timestamp', nullable: true })
+  subscriptionRenewalAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

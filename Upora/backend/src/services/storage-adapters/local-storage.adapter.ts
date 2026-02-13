@@ -46,6 +46,24 @@ export class LocalStorageAdapter implements IStorageAdapter {
     };
   }
 
+  async saveBuffer(key: string, buffer: Buffer, _contentType: string): Promise<{ url: string }> {
+    // Key may use forward slashes (e.g. transcripts/tenant/user/session.json)
+    const normalizedPath = key.replace(/\//g, path.sep);
+    const filePath = path.join(this.uploadDir, normalizedPath);
+    const dirPath = path.dirname(filePath);
+    await fs.mkdir(dirPath, { recursive: true });
+    await fs.writeFile(filePath, buffer);
+    const url = `/uploads/${key}`;
+    this.logger.log(`Buffer saved: ${filePath} -> ${url}`);
+    return { url };
+  }
+
+  async getByKey(key: string): Promise<Buffer> {
+    const normalizedPath = key.replace(/\//g, path.sep);
+    const filePath = path.join(this.uploadDir, normalizedPath);
+    return fs.readFile(filePath);
+  }
+
   async deleteFile(url: string): Promise<void> {
     try {
       // Extract file path from URL

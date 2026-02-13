@@ -40,6 +40,18 @@ export class WebSocketService {
   // Interaction AI response events
   private interactionAIResponseSubject = new BehaviorSubject<any>(null);
   interactionAIResponse$ = this.interactionAIResponseSubject.asObservable();
+
+  // Direct message notifications (when someone sends you a message)
+  private newMessageSubject = new BehaviorSubject<{
+    id: string;
+    fromUserId: string;
+    toUserId: string;
+    title: string;
+    body: string;
+    createdAt: string;
+    fromUser?: { id: string; email: string; username?: string };
+  } | null>(null);
+  newMessage$ = this.newMessageSubject.asObservable();
   
   // Timeout tracking for AI responses
   private responseTimeout: any = null;
@@ -81,6 +93,21 @@ export class WebSocketService {
       this.connectedSubject.next(false);
       this.currentLessonId = null;
     }
+  }
+
+  /**
+   * Join user-specific room for direct message notifications.
+   * Call after connect() so you receive new_message events when someone messages you.
+   */
+  joinUserRoom(userId: string): void {
+    if (!this.socket) {
+      this.connect();
+    }
+    this.socket?.emit('join-user', { userId }, (ack: any) => {
+      if (ack?.success) {
+        console.log('[WebSocketService] ✅ Joined user room for notifications');
+      }
+    });
   }
 
   /**
@@ -357,6 +384,12 @@ export class WebSocketService {
     this.socket.on('interaction-ai-response', (data: any) => {
       console.log('[WebSocketService] 🎮 Interaction AI response received:', data);
       this.interactionAIResponseSubject.next(data);
+    });
+
+    // Direct message notification (Phase 6.5)
+    this.socket.on('new_message', (data: any) => {
+      console.log('[WebSocketService] 📬 New direct message:', data?.title);
+      this.newMessageSubject.next(data);
     });
 
     // Error events

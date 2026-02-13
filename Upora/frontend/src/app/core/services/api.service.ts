@@ -3,6 +3,7 @@ import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Observable, throwError } from 'rxjs';
 import { catchError, retry } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
+import { AuthService } from './auth.service';
 
 /**
  * API Service - Centralized HTTP communication with backend
@@ -15,7 +16,10 @@ export class ApiService {
   private readonly baseUrl = environment.apiUrl;
   private readonly tenantId = environment.tenantId;
 
-  constructor(private http: HttpClient) {}
+  constructor(
+    private http: HttpClient,
+    private authService: AuthService,
+  ) {}
 
   /**
    * GET request
@@ -92,12 +96,17 @@ export class ApiService {
     const userId = this.getUserId();
     if (userId) {
       headers = headers.set('x-user-id', userId);
+      console.log('[ApiService] Setting x-user-id header:', userId);
+    } else {
+      console.warn('[ApiService] No user ID available');
     }
 
-    // Add user role (required for backend guards in mock/Cognito mode)
-    const userRole = environment.userRole;
+    // Add user role from AuthService (or fallback to environment)
+    const currentUser = this.authService.currentUser();
+    const userRole = currentUser?.role || environment.userRole;
     if (userRole) {
       headers = headers.set('x-user-role', userRole);
+      console.log('[ApiService] Setting x-user-role header:', userRole);
     }
 
     return headers;
@@ -121,11 +130,19 @@ export class ApiService {
   }
 
   /**
-   * Get user ID from localStorage (temporary until auth is implemented)
+   * Get user ID from AuthService (or fallback to environment default)
    */
   private getUserId(): string | null {
-    // TODO: Replace with proper authentication service
-    return localStorage.getItem('userId') || environment.defaultUserId;
+    const currentUser = this.authService.currentUser();
+    console.log('[ApiService] Current user from AuthService:', currentUser);
+    if (currentUser?.userId) {
+      console.log('[ApiService] Using user ID from AuthService:', currentUser.userId);
+      return currentUser.userId;
+    }
+    // Fallback to localStorage or environment default
+    const fallbackId = localStorage.getItem('userId') || environment.defaultUserId;
+    console.log('[ApiService] Using fallback user ID:', fallbackId);
+    return fallbackId;
   }
 
   /**

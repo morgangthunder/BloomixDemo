@@ -238,6 +238,101 @@ describe('Interaction Data Endpoints (SDK Tests)', () => {
       expect(mockUserProgressRepository.save).toHaveBeenCalled();
     });
 
+    it('should save score of 0 correctly (0 is a valid score)', async () => {
+      const dto = {
+        lessonId: 'test-lesson-1',
+        stageId: 'stage-1',
+        substageId: 'substage-1',
+        interactionTypeId: 'test-interaction-1',
+        score: 0, // Score of 0 is valid
+        completed: true,
+      };
+
+      const mockProgress = {
+        id: 'progress-1',
+        userId: 'user-1',
+        tenantId: 'tenant-1',
+        ...dto,
+        attempts: 1,
+        startTimestamp: new Date(),
+      };
+
+      mockInteractionTypeRepository.findOne.mockResolvedValue(null);
+      mockUserProgressRepository.findOne.mockResolvedValue(null);
+      mockUserProgressRepository.create.mockReturnValue(mockProgress);
+      mockUserProgressRepository.save.mockResolvedValue(mockProgress);
+
+      const result = await service.saveUserProgress('user-1', 'tenant-1', dto);
+
+      expect(result).toBeDefined();
+      expect(result.score).toBe(0); // Should save 0, not null
+      expect(result.score).not.toBeNull();
+      expect(result.score).not.toBeUndefined();
+    });
+
+    it('should not save invalid scores (NaN)', async () => {
+      const dto = {
+        lessonId: 'test-lesson-1',
+        stageId: 'stage-1',
+        substageId: 'substage-1',
+        interactionTypeId: 'test-interaction-1',
+        score: NaN, // Invalid score
+        completed: true,
+      };
+
+      const mockProgress = {
+        id: 'progress-1',
+        userId: 'user-1',
+        tenantId: 'tenant-1',
+        ...dto,
+        score: undefined, // Should not save NaN
+        attempts: 1,
+        startTimestamp: new Date(),
+      };
+
+      mockInteractionTypeRepository.findOne.mockResolvedValue(null);
+      mockUserProgressRepository.findOne.mockResolvedValue(null);
+      mockUserProgressRepository.create.mockReturnValue(mockProgress);
+      mockUserProgressRepository.save.mockResolvedValue(mockProgress);
+
+      const result = await service.saveUserProgress('user-1', 'tenant-1', dto);
+
+      // Score should be undefined/null, not NaN
+      expect(result.score).not.toBeNaN();
+      expect(result.score === undefined || result.score === null).toBe(true);
+    });
+
+    it('should round score to 2 decimal places', async () => {
+      const dto = {
+        lessonId: 'test-lesson-1',
+        stageId: 'stage-1',
+        substageId: 'substage-1',
+        interactionTypeId: 'test-interaction-1',
+        score: 66.66666666666666, // Should round to 66.67
+        completed: true,
+      };
+
+      const mockProgress = {
+        id: 'progress-1',
+        userId: 'user-1',
+        tenantId: 'tenant-1',
+        ...dto,
+        score: 66.67, // Rounded
+        attempts: 1,
+        startTimestamp: new Date(),
+      };
+
+      mockInteractionTypeRepository.findOne.mockResolvedValue(null);
+      mockUserProgressRepository.findOne.mockResolvedValue(null);
+      mockUserProgressRepository.create.mockReturnValue(mockProgress);
+      mockUserProgressRepository.save.mockResolvedValue(mockProgress);
+
+      const result = await service.saveUserProgress('user-1', 'tenant-1', dto);
+
+      expect(result.score).toBe(66.67);
+      expect(result.score).not.toBe(66.66666666666666);
+    });
+
     it('should get user progress', async () => {
       const mockProgress = {
         id: 'progress-1',

@@ -134,9 +134,29 @@ export class AuthService {
         await signOut();
       } catch {}
     }
+    
+    // Clear auth user storage
     sessionStorage.removeItem(this.AUTH_KEY);
     localStorage.removeItem(this.AUTH_KEY);
     this.currentUserSig.set(null);
+    
+    // CRITICAL: Clear all PKCE/OAuth storage to prevent stale data from interfering with next sign-in
+    if (typeof window !== 'undefined') {
+      const cid = environment.auth?.userPoolClientId || '';
+      const prefix = cid ? `CognitoIdentityServiceProvider.${cid}` : '';
+      
+      // Clear PKCE data from both storage types
+      localStorage.removeItem(`${prefix}.inflightOAuth`);
+      localStorage.removeItem(`${prefix}.oauthPKCE`);
+      localStorage.removeItem(`${prefix}.oauthState`);
+      sessionStorage.removeItem(`${prefix}.inflightOAuth`);
+      sessionStorage.removeItem(`${prefix}.oauthPKCE`);
+      sessionStorage.removeItem(`${prefix}.oauthState`);
+      sessionStorage.removeItem('oauth_expected_redirect');
+      sessionStorage.removeItem('upora_manual_oauth');
+      
+      console.log('[AuthService] ✅ Cleared all PKCE/OAuth storage on sign out');
+    }
   }
 
   getToken(): string | null {
@@ -669,33 +689,10 @@ export class AuthService {
             }
           }
         
-        // If PKCE is missing or we have manual PKCE, use manual exchange immediately
-        // Otherwise, try Amplify first (though it's likely to fail due to the bug)
-        if (!inflight || !pkce || codeVerifier) {
-          if (!codeVerifier) {
-            console.error('[AuthService] ❌ No PKCE verifier found - cannot complete code exchange');
-            console.error('[AuthService] This means either:');
-            console.error('[AuthService]   1. Storage was cleared between redirect and callback');
-            console.error('[AuthService]   2. Manual PKCE storage failed before redirect');
-            console.error('[AuthService]   3. Different origin (localhost vs 127.0.0.1)');
-            
-            // Clear any stale state (both storage types)
-            localStorage.removeItem(`${prefix}.inflightOAuth`);
-            localStorage.removeItem(`${prefix}.oauthPKCE`);
-            localStorage.removeItem(`${prefix}.oauthState`);
-            sessionStorage.removeItem(`${prefix}.inflightOAuth`);
-            sessionStorage.removeItem(`${prefix}.oauthPKCE`);
-            sessionStorage.removeItem(`${prefix}.oauthState`);
-            sessionStorage.removeItem('oauth_expected_redirect');
-            sessionStorage.removeItem('upora_manual_oauth');
-            
-            return { 
-              success: false, 
-              error: 'OAuth authentication failed: PKCE verifier not found. This may happen if browser storage was cleared. Please try signing in again.' 
-            };
-          }
-          
-          console.log('[AuthService] 🔧 Using manual OAuth code exchange (bypassing Amplify)');
+        // ALWAYS use manual exchange if we have PKCE verifier (prevents Amplify from consuming code)
+        // Only fall back to Amplify if we truly don't have manual PKCE
+        if (codeVerifier) {
+          console.log('[AuthService] 🔧 Using manual OAuth code exchange immediately (bypassing Amplify to prevent code consumption)');
           try {
             const result = await this.manualOAuthCodeExchange(authCode, stateParam, codeVerifier);
             if (result.success) {
@@ -720,6 +717,30 @@ export class AuthService {
               error: `Manual OAuth exchange failed: ${manualError instanceof Error ? manualError.message : 'Unknown error'}` 
             };
           }
+        }
+        
+        // If no PKCE verifier found, this is an error
+        if (!codeVerifier) {
+          console.error('[AuthService] ❌ No PKCE verifier found - cannot complete code exchange');
+          console.error('[AuthService] This means either:');
+          console.error('[AuthService]   1. Storage was cleared between redirect and callback');
+          console.error('[AuthService]   2. Manual PKCE storage failed before redirect');
+          console.error('[AuthService]   3. Different origin (localhost vs 127.0.0.1)');
+          
+          // Clear any stale state (both storage types)
+          localStorage.removeItem(`${prefix}.inflightOAuth`);
+          localStorage.removeItem(`${prefix}.oauthPKCE`);
+          localStorage.removeItem(`${prefix}.oauthState`);
+          sessionStorage.removeItem(`${prefix}.inflightOAuth`);
+          sessionStorage.removeItem(`${prefix}.oauthPKCE`);
+          sessionStorage.removeItem(`${prefix}.oauthState`);
+          sessionStorage.removeItem('oauth_expected_redirect');
+          sessionStorage.removeItem('upora_manual_oauth');
+          
+          return { 
+            success: false, 
+            error: 'OAuth authentication failed: PKCE verifier not found. This may happen if browser storage was cleared. Please try signing in again.' 
+          };
         }
         
         // If PKCE is present but not manual (Amplify's), try Amplify flow

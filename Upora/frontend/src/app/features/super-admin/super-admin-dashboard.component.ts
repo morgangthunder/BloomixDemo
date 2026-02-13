@@ -33,14 +33,15 @@ import { ContentSourceService } from '../../core/services/content-source.service
             <div class="card-arrow">→</div>
           </div>
 
-          <!-- Placeholder: User Management -->
-          <div class="dashboard-card disabled">
+          <!-- User Management -->
+          <div class="dashboard-card" (click)="navigateTo('/super-admin/user-management')">
             <div class="card-icon">👥</div>
             <div class="card-content">
               <h3>User Management</h3>
               <p>Manage accounts, roles, and permissions</p>
-              <div class="card-status">Coming Soon</div>
+              <div class="card-status active">Active</div>
             </div>
+            <div class="card-arrow">→</div>
           </div>
 
           <!-- Placeholder: System Health -->
@@ -113,6 +114,28 @@ import { ContentSourceService } from '../../core/services/content-source.service
             <div class="card-content">
               <h3>Onboarding</h3>
               <p>Popular selections, option configuration, and onboarding flow settings</p>
+              <div class="card-status active">Active</div>
+            </div>
+            <div class="card-arrow">→</div>
+          </div>
+
+          <!-- Messages & Email -->
+          <div class="dashboard-card" (click)="navigateTo('/super-admin/message-email-settings')">
+            <div class="card-icon">✉️</div>
+            <div class="card-content">
+              <h3>Messages & Email</h3>
+              <p>Configure N8N webhook and from name/address for “Also send by email”</p>
+              <div class="card-status active">Active</div>
+            </div>
+            <div class="card-arrow">→</div>
+          </div>
+
+          <!-- N8N Workflows -->
+          <div class="dashboard-card" (click)="navigateTo('/super-admin/n8n-flows')">
+            <div class="card-icon">🔀</div>
+            <div class="card-content">
+              <h3>N8N Workflows</h3>
+              <p>Open N8N and manage webhook workflows (e.g. message email)</p>
               <div class="card-status active">Active</div>
             </div>
             <div class="card-arrow">→</div>

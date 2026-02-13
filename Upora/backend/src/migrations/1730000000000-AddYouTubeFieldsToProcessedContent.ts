@@ -1,112 +1,26 @@
-import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class AddYouTubeFieldsToProcessedContent1730000000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // Add YouTube-specific fields to processed_content_outputs table
-    await queryRunner.addColumn(
-      'processed_content_outputs',
-      new TableColumn({
-        name: 'video_id',
-        type: 'varchar',
-        length: '50',
-        isNullable: true,
-      }),
-    );
-
-    await queryRunner.addColumn(
-      'processed_content_outputs',
-      new TableColumn({
-        name: 'title',
-        type: 'text',
-        isNullable: true,
-      }),
-    );
-
-    await queryRunner.addColumn(
-      'processed_content_outputs',
-      new TableColumn({
-        name: 'description',
-        type: 'text',
-        isNullable: true,
-      }),
-    );
-
-    await queryRunner.addColumn(
-      'processed_content_outputs',
-      new TableColumn({
-        name: 'thumbnail',
-        type: 'varchar',
-        length: '500',
-        isNullable: true,
-      }),
-    );
-
-    await queryRunner.addColumn(
-      'processed_content_outputs',
-      new TableColumn({
-        name: 'channel',
-        type: 'varchar',
-        length: '100',
-        isNullable: true,
-      }),
-    );
-
-    await queryRunner.addColumn(
-      'processed_content_outputs',
-      new TableColumn({
-        name: 'duration',
-        type: 'varchar',
-        length: '50',
-        isNullable: true,
-      }),
-    );
-
-    await queryRunner.addColumn(
-      'processed_content_outputs',
-      new TableColumn({
-        name: 'transcript',
-        type: 'text',
-        isNullable: true,
-      }),
-    );
-
-    await queryRunner.addColumn(
-      'processed_content_outputs',
-      new TableColumn({
-        name: 'start_time',
-        type: 'int',
-        isNullable: true,
-      }),
-    );
-
-    await queryRunner.addColumn(
-      'processed_content_outputs',
-      new TableColumn({
-        name: 'end_time',
-        type: 'int',
-        isNullable: true,
-      }),
-    );
-
-    await queryRunner.addColumn(
-      'processed_content_outputs',
-      new TableColumn({
-        name: 'validation_score',
-        type: 'decimal',
-        precision: 3,
-        scale: 2,
-        isNullable: true,
-      }),
-    );
-
-    await queryRunner.addColumn(
-      'processed_content_outputs',
-      new TableColumn({
-        name: 'created_by',
-        type: 'uuid',
-        isNullable: true,
-      }),
-    );
+    // Add YouTube-specific fields (idempotent: skip if column exists)
+    const columns: Array<{ name: string; def: string }> = [
+      { name: 'video_id', def: 'varchar(50)' },
+      { name: 'title', def: 'text' },
+      { name: 'description', def: 'text' },
+      { name: 'thumbnail', def: 'varchar(500)' },
+      { name: 'channel', def: 'varchar(100)' },
+      { name: 'duration', def: 'varchar(50)' },
+      { name: 'transcript', def: 'text' },
+      { name: 'start_time', def: 'int' },
+      { name: 'end_time', def: 'int' },
+      { name: 'validation_score', def: 'decimal(3,2)' },
+      { name: 'created_by', def: 'uuid' },
+    ];
+    for (const col of columns) {
+      await queryRunner.query(
+        `ALTER TABLE processed_content_outputs ADD COLUMN IF NOT EXISTS "${col.name}" ${col.def}`,
+      );
+    }
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

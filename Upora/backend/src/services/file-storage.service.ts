@@ -100,6 +100,37 @@ export class FileStorageService implements OnModuleInit {
   }
 
   /**
+   * Save JSON transcript (or any object) at a specific key. Used for lesson engagement transcripts in MinIO/S3.
+   */
+  async saveTranscript(key: string, data: object): Promise<{ url: string }> {
+    const buffer = Buffer.from(JSON.stringify(data, null, 2), 'utf8');
+    if (this.adapter.saveBuffer) {
+      return this.adapter.saveBuffer(key, buffer, 'application/json');
+    }
+    // Fallback: use saveFile with a synthetic file
+    const ext = key.endsWith('.json') ? '.json' : '';
+    const subfolder = key.includes('/') ? key.substring(0, key.lastIndexOf('/')) : 'transcripts';
+    const result = await this.adapter.saveFile(
+      { buffer, originalname: key.split('/').pop() || 'transcript.json', mimetype: 'application/json' },
+      subfolder,
+    );
+    return { url: result.url };
+  }
+
+  /**
+   * Read transcript (or any JSON) from storage by key. Returns parsed object or null if not found.
+   */
+  async getTranscriptContent(key: string): Promise<object | null> {
+    if (!this.adapter.getByKey) return null;
+    try {
+      const buffer = await this.adapter.getByKey(key);
+      return JSON.parse(buffer.toString('utf8')) as object;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Get the actual file path (local storage only)
    * For S3, returns the S3 key
    */

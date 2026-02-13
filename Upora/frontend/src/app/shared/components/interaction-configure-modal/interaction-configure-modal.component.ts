@@ -45,6 +45,7 @@ import { environment } from '../../../../environments/environment';
               <label>Media Content</label>
               <div class="config-value">
                 <span class="value">{{selectedMediaName || 'None selected'}}</span>
+                <button *ngIf="selectedMediaId" type="button" class="btn-small btn-secondary" style="margin-left: 12px;" (click)="onViewProcessedContentById(selectedMediaId)">View</button>
                 <button type="button" class="btn-small" style="margin-left: 12px;" (click)="openMediaSelector()">{{selectedMediaId ? 'Change Media' : 'Select Media'}}</button>
               </div>
               <p class="hint">Choose approved media content (video or audio) to use for this interaction.</p>
@@ -55,6 +56,7 @@ import { environment } from '../../../../environments/environment';
               <label>URL Content</label>
               <div class="config-value">
                 <span class="value">{{selectedUrlContentName || 'None selected'}}</span>
+                <button *ngIf="selectedUrlContentId" type="button" class="btn-small btn-secondary" style="margin-left: 12px;" (click)="onViewProcessedContentById(selectedUrlContentId)">View</button>
                 <button type="button" class="btn-small" style="margin-left: 12px;" (click)="openUrlContentSelector()">{{selectedUrlContentId ? 'Change URL' : 'Select URL'}}</button>
               </div>
               <p class="hint">Choose approved URL content to use for this iframe interaction. The selected URL will be used in the interaction.</p>
@@ -65,6 +67,7 @@ import { environment } from '../../../../environments/environment';
               <label>Video URL Content</label>
               <div class="config-value">
                 <span class="value">{{selectedVideoUrlContentName || 'None selected'}}</span>
+                <button *ngIf="selectedVideoUrlContentId" type="button" class="btn-small btn-secondary" style="margin-left: 12px;" (click)="onViewProcessedContentById(selectedVideoUrlContentId)">View</button>
                 <button type="button" class="btn-small" style="margin-left: 12px;" (click)="openVideoUrlContentSelector()">{{selectedVideoUrlContentId ? 'Change Video URL' : 'Select Video URL'}}</button>
               </div>
               <p class="hint">Choose approved video URL content (YouTube or Vimeo) to use for this interaction.</p>
@@ -75,7 +78,8 @@ import { environment } from '../../../../environments/environment';
               <label>Processed Content</label>
               <div class="config-value">
                 <span class="value">{{selectedContentOutputName || 'None selected'}}</span>
-                <button type="button" class="btn-small" (click)="onProcessedContentSelect($event)">Select</button>
+                <button *ngIf="config?.contentOutputId" type="button" class="btn-small btn-secondary" style="margin-left: 12px;" (click)="onViewProcessedContentById(config.contentOutputId)">View</button>
+                <button type="button" class="btn-small" style="margin-left: 12px;" (click)="onProcessedContentSelect($event)">{{config?.contentOutputId ? 'Change' : 'Select'}}</button>
               </div>
               <p class="hint">Choose which processed output powers this interaction.</p>
             </div>
@@ -1032,6 +1036,7 @@ export class InteractionConfigureModalComponent implements OnChanges {
   @Output() closed = new EventEmitter<void>();
   @Output() saved = new EventEmitter<any>();
   @Output() processedContentSelect = new EventEmitter<void>();
+  @Output() processedContentView = new EventEmitter<string>();
 
   activeTab: 'configure' | 'preview' = 'configure';
   config: any = {};
@@ -1381,6 +1386,13 @@ export class InteractionConfigureModalComponent implements OnChanges {
     event.preventDefault();
     event.stopPropagation();
     this.processedContentSelect.emit();
+  }
+
+  /** View processed content by ID - used by Media, URL, Video and Generic panels */
+  onViewProcessedContentById(contentId: string) {
+    if (contentId) {
+      this.processedContentView.emit(contentId);
+    }
   }
 
   getArrayItemPreview(item: any): string {

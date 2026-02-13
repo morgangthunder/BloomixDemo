@@ -54,13 +54,20 @@ export class InteractionTypesController {
   async updateTrueFalseComplete() {
     await this.interactionTypesService.fixTrueFalseDuplicateTotalTrue();
     await this.interactionTypesService.updateTrueFalseSelectionCompleteInteraction();
-    return { message: 'True/False Selection interaction updated with completeInteraction()' };
+    await this.interactionTypesService.updateTrueFalseToSaveScore();
+    return { message: 'True/False Selection interaction updated with completeInteraction() and score saving' };
   }
 
   @Post('fix-true-false-duplicate-totaltrue')
   async fixTrueFalseDuplicateTotalTrue() {
     await this.interactionTypesService.fixTrueFalseDuplicateTotalTrue();
     return { message: 'Fixed duplicate totalTrue declarations in True/False Selection interaction' };
+  }
+
+  @Post('replace-true-false-scoring')
+  async replaceTrueFalseScoring() {
+    await this.interactionTypesService.replaceTrueFalseJsWithFixedScoring();
+    return { message: 'Replaced true-false-selection JS with fixed scoring (full overwrite)' };
   }
 
   @Post('update-sdk-test-pixijs')

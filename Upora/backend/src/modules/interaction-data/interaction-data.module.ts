@@ -6,6 +6,7 @@ import { InteractionInstanceData } from '../../entities/interaction-instance-dat
 import { UserInteractionProgress } from '../../entities/user-interaction-progress.entity';
 import { UserPublicProfile } from '../../entities/user-public-profile.entity';
 import { InteractionType } from '../../entities/interaction-type.entity';
+import { SuperAdminModule } from '../super-admin/super-admin.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { InteractionType } from '../../entities/interaction-type.entity';
       UserPublicProfile,
       InteractionType,
     ]),
+    SuperAdminModule,
   ],
   controllers: [InteractionDataController],
   providers: [InteractionDataService],

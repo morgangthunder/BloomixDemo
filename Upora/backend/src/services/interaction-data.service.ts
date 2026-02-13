@@ -160,8 +160,31 @@ export class InteractionDataService {
           progress.completeTimestamp = new Date();
         }
       }
-      if (dto.score !== undefined) {
+      // Always update score if provided (including 0, which is a valid score)
+      if (dto.score !== undefined && dto.score !== null) {
+        console.log('[InteractionDataService] 📊 Updating score:', {
+          oldScore: progress.score,
+          newScore: dto.score,
+          scoreType: typeof dto.score,
+          scoreValue: dto.score,
+          userId,
+          lessonId: dto.lessonId,
+          stageId: dto.stageId,
+          substageId: dto.substageId,
+          interactionTypeId: dto.interactionTypeId,
+        });
         progress.score = dto.score;
+      } else {
+        console.log('[InteractionDataService] ⚠️ Score not provided or null:', {
+          score: dto.score,
+          scoreUndefined: dto.score === undefined,
+          scoreNull: dto.score === null,
+          userId,
+          lessonId: dto.lessonId,
+          stageId: dto.stageId,
+          substageId: dto.substageId,
+          interactionTypeId: dto.interactionTypeId,
+        });
       }
       if (dto.timeTakenSeconds !== undefined) {
         progress.timeTakenSeconds = dto.timeTakenSeconds;
@@ -174,6 +197,18 @@ export class InteractionDataService {
       }
     } else {
       // Create new
+      console.log('[InteractionDataService] 📝 Creating new progress record:', {
+        userId,
+        lessonId: dto.lessonId,
+        stageId: dto.stageId,
+        substageId: dto.substageId,
+        interactionTypeId: dto.interactionTypeId,
+        score: dto.score,
+        scoreType: typeof dto.score,
+        hasScore: dto.score !== undefined && dto.score !== null,
+        scoreValue: dto.score,
+        completed: dto.completed,
+      });
       progress = this.userProgressRepo.create({
         userId,
         tenantId,
@@ -184,14 +219,22 @@ export class InteractionDataService {
         startTimestamp: new Date(),
         attempts: 1,
         completed: dto.completed || false,
-        score: dto.score,
+        score: dto.score !== undefined && dto.score !== null ? dto.score : undefined,
         timeTakenSeconds: dto.timeTakenSeconds,
         interactionEvents: dto.interactionEvents,
         customData: dto.customData,
       });
     }
 
-    return await this.userProgressRepo.save(progress);
+    const saved = await this.userProgressRepo.save(progress);
+    console.log('[InteractionDataService] ✅ Progress saved:', {
+      id: saved.id,
+      userId: saved.userId,
+      score: saved.score,
+      completed: saved.completed,
+      attempts: saved.attempts,
+    });
+    return saved;
   }
 
   /**

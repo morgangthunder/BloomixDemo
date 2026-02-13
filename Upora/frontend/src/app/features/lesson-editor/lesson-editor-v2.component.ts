@@ -7,6 +7,8 @@ import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ActivatedRoute, Router } from '@angular/router';
 import { LessonService } from '../../core/services/lesson.service';
 import { ContentSourceService } from '../../core/services/content-source.service';
+import { UserManagementService, UserSearchResult } from '../../core/services/user-management.service';
+import { AuthService } from '../../core/services/auth.service';
 import { Lesson } from '../../core/models/lesson.model';
 import { ContentSource } from '../../core/models/content-source.model';
 import { Subject, firstValueFrom, of } from 'rxjs';
@@ -21,8 +23,9 @@ import { AddImageModalComponent } from '../../shared/components/add-image-modal/
 import { AddPdfModalComponent } from '../../shared/components/add-pdf-modal/add-pdf-modal.component';
 import { InteractionConfigureModalComponent } from '../../shared/components/interaction-configure-modal/interaction-configure-modal.component';
 import { ContentSourceViewModalComponent } from '../../shared/components/content-source-view-modal/content-source-view-modal.component';
+import { MessagesModalComponent } from '../../shared/components/messages-modal/messages-modal.component';
 
-type EditorTab = 'details' | 'structure' | 'script' | 'content' | 'preview' | 'ai-assistant';
+type EditorTab = 'details' | 'structure' | 'script' | 'content' | 'preview' | 'ai-assistant' | 'engagers';
 
 interface Stage {
   id: string;
@@ -82,6 +85,7 @@ interface ProcessedContentOutput {
   selector: 'app-lesson-editor-v2',
   standalone: true,
   imports: [
+    MessagesModalComponent,
     CommonModule, 
     FormsModule, 
     ContentProcessorModalComponent, 
@@ -478,7 +482,8 @@ interface ProcessedContentOutput {
                   <label>Processed Content</label>
                   <div class="config-value">
                     <span class="value">{{getSelectedSubStage()?.contentOutputId ? getContentOutputName(getSelectedSubStage()!.contentOutputId!) : 'None'}}</span>
-                    <button (click)="openProcessedContentPicker('structure')" class="btn-small">Select</button>
+                    <button *ngIf="getSelectedSubStage()?.contentOutputId" (click)="viewProcessedContentById(getSelectedSubStage()!.contentOutputId!)" class="btn-small btn-secondary">View</button>
+                    <button (click)="openProcessedContentPicker('structure')" class="btn-small">{{getSelectedSubStage()?.contentOutputId ? 'Change' : 'Select'}}</button>
                   </div>
                 </div>
 
@@ -818,8 +823,157 @@ interface ProcessedContentOutput {
                 </div>
               </div>
             </div>
+
+            <!-- Engagers Panel (Phase 6.5) -->
+            <div *ngIf="activeTab === 'engagers'" class="panel engagers-panel">
+              <div class="engagers-header">
+                <h2 class="panel-title">View Engagers</h2>
+                <p class="panel-description">Users who have engaged with this lesson</p>
+              </div>
+
+              <div class="engagers-search">
+                <input
+                  type="text"
+                  [(ngModel)]="engagersSearchQuery"
+                  (input)="onEngagersSearch()"
+                  placeholder="Search by email or name..."
+                  class="search-input" />
+                <div *ngIf="loadingEngagers" class="loading">Loading...</div>
+              </div>
+
+              <div class="engagers-list">
+                <div *ngIf="!loadingEngagers && engagers.length === 0 && engagersSearchQuery.length === 0" class="empty-state">
+                  <p>No engagers yet. Users who view or interact with this lesson will appear here.</p>
+                </div>
+                <div *ngIf="!loadingEngagers && engagers.length === 0 && engagersSearchQuery.length > 0" class="empty-state">
+                  <p>No engagers found matching "{{engagersSearchQuery}}"</p>
+                </div>
+                <div *ngFor="let engager of engagers" class="engager-row">
+                  <div class="engager-info">
+                    <span class="engager-name">{{engager.name}}</span>
+                    <span class="engager-email">{{engager.email}}</span>
+                    <div class="engager-stats" *ngIf="engager.engagement">
+                      <span>Views: {{engager.engagement.viewCount}}</span>
+                      <span *ngIf="engager.engagement.hasCompleted" class="completed-badge">✓ Completed</span>
+                      <span>Interactions: {{engager.engagement.interactionCount}}</span>
+                      <span class="score-badge">
+                        Avg: {{ engager.engagement.averageScore != null ? (engager.engagement.averageScore + '%') : 'No score' }}
+                      </span>
+                      <span *ngIf="engager.engagement.firstViewedAt" class="timestamp">
+                        First viewed: {{formatDate(engager.engagement.firstViewedAt)}}
+                      </span>
+                      <span *ngIf="engager.engagement.lastActivityAt" class="timestamp">
+                        Last activity: {{formatDate(engager.engagement.lastActivityAt)}}
+                      </span>
+                    </div>
+                  </div>
+                  <div class="engager-actions">
+                    <button class="message-btn" (click)="openMessageModal(engager)" title="Send message">💬</button>
+                    <button class="view-details-btn" (click)="viewEngagerDetails(engager)">View Details</button>
+                    <button class="view-user-btn" (click)="viewEngager(engager)">User Profile</button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </main>
+      </div>
+
+      <!-- Engager Details Modal -->
+      <div *ngIf="showEngagerDetails && selectedEngager" class="modal-overlay-fullscreen engager-details-modal" (click)="closeEngagerDetails()">
+        <div class="engager-details-content" (click)="$event.stopPropagation()">
+          <div class="engager-details-header">
+            <h2>Engagement Details: {{selectedEngager.name}}</h2>
+            <div class="engager-details-actions">
+              <button class="refresh-btn" (click)="refreshEngagerDetails()" [disabled]="refreshingEngagerDetails" title="Refresh to see latest scores and interactions">
+                {{ refreshingEngagerDetails ? 'Refreshing...' : '↻ Refresh' }}
+              </button>
+              <button class="close-btn" (click)="closeEngagerDetails()">×</button>
+            </div>
+          </div>
+          <div class="engager-details-body" *ngIf="selectedEngager.engagement; else noEngagement">
+            <div class="engagement-summary">
+              <div class="summary-item">
+                <span class="label">Total Views:</span>
+                <span class="value">{{selectedEngager.engagement.viewCount}}</span>
+              </div>
+              <div class="summary-item">
+                <span class="label">Completions:</span>
+                <span class="value">{{selectedEngager.engagement.completionCount}}</span>
+              </div>
+              <div class="summary-item">
+                <span class="label">Total Interactions:</span>
+                <span class="value">{{selectedEngager.engagement.interactionCount}}</span>
+              </div>
+              <div class="summary-item">
+                <span class="label">Average Score:</span>
+                <span class="value" [class.score-highlight]="selectedEngager.engagement.averageScore != null" [class.score-none]="selectedEngager.engagement.averageScore == null">
+                  {{ selectedEngager.engagement.averageScore != null ? (selectedEngager.engagement.averageScore + '%') : 'No scored interactions yet' }}
+                </span>
+              </div>
+              <div class="summary-item" *ngIf="selectedEngager.engagement.firstViewedAt">
+                <span class="label">First Viewed:</span>
+                <span class="value">{{formatDate(selectedEngager.engagement.firstViewedAt)}}</span>
+              </div>
+              <div class="summary-item" *ngIf="selectedEngager.engagement.lastActivityAt">
+                <span class="label">Last Activity:</span>
+                <span class="value">{{formatDate(selectedEngager.engagement.lastActivityAt)}}</span>
+              </div>
+            </div>
+            <div class="interactions-list" *ngIf="selectedEngager.engagement.interactions && selectedEngager.engagement.interactions.length > 0">
+              <h3>Interaction History ({{selectedEngager.engagement.interactions.length}} interactions)</h3>
+              <div class="interaction-item" *ngFor="let interaction of selectedEngager.engagement.interactions; let i = index; trackBy: trackByInteractionId">
+                <!-- Debug info -->
+                <div style="font-size: 0.75rem; color: #666; margin-bottom: 0.25rem; padding: 0.25rem; background: rgba(255,255,255,0.05); border-radius: 4px;">
+                  Debug: {{i+1}}/{{selectedEngager.engagement.interactions.length}} | 
+                  TypeId: {{getInteractionTypeId(interaction)}} | 
+                  Score: {{interaction.score ?? 'NULL'}} |
+                  ID: {{interaction.id ?? 'NO-ID'}}
+                </div>
+                <div class="interaction-header">
+                  <span class="interaction-stage">{{getInteractionLocationDisplay(interaction)}}</span>
+                  <span class="interaction-type">{{formatInteractionTypeName(getInteractionTypeId(interaction))}}</span>
+                </div>
+                <div class="interaction-details">
+                  <span *ngIf="interaction.score !== null && interaction.score !== undefined" class="interaction-score">Score: {{interaction.score}}%</span>
+                  <span class="interaction-status" [class.completed]="interaction.completed">
+                    {{interaction.completed ? '✓ Completed' : 'In Progress'}}
+                  </span>
+                  <span class="interaction-attempts">Attempts: {{interaction.attempts ?? 0}}</span>
+                  <span *ngIf="interaction.timeTakenSeconds" class="interaction-time">
+                    Time: {{formatTimeTaken(interaction.timeTakenSeconds)}}
+                  </span>
+                </div>
+                <div class="interaction-timestamps">
+                  <span *ngIf="interaction.startTimestamp">Started: {{formatDate(interaction.startTimestamp)}}</span>
+                  <span *ngIf="interaction.completeTimestamp">Completed: {{formatDate(interaction.completeTimestamp)}}</span>
+                </div>
+                <div class="interaction-custom-data" *ngIf="hasCustomData(interaction.customData)">
+                  <h4>Custom Data:</h4>
+                  <pre class="custom-data-json">{{formatJson(interaction.customData)}}</pre>
+                </div>
+                <div class="interaction-events" *ngIf="hasInteractionEvents(interaction.interactionEvents)">
+                  <h4>Interaction Events ({{getInteractionEventsLength(interaction.interactionEvents)}}):</h4>
+                  <div class="events-list">
+                    <div *ngFor="let event of getInteractionEventsArray(interaction.interactionEvents); trackBy: trackByEventIndex" class="event-item">
+                      <span class="event-type">{{event?.type ?? 'Unknown'}}</span>
+                      <span class="event-time" *ngIf="event?.timestamp">{{formatDate(event.timestamp)}}</span>
+                      <pre *ngIf="hasCustomData(event?.data)" class="event-data">{{formatJson(event.data)}}</pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="no-interactions" *ngIf="!selectedEngager.engagement.interactions || selectedEngager.engagement.interactions.length === 0">
+              <p>No detailed interaction data available.</p>
+            </div>
+          </div>
+          <ng-template #noEngagement>
+            <div class="engager-details-body" style="padding: 1.5rem;">
+              <p class="text-gray-400">No engagement data available for this user.</p>
+            </div>
+          </ng-template>
+        </div>
       </div>
 
       <!-- Mobile Sidebar Overlay -->
@@ -893,6 +1047,14 @@ interface ProcessedContentOutput {
       </app-approval-queue-modal>
 
       <!-- Content Library Modal -->
+      <!-- Messages modal -->
+      <app-messages-modal
+        *ngIf="showMessageModal"
+        [toUserId]="selectedEngagerForMessage?.id"
+        [toUserEmail]="selectedEngagerForMessage?.email"
+        [onClose]="closeMessageModal">
+      </app-messages-modal>
+
       <app-content-library-modal
         [isOpen]="showContentLibrary"
         [lessonId]="lesson?.id"
@@ -1011,8 +1173,8 @@ interface ProcessedContentOutput {
         </div>
       </div>
 
-      <!-- Processed Content JSON Editor Modal -->
-      <div class="modal-overlay-fullscreen" *ngIf="showProcessedContentJsonModal" (click)="closeProcessedContentViewer()">
+      <!-- Processed Content JSON Editor Modal (z-index above configure modal 999999 when View from within it) -->
+      <div class="modal-overlay-fullscreen" *ngIf="showProcessedContentJsonModal" (click)="closeProcessedContentViewer()" style="z-index: 1000001;">
         <div class="modal-container-fullscreen" (click)="$event.stopPropagation()">
           <div class="modal-header-sticky">
             <h2>🎯 Edit Processed Content JSON</h2>
@@ -1049,8 +1211,8 @@ interface ProcessedContentOutput {
         </div>
       </div>
 
-      <!-- Processed Content Picker Modal -->
-      <div class="modal-overlay-fullscreen" *ngIf="showProcessedContentPicker" (click)="closeProcessedContentPicker()">
+      <!-- Processed Content Picker Modal (z-index above interaction configure modal when both open) -->
+      <div class="modal-overlay-fullscreen" *ngIf="showProcessedContentPicker" (click)="closeProcessedContentPicker()" style="z-index: 1000000;">
         <div class="modal-container-fullscreen" (click)="$event.stopPropagation()">
           <div class="modal-header-sticky">
             <h2>🎯 Select Processed Content</h2>
@@ -1091,6 +1253,7 @@ interface ProcessedContentOutput {
                   </div>
                 </div>
                 <div class="content-actions">
+                  <button class="btn-secondary btn-small" (click)="viewProcessedContent(content); $event.stopPropagation()" title="View content">View</button>
                   <button class="btn-primary btn-small" (click)="selectProcessedContentItem(content)">Select</button>
                 </div>
               </div>
@@ -1120,7 +1283,8 @@ interface ProcessedContentOutput {
         [interactionWidgets]="currentInteractionType?.widgets?.instances || []"
         (closed)="closeInteractionConfigModal()"
         (saved)="saveInteractionConfig($event)"
-        (processedContentSelect)="openProcessedContentPicker('interaction')">
+        (processedContentSelect)="openProcessedContentPicker('interaction')"
+        (processedContentView)="viewProcessedContentById($event)">
       </app-interaction-configure-modal>
       
       <!-- View Changes Modal -->
@@ -2656,6 +2820,331 @@ interface ProcessedContentOutput {
       border-radius: 8px;
       margin-bottom: 1.5rem;
     }
+    /* Phase 6.5: Engagers Panel */
+    .engagers-panel {
+      padding: 2rem;
+    }
+    .engagers-header {
+      margin-bottom: 2rem;
+    }
+    .engagers-header .panel-title {
+      font-size: 1.5rem;
+      color: #fff;
+      margin: 0 0 0.5rem 0;
+    }
+    .engagers-header .panel-description {
+      color: rgba(255,255,255,0.6);
+      margin: 0;
+      font-size: 0.95rem;
+    }
+    .engagers-search {
+      margin-bottom: 2rem;
+    }
+    .engagers-search .search-input {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 1rem;
+    }
+    .engagers-search .search-input::placeholder {
+      color: rgba(255,255,255,0.4);
+    }
+    .engagers-search .loading {
+      margin-top: 0.5rem;
+      color: rgba(255,255,255,0.6);
+      font-size: 0.9rem;
+    }
+    .engagers-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .engagers-list .empty-state {
+      padding: 3rem;
+      text-align: center;
+      color: rgba(255,255,255,0.6);
+    }
+    .engager-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .engager-row:hover {
+      background: rgba(255,255,255,0.05);
+      border-color: rgba(0,212,255,0.3);
+    }
+    .engager-info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      flex: 1;
+    }
+    .engager-name {
+      font-weight: 500;
+      color: #fff;
+      font-size: 1rem;
+    }
+    .engager-email {
+      color: rgba(255,255,255,0.6);
+      font-size: 0.9rem;
+    }
+    .engager-stats {
+      display: flex;
+      gap: 1rem;
+      margin-top: 0.5rem;
+      font-size: 0.85rem;
+      color: rgba(255,255,255,0.5);
+    }
+    .engager-stats span {
+      display: inline-block;
+    }
+    .engager-row .engager-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+    .engager-row .message-btn {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid rgba(0,212,255,0.3);
+      background: rgba(0,212,255,0.1);
+      color: #00d4ff;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: all 0.2s;
+    }
+    .engager-row .message-btn:hover {
+      background: rgba(0,212,255,0.2);
+      border-color: #00d4ff;
+    }
+    .engager-row .view-details-btn,
+    .engager-row .view-user-btn {
+      padding: 0.5rem 1rem;
+      border: 1px solid rgba(0,212,255,0.3);
+      background: rgba(0,212,255,0.1);
+      color: #00d4ff;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+    }
+    .engager-row .view-details-btn:hover,
+    .engager-row .view-user-btn:hover {
+      background: rgba(0,212,255,0.2);
+      border-color: rgba(0,212,255,0.5);
+    }
+    .engager-stats .completed-badge {
+      color: #4ade80;
+      font-weight: 500;
+    }
+    .engager-stats .score-badge {
+      color: #fbbf24;
+      font-weight: 500;
+    }
+    .engager-stats .timestamp {
+      color: rgba(255,255,255,0.4);
+      font-size: 0.8rem;
+    }
+    /* Engager Details Modal */
+    .engager-details-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.8);
+      z-index: 10001;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    .engager-details-content {
+      background: #1a1a2e;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      max-width: 800px;
+      max-height: 90vh;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .engager-details-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.5rem;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .engager-details-header h2 {
+      margin: 0;
+      color: #fff;
+      font-size: 1.5rem;
+    }
+    .engager-details-header .close-btn {
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 2rem;
+      cursor: pointer;
+      padding: 0;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+    }
+    .engager-details-header .close-btn:hover {
+      background: rgba(255,255,255,0.1);
+    }
+    .engager-details-body {
+      padding: 1.5rem;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .engagement-summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .summary-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .summary-item .label {
+      color: rgba(255,255,255,0.6);
+      font-size: 0.85rem;
+    }
+    .summary-item .value {
+      color: #fff;
+      font-size: 1.1rem;
+      font-weight: 500;
+    }
+    .summary-item .value.score-highlight {
+      color: #fbbf24;
+      font-size: 1.3rem;
+    }
+    .summary-item .value.score-none {
+      color: rgba(255,255,255,0.6);
+      font-style: italic;
+    }
+    .interactions-list h3 {
+      color: #fff;
+      margin: 0 0 1rem 0;
+      font-size: 1.2rem;
+    }
+    .interaction-item {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 0.75rem;
+    }
+    .interaction-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.5rem;
+    }
+    .interaction-stage {
+      color: #fff;
+      font-weight: 500;
+    }
+    .interaction-type {
+      color: rgba(255,255,255,0.6);
+      font-size: 0.9rem;
+    }
+    .interaction-details {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.5rem;
+    }
+    .interaction-score {
+      color: #fbbf24;
+      font-weight: 500;
+    }
+    .interaction-status {
+      color: rgba(255,255,255,0.6);
+    }
+    .interaction-status.completed {
+      color: #4ade80;
+    }
+    .interaction-attempts,
+    .interaction-time {
+      color: rgba(255,255,255,0.5);
+      font-size: 0.9rem;
+    }
+    .interaction-timestamps {
+      display: flex;
+      gap: 1rem;
+      font-size: 0.85rem;
+      color: rgba(255,255,255,0.4);
+    }
+    .no-interactions {
+      text-align: center;
+      padding: 2rem;
+      color: rgba(255,255,255,0.6);
+    }
+    .interaction-custom-data,
+    .interaction-events {
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(255,255,255,0.1);
+    }
+    .interaction-custom-data h4,
+    .interaction-events h4 {
+      color: #fff;
+      font-size: 0.9rem;
+      margin: 0 0 0.5rem 0;
+      font-weight: 600;
+    }
+    .custom-data-json,
+    .event-data {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 4px;
+      padding: 0.75rem;
+      font-size: 0.8rem;
+      color: rgba(255,255,255,0.8);
+      overflow-x: auto;
+      margin: 0.5rem 0 0 0;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .events-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .event-item {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 4px;
+      padding: 0.5rem;
+    }
+    .event-type {
+      color: #00d4ff;
+      font-weight: 500;
+      margin-right: 0.5rem;
+    }
+    .event-time {
+      color: rgba(255,255,255,0.5);
+      font-size: 0.85rem;
+    }
     .ai-teacher-message .avatar {
       font-size: 2rem;
     }
@@ -3345,6 +3834,10 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   }
   set activeTab(value: EditorTab) {
     this._activeTab = value;
+    // Load engagers when engagers tab is activated
+    if (value === 'engagers' && this.lesson?.id) {
+      this.loadEngagers();
+    }
     // Save to localStorage
     this.saveSelectionToStorage();
     // Load preview data when switching to preview tab
@@ -3435,6 +3928,13 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   sourceContentItems: any[] = []; // Content sources used in this lesson
   aiMessage: string = '';
   
+  // Phase 6.5: Engagers
+  engagers: UserSearchResult[] = [];
+  engagersSearchQuery: string = '';
+  loadingEngagers: boolean = false;
+  showMessageModal = false;
+  selectedEngagerForMessage: UserSearchResult | null = null;
+  
   // Tab Configuration
   tabs = [
     { id: 'details' as EditorTab, label: 'Details', icon: '📋' },
@@ -3442,7 +3942,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     { id: 'script' as EditorTab, label: 'Script', icon: '📜' },
     { id: 'content' as EditorTab, label: 'Content', icon: '📚', badge: '' },
     { id: 'preview' as EditorTab, label: 'Preview', icon: '🔍' },
-    { id: 'ai-assistant' as EditorTab, label: 'AI Assistant', icon: '🤖' }
+    { id: 'ai-assistant' as EditorTab, label: 'AI Assistant', icon: '🤖' },
+    { id: 'engagers' as EditorTab, label: 'View Engagers', icon: '👥' }
   ];
   
   // TEACH Stage-SubStage Mapping
@@ -3488,6 +3989,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     private lessonService: LessonService,
     private contentSourceService: ContentSourceService,
     private processedContentService: ProcessedContentService,
+    private userManagementService: UserManagementService,
+    private authService: AuthService,
     private cdr: ChangeDetectorRef,
     private domSanitizer: DomSanitizer
   ) {}
@@ -3922,6 +4425,12 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
         this.processedContentItems.push(...newItems);
       }
     });
+  }
+
+  /** View processed content by ID - used when ID comes from configure modal (Media, URL, Video, Generic) */
+  viewProcessedContentById(contentId: string) {
+    if (!contentId) return;
+    this.viewProcessedContent({ id: contentId } as ProcessedContentItem);
   }
 
   viewProcessedContent(content: ProcessedContentItem) {
@@ -7688,5 +8197,276 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       console.log('[LessonEditor] ✅ Parsed stage:', stage.title, 'with', stage.subStages.length, 'substages');
       return stage;
     });
+  }
+
+  // Phase 6.5: Engagers methods
+  async loadEngagers() {
+    if (!this.lesson?.id) return;
+    
+    this.loadingEngagers = true;
+    try {
+      const currentUser = this.authService.currentUser();
+      console.log('[LessonEditor] Loading engagers for lesson:', this.lesson.id);
+      console.log('[LessonEditor] Current user:', JSON.stringify(currentUser, null, 2));
+      console.log('[LessonEditor] Current user ID:', currentUser?.userId);
+      console.log('[LessonEditor] Lesson createdBy:', (this.lesson as any).createdBy);
+      
+      const query = this.engagersSearchQuery.trim() || undefined;
+      const engagers = await firstValueFrom(
+        this.userManagementService.getLessonEngagers(this.lesson.id, query)
+      );
+      this.engagers = engagers;
+      console.log('[LessonEditor] ✅ Loaded engagers:', engagers.length);
+      engagers.forEach((engager) => {
+        const interactionCount = engager.engagement?.interactions?.length ?? 0;
+        console.log(`[LessonEditor]   - ${engager.name}: ${interactionCount} interactions, avg score: ${engager.engagement?.averageScore ?? 'N/A'}`);
+      });
+    } catch (error) {
+      console.error('[LessonEditor] Failed to load engagers:', error);
+      this.engagers = [];
+    } finally {
+      this.loadingEngagers = false;
+    }
+  }
+
+  onEngagersSearch() {
+    // Debounce search
+    setTimeout(() => {
+      this.loadEngagers();
+    }, 300);
+  }
+
+  selectedEngager: UserSearchResult | null = null;
+  showEngagerDetails = false;
+  refreshingEngagerDetails = false;
+
+  viewEngagerDetails(engager: UserSearchResult) {
+    this.selectedEngager = engager;
+    this.showEngagerDetails = true;
+    const interactionCount = engager?.engagement?.interactions?.length ?? 0;
+    console.log(`[LessonEditor] 👁️ Viewing engager details for ${engager.name}:`, {
+      interactionCount,
+      interactions: engager.engagement?.interactions?.map((i: any, idx: number) => ({
+        index: idx,
+        id: i.id,
+        interactionTypeId: i.interactionTypeId || i.interaction_type_id,
+        score: i.score,
+        completed: i.completed,
+        stageId: i.stageId || i.stage_id,
+        substageId: i.substageId || i.substage_id,
+        hasCustomData: !!i.customData,
+        hasEvents: !!(i.interactionEvents && Array.isArray(i.interactionEvents) && i.interactionEvents.length > 0),
+      })),
+      averageScore: engager.engagement?.averageScore,
+      engagement: engager?.engagement ? 'present' : 'missing',
+    });
+    // Log each interaction individually to catch any issues
+    if (engager.engagement?.interactions) {
+      engager.engagement.interactions.forEach((interaction: any, idx: number) => {
+        console.log(`[LessonEditor]   Interaction ${idx + 1}:`, {
+          id: interaction.id,
+          typeId: interaction.interactionTypeId || interaction.interaction_type_id,
+          score: interaction.score,
+          completed: interaction.completed,
+        });
+      });
+    }
+    // Hide header and lock scroll (same approach as other modals)
+    document.body.style.overflow = 'hidden';
+    const header = document.querySelector('app-header');
+    if (header) (header as HTMLElement).style.display = 'none';
+  }
+
+  async refreshEngagerDetails() {
+    if (!this.selectedEngager || !this.lesson?.id) return;
+    this.refreshingEngagerDetails = true;
+    try {
+      const query = this.engagersSearchQuery?.trim() || undefined;
+      const engagers = await firstValueFrom(
+        this.userManagementService.getLessonEngagers(this.lesson.id, query)
+      );
+      this.engagers = engagers;
+      const updated = engagers.find((e) => e.id === this.selectedEngager!.id);
+      if (updated) {
+        this.selectedEngager = updated;
+        const count = updated.engagement?.interactions?.length ?? 0;
+        console.log('[LessonEditor] Refreshed engager details:', updated.name, 'interactions:', count);
+      }
+    } catch (error) {
+      console.error('[LessonEditor] Failed to refresh engager details:', error);
+    } finally {
+      this.refreshingEngagerDetails = false;
+    }
+  }
+
+  closeEngagerDetails() {
+    this.showEngagerDetails = false;
+    this.selectedEngager = null;
+    // Restore header and scroll
+    document.body.style.overflow = '';
+    const header = document.querySelector('app-header');
+    if (header) (header as HTMLElement).style.display = '';
+  }
+
+  viewEngager(engager: UserSearchResult) {
+    const lessonId = this.lesson?.id;
+    if (lessonId) {
+      this.router.navigate(['/lesson-editor', lessonId, 'engagers', engager.id]);
+    } else {
+      this.router.navigate(['/super-admin/user-management', engager.id]);
+    }
+  }
+
+  openMessageModal(engager: UserSearchResult) {
+    this.selectedEngagerForMessage = engager;
+    this.showMessageModal = true;
+  }
+
+  closeMessageModal = () => {
+    this.showMessageModal = false;
+    this.selectedEngagerForMessage = null;
+  };
+
+  formatDate(date: string | Date): string {
+    if (!date) return 'N/A';
+    const d = typeof date === 'string' ? new Date(date) : date;
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  formatTimeTaken(seconds: number): string {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes}m ${secs}s`;
+  }
+
+  formatJson(obj: any): string {
+    return JSON.stringify(obj, null, 2);
+  }
+
+  /**
+   * Check if an object has any keys (safe for use in templates)
+   */
+  hasCustomData(obj: any): boolean {
+    if (!obj || typeof obj !== 'object') return false;
+    try {
+      return Object.keys(obj).length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Check if interaction events array exists and has items (safe for use in templates)
+   */
+  hasInteractionEvents(events: any): boolean {
+    if (!events) return false;
+    try {
+      return Array.isArray(events) && events.length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Get interaction events length safely (safe for use in templates)
+   */
+  getInteractionEventsLength(events: any): number {
+    if (!events) return 0;
+    try {
+      return Array.isArray(events) ? events.length : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Get interaction events as array safely (safe for use in templates)
+   */
+  getInteractionEventsArray(events: any): any[] {
+    if (!events) return [];
+    try {
+      return Array.isArray(events) ? events : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Get interaction type ID safely (handles both camelCase and snake_case)
+   */
+  getInteractionTypeId(interaction: any): string {
+    return interaction?.interactionTypeId || interaction?.interaction_type_id || 'Unknown';
+  }
+
+  /**
+   * Track by function for interaction items
+   */
+  trackByInteractionId(index: number, interaction: any): any {
+    return interaction?.id || interaction?.interactionTypeId || interaction?.interaction_type_id || index;
+  }
+
+  /**
+   * Track by function for event items
+   */
+  trackByEventIndex(index: number, event: any): any {
+    return index;
+  }
+
+  /**
+   * Resolve stage/substage IDs to human-readable names for Interaction History display.
+   * Prioritizes sub-stage names; shows stage number/name as context; adds type/number when multiple interactions per sub-stage.
+   * Handles both camelCase and snake_case from API.
+   */
+  getInteractionLocationDisplay(interaction: { stageId?: string; substageId?: string; stage_id?: string; substage_id?: string; interactionTypeId?: string; interaction_type_id?: string }): string {
+    try {
+      const stageId = interaction.stageId ?? interaction.stage_id ?? '';
+      const substageId = interaction.substageId ?? interaction.substage_id ?? '';
+      type InteractionItem = { stageId?: string; substageId?: string; stage_id?: string; substage_id?: string; interactionTypeId?: string; interaction_type_id?: string };
+      const interactions: InteractionItem[] = this.selectedEngager?.engagement?.interactions || [];
+      const sameSubstage = interactions.filter(
+        (i: InteractionItem) => String(i.stageId ?? i.stage_id ?? '') === String(stageId) && String(i.substageId ?? i.substage_id ?? '') === String(substageId)
+      );
+      const stage = this.stages?.find((s) => String(s.id) === String(stageId));
+      const subStages = stage?.subStages ?? (stage as any)?.substages ?? [];
+      const substage = Array.isArray(subStages) ? subStages.find((ss: any) => String(ss.id) === String(substageId)) : undefined;
+      const stageNum = this.stages?.length ? (this.stages.findIndex((s) => String(s.id) === String(stageId)) + 1) : null;
+      const subStagesArr = stage?.subStages ?? (stage as any)?.substages ?? [];
+      const substageNum = Array.isArray(subStagesArr) && subStagesArr.length ? (subStagesArr.findIndex((ss: any) => String(ss.id) === String(substageId)) + 1) : null;
+      const stageTitle = stage?.title?.trim() || (stageNum != null ? `Stage ${stageNum}` : `Stage ${stageId || '?'}`);
+      const substageTitle = (substage as any)?.title?.trim() || (substageNum != null ? `Sub-stage ${substageNum}` : `Sub-stage ${substageId || '?'}`);
+
+      // Primary: sub-stage name (most intuitive for users)
+      let label = substageTitle;
+      // Add stage context when it helps (e.g. multiple stages)
+      if (this.stages && this.stages.length > 1) {
+        label = `${substageTitle} (${stageTitle})`;
+      }
+      const typeId = interaction.interactionTypeId ?? interaction.interaction_type_id ?? '';
+      if (sameSubstage.length > 1) {
+        const idx = sameSubstage.findIndex(
+          (i: InteractionItem) =>
+            String(i.stageId ?? i.stage_id ?? '') === String(stageId) &&
+            String(i.substageId ?? i.substage_id ?? '') === String(substageId) &&
+            String(i.interactionTypeId ?? i.interaction_type_id ?? '') === String(typeId)
+        );
+        const pos = idx >= 0 ? idx + 1 : 1;
+        const typeName = this.formatInteractionTypeName(typeId);
+        label += typeName && typeName !== 'Interaction' ? ` – ${typeName} (${pos} of ${sameSubstage.length})` : ` (${pos} of ${sameSubstage.length})`;
+      }
+      return label;
+    } catch (err) {
+      console.warn('[LessonEditor] getInteractionLocationDisplay error:', err, interaction);
+      const typeId = interaction.interactionTypeId ?? interaction.interaction_type_id ?? 'Interaction';
+      return `${this.formatInteractionTypeName(typeId)} (${interaction.stageId ?? interaction.stage_id ?? '?'} / ${interaction.substageId ?? interaction.substage_id ?? '?'})`;
+    }
+  }
+
+  /**
+   * Format interaction type ID to a readable name (e.g. true-false-selection -> True/False)
+   */
+  formatInteractionTypeName(typeId: string): string {
+    if (!typeId) return 'Interaction';
+    const parts = typeId.split(/[-_]/).map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase());
+    return parts.join(' ') || typeId;
   }
 }

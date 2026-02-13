@@ -1,0 +1,68 @@
+{
+  "name": "Upora – Test Notion MD (Markdown ↔ Notion)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "upora-test-notionmd",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "upora-test-notionmd"
+    },
+    {
+      "parameters": {
+        "operation": "markdownToNotion",
+        "markdown": "={{ $json.markdown || '# Hello World\\n\\nThis is a **test** from Upora.\\n\\n- Item 1\\n- Item 2' }}"
+      },
+      "id": "notionmd-node",
+      "name": "Notion MD",
+      "type": "n8n-nodes-notionmd.notionMd",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, input: $('Webhook').item.json, notionBlocks: $json }) }}"
+      },
+      "id": "respond-node",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Notion MD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notion MD": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

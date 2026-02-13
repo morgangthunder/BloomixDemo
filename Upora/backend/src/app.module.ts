@@ -28,6 +28,7 @@ import { LessonDraft } from './lesson-drafts/entities/lesson-draft.entity';
 import { GeneratedImage } from './entities/generated-image.entity';
 import { UserPersonalization } from './entities/user-personalization.entity';
 import { PersonalizationOption } from './entities/personalization-option.entity';
+import { LessonEngagementTranscription } from './entities/lesson-engagement-transcription.entity';
 import { UsersModule } from './modules/users/users.module';
 import { LessonsModule } from './modules/lessons/lessons.module';
 import { ChatModule } from './modules/chat/chat.module';
@@ -48,6 +49,10 @@ import { TestsModule } from './modules/tests/tests.module';
 import { ImageGeneratorModule } from './modules/image-generator/image-generator.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserPersonalizationModule } from './modules/user-personalization/user-personalization.module';
+import { ProfileModule } from './modules/profile/profile.module';
+import { MessagesModule } from './modules/messages/messages.module';
+import { Notification } from './entities/notification.entity';
+import { MessageDeliverySettings } from './entities/message-delivery-settings.entity';
 
 @Module({
   imports: [
@@ -65,7 +70,7 @@ import { UserPersonalizationModule } from './modules/user-personalization/user-p
         username: configService.get('database.username'),
         password: configService.get('database.password'),
         database: configService.get('database.database'),
-        entities: [User, Lesson, InteractionType, Workflow, Usage, ContentSource, LessonDataLink, ProcessedContentOutput, ScriptBlock, Course, LlmGenerationLog, StudentTopicScore, StudentMistake, LlmProvider, AiPrompt, InteractionResult, InteractionAverage, InteractionInstanceData, UserInteractionProgress, UserPublicProfile, LessonDraft, GeneratedImage, UserPersonalization, PersonalizationOption],
+        entities: [User, Lesson, InteractionType, Workflow, Usage, ContentSource, LessonDataLink, ProcessedContentOutput, ScriptBlock, Course, LlmGenerationLog, StudentTopicScore, StudentMistake, LlmProvider, AiPrompt, InteractionResult, InteractionAverage, InteractionInstanceData, UserInteractionProgress, UserPublicProfile, LessonDraft, GeneratedImage, UserPersonalization, PersonalizationOption, LessonEngagementTranscription, Notification, MessageDeliverySettings],
         synchronize: configService.get('database.synchronize'),
         logging: configService.get('database.logging'),
       }),
@@ -90,6 +95,8 @@ import { UserPersonalizationModule } from './modules/user-personalization/user-p
     TestsModule,
     ImageGeneratorModule,
     UserPersonalizationModule,
+    ProfileModule,
+    MessagesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

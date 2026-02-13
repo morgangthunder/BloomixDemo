@@ -12,6 +12,8 @@ import { ScreenshotStorageService } from '../../core/services/screenshot-storage
 import { InteractionAISDK } from '../../core/services/interaction-ai-sdk.service';
 import { InteractionAIBridgeService } from '../../core/services/interaction-ai-bridge.service';
 import { SnackMessageService } from '../../core/services/snack-message.service';
+import { AuthService } from '../../core/services/auth.service';
+import { ApiService } from '../../core/services/api.service';
 import { Subject, firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { Lesson, Stage, SubStage } from '../../core/models/lesson.model';
@@ -1167,16 +1169,23 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   
   private destroy$ = new Subject<void>();
   private processedOutputsCache = new Map<string, any[]>();
+
+  /** Phase 6: lesson engagement transcript capture (stored in MinIO via API) */
+  engagementSessionId = '';
+  engagementTranscript: Array<{ timestamp: string; speaker: 'user' | 'assistant' | 'system'; type: string; content: string; metadata?: Record<string, unknown> }> = [];
+  private transcriptFlushIntervalId: ReturnType<typeof setInterval> | null = null;
   
   @ViewChild('teacherWidget') teacherWidget?: FloatingTeacherWidgetComponent;
   @ViewChild('interactionIframe', { static: false }) interactionIframe?: any;
 
   constructor(
     private lessonService: LessonService,
+    private authService: AuthService,
     public router: Router,
     private route: ActivatedRoute,
     private wsService: WebSocketService,
     private http: HttpClient,
+    private api: ApiService,
     private screenshotStorage: ScreenshotStorageService,
     private interactionAISDK: InteractionAISDK,
     private bridgeService: InteractionAIBridgeService,
@@ -1219,7 +1228,17 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     
     // Listen for interaction completion requests (from iframe interactions)
     window.addEventListener('interaction-request-progress', (() => {
-      console.log('[LessonView] 📨 Received interaction-request-progress event, calling onNextButtonClick');
+      console.log('[LessonView] 📨 Received interaction-request-progress event');
+      // If we have a score (e.g. from component-based interactions), track it.
+      // If interactionScore is null, the iframe interaction (true-false, sdk-test-html, etc.)
+      // has likely already called saveUserProgress with the correct score. Do NOT call
+      // trackInteractionProgress(0) - that would overwrite the correct score with 0.
+      if (this.interactionScore !== null) {
+        console.log('[LessonView] Tracking interaction progress with score:', this.interactionScore);
+        this.trackInteractionProgress(this.interactionScore);
+      } else {
+        console.log('[LessonView] No interactionScore set - iframe already saved via saveUserProgress, skipping trackInteractionProgress');
+      }
       this.onNextButtonClick();
     }) as EventListener);
     
@@ -1345,6 +1364,15 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     this.wsService.messages$.pipe(takeUntil(this.destroy$)).subscribe(messages => {
       const previousMessageCount = this.chatMessages.length;
       this.chatMessages = messages;
+      for (let i = previousMessageCount; i < messages.length; i++) {
+        const m = messages[i];
+        this.pushToEngagementTranscript({
+          type: 'chat',
+          speaker: (m.role === 'user' ? 'user' : m.role === 'assistant' ? 'assistant' : 'system') as 'user' | 'assistant' | 'system',
+          content: m.content || '',
+          timestamp: (m.timestamp && (m.timestamp as Date).toISOString) ? (m.timestamp as Date).toISOString() : new Date().toISOString(),
+        });
+      }
       console.log('[LessonView] Chat messages updated:', messages.length);
       
       // Track unread messages (messages received while widget is minimized/closed)
@@ -1386,6 +1414,16 @@ export class LessonViewComponent implements OnInit, OnDestroy {
 
     this.wsService.typing$.pipe(takeUntil(this.destroy$)).subscribe(typing => {
       this.isAITyping = typing;
+    });
+
+    this.interactionAISDK.transcriptEvent$.pipe(takeUntil(this.destroy$)).subscribe(ev => {
+      this.pushToEngagementTranscript({
+        type: ev.type,
+        speaker: 'system',
+        content: ev.content,
+        timestamp: new Date().toISOString(),
+        metadata: ev.metadata,
+      });
     });
 
     // Subscribe to screenshot requests
@@ -1490,6 +1528,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    */
   onInteractionIframeLoad() {
     console.log('[LessonView] Interaction iframe loaded');
+    
+    // Track interaction start (opening)
+    this.trackInteractionStart();
     
     // Ensure teacher widget reference is set before sending SDK ready
     if (this.teacherWidget) {
@@ -1708,6 +1749,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    */
   private setLessonData(lesson: Lesson) {
     this.lesson = lesson;
+    this.engagementSessionId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : this.fallbackUuid();
+    this.engagementTranscript = [];
+    this.transcriptFlushIntervalId = setInterval(() => this.flushEngagementTranscript(), 60_000);
     // Try data.stages first (from API), fallback to stages (for compatibility)
     const rawStages = (lesson.data as any)?.structure?.stages || lesson.data?.stages || lesson.stages || [];
     
@@ -1717,9 +1761,19 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       subStages: stage.subStages || stage.substages || []
     }));
     
+    this.pushToEngagementTranscript({
+      type: 'lesson_loaded',
+      speaker: 'system',
+      content: `Lesson loaded: ${(lesson.title || lesson.id || 'Untitled').toString().substring(0, 80)}`,
+      timestamp: new Date().toISOString(),
+      metadata: { lessonId: lesson.id },
+    });
     console.log('[LessonView] Lesson set - ID:', lesson.id, 'Stages:', this.lessonStages.length);
     console.log('[LessonView] First stage:', JSON.stringify(this.lessonStages[0], null, 2).substring(0, 800));
     console.log('[LessonView] First substage full:', JSON.stringify(this.lessonStages[0]?.subStages?.[0], null, 2));
+    
+    // Track lesson view (Phase 6.5)
+    this.trackLessonView(lesson.id.toString());
     
     // Try to restore saved state from localStorage
     const savedState = this.getSavedLessonState(lesson.id.toString());
@@ -1858,6 +1912,11 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       clearTimeout(this.autoAdvanceTimeout);
     }
     
+    if (this.transcriptFlushIntervalId) {
+      clearInterval(this.transcriptFlushIntervalId);
+      this.transcriptFlushIntervalId = null;
+    }
+    this.flushEngagementTranscript();
     // Disconnect from WebSocket
     this.wsService.leaveLesson();
     this.wsService.disconnect();
@@ -2039,7 +2098,15 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     const stage = this.lessonStages.find(s => s.id === this.activeStageId);
     this.currentStage = stage || null;
     this.activeSubStage = stage?.subStages.find(ss => ss.id === this.activeSubStageId) || null;
-    
+    if (this.currentStage || this.activeSubStage) {
+      this.pushToEngagementTranscript({
+        type: 'stage_change',
+        speaker: 'system',
+        content: `Stage: ${(this.currentStage as any)?.title || this.activeStageId} → Substage: ${(this.activeSubStage as any)?.title || this.activeSubStageId}`,
+        timestamp: new Date().toISOString(),
+        metadata: { stageId: this.activeStageId, substageId: this.activeSubStageId },
+      });
+    }
     // Update normalized embedded interaction data
     const embeddedInteraction = this.getEmbeddedInteraction();
     if (embeddedInteraction?.config) {
@@ -2071,10 +2138,11 @@ export class LessonViewComponent implements OnInit, OnDestroy {
           processedContentId || undefined
         );
         
-        // Set context for data storage SDK methods
+        // Set context for data storage SDK methods (use actual user when logged in)
         if (this.currentStage && this.activeSubStage) {
-          const userId = environment.defaultUserId;
-          const tenantId = environment.tenantId;
+          const currentUser = this.authService.currentUser();
+          const userId = currentUser?.userId || environment.defaultUserId;
+          const tenantId = currentUser?.tenantId || environment.tenantId;
           const userRole = 'student'; // Default role, could be enhanced later
           this.interactionAISDK.setContext(
             this.lesson.id,
@@ -2362,15 +2430,55 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     
     // If it's already in the correct format with required fields, return as-is
     if (rawData.fragments && Array.isArray(rawData.fragments) && rawData.fragments.length > 0 && rawData.targetStatement) {
+      // Verify all fragments have isTrueInContext
+      const fragmentsWithIsTrue = rawData.fragments.filter((f: any) => typeof f.isTrueInContext !== 'undefined');
+      if (fragmentsWithIsTrue.length !== rawData.fragments.length) {
+        console.warn('[LessonView] ⚠️ Some fragments missing isTrueInContext, attempting to fix...');
+        rawData.fragments = rawData.fragments.map((f: any) => {
+          if (typeof f.isTrueInContext === 'undefined') {
+            // Try to infer from other fields
+            if (typeof f.isTrue !== 'undefined') {
+              return { ...f, isTrueInContext: f.isTrue };
+            }
+            // Default to false if we can't determine
+            console.warn('[LessonView] ⚠️ Fragment missing isTrueInContext, defaulting to false:', f.text?.substring(0, 50));
+            return { ...f, isTrueInContext: false };
+          }
+          return f;
+        });
+      }
       return rawData;
     }
     
     // Try to extract from nested structures
-    const fragments = rawData.fragments || rawData.data?.fragments || rawData.config?.fragments || rawData.sampleData?.fragments || [];
-    const targetStatement = rawData.targetStatement || rawData.data?.targetStatement || rawData.config?.targetStatement || rawData.sampleData?.targetStatement || '';
+    let fragments = rawData.fragments || rawData.data?.fragments || rawData.config?.fragments || rawData.sampleData?.fragments || [];
+    
+    // Handle legacy "statements" format (e.g. from processed_content_outputs with output_data.statements)
+    if ((!fragments || fragments.length === 0) && rawData.statements && Array.isArray(rawData.statements)) {
+      fragments = rawData.statements.map((stmt: any) => ({
+        text: stmt.text || '',
+        isTrueInContext: stmt.isTrue === true || stmt.isTrueInContext === true,
+        explanation: stmt.explanation || ''
+      }));
+    }
+    
+    const targetStatement = rawData.targetStatement || rawData.data?.targetStatement || rawData.config?.targetStatement || rawData.sampleData?.targetStatement || rawData.outputName || '';
+    
+    // Ensure fragments is an array
+    if (!Array.isArray(fragments)) {
+      fragments = [];
+    }
+    
+    // Normalize fragments to ensure they have isTrueInContext as explicit boolean
+    // Critical for true-false scoring: DB JS uses fragment.isTrueInContext === true
+    fragments = fragments.map((f: any) => {
+      const val = f.isTrueInContext !== undefined ? !!f.isTrueInContext
+        : (f.isTrue !== undefined ? !!f.isTrue : (typeof f.true === 'boolean' ? f.true : false));
+      return { ...f, isTrueInContext: val };
+    });
     
     const normalized: any = {
-      fragments: Array.isArray(fragments) ? fragments : [],
+      fragments: fragments,
       targetStatement: targetStatement || 'Loading...',
       maxFragments: rawData.maxFragments || rawData.data?.maxFragments || rawData.config?.maxFragments || 10,
       showHints: rawData.showHints !== undefined ? rawData.showHints : (rawData.data?.showHints !== undefined ? rawData.data.showHints : (rawData.config?.showHints !== undefined ? rawData.config.showHints : false))
@@ -2380,16 +2488,6 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     if (rawData.interactionTypeId) {
       normalized.interactionTypeId = rawData.interactionTypeId;
     }
-    
-    // Removed verbose logging - only log if explicitly needed for debugging
-    // if (environment.logLevel === 'debug') {
-    //   console.log('[LessonView] Normalized interaction data:', {
-    //     fragmentsCount: normalized.fragments.length,
-    //     targetStatement: normalized.targetStatement,
-    //     maxFragments: normalized.maxFragments,
-    //     showHints: normalized.showHints
-    //   });
-    // }
     
     return normalized;
   }
@@ -2447,7 +2545,13 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       
       // Set loading state
       this.isLoadingInteraction = true;
-      
+      this.pushToEngagementTranscript({
+        type: 'interaction_loading',
+        speaker: 'system',
+        content: `Loading interaction: ${interactionTypeId}`,
+        timestamp: new Date().toISOString(),
+        metadata: { interactionTypeId, substageTitle: (subStage as any)?.title },
+      });
       // First, fetch the interaction build to check its category
       // Use a more aggressive cache buster to ensure we get the latest code
       const cacheBuster = `?t=${Date.now()}&v=${Math.random()}`;
@@ -2455,6 +2559,13 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: (build: any) => {
+            this.pushToEngagementTranscript({
+              type: 'interaction_loaded',
+              speaker: 'system',
+              content: `Interaction loaded: ${build.id} (${build.interactionTypeCategory || 'unknown'})`,
+              timestamp: new Date().toISOString(),
+              metadata: { interactionTypeId: build.id, category: build.interactionTypeCategory },
+            });
             console.log('[LessonView] ✅ Loaded interaction build:', build.id, 'Category:', build.interactionTypeCategory);
             // Check if this is an uploaded-media or video-url interaction
             if (build.interactionTypeCategory === 'uploaded-media') {
@@ -2474,6 +2585,13 @@ export class LessonViewComponent implements OnInit, OnDestroy {
             this.loadPixiJSHTMLIframeInteraction(build, subStage);
           },
           error: (error) => {
+            this.pushToEngagementTranscript({
+              type: 'interaction_load_error',
+              speaker: 'system',
+              content: `Interaction load failed: ${(error?.message || String(error)).substring(0, 100)}`,
+              timestamp: new Date().toISOString(),
+              metadata: { interactionTypeId },
+            });
             console.error('[LessonView] ❌ Failed to load interaction build:', error);
             this.isLoadingInteraction = false;
           }
@@ -2541,11 +2659,18 @@ export class LessonViewComponent implements OnInit, OnDestroy {
             
             // Fallback: Check for statements array (legacy format)
             if (!rawData && output.outputData && output.outputType === 'true-false-selection') {
-              const fragments = (output.outputData.statements || []).map((stmt: any) => ({
-                text: stmt.text,
-                isTrueInContext: stmt.isTrue,
-                explanation: stmt.explanation || ''
-              }));
+              const fragments = (output.outputData.statements || []).map((stmt: any) => {
+                // Ensure isTrueInContext is set correctly
+                const isTrueInContext = typeof stmt.isTrueInContext !== 'undefined' 
+                  ? stmt.isTrueInContext 
+                  : (typeof stmt.isTrue !== 'undefined' ? stmt.isTrue : false);
+                
+                return {
+                  text: stmt.text,
+                  isTrueInContext: isTrueInContext,
+                  explanation: stmt.explanation || ''
+                };
+              });
               rawData = {
                 fragments,
                 targetStatement: output.outputName || 'True or False?',
@@ -2553,6 +2678,12 @@ export class LessonViewComponent implements OnInit, OnDestroy {
                 _sourceFormat: 'legacy-statements' // Flag to identify format
               };
               console.warn('[LessonView] ⚠️ Using FALLBACK: legacy statements format');
+              
+              // Verify fragments have isTrueInContext
+              const fragmentsWithIsTrue = fragments.filter((f: any) => f.isTrueInContext === true);
+              if (fragmentsWithIsTrue.length === 0 && fragments.length > 0) {
+                console.error('[LessonView] ❌ ERROR: No fragments have isTrueInContext=true after mapping from legacy format!');
+              }
             }
             
             // Fallback: Try to extract from nested structures
@@ -2575,18 +2706,48 @@ export class LessonViewComponent implements OnInit, OnDestroy {
               console.log('[LessonView] ✅ Interaction data loaded successfully');
               console.log('[LessonView] 📊 Data source format:', formatUsed);
               console.log('[LessonView] ' + (isNewFormat ? '✅' : '⚠️') + ' Using ' + (isNewFormat ? 'NEW' : 'FALLBACK') + ' format');
+              
+              // Verify fragments have isTrueInContext
+              const fragments = this.normalizedInteractionData?.fragments || [];
+              const fragmentsWithIsTrue = fragments.filter((f: any) => f.isTrueInContext === true);
+              const fragmentsWithIsFalse = fragments.filter((f: any) => f.isTrueInContext === false);
+              const fragmentsWithoutIsTrue = fragments.filter((f: any) => typeof f.isTrueInContext === 'undefined');
+              
               console.log('[LessonView] Normalized interaction data:', {
-                fragmentsCount: this.normalizedInteractionData?.fragments?.length || 0,
+                fragmentsCount: fragments.length,
+                fragmentsWithIsTrueInContext: fragmentsWithIsTrue.length,
+                fragmentsWithIsFalseInContext: fragmentsWithIsFalse.length,
+                fragmentsWithoutIsTrueInContext: fragmentsWithoutIsTrue.length,
                 targetStatement: this.normalizedInteractionData?.targetStatement,
                 hasFragments: !!this.normalizedInteractionData?.fragments,
                 sourceFormat: formatUsed,
-                contentOutputId: contentOutputId
+                contentOutputId: contentOutputId,
+                fragmentDetails: fragments.map((f: any, i: number) => ({
+                  index: i,
+                  text: f.text?.substring(0, 50),
+                  hasIsTrueInContext: typeof f.isTrueInContext !== 'undefined',
+                  isTrueInContext: f.isTrueInContext
+                }))
               });
+              
+              // Warn if fragments are missing isTrueInContext
+              if (fragmentsWithoutIsTrue.length > 0) {
+                console.warn('[LessonView] ⚠️ Some fragments are missing isTrueInContext:', fragmentsWithoutIsTrue.map((f: any, i: number) => ({
+                  index: fragments.indexOf(f),
+                  text: f.text?.substring(0, 50)
+                })));
+              }
+              
+              if (fragments.length > 0 && fragmentsWithIsTrue.length === 0) {
+                console.error('[LessonView] ❌ ERROR: No fragments have isTrueInContext=true! This will cause "0 out of 0 correct" error.');
+              }
             } else {
               console.warn('[LessonView] ❌ No interaction data found in output:', output);
             }
             
             this.isLoadingInteraction = false;
+            // Track interaction start when data is loaded
+            this.trackInteractionStart();
           },
           error: (error) => {
             // Only log 404 errors as warnings, not errors (they're expected for invalid IDs)
@@ -2596,6 +2757,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
               console.error('[LessonView] Error loading interaction data:', error);
             }
             this.isLoadingInteraction = false;
+            // Track interaction start even if data load failed (interaction was opened)
+            this.trackInteractionStart();
           }
         });
     };
@@ -2755,8 +2918,22 @@ export class LessonViewComponent implements OnInit, OnDestroy {
               if (matchingInteraction && matchingInteraction.inputData) {
                 normalizedData = matchingInteraction.inputData;
                 console.log('[LessonView] ✅ Normalized data from rankedInteractions for True/False interaction');
+              } else {
+                console.warn('[LessonView] ⚠️ True/False: No matching rankedInteraction found. IDs:', processedData.rankedInteractions?.map((i: any) => i.id));
               }
             }
+            
+            // Ensure fragments have isTrueInContext (map from isTrue, etc.)
+            normalizedData = this.normalizeInteractionData(normalizedData) || normalizedData;
+            
+            // DEBUG: Log fragment data for true-false scoring
+            const frags = normalizedData?.fragments || [];
+            const withTrue = frags.filter((f: any) => f.isTrueInContext === true || f.isTrue === true);
+            console.log('[LessonView] 📊 TRUE-FALSE DATA CHECK:', {
+              fragmentsCount: frags.length,
+              withIsTrueInContext: withTrue.length,
+              firstThree: frags.slice(0, 3).map((f: any) => ({ text: (f.text || '').substring(0, 40), isTrueInContext: f.isTrueInContext, isTrue: f.isTrue }))
+            });
             
             // Use processed content (replace sample data)
             this.interactionBuild = { ...build, sampleData: normalizedData };
@@ -3183,6 +3360,11 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       }));
       
       this.updateActiveSubStage();
+      
+      // Track interaction progress (Phase 6.5)
+      if (this.lesson?.id && this.activeStageId && this.activeSubStageId) {
+        this.trackInteractionProgress(result.score);
+      }
     }
     
     console.log('[LessonView] Score:', result.score, '% - Selected:', result.selectedFragments);
@@ -3306,6 +3488,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   onMediaLoaded(event: { duration: number; width?: number; height?: number }) {
     console.log('[LessonView] 🎬 Media loaded:', event);
     
+    // Track interaction start when media is loaded
+    this.trackInteractionStart();
+    
     // Defer property updates to avoid ExpressionChangedAfterItHasBeenCheckedError
     // Use queueMicrotask to ensure this runs after the current change detection cycle
     queueMicrotask(() => {
@@ -3359,6 +3544,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    */
   onVideoUrlLoaded(event: { duration: number; provider: string; videoId: string }) {
     console.log('[LessonView] 🎬 Video URL loaded:', event);
+    
+    // Track interaction start when video URL is loaded
+    this.trackInteractionStart();
     
     // Set video URL ready flag
     queueMicrotask(() => {
@@ -3718,6 +3906,12 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   }
 
   onTeacherSkip() {
+    this.pushToEngagementTranscript({
+      type: 'script_skipped',
+      speaker: 'system',
+      content: 'Teacher script skipped',
+      timestamp: new Date().toISOString(),
+    });
     console.log('[LessonView] Teacher script skipped');
     // Defer to avoid change detection error
     setTimeout(() => {
@@ -3890,7 +4084,14 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // If sending a screenshot, use empty message (screenshot is sent silently)
     // The backend will use the last user message from conversation history
     const messageToSend = isScreenshotRequest ? '' : message;
-    
+    if (messageToSend) {
+      this.pushToEngagementTranscript({
+        type: 'chat',
+        speaker: 'user',
+        content: messageToSend,
+        timestamp: new Date().toISOString(),
+      });
+    }
     this.wsService.sendMessage(messageToSend, conversationHistory, lessonData, screenshot, isScreenshotRequest, currentStageInfo, this.isTimeoutFallback);
     
     // Reset screenshot request state
@@ -4112,6 +4313,12 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    * Handle message added from widget (when SDK calls postToChat)
    */
   onWidgetMessageAdded(message: WidgetChatMessage) {
+    this.pushToEngagementTranscript({
+      type: 'chat',
+      speaker: (message.role === 'user' ? 'user' : message.role === 'assistant' ? 'assistant' : 'system') as 'user' | 'assistant' | 'system',
+      content: message.content || '',
+      timestamp: (message.timestamp && (message.timestamp as Date).toISOString) ? (message.timestamp as Date).toISOString() : new Date().toISOString(),
+    });
     // Convert widget's ChatMessage (optional timestamp) to websocket's ChatMessage (required timestamp)
     const chatMessage: ChatMessage = {
       role: message.role,
@@ -4141,6 +4348,29 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     this.unreadMessageCount = 0;
     this.lastReadMessageCount = this.chatMessages.length;
     console.log('[LessonView] ✅ Widget opened - unread count reset');
+  }
+
+  /** Push one entry to engagement transcript (captured and sent to backend / MinIO) */
+  private pushToEngagementTranscript(entry: { timestamp: string; speaker: 'user' | 'assistant' | 'system'; type: string; content: string; metadata?: Record<string, unknown> }) {
+    this.engagementTranscript = [...this.engagementTranscript, entry];
+  }
+
+  /** Send current engagement transcript to backend (stored in MinIO) */
+  private flushEngagementTranscript() {
+    if (!this.engagementSessionId || !this.lesson?.id || this.engagementTranscript.length === 0) return;
+    const payload = { lessonId: this.lesson.id, transcript: this.engagementTranscript };
+    this.api.post<{ saved: boolean; id?: string }>(`/interaction-data/session/${this.engagementSessionId}/transcript`, payload).subscribe({
+      next: (res) => console.log('[LessonView] Transcript flushed to MinIO:', res.saved ? 'ok' : 'failed'),
+      error: (err) => console.warn('[LessonView] Transcript flush failed:', err?.message || err),
+    });
+  }
+
+  private fallbackUuid(): string {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
   }
 
   /**
@@ -4386,13 +4616,36 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       widgetConfigs: widgetConfigs
     };
     
-    const sampleData = this.interactionBuild.sampleData || {};
+    let sampleData = this.interactionBuild.sampleData || {};
+    
+    // If sampleData has no fragments but config has fragments (e.g. user edited in Configure modal),
+    // merge normalized config.fragments so we don't get "1 out of 0 correct" from misconfigured data
+    const sampleDataHasNoFragments = !sampleData.fragments || !Array.isArray(sampleData.fragments) || sampleData.fragments.length === 0;
+    const configHasFragments = config?.fragments && Array.isArray(config.fragments) && config.fragments.length > 0;
+    if (sampleDataHasNoFragments && configHasFragments) {
+      const normalizedFromConfig = this.normalizeInteractionData({ fragments: config.fragments, targetStatement: config.targetStatement || sampleData.targetStatement || '' });
+      if (normalizedFromConfig?.fragments?.length) {
+        sampleData = { ...sampleData, fragments: normalizedFromConfig.fragments, targetStatement: normalizedFromConfig.targetStatement || sampleData.targetStatement };
+        console.log('[LessonView] Merged config.fragments into sampleData for interaction:', this.interactionBuild?.id);
+      }
+    }
     
     // Log overlayMode before creating HTML (for debugging)
     if (this.interactionBuild.interactionTypeCategory === 'iframe') {
       console.log('[LessonView] 🎛️ createInteractionBlobUrl - overlayMode:', this.interactionBuild.iframeConfig?.overlayMode, 'Full iframeConfig:', JSON.stringify(this.interactionBuild.iframeConfig, null, 2));
     }
 
+    // DEBUG: Log sampleData being passed to iframe (for true-false scoring)
+    if (this.interactionBuild?.id === 'true-false-selection') {
+      const sdFrags = sampleData?.fragments || [];
+      const sdWithTrue = sdFrags.filter((f: any) => f.isTrueInContext === true || f.isTrue === true);
+      console.log('[LessonView] 📊 createInteractionBlobUrl - sampleData for iframe:', {
+        fragmentsCount: sdFrags.length,
+        withIsTrueInContext: sdWithTrue.length,
+        sample: sdFrags.slice(0, 2).map((f: any) => ({ isTrueInContext: f?.isTrueInContext, isTrue: f?.isTrue }))
+      });
+    }
+    
     // Create HTML document
     const htmlDoc = this.createInteractionHtmlDoc(this.interactionBuild, config, sampleData);
     
@@ -6438,7 +6691,41 @@ ${escapedCss}
     // Normalize line endings first (handle \r\n and \r)
     const normalizedHtml = (build.htmlCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
     const normalizedCss = (build.cssCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
-    const normalizedJs = (build.jsCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
+    let normalizedJs = (build.jsCode || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\?{2,}/g, '').replace(/\uFFFD/g, '');
+    
+    // Patch true-false scoring at runtime - ensures totalTrue works regardless of DB state
+    if (build.id === 'true-false-selection') {
+      // 1. Permissive totalTrue/correctCount checks
+      normalizedJs = normalizedJs.replace(
+        /if\s*\(\s*fragment\.isTrueInContext\s*\)\s*totalTrue\+\+/g,
+        'if (!!fragment.isTrueInContext || !!fragment.isTrue) totalTrue++'
+      );
+      normalizedJs = normalizedJs.replace(
+        /if\s*\(\s*fragment\.isTrueInContext\s*\)\s*\{\s*totalTrue\+\+\s*;\s*\}/g,
+        'if (!!fragment.isTrueInContext || !!fragment.isTrue) { totalTrue++; }'
+      );
+      normalizedJs = normalizedJs.replace(
+        /if\s*\(\s*selectedFragments\.has\s*\(\s*index\s*\)\s*&&\s*fragment\.isTrueInContext\s*\)/g,
+        'if (selectedFragments.has(index) && (!!fragment.isTrueInContext || !!fragment.isTrue))'
+      );
+      // 2. Fallback: when totalTrue is 0, recompute from window.interactionData.fragments
+      const fallback = 'if(totalTrue===0){var _d=window.interactionData||{};if(_d.fragments){totalTrue=_d.fragments.filter(function(f){return !!f.isTrueInContext||!!f.isTrue;}).length;}}';
+      // Match various score calculation formats
+      if (!normalizedJs.includes('totalTrue===0&&data&&data.fragments')) {
+        normalizedJs = normalizedJs.replace(
+          /(\s*)(score\s*=\s*\(correctCount\s*\/\s*totalTrue\)\s*\*\s*100\s*;)/,
+          '$1' + fallback + '\n$1$2'
+        );
+        normalizedJs = normalizedJs.replace(
+          /(\s*)(score\s*=\s*totalTrue\s*>\s*0\s*\?\s*Math\.round\s*\(\s*\(correctCount\s*\/\s*totalTrue\)\s*\*\s*100\s*\)\s*:\s*0\s*;)/,
+          '$1' + fallback + '\n$1$2'
+        );
+        normalizedJs = normalizedJs.replace(
+          /(\s*)(score\s*=\s*\(correctCount\s*\/\s*totalTrue\)\s*\*\s*100)/,
+          '$1' + fallback + '\n$1$2'
+        );
+      }
+    }
     
     // For HTML and CSS, escape for template literal injection
     const escapedHtml = normalizedHtml ? normalizedHtml.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${').replace(/<\/script>/gi, '<\\/script>') : '';
@@ -6521,8 +6808,44 @@ ${escapedHtml}
         var configStr = ${JSON.stringify(configJson)};
         window.interactionData = JSON.parse(dataStr);
         window.interactionConfig = JSON.parse(configStr);
+        // Critical: ensure each fragment has explicit boolean isTrueInContext for true-false scoring
+        if (window.interactionData && window.interactionData.fragments && Array.isArray(window.interactionData.fragments)) {
+          window.interactionData.fragments = window.interactionData.fragments.map(function(f) {
+            var val = f.isTrueInContext !== undefined ? !!f.isTrueInContext
+              : (f.isTrue !== undefined ? !!f.isTrue : (typeof f.true === 'boolean' ? f.true : false));
+            return Object.assign({}, f, { isTrueInContext: val });
+          });
+        }
         console.log("[Interaction] Data injected:", window.interactionData);
         console.log("[Interaction] Config injected:", window.interactionConfig);
+        
+        // Verify fragments have isTrueInContext (DEBUG for true-false scoring)
+        if (window.interactionData && window.interactionData.fragments) {
+          const fragments = window.interactionData.fragments;
+          const fragmentsWithIsTrue = fragments.filter(function(f) { return f.isTrueInContext === true || f.isTrue === true; });
+          const fragmentsWithoutIsTrue = fragments.filter(function(f) { return typeof f.isTrueInContext === 'undefined' && typeof f.isTrue === 'undefined'; });
+          
+          console.log("[Interaction] 📊 FRAGMENT VERIFICATION (in iframe):", {
+            totalFragments: fragments.length,
+            fragmentsWithIsTrueInContext: fragmentsWithIsTrue.length,
+            fragmentsWithoutIsTrueInContext: fragmentsWithoutIsTrue.length,
+            eachFragment: fragments.map(function(f, i) { return { i: i, isTrueInContext: f.isTrueInContext, isTrue: f.isTrue, text: (f.text || '').substring(0, 30) }; })
+          });
+          
+          if (fragmentsWithoutIsTrue.length > 0) {
+            console.error("[Interaction] ERROR: Some fragments missing isTrueInContext/isTrue:", 
+              fragmentsWithoutIsTrue.map(function(f) {
+                return { index: fragments.indexOf(f), text: (f.text && f.text.substring(0, 50)) };
+              })
+            );
+          }
+          
+          if (fragments.length > 0 && fragmentsWithIsTrue.length === 0) {
+            console.error("[Interaction] ❌ CRITICAL: No fragments have isTrueInContext=true! This causes 'X out of 0 correct'. Check if DB has old JS that uses stale data.");
+          }
+        } else {
+          console.warn("[Interaction] ⚠️ No fragments in window.interactionData:", window.interactionData ? Object.keys(window.interactionData) : 'null');
+        }
       } catch (e) {
         console.error("[Interaction] Error setting data:", e);
         window.interactionData = {};
@@ -6576,6 +6899,47 @@ ${escapedHtml}
             },
             completeInteraction: function() {
               sendMessage("ai-sdk-complete-interaction", {});
+            },
+            // User Progress Methods
+            saveUserProgress: (data, callback) => {
+              // Validate and sanitize score - only include if it's a valid number (including 0)
+              const sanitizedData = {};
+              if (data.score !== undefined && data.score !== null) {
+                const numScore = Number(data.score);
+                if (!isNaN(numScore) && isFinite(numScore)) {
+                  sanitizedData.score = Math.round(numScore * 100) / 100;
+                }
+              }
+              if (data.timeTakenSeconds !== undefined) sanitizedData.timeTakenSeconds = data.timeTakenSeconds;
+              if (data.interactionEvents !== undefined) sanitizedData.interactionEvents = data.interactionEvents;
+              if (data.customData !== undefined) sanitizedData.customData = data.customData;
+              if (data.completed !== undefined) sanitizedData.completed = data.completed;
+              sendMessage("ai-sdk-save-user-progress", { data: sanitizedData }, (response) => {
+                if (callback) {
+                  callback(response.progress, response.error);
+                }
+              });
+            },
+            getUserProgress: (callback) => {
+              sendMessage("ai-sdk-get-user-progress", {}, (response) => {
+                if (callback) {
+                  callback(response.progress, response.error);
+                }
+              });
+            },
+            markCompleted: (callback) => {
+              sendMessage("ai-sdk-mark-completed", {}, (response) => {
+                if (callback) {
+                  callback(response.progress, response.error);
+                }
+              });
+            },
+            incrementAttempts: (callback) => {
+              sendMessage("ai-sdk-increment-attempts", {}, (response) => {
+                if (callback) {
+                  callback(response.progress, response.error);
+                }
+              });
             },
             // Widget Management
             _widgetInstances: new Map(),
@@ -8655,7 +9019,12 @@ ${escapedHtml}
 
     console.log('[LessonView] Playing teacher script:', script.text.substring(0, 50) + '...');
     this.currentTeacherScript = script;
-    
+    this.pushToEngagementTranscript({
+      type: 'script',
+      speaker: 'assistant',
+      content: script.text || '',
+      timestamp: new Date().toISOString(),
+    });
     // Use scriptBlock parameter if provided, otherwise use script object itself
     const block = scriptBlock || script;
     
@@ -8747,6 +9116,13 @@ ${escapedHtml}
       
       if (shouldShowInSnack) {
         const duration = block.snackDuration || (script as any).snackDuration;
+        this.pushToEngagementTranscript({
+          type: 'snack',
+          speaker: 'assistant',
+          content: (blockContent || '').substring(0, 300),
+          timestamp: new Date().toISOString(),
+          metadata: { duration, source: 'script_block' },
+        });
         console.log('[LessonView] ✅ Showing snack message:', blockContent.substring(0, 50) + '...', 'duration:', duration);
         this.snackService.show(blockContent, duration);
         console.log('[LessonView] ✅ Snack service.show() called');
@@ -8766,5 +9142,149 @@ ${escapedHtml}
         console.log('[LessonView] ✅ Activating fullscreen');
       }
     }
+  }
+
+  /**
+   * Track lesson view (Phase 6.5)
+   */
+  private trackLessonView(lessonId: string) {
+    if (isDefaultLessonId(lessonId)) {
+      console.log('[LessonView] Skipping view tracking for default lesson');
+      return;
+    }
+
+    const currentUser = this.authService.currentUser();
+    const userId = currentUser?.userId || environment.defaultUserId;
+    const tenantId = currentUser?.tenantId || environment.tenantId;
+
+    if (!userId || !tenantId) {
+      console.warn('[LessonView] Cannot track view: missing userId or tenantId');
+      return;
+    }
+
+    this.http.post(
+      `${environment.apiUrl}/lessons/${lessonId}/view`,
+      {},
+      {
+        headers: {
+          'x-user-id': userId,
+          'x-tenant-id': tenantId,
+        },
+      }
+    )
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          console.log('[LessonView] ✅ Tracked lesson view');
+        },
+        error: (error) => {
+          console.error('[LessonView] ❌ Failed to track lesson view:', error);
+        },
+      });
+  }
+
+  /**
+   * Track interaction progress (Phase 6.5)
+   */
+  private trackInteractionStart() {
+    if (!this.lesson?.id || !this.activeStageId || !this.activeSubStageId) {
+      return;
+    }
+
+    const currentUser = this.authService.currentUser();
+    const userId = currentUser?.userId || environment.defaultUserId;
+    const tenantId = currentUser?.tenantId || environment.tenantId;
+
+    if (!userId || !tenantId) {
+      console.warn('[LessonView] Cannot track interaction start: missing userId or tenantId');
+      return;
+    }
+
+    const activeSubStage = this.lessonStages
+      .find(s => s.id === this.activeStageId)
+      ?.subStages?.find(ss => ss.id === this.activeSubStageId);
+
+    if (!activeSubStage?.interactionType) {
+      return;
+    }
+
+    // Track interaction start (opening) - this creates a record if it doesn't exist
+    this.http.post(
+      `${environment.apiUrl}/interaction-data/user-progress`,
+      {
+        lessonId: this.lesson.id,
+        stageId: this.activeStageId,
+        substageId: this.activeSubStageId,
+        interactionTypeId: activeSubStage.interactionType,
+        completed: false,
+      },
+      {
+        headers: {
+          'x-user-id': userId,
+          'x-tenant-id': tenantId,
+        },
+      }
+    )
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          console.log('[LessonView] ✅ Tracked interaction start');
+        },
+        error: (error) => {
+          console.error('[LessonView] ❌ Failed to track interaction start:', error);
+        },
+      });
+  }
+
+  private trackInteractionProgress(score: number) {
+    if (!this.lesson?.id || !this.activeStageId || !this.activeSubStageId) {
+      return;
+    }
+
+    const currentUser = this.authService.currentUser();
+    const userId = currentUser?.userId || environment.defaultUserId;
+    const tenantId = currentUser?.tenantId || environment.tenantId;
+
+    if (!userId || !tenantId) {
+      console.warn('[LessonView] Cannot track interaction progress: missing userId or tenantId');
+      return;
+    }
+
+    const activeSubStage = this.lessonStages
+      .find(s => s.id === this.activeStageId)
+      ?.subStages?.find(ss => ss.id === this.activeSubStageId);
+
+    if (!activeSubStage?.interactionType) {
+      return;
+    }
+
+    // Track via interaction-data/user-progress endpoint
+    this.http.post(
+      `${environment.apiUrl}/interaction-data/user-progress`,
+      {
+        lessonId: this.lesson.id,
+        stageId: this.activeStageId,
+        substageId: this.activeSubStageId,
+        interactionTypeId: activeSubStage.interactionType,
+        completed: true,
+        score: score,
+        attempts: 1,
+      },
+      {
+        headers: {
+          'x-user-id': userId,
+          'x-tenant-id': tenantId,
+        },
+      }
+    )
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          console.log('[LessonView] ✅ Tracked interaction progress');
+        },
+        error: (error) => {
+          console.error('[LessonView] ❌ Failed to track interaction progress:', error);
+        },
+      });
   }
 }
