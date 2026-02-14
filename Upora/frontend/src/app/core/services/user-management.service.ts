@@ -40,6 +40,7 @@ export interface UserDashboard {
     firstName?: string;
     subscriptionTier: string;
     authProvider: string;
+    feedbackEnabled: boolean;
     createdAt: string;
     updatedAt: string;
   };

@@ -6,9 +6,11 @@ import { LessonService } from '../../../core/services/lesson.service';
 import { ApiService } from '../../../core/services/api.service';
 import { WebSocketService } from '../../../core/services/websocket.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { MessagesService } from '../../../core/services/messages.service';
+import { MessagesModalComponent } from '../messages-modal/messages-modal.component';
 import { environment } from '../../../../environments/environment';
 import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { takeUntil, filter } from 'rxjs/operators';
 
 interface TokenUsage {
   monthlyUsage: number;
@@ -24,7 +26,7 @@ interface TokenUsage {
 @Component({
   selector: 'app-header',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MessagesModalComponent],
   template: `
     <header 
       class="fixed top-0 left-0 right-0 bg-brand-black shadow-lg"
@@ -44,8 +46,9 @@ interface TokenUsage {
               </button>
             </div>
             
-            <!-- Logo -->
-            <h1 class="text-2xl md:text-3xl font-bold text-brand-red tracking-wider cursor-pointer" 
+            <!-- Logo (aligned with nav items) -->
+            <h1 class="text-2xl md:text-3xl font-bold text-brand-red tracking-wider cursor-pointer leading-none flex items-center" 
+                style="margin-top: 1px"
                 (click)="navigateTo('home')">
               Upora
             </h1>
@@ -63,6 +66,11 @@ interface TokenUsage {
               <button (click)="navigateTo('my-list')" 
                       [class]="getNavLinkClasses('my-list')">
                 My List
+              </button>
+              <button *ngIf="feedbackEnabled"
+                      (click)="navigateTo('feedback')"
+                      [class]="getNavLinkClasses('feedback')">
+                Feedback
               </button>
               <button *ngIf="isLessonBuilder()" 
                       (click)="navigateTo('content-library')" 
@@ -140,10 +148,11 @@ interface TokenUsage {
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                 </svg>
               </button>
-              <button class="text-white hover:text-brand-gray transition-colors">
+              <button class="bell-btn text-white hover:text-brand-gray transition-colors" (click)="toggleMessagesModal()" title="Messages">
                 <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"></path>
                 </svg>
+                <span *ngIf="unreadCount > 0" class="unread-badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
               </button>
               <button *ngIf="auth.isAuthenticated()" (click)="signOut()" class="text-gray-400 hover:text-white text-sm">
                 Sign out
@@ -175,6 +184,7 @@ interface TokenUsage {
           <button (click)="navigateTo('home')" [class]="getMobileNavLinkClasses('home')">Home</button>
           <button (click)="navigateTo('categories')" [class]="getMobileNavLinkClasses('categories')">Categories</button>
           <button (click)="navigateTo('my-list')" [class]="getMobileNavLinkClasses('my-list')">My List</button>
+          <button *ngIf="feedbackEnabled" (click)="navigateTo('feedback')" [class]="getMobileNavLinkClasses('feedback')">Feedback</button>
           <button *ngIf="isLessonBuilder()" (click)="navigateTo('content-library')" [class]="getMobileNavLinkClasses('content-library')">Content Library</button>
           <button *ngIf="isLessonBuilder()" (click)="navigateTo('lesson-builder')" [class]="getMobileNavLinkClasses('lesson-builder')">Lesson Builder</button>
           <button *ngIf="isInteractionBuilder()" (click)="navigateTo('interaction-builder')" [class]="getMobileNavLinkClasses('interaction-builder')">Interaction Builder</button>
@@ -182,6 +192,13 @@ interface TokenUsage {
         </nav>
       </div>
     </header>
+    <!-- Messages Modal (opened by bell icon) -->
+    <app-messages-modal
+      *ngIf="showMessagesModal"
+      [skipHideNav]="true"
+      [onClose]="closeMessagesModal.bind(this)"
+      (messageRead)="onMessageRead()">
+    </app-messages-modal>
   `,
   styles: [`
     .animate-fade-in {
@@ -198,6 +215,30 @@ interface TokenUsage {
         transform: translateY(0); 
       }
     }
+    .bell-btn {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .unread-badge {
+      position: absolute;
+      top: -6px;
+      right: -8px;
+      background: #ef4444;
+      color: #fff;
+      font-size: 0.65rem;
+      font-weight: 700;
+      min-width: 18px;
+      height: 18px;
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 4px;
+      line-height: 1;
+      border: 2px solid #0f0f23;
+    }
   `]
 })
 export class HeaderComponent implements OnInit, OnDestroy {
@@ -207,6 +248,9 @@ export class HeaderComponent implements OnInit, OnDestroy {
   searchQuery = '';
   currentPage = 'home';
   tokenUsage: TokenUsage | null = null;
+  unreadCount = 0;
+  showMessagesModal = false;
+  feedbackEnabled = false;
   
   private destroy$ = new Subject<void>();
 
@@ -215,6 +259,7 @@ export class HeaderComponent implements OnInit, OnDestroy {
     private router: Router,
     private apiService: ApiService,
     private wsService: WebSocketService,
+    private messagesService: MessagesService,
     public auth: AuthService,
   ) {}
 
@@ -233,8 +278,24 @@ export class HeaderComponent implements OnInit, OnDestroy {
     // Load token usage
     this.loadTokenUsage();
 
-    // TODO: Subscribe to real-time token usage updates from WebSocket (Phase 3 enhancement)
-    // Will be implemented when backend emits 'token-usage-update' events
+    // Load unread message count
+    this.loadUnreadCount();
+
+    // Load feedback enabled flag from profile
+    this.loadFeedbackEnabled();
+
+    // Join user-specific WebSocket room for real-time notifications
+    this.joinUserRoomWhenReady();
+
+    // Listen for real-time new messages via WebSocket
+    this.wsService.newMessage$
+      .pipe(
+        takeUntil(this.destroy$),
+        filter((msg) => msg !== null),
+      )
+      .subscribe(() => {
+        this.unreadCount++;
+      });
   }
 
   ngOnDestroy() {
@@ -296,6 +357,59 @@ export class HeaderComponent implements OnInit, OnDestroy {
     // Use the Super-Admin LLM Usage page instead
     // TODO: Implement real-time token usage widget in header
     return;
+  }
+
+  loadUnreadCount() {
+    if (!this.auth.isAuthenticated()) return;
+    this.messagesService.getUnreadCount()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (res) => { this.unreadCount = res.count || 0; },
+        error: () => {},
+      });
+  }
+
+  toggleMessagesModal() {
+    this.showMessagesModal = !this.showMessagesModal;
+    if (this.showMessagesModal) {
+      // Refresh unread count when opening
+      this.loadUnreadCount();
+    }
+  }
+
+  closeMessagesModal() {
+    this.showMessagesModal = false;
+    // Refresh unread count when modal closes (user may have read messages)
+    this.loadUnreadCount();
+  }
+
+  onMessageRead() {
+    if (this.unreadCount > 0) this.unreadCount--;
+  }
+
+  private joinUserRoomWhenReady(retries = 5) {
+    const myUserId = this.auth.getUserId();
+    if (myUserId) {
+      this.wsService.connect();
+      this.wsService.joinUserRoom(myUserId);
+    } else if (retries > 0) {
+      setTimeout(() => this.joinUserRoomWhenReady(retries - 1), 1000);
+    }
+  }
+
+  loadFeedbackEnabled(retries = 5) {
+    if (!this.auth.isAuthenticated()) {
+      if (retries > 0) setTimeout(() => this.loadFeedbackEnabled(retries - 1), 1000);
+      return;
+    }
+    this.apiService.get<any>('/profile/dashboard')
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (data) => {
+          this.feedbackEnabled = data?.account?.feedbackEnabled ?? false;
+        },
+        error: () => { this.feedbackEnabled = false; },
+      });
   }
 
   formatTokens(tokens: number): string {

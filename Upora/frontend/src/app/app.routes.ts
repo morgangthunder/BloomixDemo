@@ -101,6 +101,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/course-details/course-details.component').then(m => m.CourseDetailsComponent)
   },
   {
+    path: 'feedback',
+    canActivate: [authGuard, requireOnboardingGuard],
+    loadComponent: () => import('./features/feedback/feedback.component').then(m => m.FeedbackComponent)
+  },
+  {
     path: 'super-admin',
     canActivate: [authGuard],
     loadComponent: () => import('./features/super-admin/super-admin-dashboard.component').then(m => m.SuperAdminDashboardComponent)
@@ -134,6 +139,11 @@ export const routes: Routes = [
     path: 'super-admin/onboarding',
     canActivate: [authGuard],
     loadComponent: () => import('./features/super-admin/onboarding.component').then(m => m.OnboardingComponent)
+  },
+  {
+    path: 'super-admin/feedback',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/super-admin/feedback-panel.component').then(m => m.FeedbackPanelComponent)
   },
   {
     path: 'super-admin/message-email-settings',

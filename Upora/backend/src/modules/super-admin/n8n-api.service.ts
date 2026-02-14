@@ -12,6 +12,48 @@ export interface PopularNode {
   weeklyDownloads?: number;
 }
 
+/**
+ * Workflow purpose definitions. Each purpose is a use case a workflow can be assigned to.
+ * Add new entries here as you develop new features that need N8N workflows.
+ * See N8N_WORKFLOW_PURPOSES_GUIDE.md for full documentation.
+ */
+export interface WorkflowPurpose {
+  key: string;
+  displayName: string;
+  description: string;
+  /** Expected webhook payload fields (for documentation in the UI). */
+  payloadFields?: string[];
+}
+
+export const WORKFLOW_PURPOSES: WorkflowPurpose[] = [
+  {
+    key: 'message_email',
+    displayName: 'Sending emails',
+    description: 'Sends email when a user checks "Also send by email" on a message. Receives toUserEmail, title, body, fromAddress, fromName.',
+    payloadFields: ['toUserEmail', 'title', 'body', 'fromAddress', 'fromName', 'messageId', 'toUserId', 'fromUserId', 'createdAt'],
+  },
+  // Future purposes – uncomment or add as needed:
+  // {
+  //   key: 'lesson_completion',
+  //   displayName: 'Lesson completion',
+  //   description: 'Triggered when a student completes a lesson. Could send a certificate email or update a spreadsheet.',
+  //   payloadFields: ['userId', 'lessonId', 'lessonTitle', 'completedAt'],
+  // },
+  // {
+  //   key: 'admin_alerts',
+  //   displayName: 'Admin alerts',
+  //   description: 'Sends alerts to admins (e.g. new sign-ups, content flagged). Could go to Slack, email, or a dashboard.',
+  //   payloadFields: ['alertType', 'message', 'userId', 'timestamp'],
+  // },
+];
+
+export interface WorkflowPurposeAssignment {
+  workflowId: string;
+  webhookUrl: string;
+  workflowName: string;
+  assignedAt: string;
+}
+
 const N8N_API_PREFIX = '/api/v1';
 
 /** Workflow template metadata. */

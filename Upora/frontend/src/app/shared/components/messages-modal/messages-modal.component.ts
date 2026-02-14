@@ -1,9 +1,11 @@
-import { Component, Input, OnInit, OnDestroy } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { MessagesService, Message, CreateMessageDto } from '../../../core/services/messages.service';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { FeedbackService, FeedbackItem } from '../../../core/services/feedback.service';
+import { Subject, forkJoin, of } from 'rxjs';
+import { takeUntil, catchError } from 'rxjs/operators';
 
 @Component({
   selector: 'app-messages-modal',
@@ -13,7 +15,7 @@ import { takeUntil } from 'rxjs/operators';
     <div class="modal-backdrop" (click)="close()"></div>
     <div class="modal messages-modal" role="dialog" aria-modal="true">
       <div class="modal-header">
-        <h3>{{ toUserId ? 'Send Message' : 'Messages' }}</h3>
+        <h3>{{ toUserId ? 'Send Message' : 'Notifications' }}</h3>
         <button type="button" class="modal-close" (click)="close()" aria-label="Close">×</button>
       </div>
       <div class="modal-body">
@@ -72,7 +74,7 @@ import { takeUntil } from 'rxjs/operators';
         </div>
 
         <!-- Messages list (all messages / sent & received) -->
-        <div *ngIf="!showCompose || !toUserId" class="messages-list">
+        <div *ngIf="(!showCompose || !toUserId) && !selectedMessage" class="messages-list">
           <div class="tabs">
             <button
               class="tab-btn"
@@ -92,8 +94,8 @@ import { takeUntil } from 'rxjs/operators';
           <div *ngIf="!loading && activeTab === 'received' && receivedMessages.length === 0" class="empty">
             No received messages
           </div>
-          <div *ngIf="!loading && activeTab === 'sent' && sentMessages.length === 0" class="empty">
-            No sent messages
+          <div *ngIf="!loading && activeTab === 'sent' && sentMessages.length === 0 && myFeedback.length === 0" class="empty">
+            No sent messages or feedback
           </div>
 
           <div class="messages">
@@ -108,15 +110,43 @@ import { takeUntil } from 'rxjs/operators';
                 </span>
                 <span class="message-date">{{ msg.createdAt | date:'short' }}</span>
               </div>
-              <div class="message-title">{{ msg.title }}</div>
+              <div class="message-title">
+                {{ msg.title }}
+                <span *ngIf="activeTab === 'sent' && msg.emailRequested" class="delivery-badge"
+                      [class.delivery-sent]="msg.emailDeliveryStatus === 'sent'"
+                      [class.delivery-failed]="msg.emailDeliveryStatus === 'failed'"
+                      [class.delivery-pending]="msg.emailDeliveryStatus === 'pending' || !msg.emailDeliveryStatus">
+                  {{ msg.emailDeliveryStatus === 'sent' ? 'Email delivered' : msg.emailDeliveryStatus === 'failed' ? 'Email failed' : 'Email pending' }}
+                </span>
+              </div>
               <div class="message-preview">{{ msg.body }}</div>
+              <button *ngIf="!msg.readAt && activeTab === 'received'"
+                      class="quick-read-btn"
+                      (click)="quickMarkAsRead($event, msg)">
+                Mark as read
+              </button>
+            </div>
+            <!-- Feedback items in Sent tab -->
+            <div *ngIf="activeTab === 'sent' && myFeedback.length > 0" class="feedback-divider">
+              Feedback submissions
+            </div>
+            <div *ngFor="let fb of (activeTab === 'sent' ? myFeedback : [])"
+                 class="message-item feedback-item"
+                 (click)="navigateToFeedback(fb)">
+              <div class="message-header">
+                <span class="message-from feedback-tag">Feedback</span>
+                <span class="feedback-status-badge" [class]="'fbs-' + fb.status">{{ formatFeedbackStatus(fb.status) }}</span>
+                <span class="message-date">{{ fb.createdAt | date:'short' }}</span>
+              </div>
+              <div class="message-title">{{ fb.subject }}</div>
+              <div class="message-preview">{{ fb.body | slice:0:120 }}{{ fb.body.length > 120 ? '...' : '' }}</div>
             </div>
           </div>
         </div>
 
-        <!-- Message detail view -->
+        <!-- Message detail view (replaces list) -->
         <div *ngIf="selectedMessage" class="message-detail">
-          <button class="back-to-list" (click)="selectedMessage = null">← Back to list</button>
+          <button class="back-to-list" (click)="selectedMessage = null">← Back</button>
           <div class="message-detail-header">
             <div class="message-detail-from">
               <strong>From:</strong> {{ selectedMessage.fromUser?.email || selectedMessage.fromUserId }}
@@ -426,17 +456,93 @@ import { takeUntil } from 'rxjs/operators';
     .message-actions {
       margin-top: 1.5rem;
     }
+    .delivery-badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 10px;
+      margin-left: 0.5rem;
+      vertical-align: middle;
+    }
+    .delivery-sent {
+      background: rgba(34, 197, 94, 0.15);
+      color: #22c55e;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+    .delivery-failed {
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .delivery-pending {
+      background: rgba(234, 179, 8, 0.15);
+      color: #eab308;
+      border: 1px solid rgba(234, 179, 8, 0.3);
+    }
+    .quick-read-btn {
+      margin-top: 0.5rem;
+      background: rgba(0, 212, 255, 0.1);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      color: #00d4ff;
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .quick-read-btn:hover {
+      background: rgba(0, 212, 255, 0.2);
+    }
+    .feedback-divider {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: rgba(0, 212, 255, 0.6);
+      border-top: 1px solid rgba(255,255,255,0.08);
+      margin-top: 0.75rem;
+      padding-top: 0.75rem;
+      padding-bottom: 0.25rem;
+      font-weight: 600;
+    }
+    .feedback-item { border-left: 3px solid #00d4ff; }
+    .feedback-tag {
+      display: inline-block;
+      background: rgba(0, 212, 255, 0.15);
+      color: #00d4ff;
+      font-size: 0.65rem;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .feedback-status-badge {
+      font-size: 0.65rem;
+      padding: 1px 6px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+    .fbs-pending { background: rgba(234,179,8,0.15); color: #eab308; }
+    .fbs-replied { background: rgba(0,212,255,0.15); color: #00d4ff; }
+    .fbs-addressed { background: rgba(34,197,94,0.15); color: #22c55e; }
+    .fbs-wont_do { background: rgba(239,68,68,0.15); color: #ef4444; }
+    .fbs-archived { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.4); }
   `],
 })
 export class MessagesModalComponent implements OnInit, OnDestroy {
   @Input() toUserId?: string;
   @Input() toUserEmail?: string;
   @Input() onClose?: () => void;
+  /** When true, skip hiding the header (used when modal is rendered inside the header). */
+  @Input() skipHideNav = false;
+  /** Emits when a message is marked as read (so parent can decrement badge). */
+  @Output() messageRead = new EventEmitter<void>();
 
   activeTab: 'received' | 'sent' = 'received';
   loading = false;
   sentMessages: Message[] = [];
   receivedMessages: Message[] = [];
+  myFeedback: FeedbackItem[] = [];
   selectedMessage: Message | null = null;
   composeTitle = '';
   composeBody = '';
@@ -450,7 +556,11 @@ export class MessagesModalComponent implements OnInit, OnDestroy {
 
   private destroy$ = new Subject<void>();
 
-  constructor(private messagesService: MessagesService) {}
+  constructor(
+    private messagesService: MessagesService,
+    private feedbackService: FeedbackService,
+    private router: Router,
+  ) {}
 
   ngOnInit() {
     this.showCompose = !!this.toUserId;
@@ -468,28 +578,36 @@ export class MessagesModalComponent implements OnInit, OnDestroy {
 
   private hideNavForModal() {
     document.body.style.overflow = 'hidden';
-    const header = document.querySelector('app-header');
-    if (header) {
-      (header as HTMLElement).style.display = 'none';
+    if (!this.skipHideNav) {
+      const header = document.querySelector('app-header');
+      if (header) {
+        (header as HTMLElement).style.display = 'none';
+      }
     }
   }
 
   private restoreNavAfterModal() {
     document.body.style.overflow = '';
-    const header = document.querySelector('app-header');
-    if (header) {
-      (header as HTMLElement).style.display = '';
+    if (!this.skipHideNav) {
+      const header = document.querySelector('app-header');
+      if (header) {
+        (header as HTMLElement).style.display = '';
+      }
     }
   }
 
   loadMessages() {
     this.loading = true;
-    this.messagesService.getMessages()
+    forkJoin({
+      messages: this.messagesService.getMessages().pipe(catchError(() => of({ sent: [], received: [] }))),
+      feedback: this.feedbackService.getMine().pipe(catchError(() => of([] as FeedbackItem[]))),
+    })
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (response) => {
-          this.sentMessages = response.sent;
-          this.receivedMessages = response.received;
+        next: ({ messages, feedback }) => {
+          this.sentMessages = messages.sent;
+          this.receivedMessages = messages.received;
+          this.myFeedback = feedback;
           this.loading = false;
         },
         error: (err) => {
@@ -566,11 +684,34 @@ export class MessagesModalComponent implements OnInit, OnDestroy {
           if (idx >= 0) {
             this.receivedMessages[idx] = updated;
           }
+          this.messageRead.emit();
         },
         error: (err) => {
           console.error('[MessagesModal] Failed to mark as read:', err);
         },
       });
+  }
+
+  /** Quick mark-as-read from the tile without opening the detail view. */
+  quickMarkAsRead(event: Event, message: Message) {
+    event.stopPropagation(); // Don't open the detail view
+    this.markAsRead(message);
+  }
+
+  navigateToFeedback(fb: FeedbackItem) {
+    this.close();
+    this.router.navigate(['/feedback']);
+  }
+
+  formatFeedbackStatus(status: string): string {
+    switch (status) {
+      case 'pending': return 'Pending';
+      case 'replied': return 'Replied';
+      case 'addressed': return 'Addressed';
+      case 'wont_do': return "Won't Do";
+      case 'archived': return 'Archived';
+      default: return status;
+    }
   }
 
   close() {

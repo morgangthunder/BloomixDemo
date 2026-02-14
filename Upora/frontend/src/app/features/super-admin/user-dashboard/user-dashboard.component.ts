@@ -3,12 +3,14 @@ import { CommonModule } from '@angular/common';
 import { Router, RouterModule, ActivatedRoute } from '@angular/router';
 import { IonContent } from '@ionic/angular/standalone';
 import { UserManagementService, UserDashboard } from '../../../core/services/user-management.service';
+import { FeedbackService, FeedbackItem, FeedbackReply } from '../../../core/services/feedback.service';
+import { FormsModule } from '@angular/forms';
 import { MessagesModalComponent } from '../../../shared/components/messages-modal/messages-modal.component';
 
 @Component({
   selector: 'app-user-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterModule, IonContent, MessagesModalComponent],
+  imports: [CommonModule, RouterModule, IonContent, FormsModule, MessagesModalComponent],
   template: `
     <ion-content [style.--padding-top]="'80px'" [style.--padding]="'0'">
       <div class="user-dashboard" *ngIf="dashboard; else notLoaded">
@@ -42,6 +44,41 @@ import { MessagesModalComponent } from '../../../shared/components/messages-moda
               {{ passwordResetSending ? 'Sending…' : 'Send password reset email' }}
             </button>
             <p class="message success" *ngIf="passwordResetMessage">{{ passwordResetMessage }}</p>
+          </section>
+
+          <!-- Feedback Section -->
+          <section class="card" *ngIf="!isCreatorView">
+            <h2>Feedback</h2>
+            <div class="feedback-toggle-row">
+              <label class="toggle-label">
+                <input type="checkbox" [checked]="dashboard.account.feedbackEnabled" (change)="toggleFeedbackEnabled($event)">
+                <span>Feedback enabled for this user</span>
+              </label>
+            </div>
+            <div *ngIf="userFeedback.length === 0 && !feedbackLoading" class="feedback-empty">No feedback from this user.</div>
+            <div *ngIf="feedbackLoading" class="feedback-empty">Loading feedback...</div>
+            <div *ngFor="let fb of userFeedback" class="feedback-thread-card">
+              <div class="fb-thread-header">
+                <span class="fb-thread-subject">{{ fb.subject }}</span>
+                <span class="fb-thread-status" [class]="'fbs-' + fb.status">{{ formatFeedbackStatus(fb.status) }}</span>
+                <span class="fb-thread-date">{{ fb.createdAt | date:'short' }}</span>
+              </div>
+              <div class="fb-thread-body">{{ fb.body }}</div>
+              <!-- Replies -->
+              <div *ngFor="let r of fb.replies" class="fb-reply" [class.fb-reply-admin]="r.fromUserId !== fb.userId">
+                <div class="fb-reply-meta">{{ r.fromUser?.email || (r.fromUserId === fb.userId ? 'User' : 'Admin') }} · {{ r.createdAt | date:'short' }}</div>
+                <div class="fb-reply-body">{{ r.body }}</div>
+              </div>
+              <!-- Quick reply -->
+              <div class="fb-quick-reply">
+                <input type="text" [(ngModel)]="feedbackReplyTexts[fb.id]" placeholder="Reply..." (keydown.enter)="replyToFeedback(fb)">
+                <label class="email-check">
+                  <input type="checkbox" [checked]="feedbackEmailFlags[fb.id]" (change)="feedbackEmailFlags[fb.id] = !feedbackEmailFlags[fb.id]">
+                  <span>Email</span>
+                </label>
+                <button class="btn-sm" [disabled]="!feedbackReplyTexts[fb.id]?.trim()" (click)="replyToFeedback(fb)">Reply</button>
+              </div>
+            </div>
           </section>
 
           <section class="card" *ngIf="dashboard.personalisation">
@@ -440,6 +477,33 @@ import { MessagesModalComponent } from '../../../shared/components/messages-moda
     .message.success {
       color: #00d4ff;
     }
+    /* Feedback section */
+    .feedback-toggle-row { margin-bottom: 1rem; }
+    .toggle-label { display: flex; align-items: center; gap: 0.5rem; color: rgba(255,255,255,0.8); cursor: pointer; font-size: 0.9rem; }
+    .toggle-label input[type=checkbox] { accent-color: #00d4ff; width: 18px; height: 18px; }
+    .feedback-empty { color: rgba(255,255,255,0.4); font-size: 0.85rem; }
+    .feedback-thread-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 0.75rem; }
+    .fb-thread-header { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.3rem; }
+    .fb-thread-subject { color: #fff; font-weight: 600; font-size: 0.9rem; }
+    .fb-thread-status { font-size: 0.65rem; padding: 1px 7px; border-radius: 10px; font-weight: 600; }
+    .fbs-pending { background: rgba(234,179,8,0.15); color: #eab308; }
+    .fbs-replied { background: rgba(0,212,255,0.15); color: #00d4ff; }
+    .fbs-addressed { background: rgba(34,197,94,0.15); color: #22c55e; }
+    .fbs-wont_do { background: rgba(239,68,68,0.15); color: #ef4444; }
+    .fbs-archived { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.4); }
+    .fb-thread-date { color: rgba(255,255,255,0.35); font-size: 0.75rem; margin-left: auto; }
+    .fb-thread-body { color: rgba(255,255,255,0.7); font-size: 0.85rem; white-space: pre-wrap; margin-bottom: 0.5rem; }
+    .fb-reply { padding: 0.5rem 0.75rem; margin-top: 0.4rem; border-radius: 6px; background: rgba(0,212,255,0.04); border-left: 2px solid rgba(0,212,255,0.3); }
+    .fb-reply-admin { background: rgba(255,255,255,0.04); border-left-color: rgba(255,255,255,0.2); }
+    .fb-reply-meta { color: rgba(255,255,255,0.4); font-size: 0.7rem; margin-bottom: 0.15rem; }
+    .fb-reply-body { color: rgba(255,255,255,0.8); font-size: 0.85rem; }
+    .fb-quick-reply { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+    .fb-quick-reply input { flex: 1; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 0.4rem 0.6rem; color: #fff; font-size: 0.85rem; }
+    .fb-quick-reply input:focus { border-color: #00d4ff; outline: none; }
+    .fb-quick-reply .btn-sm { background: #00d4ff; color: #000; border: none; padding: 0.35rem 0.75rem; border-radius: 5px; font-size: 0.8rem; cursor: pointer; font-weight: 600; }
+    .fb-quick-reply .btn-sm:disabled { opacity: 0.4; cursor: not-allowed; }
+    .email-check { display: flex; align-items: center; gap: 0.25rem; color: rgba(255,255,255,0.6); font-size: 0.75rem; white-space: nowrap; cursor: pointer; }
+    .email-check input[type=checkbox] { accent-color: #00d4ff; width: 14px; height: 14px; }
   `],
 })
 export class UserDashboardComponent implements OnInit, OnDestroy {
@@ -459,8 +523,15 @@ export class UserDashboardComponent implements OnInit, OnDestroy {
   lessonIdForBack: string | null = null;
   showMessageModal = false;
 
+  // Feedback
+  userFeedback: FeedbackItem[] = [];
+  feedbackLoading = false;
+  feedbackReplyTexts: Record<string, string> = {};
+  feedbackEmailFlags: Record<string, boolean> = {};
+
   constructor(
     private userMgmt: UserManagementService,
+    private feedbackService: FeedbackService,
     private router: Router,
     private route: ActivatedRoute,
   ) {}
@@ -479,6 +550,7 @@ export class UserDashboardComponent implements OnInit, OnDestroy {
       next: (d) => {
         this.dashboard = d;
         this.errorMessage = null;
+        if (!this.isCreatorView) this.loadUserFeedback();
       },
       error: (err) => {
         this.dashboard = null;
@@ -577,6 +649,54 @@ export class UserDashboardComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     if (this.transcriptModalVisible) {
       this.restoreNavAfterModal();
+    }
+  }
+
+  // ── Feedback ──────────────────────────────────────────────────────
+
+  loadUserFeedback() {
+    if (!this.userId) return;
+    this.feedbackLoading = true;
+    this.feedbackService.getForUser(this.userId).subscribe({
+      next: (items) => { this.userFeedback = items; this.feedbackLoading = false; },
+      error: () => { this.feedbackLoading = false; },
+    });
+  }
+
+  toggleFeedbackEnabled(event: Event) {
+    const enabled = (event.target as HTMLInputElement).checked;
+    this.feedbackService.toggleUserFeedback(this.userId, enabled).subscribe({
+      next: () => {
+        if (this.dashboard) this.dashboard.account.feedbackEnabled = enabled;
+      },
+      error: () => {
+        // Revert checkbox on error
+        if (this.dashboard) this.dashboard.account.feedbackEnabled = !enabled;
+      },
+    });
+  }
+
+  replyToFeedback(fb: FeedbackItem) {
+    const text = this.feedbackReplyTexts[fb.id]?.trim();
+    if (!text) return;
+    const sendEmail = !!this.feedbackEmailFlags[fb.id];
+    this.feedbackService.adminReply(fb.id, text, sendEmail).subscribe({
+      next: (reply) => {
+        fb.replies = [...(fb.replies || []), reply];
+        this.feedbackReplyTexts[fb.id] = '';
+        this.feedbackEmailFlags[fb.id] = false;
+      },
+    });
+  }
+
+  formatFeedbackStatus(status: string): string {
+    switch (status) {
+      case 'pending': return 'Pending';
+      case 'replied': return 'Replied';
+      case 'addressed': return 'Addressed';
+      case 'wont_do': return "Won't Do";
+      case 'archived': return 'Archived';
+      default: return status;
     }
   }
 }

@@ -130,6 +130,17 @@ import { ContentSourceService } from '../../core/services/content-source.service
             <div class="card-arrow">→</div>
           </div>
 
+          <!-- Feedback -->
+          <div class="dashboard-card" (click)="navigateTo('/super-admin/feedback')">
+            <div class="card-icon">💬</div>
+            <div class="card-content">
+              <h3>Feedback</h3>
+              <p>View user feedback, reply, and manage feedback settings</p>
+              <div class="card-status active">Active</div>
+            </div>
+            <div class="card-arrow">→</div>
+          </div>
+
           <!-- N8N Workflows -->
           <div class="dashboard-card" (click)="navigateTo('/super-admin/n8n-flows')">
             <div class="card-icon">🔀</div>

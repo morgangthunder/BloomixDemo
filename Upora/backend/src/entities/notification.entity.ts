@@ -66,6 +66,14 @@ export class Notification {
   @Column({ type: 'timestamp', nullable: true, name: 'read_at' })
   readAt: Date | null;
 
+  /** Email delivery status: 'pending' | 'sent' | 'failed' | null (no email requested) */
+  @Column({ type: 'varchar', length: 32, nullable: true, name: 'email_delivery_status' })
+  emailDeliveryStatus: string | null;
+
+  /** True if "Also send by email" was checked when sending this message */
+  @Column({ type: 'boolean', default: false, name: 'email_requested' })
+  emailRequested: boolean;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

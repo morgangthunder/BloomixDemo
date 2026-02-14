@@ -1,8 +1,10 @@
-import { BadGatewayException, BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { SuperAdminService } from './super-admin.service';
 import { UserPersonalizationService } from '../user-personalization/user-personalization.service';
 import { MessageDeliverySettingsService } from '../message-delivery-settings/message-delivery-settings.service';
-import { N8nApiService } from './n8n-api.service';
+import { N8nApiService, WORKFLOW_PURPOSES } from './n8n-api.service';
+import { FeedbackService } from '../feedback/feedback.service';
+import { FeedbackStatus } from '../../entities/feedback.entity';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -17,6 +19,7 @@ export class SuperAdminController {
     private readonly userPersonalizationService: UserPersonalizationService,
     private readonly messageDeliverySettingsService: MessageDeliverySettingsService,
     private readonly n8nApiService: N8nApiService,
+    private readonly feedbackService: FeedbackService,
   ) {}
 
   @Get('token-usage')
@@ -215,6 +218,7 @@ export class SuperAdminController {
     }
   }
 
+  // ── Legacy endpoint (kept for backward compat) ──
   @Post('n8n/use-webhook-for-messages')
   async useN8nWebhookForMessages(@Body('webhookUrl') webhookUrl: string) {
     if (!webhookUrl || typeof webhookUrl !== 'string') {
@@ -225,6 +229,54 @@ export class SuperAdminController {
       emailDeliveryMethod: 'n8n_webhook',
     });
     return { ok: true, messageWebhookUrl: webhookUrl.trim() };
+  }
+
+  // ── Workflow purpose assignments ──────────────────────────────────────
+
+  /** List available purposes and current assignments. */
+  @Get('n8n/workflow-purposes')
+  async getWorkflowPurposes() {
+    const assignments = await this.messageDeliverySettingsService.getPurposeAssignments();
+    return {
+      purposes: WORKFLOW_PURPOSES,
+      assignments,
+    };
+  }
+
+  /** Assign a workflow to a purpose. */
+  @Post('n8n/workflow-purposes/assign')
+  async assignWorkflowPurpose(
+    @Body('purposeKey') purposeKey: string,
+    @Body('workflowId') workflowId: string,
+    @Body('webhookUrl') webhookUrl: string,
+    @Body('workflowName') workflowName: string,
+  ) {
+    if (!purposeKey || typeof purposeKey !== 'string') {
+      throw new BadRequestException('purposeKey is required');
+    }
+    if (!WORKFLOW_PURPOSES.some((p) => p.key === purposeKey)) {
+      throw new BadRequestException(`Unknown purpose: ${purposeKey}. Valid: ${WORKFLOW_PURPOSES.map((p) => p.key).join(', ')}`);
+    }
+    if (!workflowId || !webhookUrl) {
+      throw new BadRequestException('workflowId and webhookUrl are required');
+    }
+    const assignments = await this.messageDeliverySettingsService.assignPurpose(purposeKey, {
+      workflowId,
+      webhookUrl: webhookUrl.trim(),
+      workflowName: workflowName || '',
+      assignedAt: new Date().toISOString(),
+    });
+    return { ok: true, assignments };
+  }
+
+  /** Unassign a workflow from a purpose. */
+  @Post('n8n/workflow-purposes/unassign')
+  async unassignWorkflowPurpose(@Body('purposeKey') purposeKey: string) {
+    if (!purposeKey || typeof purposeKey !== 'string') {
+      throw new BadRequestException('purposeKey is required');
+    }
+    const assignments = await this.messageDeliverySettingsService.unassignPurpose(purposeKey);
+    return { ok: true, assignments };
   }
 
   @Get('n8n/community-nodes')
@@ -311,6 +363,61 @@ export class SuperAdminController {
       const message = err instanceof Error ? err.message : String(err);
       throw new BadGatewayException(message || 'Failed to install community node');
     }
+  }
+
+  // ── Feedback management ───────────────────────────────────────────────
+
+  @Get('feedback')
+  async getAllFeedback() {
+    return this.feedbackService.getAllFeedback(false);
+  }
+
+  @Get('feedback/archived')
+  async getArchivedFeedback() {
+    return this.feedbackService.getArchivedFeedback();
+  }
+
+  @Get('feedback/settings')
+  async getFeedbackSettings() {
+    const settings = await this.messageDeliverySettingsService.getSettings();
+    return { feedbackEnabledByDefault: settings.feedbackEnabledByDefault ?? true };
+  }
+
+  @Patch('feedback/settings')
+  async updateFeedbackSettings(@Body('feedbackEnabledByDefault') enabled: boolean) {
+    await this.messageDeliverySettingsService.updateSettings({ feedbackEnabledByDefault: enabled } as any);
+    return { ok: true, feedbackEnabledByDefault: enabled };
+  }
+
+  @Get('feedback/user/:userId')
+  async getFeedbackForUser(@Param('userId') userId: string) {
+    return this.feedbackService.getFeedbackForUser(userId);
+  }
+
+  @Get('feedback/:id/thread')
+  async getFeedbackThread(@Param('id') id: string) {
+    return this.feedbackService.getFeedbackThread(id);
+  }
+
+  @Post('feedback/:id/reply')
+  async replyToFeedback(@Param('id') id: string, @Body('body') body: string, @Body('sendEmail') sendEmail: boolean, @Req() req: any) {
+    const uid = req.user?.userId || req.user?.sub;
+    return this.feedbackService.replyToFeedback(id, uid, body, !!sendEmail);
+  }
+
+  @Patch('feedback/:id/status')
+  async updateFeedbackStatus(@Param('id') id: string, @Body('status') status: string) {
+    const validStatuses = Object.values(FeedbackStatus);
+    if (!validStatuses.includes(status as FeedbackStatus)) {
+      throw new BadRequestException(`Invalid status. Valid: ${validStatuses.join(', ')}`);
+    }
+    return this.feedbackService.updateStatus(id, status as FeedbackStatus);
+  }
+
+  @Patch('users/:userId/feedback-enabled')
+  async toggleUserFeedback(@Param('userId') userId: string, @Body('enabled') enabled: boolean) {
+    await this.feedbackService.toggleUserFeedback(userId, enabled);
+    return { ok: true, feedbackEnabled: enabled };
   }
 }
 

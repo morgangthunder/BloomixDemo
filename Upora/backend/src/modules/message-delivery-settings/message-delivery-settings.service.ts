@@ -18,6 +18,15 @@ export interface MessageDeliverySettingsDto {
   smtpUser?: string | null;
   smtpPassword?: string | null;
   n8nApiKey?: string | null;
+  workflowPurposes?: string | null;
+  feedbackEnabledByDefault?: boolean;
+}
+
+export interface WorkflowPurposeAssignment {
+  workflowId: string;
+  webhookUrl: string;
+  workflowName: string;
+  assignedAt: string;
 }
 
 export type EffectiveEmailConfig =
@@ -111,6 +120,59 @@ export class MessageDeliverySettingsService {
     if (dto.smtpUser !== undefined) row.smtpUser = dto.smtpUser ?? null;
     if (dto.smtpPassword !== undefined && dto.smtpPassword !== '********') row.smtpPassword = dto.smtpPassword ?? null;
     if (dto.n8nApiKey !== undefined && dto.n8nApiKey !== '********') row.n8nApiKey = dto.n8nApiKey ?? null;
+    if (dto.workflowPurposes !== undefined) row.workflowPurposes = dto.workflowPurposes ?? null;
+    if (dto.feedbackEnabledByDefault !== undefined) (row as any).feedbackEnabledByDefault = dto.feedbackEnabledByDefault;
     return this.repo.save(row);
+  }
+
+  // ── Workflow purpose assignments ──────────────────────────────────────
+
+  /** Get all purpose assignments as a map: { [purposeKey]: assignment } */
+  async getPurposeAssignments(): Promise<Record<string, WorkflowPurposeAssignment>> {
+    const s = await this.getSettings();
+    if (!s.workflowPurposes) return {};
+    try {
+      return JSON.parse(s.workflowPurposes) as Record<string, WorkflowPurposeAssignment>;
+    } catch {
+      return {};
+    }
+  }
+
+  /** Assign a workflow to a purpose. Replaces any existing assignment for that purpose. */
+  async assignPurpose(
+    purposeKey: string,
+    assignment: WorkflowPurposeAssignment,
+  ): Promise<Record<string, WorkflowPurposeAssignment>> {
+    const map = await this.getPurposeAssignments();
+    map[purposeKey] = assignment;
+    const row = await this.getSettings();
+    row.workflowPurposes = JSON.stringify(map);
+    // Sync: if purpose is message_email, also set n8nWebhookUrl + delivery method
+    if (purposeKey === 'message_email') {
+      row.n8nWebhookUrl = assignment.webhookUrl;
+      row.emailDeliveryMethod = 'n8n_webhook' as any;
+    }
+    await this.repo.save(row);
+    return map;
+  }
+
+  /** Unassign a workflow from a purpose. */
+  async unassignPurpose(purposeKey: string): Promise<Record<string, WorkflowPurposeAssignment>> {
+    const map = await this.getPurposeAssignments();
+    delete map[purposeKey];
+    const row = await this.getSettings();
+    row.workflowPurposes = Object.keys(map).length > 0 ? JSON.stringify(map) : null;
+    // Sync: if purpose is message_email, clear n8nWebhookUrl
+    if (purposeKey === 'message_email') {
+      row.n8nWebhookUrl = null;
+    }
+    await this.repo.save(row);
+    return map;
+  }
+
+  /** Get the webhook URL for a specific purpose. */
+  async getWebhookUrlForPurpose(purposeKey: string): Promise<string | null> {
+    const map = await this.getPurposeAssignments();
+    return map[purposeKey]?.webhookUrl ?? null;
   }
 }

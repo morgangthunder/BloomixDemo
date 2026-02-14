@@ -51,8 +51,10 @@ import { AuthModule } from './modules/auth/auth.module';
 import { UserPersonalizationModule } from './modules/user-personalization/user-personalization.module';
 import { ProfileModule } from './modules/profile/profile.module';
 import { MessagesModule } from './modules/messages/messages.module';
+import { FeedbackModule } from './modules/feedback/feedback.module';
 import { Notification } from './entities/notification.entity';
 import { MessageDeliverySettings } from './entities/message-delivery-settings.entity';
+import { Feedback, FeedbackReply } from './entities/feedback.entity';
 
 @Module({
   imports: [
@@ -70,7 +72,7 @@ import { MessageDeliverySettings } from './entities/message-delivery-settings.en
         username: configService.get('database.username'),
         password: configService.get('database.password'),
         database: configService.get('database.database'),
-        entities: [User, Lesson, InteractionType, Workflow, Usage, ContentSource, LessonDataLink, ProcessedContentOutput, ScriptBlock, Course, LlmGenerationLog, StudentTopicScore, StudentMistake, LlmProvider, AiPrompt, InteractionResult, InteractionAverage, InteractionInstanceData, UserInteractionProgress, UserPublicProfile, LessonDraft, GeneratedImage, UserPersonalization, PersonalizationOption, LessonEngagementTranscription, Notification, MessageDeliverySettings],
+        entities: [User, Lesson, InteractionType, Workflow, Usage, ContentSource, LessonDataLink, ProcessedContentOutput, ScriptBlock, Course, LlmGenerationLog, StudentTopicScore, StudentMistake, LlmProvider, AiPrompt, InteractionResult, InteractionAverage, InteractionInstanceData, UserInteractionProgress, UserPublicProfile, LessonDraft, GeneratedImage, UserPersonalization, PersonalizationOption, LessonEngagementTranscription, Notification, MessageDeliverySettings, Feedback, FeedbackReply],
         synchronize: configService.get('database.synchronize'),
         logging: configService.get('database.logging'),
       }),
@@ -97,6 +99,7 @@ import { MessageDeliverySettings } from './entities/message-delivery-settings.en
     UserPersonalizationModule,
     ProfileModule,
     MessagesModule,
+    FeedbackModule,
   ],
   controllers: [AppController],
   providers: [AppService],

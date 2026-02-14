@@ -182,12 +182,21 @@ interface N8nWorkflowTemplate {
                     <li *ngFor="let url of w.productionWebhookUrls"><code>{{ url }}</code></li>
                   </ul>
                 </div>
+                <!-- Purpose lozenges -->
+                <div *ngIf="getWorkflowPurposes(w.id).length > 0" class="workflow-purposes">
+                  <span class="purpose-lozenge" *ngFor="let p of getWorkflowPurposes(w.id)">
+                    {{ p.displayName }}
+                    <button type="button" class="purpose-remove" (click)="unassignPurpose(p.key)" title="Remove use case">×</button>
+                  </span>
+                </div>
                 <div class="workflow-actions">
                   <a [href]="config!.n8nUiUrl + '/workflow/' + w.id" target="_blank" rel="noopener noreferrer" class="btn-sm">Open in N8N</a>
                   <button *ngIf="!w.active" class="btn-sm" (click)="setActive(w.id, true)">Activate</button>
                   <button *ngIf="w.active" class="btn-sm btn-sm-warn" (click)="setActive(w.id, false)">Deactivate</button>
                   <button *ngIf="w.productionWebhookUrls.length > 0" class="btn-sm" (click)="showPayloadFormat(w.id)">Payload Format</button>
-                  <button *ngIf="w.productionWebhookUrls.length > 0" class="btn-sm btn-sm-primary" (click)="useForMessages(w.productionWebhookUrls[0])">Use for messages</button>
+                  <button *ngIf="w.productionWebhookUrls.length > 0" class="btn-sm btn-sm-primary" (click)="openPurposeModal(w)">
+                    {{ getWorkflowPurposes(w.id).length > 0 ? 'Change use case' : 'Select use case' }}
+                  </button>
                   <button type="button" class="btn-sm btn-sm-warn" [disabled]="deletingWorkflowId === w.id" (click)="deleteWorkflow(w.id, w.name)">
                     {{ deletingWorkflowId === w.id ? 'Deleting…' : 'Delete' }}
                   </button>
@@ -347,6 +356,39 @@ interface N8nWorkflowTemplate {
           </div>
         </div>
       </div>
+      <!-- Purpose Assignment Modal -->
+      <div *ngIf="purposeModalOpen" class="modal-overlay" (click)="closePurposeModal()">
+        <div class="modal-content purpose-modal" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h2>Select use case</h2>
+            <button class="modal-close" (click)="closePurposeModal()">×</button>
+          </div>
+          <div class="modal-body">
+            <p class="purpose-modal-desc">Assign this workflow to a use case. The app will call its webhook for that purpose.</p>
+            <p class="purpose-modal-workflow">Workflow: <strong>{{ purposeModalWorkflow?.name }}</strong></p>
+            <div class="purpose-list">
+              <div class="purpose-item" *ngFor="let p of availablePurposes"
+                   [class.purpose-selected]="selectedPurposeKey === p.key"
+                   (click)="selectedPurposeKey = p.key">
+                <div class="purpose-item-header">
+                  <strong>{{ p.displayName }}</strong>
+                  <span *ngIf="purposeAssignments[p.key]" class="purpose-current-badge">
+                    Currently: {{ purposeAssignments[p.key].workflowName || 'another workflow' }}
+                  </span>
+                </div>
+                <p class="purpose-item-desc">{{ p.description }}</p>
+              </div>
+            </div>
+            <div *ngIf="purposeAssignError" class="error-msg" style="margin-top: 0.75rem;">{{ purposeAssignError }}</div>
+            <div class="modal-actions">
+              <button type="button" class="btn-sm" (click)="closePurposeModal()">Cancel</button>
+              <button type="button" class="btn-primary" [disabled]="!selectedPurposeKey || assigningPurpose" (click)="confirmAssignPurpose()">
+                {{ assigningPurpose ? 'Saving…' : 'Save' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </ion-content>
   `,
   styles: [`
@@ -442,6 +484,7 @@ interface N8nWorkflowTemplate {
     .node-install-note { color: rgba(255,255,255,0.6); font-size: 0.85rem; margin: 0.5rem 0 0 0; }
     .node-install-note code { background: rgba(0,0,0,0.3); padding: 0.2rem 0.4rem; border-radius: 4px; font-size: 0.85rem; color: #4ade80; }
     .popular-nodes, .installed-nodes { margin-top: 2rem; }
+    .installed-nodes { margin-bottom: 2.5rem; }
     .subsection-title { font-size: 1rem; color: rgba(255,255,255,0.9); margin: 0 0 1rem 0; font-weight: 500; }
     .community-nodes-section .nodes-section-title { font-size: 1.2rem; color: #00d4ff; margin: 0 0 0.75rem 0; font-weight: 600; }
     .search-box { margin-bottom: 1rem; }
@@ -477,6 +520,21 @@ interface N8nWorkflowTemplate {
     .paste-json-textarea::placeholder { color: rgba(255,255,255,0.4); }
     .modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem; }
     .import-tip { color: rgba(255,255,255,0.55); font-size: 0.85rem; margin: 1rem 0 0 0; line-height: 1.4; }
+    .workflow-purposes { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .purpose-lozenge { display: inline-flex; align-items: center; gap: 0.4rem; background: rgba(0,212,255,0.15); color: #00d4ff; border: 1px solid rgba(0,212,255,0.3); border-radius: 20px; padding: 0.3rem 0.75rem; font-size: 0.8rem; font-weight: 500; }
+    .purpose-remove { background: none; border: none; color: rgba(0,212,255,0.7); font-size: 1rem; cursor: pointer; padding: 0; line-height: 1; }
+    .purpose-remove:hover { color: #ff4444; }
+    .purpose-modal .modal-content { max-width: 550px; }
+    .purpose-modal-desc { color: rgba(255,255,255,0.7); margin: 0 0 0.5rem 0; font-size: 0.95rem; }
+    .purpose-modal-workflow { color: rgba(255,255,255,0.9); margin: 0 0 1rem 0; font-size: 0.95rem; }
+    .purpose-list { display: flex; flex-direction: column; gap: 0.5rem; }
+    .purpose-item { background: rgba(255,255,255,0.03); border: 2px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 0.75rem 1rem; cursor: pointer; transition: all 0.15s; }
+    .purpose-item:hover { border-color: rgba(0,212,255,0.3); background: rgba(0,212,255,0.05); }
+    .purpose-selected { border-color: #00d4ff !important; background: rgba(0,212,255,0.1) !important; }
+    .purpose-item-header { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+    .purpose-item-header strong { color: #fff; }
+    .purpose-current-badge { font-size: 0.75rem; color: rgba(255,255,255,0.5); font-style: italic; }
+    .purpose-item-desc { color: rgba(255,255,255,0.6); font-size: 0.85rem; margin: 0.25rem 0 0 0; }
   `],
 })
 export class N8nFlowsComponent implements OnInit {
@@ -513,6 +571,15 @@ export class N8nFlowsComponent implements OnInit {
   installedNodes: Array<{ packageName: string; version?: string; description?: string; needsRestart?: boolean }> = [];
   installedNodesLoading = false;
   activeTab: 'config' | 'templates' | 'workflows' | 'nodes' = 'config';
+
+  // Workflow purposes
+  availablePurposes: Array<{ key: string; displayName: string; description: string }> = [];
+  purposeAssignments: Record<string, { workflowId: string; webhookUrl: string; workflowName: string; assignedAt: string }> = {};
+  purposeModalOpen = false;
+  purposeModalWorkflow: N8nWorkflowItem | null = null;
+  selectedPurposeKey: string | null = null;
+  assigningPurpose = false;
+  purposeAssignError = '';
   hiddenTemplates: Set<string> = new Set(); // Templates hidden via "Remove" (persisted in localStorage)
   popularNodes: Array<{ name: string; package: string; description: string; weeklyDownloads?: number }> = [];
   popularNodesLoading = false;
@@ -666,6 +733,7 @@ export class N8nFlowsComponent implements OnInit {
         this.loadWorkflows();
         this.loadInstalledNodes();
         this.loadPopularNodes();
+        this.loadPurposes();
       },
       error: (err) => {
         this.error = err?.error?.message || err?.message || 'Failed to load N8N config';
@@ -757,10 +825,82 @@ export class N8nFlowsComponent implements OnInit {
     });
   }
 
-  useForMessages(webhookUrl: string) {
-    this.api.post<{ ok: boolean; messageWebhookUrl: string }>('/super-admin/n8n/use-webhook-for-messages', { webhookUrl }).subscribe({
-      next: () => {
-        if (this.config) this.config = { ...this.config, messageWebhookUrl: webhookUrl };
+  // ── Workflow purposes ──────────────────────────────────────────────────
+
+  loadPurposes() {
+    this.api.get<{ purposes: Array<{ key: string; displayName: string; description: string }>; assignments: Record<string, any> }>('/super-admin/n8n/workflow-purposes').subscribe({
+      next: (res) => {
+        this.availablePurposes = res.purposes || [];
+        this.purposeAssignments = res.assignments || {};
+      },
+      error: () => {},
+    });
+  }
+
+  /** Get purpose display names for a specific workflow. */
+  getWorkflowPurposes(workflowId: string): Array<{ key: string; displayName: string }> {
+    const results: Array<{ key: string; displayName: string }> = [];
+    for (const [key, assignment] of Object.entries(this.purposeAssignments)) {
+      if (assignment.workflowId === workflowId) {
+        const purpose = this.availablePurposes.find((p) => p.key === key);
+        results.push({ key, displayName: purpose?.displayName || key });
+      }
+    }
+    return results;
+  }
+
+  openPurposeModal(workflow: N8nWorkflowItem) {
+    this.purposeModalWorkflow = workflow;
+    this.purposeModalOpen = true;
+    this.selectedPurposeKey = null;
+    this.purposeAssignError = '';
+    this.assigningPurpose = false;
+    // Pre-select if this workflow is already assigned to a purpose
+    for (const [key, assignment] of Object.entries(this.purposeAssignments)) {
+      if (assignment.workflowId === workflow.id) {
+        this.selectedPurposeKey = key;
+        break;
+      }
+    }
+  }
+
+  closePurposeModal() {
+    this.purposeModalOpen = false;
+    this.purposeModalWorkflow = null;
+  }
+
+  confirmAssignPurpose() {
+    if (!this.selectedPurposeKey || !this.purposeModalWorkflow) return;
+    const wf = this.purposeModalWorkflow;
+    const webhookUrl = wf.productionWebhookUrls?.[0] || '';
+    if (!webhookUrl) {
+      this.purposeAssignError = 'This workflow has no production webhook URL. Activate the workflow first.';
+      return;
+    }
+    this.assigningPurpose = true;
+    this.purposeAssignError = '';
+    this.api.post<{ ok: boolean; assignments: Record<string, any> }>('/super-admin/n8n/workflow-purposes/assign', {
+      purposeKey: this.selectedPurposeKey,
+      workflowId: wf.id,
+      webhookUrl,
+      workflowName: wf.name,
+    }).subscribe({
+      next: (res) => {
+        this.assigningPurpose = false;
+        this.purposeAssignments = res.assignments || {};
+        this.closePurposeModal();
+      },
+      error: (err) => {
+        this.assigningPurpose = false;
+        this.purposeAssignError = err?.error?.message || err?.message || 'Failed to save';
+      },
+    });
+  }
+
+  unassignPurpose(purposeKey: string) {
+    this.api.post<{ ok: boolean; assignments: Record<string, any> }>('/super-admin/n8n/workflow-purposes/unassign', { purposeKey }).subscribe({
+      next: (res) => {
+        this.purposeAssignments = res.assignments || {};
       },
       error: () => {},
     });

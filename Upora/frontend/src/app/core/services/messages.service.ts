@@ -20,6 +20,8 @@ export interface Message {
   body: string;
   readAt: Date | null;
   createdAt: Date;
+  emailRequested?: boolean;
+  emailDeliveryStatus?: string | null;
   fromUser?: {
     id: string;
     email: string;

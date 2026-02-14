@@ -34,6 +34,8 @@ export interface MessageResponse {
   body: string;
   readAt: Date | null;
   createdAt: Date;
+  emailRequested?: boolean;
+  emailDeliveryStatus?: string | null;
   fromUser?: {
     id: string;
     email: string;
@@ -174,6 +176,15 @@ export class MessagesService {
     });
   }
 
+  private async updateEmailDeliveryStatus(notificationId: string | undefined, status: 'sent' | 'failed'): Promise<void> {
+    if (!notificationId) return;
+    try {
+      await this.notificationRepo.update(notificationId, { emailDeliveryStatus: status });
+    } catch (err) {
+      this.logger.warn(`Failed to update email delivery status for ${notificationId}:`, (err as Error)?.message);
+    }
+  }
+
   private async triggerN8NMessageWebhook(
     url: string,
     payload: {
@@ -240,6 +251,8 @@ export class MessagesService {
         body: dto.body,
         fromUserId,
         toUserId: dto.toUserId,
+        emailRequested: sendEmail,
+        emailDeliveryStatus: sendEmail ? 'pending' : null,
       });
       saved = await this.notificationRepo.save(notification);
 
@@ -257,9 +270,12 @@ export class MessagesService {
     if (sendEmail && toUser.email) {
       const config = await this.messageDeliverySettings.getEffectiveEmailConfig();
       if (config?.type === 'smtp') {
-        this.sendEmailViaSmtp(config, toUser.email, dto.title, dto.body || '').catch((err) =>
-          this.logger.warn('SMTP send failed:', err?.message),
-        );
+        this.sendEmailViaSmtp(config, toUser.email, dto.title, dto.body || '')
+          .then(() => this.updateEmailDeliveryStatus(saved?.id, 'sent'))
+          .catch((err) => {
+            this.logger.warn('SMTP send failed:', err?.message);
+            this.updateEmailDeliveryStatus(saved?.id, 'failed');
+          });
       } else if (config?.type === 'n8n') {
         this.triggerN8NMessageWebhook(config.url, {
           messageId: saved?.id ?? undefined,
@@ -272,7 +288,12 @@ export class MessagesService {
           title: dto.title,
           body: dto.body || '',
           createdAt: saved?.createdAt?.toISOString() ?? new Date().toISOString(),
-        }).catch((err) => this.logger.warn('N8N message webhook failed:', err?.message));
+        })
+          .then(() => this.updateEmailDeliveryStatus(saved?.id, 'sent'))
+          .catch((err) => {
+            this.logger.warn('N8N message webhook failed:', err?.message);
+            this.updateEmailDeliveryStatus(saved?.id, 'failed');
+          });
       }
     }
 
@@ -285,6 +306,8 @@ export class MessagesService {
         body: saved.body || '',
         readAt: saved.readAt,
         createdAt: saved.createdAt,
+        emailRequested: saved.emailRequested || false,
+        emailDeliveryStatus: saved.emailDeliveryStatus || null,
         fromUser: fromUser
           ? {
               id: fromUser.id,
@@ -376,6 +399,8 @@ export class MessagesService {
       body: n.body || '',
       readAt: n.readAt,
       createdAt: n.createdAt,
+      emailRequested: n.emailRequested || false,
+      emailDeliveryStatus: n.emailDeliveryStatus || null,
       fromUser: n.fromUserId && userMap[n.fromUserId]
         ? {
             id: userMap[n.fromUserId].id,

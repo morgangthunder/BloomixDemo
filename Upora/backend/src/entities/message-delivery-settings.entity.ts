@@ -48,6 +48,17 @@ export class MessageDeliverySettings {
   @Column({ name: 'n8n_api_key', type: 'varchar', length: 512, nullable: true })
   n8nApiKey: string | null;
 
+  /**
+   * Workflow purpose assignments as JSON: { [purposeKey]: { workflowId, webhookUrl, workflowName } }
+   * See WORKFLOW_PURPOSES in n8n-api.service.ts for the list of available purpose keys.
+   */
+  @Column({ name: 'workflow_purposes', type: 'text', nullable: true })
+  workflowPurposes: string | null;
+
+  /** When true, new users get feedbackEnabled=true by default. */
+  @Column({ name: 'feedback_enabled_by_default', type: 'boolean', default: true })
+  feedbackEnabledByDefault: boolean;
+
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }

@@ -409,7 +409,7 @@ if (authConfig?.enabled && authConfig?.userPoolId && authConfig?.userPoolClientI
 // ========================================
 // Version is read from package.json at build time
 // This will be replaced by the build process or read dynamically
-const FRONTEND_VERSION = '0.3.125'; // N8N: Tab rename, Installed first, Enter-search npm, needsRestart preserved, SendMail @n8n/ type
+const FRONTEND_VERSION = '0.3.134'; // Fix feedback toggle, real-time notifications, double /api prefix
 const CACHE_BUST_ID = `v${FRONTEND_VERSION}-${Math.random().toString(36).substr(2, 9)}`;
 console.log('');
 console.log('═══════════════════════════════════════════════════════════');

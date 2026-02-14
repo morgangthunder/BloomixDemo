@@ -12,18 +12,18 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [240, 300],
+      "position": [240, 304],
       "webhookId": "upora-message-email-brevo"
     },
     {
       "parameters": {
-        "jsCode": "const fromAddress = $input.item.json.fromAddress || 'noreply@yourdomain.com';\nconst toUserEmail = $input.item.json.toUserEmail;\nconst title = $input.item.json.title;\nconst body = $input.item.json.body || '';\nreturn {\n  json: {\n    sender: { email: fromAddress, name: 'Upora' },\n    to: [{ email: toUserEmail }],\n    subject: title,\n    textContent: body\n  }\n};"
+        "jsCode": "// Webhook v2 nests POST body under .body\nconst items = $input.all();\nconst raw = items[0].json;\nconst d = raw.body || raw; // fallback for test mode\nreturn [{\n  json: {\n    fromEmail: String(d.fromAddress || 'CONFIGURE_SENDER_IN_SUPER_ADMIN'),\n    fromName: String(d.fromName || 'Upora'),\n    toEmail: String(d.toUserEmail || ''),\n    emailSubject: String(d.title || 'No subject'),\n    emailBody: String(d.body || '')\n  }\n}];"
       },
       "id": "build-brevo-body",
       "name": "Build Brevo payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [460, 300]
+      "position": [464, 304]
     },
     {
       "parameters": {
@@ -39,25 +39,25 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ $json }}",
+        "jsonBody": "={{ JSON.stringify({ sender: { email: $json.fromEmail, name: $json.fromName }, to: [{ email: $json.toEmail }], subject: $json.emailSubject, textContent: $json.emailBody }) }}",
         "options": {}
       },
       "id": "send-email-node",
       "name": "Send Email via Brevo API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [680, 300]
+      "position": [688, 304]
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ { \"ok\": true, \"message\": \"Email sent\" } }}"
+        "responseBody": "={{ JSON.stringify({ ok: true, message: 'Email sent' }) }}"
       },
       "id": "respond-node",
       "name": "Respond to Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [900, 300]
+      "position": [900, 304]
     }
   ],
   "connections": {

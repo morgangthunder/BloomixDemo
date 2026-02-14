@@ -40,6 +40,9 @@ export class User {
   @Column({ name: 'subscription_renewal_at', type: 'timestamp', nullable: true })
   subscriptionRenewalAt: Date | null;
 
+  @Column({ type: 'boolean', default: true, name: 'feedback_enabled' })
+  feedbackEnabled: boolean;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

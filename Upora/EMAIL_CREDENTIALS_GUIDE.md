@@ -187,7 +187,7 @@ Uses Brevo’s HTTP API (no SMTP credential in N8N):
 1. In **Super Admin → N8N Workflows**, under **Import Templates**, click **Import** for **Message email (Brevo)**.
 2. Open the new workflow in N8N.
 3. Open the **Send Email via Brevo API** node and replace `YOUR_BREVO_API_KEY_HERE` in the **api-key** header with your Brevo API key (Settings → SMTP & API → API Keys).
-4. Activate the workflow, then copy the **Webhook Production URL** and set it in Super Admin (e.g. **Use for messages** or **N8N webhook URL**).
+4. Activate the workflow, then in **Super Admin → N8N Workflows**, click **"Select use case"** on the workflow and choose **"Sending emails"** → **Save**. (See `N8N_WORKFLOW_PURPOSES_GUIDE.md` for full details.)
 
 **Option B – Message email (SMTP)** template (generic SMTP, e.g. Brevo SMTP):
 
@@ -204,7 +204,7 @@ Uses Brevo’s HTTP API (no SMTP credential in N8N):
 6. Save the credential (e.g. name it **Brevo SMTP**).
 7. Select this credential in the **Send Email** node.
 8. **Activate** the workflow.
-9. Copy the **Webhook Production URL** and use **Use for messages** in Super Admin → N8N Workflows, or paste it in **Super Admin → Messages & Email** → **N8N webhook URL**.
+9. In **Super Admin → N8N Workflows**, click **"Select use case"** on the workflow and choose **"Sending emails"** → **Save**. (See `N8N_WORKFLOW_PURPOSES_GUIDE.md`.)
 
 ### 3. Sender verification
 

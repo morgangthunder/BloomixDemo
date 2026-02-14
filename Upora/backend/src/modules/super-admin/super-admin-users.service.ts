@@ -74,6 +74,7 @@ export class SuperAdminUsersService {
       tenantId: u.tenantId,
       role: u.role,
       name: (u as any).username || u.email?.split('@')[0] || 'Unknown',
+      feedbackEnabled: u.feedbackEnabled ?? true,
       createdAt: u.createdAt,
     }));
   }
@@ -182,6 +183,7 @@ export class SuperAdminUsersService {
         firstName: (user as any).username,
         subscriptionTier: user.subscription || 'free',
         authProvider: 'cognito',
+        feedbackEnabled: user.feedbackEnabled ?? true,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       },

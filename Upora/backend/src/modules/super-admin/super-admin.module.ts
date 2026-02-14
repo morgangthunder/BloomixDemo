@@ -17,6 +17,7 @@ import { LessonEngagementTranscription } from '../../entities/lesson-engagement-
 import { Lesson } from '../../entities/lesson.entity';
 import { AiPromptsModule } from '../ai-prompts/ai-prompts.module';
 import { UserPersonalizationModule } from '../user-personalization/user-personalization.module';
+import { FeedbackModule } from '../feedback/feedback.module';
 import { FileStorageService } from '../../services/file-storage.service';
 
 @Module({
@@ -35,6 +36,7 @@ import { FileStorageService } from '../../services/file-storage.service';
     ]),
     AiPromptsModule,
     UserPersonalizationModule,
+    FeedbackModule,
   ],
   controllers: [SuperAdminController, SuperAdminUsersController],
   providers: [SuperAdminService, SuperAdminUsersService, N8nApiService, FileStorageService],
