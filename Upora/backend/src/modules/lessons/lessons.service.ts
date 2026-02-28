@@ -30,14 +30,18 @@ export class LessonsService {
     return await this.lessonsRepository.save(lesson);
   }
 
-  async findAll(tenantId?: string, onlyApproved = false): Promise<Lesson[]> {
+  async findAll(tenantId?: string, onlyApproved = false, createdBy?: string): Promise<Lesson[]> {
     const where: any = tenantId ? { tenantId } : {};
     
     if (onlyApproved) {
       where.status = ApprovalStatus.APPROVED;
     }
+
+    if (createdBy) {
+      where.createdBy = createdBy;
+    }
     
-    console.log(`[LessonsService] findAll - tenantId: ${tenantId}, onlyApproved: ${onlyApproved}, where:`, where);
+    console.log(`[LessonsService] findAll - tenantId: ${tenantId}, onlyApproved: ${onlyApproved}, createdBy: ${createdBy}, where:`, where);
     
     const lessons = await this.lessonsRepository.find({ 
       where,
@@ -81,35 +85,28 @@ export class LessonsService {
     updateLessonDto: UpdateLessonDto,
     userId: string,
     tenantId?: string,
+    userRole?: string,
   ): Promise<Lesson> {
-    console.log('🔥🔥🔥 BACKEND LESSONS SERVICE VERSION 0.0.1 🔥🔥🔥');
-    console.log('[LessonsService] update() - Version 0.0.1');
-    console.log('[LessonsService] Updating lesson ID:', id);
-    console.log('[LessonsService] User ID:', userId);
-    console.log('[LessonsService] Update DTO:', JSON.stringify(updateLessonDto, null, 2));
+    console.log('[LessonsService] update() lesson:', id, 'by user:', userId, 'role:', userRole);
     
     const lesson = await this.findOne(id, tenantId);
     
-    console.log('[LessonsService] Found lesson:', lesson.title);
-    console.log('[LessonsService] Lesson createdBy:', lesson.createdBy);
-    
-    // Only creator can update
-    if (lesson.createdBy !== userId) {
-      console.log('[LessonsService] ❌ Permission denied: User', userId, 'trying to update lesson by', lesson.createdBy);
+    // Creator or super-admin can update
+    const isSuperAdmin = userRole === 'super-admin' || userRole === 'admin';
+    if (lesson.createdBy !== userId && !isSuperAdmin) {
+      console.log('[LessonsService] ❌ Permission denied: User', userId, '(role:', userRole, ') trying to update lesson by', lesson.createdBy);
       throw new ForbiddenException('You can only update your own lessons');
     }
     
-    console.log('[LessonsService] ✅ Permission check passed');
-    console.log('[LessonsService] Assigning updates...');
-    
-    Object.assign(lesson, updateLessonDto);
-    
-    console.log('[LessonsService] Saving to database...');
+    // Apply updates, handling null explicitly for nullable columns
+    const dto = { ...updateLessonDto };
+    if ('requiredSubscriptionTier' in updateLessonDto && updateLessonDto.requiredSubscriptionTier == null) {
+      (dto as any).requiredSubscriptionTier = null; // Ensure null is preserved, not stripped
+    }
+    Object.assign(lesson, dto);
     const savedLesson = await this.lessonsRepository.save(lesson);
     
-    console.log('[LessonsService] ✅ Lesson saved successfully');
-    console.log('[LessonsService] Updated data:', JSON.stringify(savedLesson.data).substring(0, 200) + '...');
-    
+    console.log('[LessonsService] ✅ Lesson updated:', id);
     return savedLesson;
   }
 
@@ -205,12 +202,10 @@ export class LessonsService {
    * Used for creator engagement view (Phase 6.5)
    */
   async getEngagers(lessonId: string, userId: string, tenantId?: string, searchQuery?: string, userRole?: string): Promise<any[]> {
-    console.log('[LessonsService] 📊 getEngagers called:', { lessonId, userId, tenantId, searchQuery, userRole });
     await this.assertCanViewEngagers(lessonId, userId, tenantId, userRole);
     const lesson = await this.findOne(lessonId, tenantId);
 
-    // Get distinct user IDs from usages - use raw query to match actual DB schema
-    // DB schema: resource_type='lesson', resource_id=lessonId, action='view' or 'complete'
+    // Get distinct user IDs from usages
     const usageUserIds = await this.usagesRepository.query(
       `SELECT DISTINCT user_id as "userId"
        FROM usages
@@ -219,7 +214,6 @@ export class LessonsService {
          AND action IN ('view', 'complete')`,
       [lessonId]
     );
-    console.log('[LessonsService] Found usage user IDs:', usageUserIds);
 
     // Get distinct user IDs from interaction progress
     const progressUserIds = await this.progressRepository.query(
@@ -228,7 +222,6 @@ export class LessonsService {
        WHERE lesson_id = $1`,
       [lessonId]
     );
-    console.log('[LessonsService] Found progress user IDs:', progressUserIds);
 
     // Combine both queries to get all unique engagers
     const allUserIds = [
@@ -238,10 +231,7 @@ export class LessonsService {
       ]),
     ];
 
-    console.log('[LessonsService] Combined user IDs:', allUserIds);
-
     if (allUserIds.length === 0) {
-      console.log('[LessonsService] No engagers found');
       return [];
     }
 
@@ -268,7 +258,7 @@ export class LessonsService {
     const foundIds = new Set(users.map((u) => u.id));
     const orphanIds = allUserIds.filter((id) => !foundIds.has(id));
     if (orphanIds.length > 0) {
-      console.log('[LessonsService] Found orphan user IDs (progress/usages but no users record):', orphanIds);
+      console.log('[LessonsService] Orphan user IDs (no users record):', orphanIds.length);
     }
     // Build synthetic user records for orphans so their engagement data is visible
     const orphanUsers = orphanIds.map((id) => ({
@@ -346,23 +336,6 @@ export class LessonsService {
         const lastActivityAt = lastProgressResult[0]?.updated_at || firstViewedAt;
 
         // Get average score from interactions (include 0 scores, exclude NULL)
-        // First, get all scores to debug
-        const allScoresResult = await this.progressRepository.query(
-          `SELECT interaction_type_id, score, completed, substage_id
-           FROM user_interaction_progress
-           WHERE lesson_id = $1
-             AND user_id = $2
-           ORDER BY updated_at DESC`,
-          [lessonId, user.id]
-        );
-        console.log(`[LessonsService] 🔍 All scores for ${user.email}:`, allScoresResult.map((r: any) => ({
-          interactionTypeId: r.interaction_type_id,
-          substageId: r.substage_id,
-          score: r.score,
-          scoreType: typeof r.score,
-          completed: r.completed,
-        })));
-        
         const avgScoreResult = await this.progressRepository.query(
           `SELECT AVG(score) as avg_score, COUNT(*) as total_with_score, 
                   MIN(score) as min_score, MAX(score) as max_score
@@ -375,18 +348,8 @@ export class LessonsService {
         const avgScoreRaw = avgScoreResult[0]?.avg_score;
         const avgScore = avgScoreRaw !== null && avgScoreRaw !== undefined ? Math.round(parseFloat(String(avgScoreRaw))) : null;
         const totalWithScore = parseInt(avgScoreResult[0]?.total_with_score || '0', 10);
-        console.log(`[LessonsService] 📊 Score calculation for ${user.email}:`, {
-          avgScoreRaw,
-          avgScore,
-          totalWithScore,
-          minScore: avgScoreResult[0]?.min_score,
-          maxScore: avgScoreResult[0]?.max_score,
-          scoresFound: allScoresResult.filter((r: any) => r.score !== null && r.score !== undefined).length,
-          scoresNull: allScoresResult.filter((r: any) => r.score === null || r.score === undefined).length,
-        });
 
-        // Get all interaction progress records for detailed view - include all data fields
-        console.log(`[LessonsService] 🔍 Querying interactions for user ${user.id} (${user.email}) in lesson ${lessonId}`);
+        // Get all interaction progress records for detailed view
         const allProgressResult = await this.progressRepository.query(
           `SELECT 
              id, stage_id, substage_id, interaction_type_id, 
@@ -401,21 +364,8 @@ export class LessonsService {
         
         // Sort interactions by lesson script order (stage order, then substage order)
         const lessonData = lesson.data as any;
-        // Stages are stored in data.structure.stages, not data.stages
         const stages = lessonData?.structure?.stages || lessonData?.stages || [];
-        
-        console.log(`[LessonsService] 🔍 Building order map from ${stages.length} stages`);
-        if (stages.length === 0) {
-          console.warn(`[LessonsService] ⚠️ No stages found in lesson data!`, {
-            hasData: !!lessonData,
-            hasStructure: !!lessonData?.structure,
-            structureKeys: lessonData?.structure ? Object.keys(lessonData.structure) : [],
-            hasStages: !!lessonData?.structure?.stages,
-            directStages: !!lessonData?.stages,
-            dataKeys: lessonData ? Object.keys(lessonData) : [],
-          });
-        }
-        
+
         // Build a map of stage/substage positions for sorting
         const stageOrderMap = new Map<string, number>();
         const substageOrderMap = new Map<string, { stageOrder: number; substageOrder: number }>();
@@ -426,21 +376,12 @@ export class LessonsService {
           stageOrderMap.set(stageId, stageOrder);
           
           const subStages = stage.subStages || stage.substages || [];
-          console.log(`[LessonsService]   Stage ${stageId} (order: ${stageOrder}) has ${subStages.length} substages`);
           subStages.forEach((substage: any, substageIdx: number) => {
             const substageId = substage.id || substage.substageId;
             const substageOrder = substage.order !== undefined ? substage.order : substage.orderIndex !== undefined ? substage.orderIndex : substageIdx;
             substageOrderMap.set(substageId, { stageOrder, substageOrder });
-            console.log(`[LessonsService]     Substage ${substageId} (order: ${substageOrder})`);
           });
         });
-        
-        console.log(`[LessonsService] 📊 Built order map with ${substageOrderMap.size} substages`);
-        console.log(`[LessonsService] 📊 Interactions before sorting:`, allProgressResult.map((p: any) => ({
-          substageId: p.substage_id,
-          interactionTypeId: p.interaction_type_id,
-          hasPosition: substageOrderMap.has(p.substage_id),
-        })));
         
         // Sort interactions by script position
         const sortedProgress = allProgressResult.sort((a: any, b: any) => {
@@ -465,34 +406,6 @@ export class LessonsService {
           return bTime - aTime;
         });
         
-        console.log(`[LessonsService] 📊 Sorted ${sortedProgress.length} interactions by lesson script order:`, sortedProgress.map((p: any, idx: number) => ({
-          index: idx,
-          substageId: p.substage_id,
-          interactionTypeId: p.interaction_type_id,
-          position: substageOrderMap.get(p.substage_id),
-          score: p.score,
-        })));
-        
-        // Log all substage IDs from lesson for comparison
-        console.log(`[LessonsService] 📋 Lesson substage IDs:`, Array.from(substageOrderMap.keys()));
-        console.log(`[LessonsService] 📋 Progress substage IDs:`, allProgressResult.map((p: any) => p.substage_id));
-        console.log(`[LessonsService] 📊 Found ${allProgressResult.length} interaction progress records for user ${user.id} (${user.email}) in lesson ${lessonId}:`, 
-          allProgressResult.map((p: any) => ({
-            id: p.id,
-            interactionTypeId: p.interaction_type_id,
-            stageId: p.stage_id,
-            substageId: p.substage_id,
-            score: p.score,
-            completed: p.completed,
-            attempts: p.attempts,
-          }))
-        );
-        
-        // Also log the raw query result to see if there's any data transformation issue
-        if (allProgressResult.length > 0) {
-          console.log(`[LessonsService] 🔍 Raw first interaction record:`, JSON.stringify(allProgressResult[0], null, 2));
-        }
-
         return {
           id: user.id,
           email: user.email,
@@ -510,7 +423,7 @@ export class LessonsService {
             averageScore: avgScore,
             totalScoredInteractions: totalWithScore,
             interactions: sortedProgress.map((p: any) => {
-              const mapped = {
+              return {
                 id: p.id,
                 stageId: p.stage_id,
                 substageId: p.substage_id,
@@ -525,12 +438,6 @@ export class LessonsService {
                 interactionEvents: p.interaction_events || [],
                 customData: p.custom_data || {},
               };
-              console.log(`[LessonsService] 🔄 Mapped interaction:`, {
-                interactionTypeId: mapped.interactionTypeId,
-                score: mapped.score,
-                completed: mapped.completed,
-              });
-              return mapped;
             }),
           },
         };

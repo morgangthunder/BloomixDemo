@@ -21,21 +21,32 @@ export const authHeadersInterceptor: HttpInterceptorFn = (
 
   const auth = inject(AuthService);
   let headers = req.headers;
+  const isLoggedIn = auth.isAuthenticated();
   const tenantId = auth.getTenantId() || environment.tenantId;
   if (tenantId) {
     headers = headers.set('x-tenant-id', tenantId);
   }
-  const userId = auth.getUserId() || localStorage.getItem('userId') || environment.defaultUserId;
+  // Only send x-user-id when the user is actually authenticated.
+  // The environment.defaultUserId fallback is for authenticated sessions
+  // where getUserId() hasn't resolved yet (e.g. mock auth mode).
+  // Anonymous users must NOT send a userId so the backend can enforce access walls.
+  const userId = isLoggedIn
+    ? (auth.getUserId() || environment.defaultUserId)
+    : null;
   if (userId) {
     headers = headers.set('x-user-id', userId);
   }
-  const role = auth.getRole() || environment.userRole;
+  const role = auth.getRole();
   if (role) {
     headers = headers.set('x-user-role', role);
   }
   const email = auth.getEmail();
   if (email) {
     headers = headers.set('x-user-email', email);
+  }
+  const tier = auth.getSubscriptionTier();
+  if (tier) {
+    headers = headers.set('x-subscription-tier', tier);
   }
   const token = auth.getToken();
   if (token) {

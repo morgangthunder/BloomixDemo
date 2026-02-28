@@ -17,16 +17,16 @@
 
 | Phase | Description |
 |-------|-------------|
-| 1 | AWS Cognito Authentication (backend + frontend) – partial JWT strategy exists |
-| 4 | Content Caching (param_hash, processed_content_cache, image cache) |
-| 5 | Route Protection & UX |
-| 6 | Shared User Management (core + Creator Engagement) |
-| 6.5 | Messaging |
-| 6.6 | Assignments & Deadlines |
-| 6.7 | Course Creation UI |
-| 6.8 | Groups (Lesson Groups, Course Groups) |
-| 7 | Hub System |
-| 8 | Notifications |
+| 1 | AWS Cognito Authentication – **DONE** (real Cognito login, JWT, role resolution via backend) |
+| 4 | Content Caching – **DONE** (param_hash, processed_content_cache, image dictionary, component map) |
+| 5 | Route Protection & UX – **DONE** (roleGuard, unauthorized page, all routes protected) |
+| 6 | Shared User Management (core + Creator Engagement) – **DONE** |
+| 6.5 | Messaging – **DONE** |
+| 6.6 | Assignments & Deadlines – **DONE** |
+| 6.7 | Course Creation UI – **DONE** |
+| 6.8 | Groups (Lesson Groups, Course Groups) – **DONE** |
+| 7 | Hub System – **DONE** (shelves, management, SSO config, hub switcher, default hub) |
+| 8 | Notifications – **DONE** (real-time bell, messages modal, invites) |
 
 ---
 
@@ -350,79 +350,110 @@ interface ViewerContext {
 
 ---
 
-## Phase 6.6: Assignments & Deadlines
+## Phase 6.6+6.8 (Combined): Lesson Groups, Assignments & Deadlines
 
-### 6.6.1 Offline Assignments
+**Rationale**: Groups and Assignments are tightly coupled — assignments are scoped to groups, deadlines are per-group, and the group management view is the natural home for assignment management. Building them together avoids refactoring.
 
-- New table `user_assignment_completions`: `user_id`, `lesson_id`, `assignment_key`, `completed_by_user`, `marked_done_by_creator`, `marked_by_user_id`, `marked_at`
-- Define checkpoints in `lesson.data.assessment` with `type: 'offline'`
-- API: `GET /lessons/:id/engagers/:userId/assignments`, `PATCH /lessons/:id/engagers/:userId/assignments/:key`
+### 6.6.1 Lesson Groups (built first, Course Groups follow in Phase 6.7)
 
-### 6.6.2 Deadlines
+**Group Types:**
+- **Default Group**: Auto-created per lesson, containing all engagers (from `usages` + `user_interaction_progress`). No manual membership — membership is derived from engagement data.
+- **Custom Groups**: Creator can create named groups, invite specific users. Useful for cohorts, classes, etc.
 
-- New table `user_lesson_deadlines`: `user_id`, `lesson_id`, `course_id` (optional), `deadline_at`, `set_by_user_id`
-- API: `GET /users/:userId/deadlines`, `POST /users/:userId/deadlines`, `PATCH` / `DELETE`
+**Data Model:**
+- `lesson_groups`: `id`, `lesson_id`, `created_by`, `tenant_id`, `name`, `description`, `is_default` (boolean), `created_at`, `updated_at`
+- `group_members`: `id`, `group_id`, `user_id`, `role` (member/moderator), `invited_at`, `joined_at`, `invited_by`
+- Default groups have `is_default = true`; their members are computed dynamically from engagers (not stored in `group_members`)
 
-### 6.6.3 Timeline View
+**Group Management View** — accessed from lesson-editor "Groups" tab or "Manage Groups" button:
+- Group selector (default group + custom groups, create new)
+- Tabs within group view:
+  - **Members**: List with search, message button, remove (custom groups only)
+  - **Assignments**: Create/manage assignments, view submissions, grade
+  - **Deadlines**: Set per-member or bulk deadlines
+  - **Progress**: Aggregate view of interaction scores, completion, timeline
 
-- Chronological list of `usages` + `user_interaction_progress`; aggregate in backend, no new table
+### 6.6.2 Assignment Types (Moodle-inspired)
+
+- **Offline**: Creator manually marks complete (e.g. "present your project in class")
+- **File Submission**: Student uploads homework file (uses existing S3/MinIO file upload infrastructure)
+- **Interaction-based**: Auto-completed when student finishes specified lesson interactions (leverages `user_interaction_progress`)
+
+**Data Model:**
+- `assignments`: `id`, `lesson_id`, `group_id` (nullable; null = applies to all groups), `title`, `description`, `type` (offline/file/interaction), `allowed_file_types`, `max_file_size_bytes`, `max_score`, `stage_id`, `substage_id`, `sort_order`, `is_published`, `created_by`, `created_at`, `updated_at`
+- `assignment_submissions`: `id`, `assignment_id`, `user_id`, `status` (not_started/in_progress/submitted/graded/late/resubmit_requested), `file_url`, `file_name`, `file_size`, `student_comment`, `score`, `grader_feedback`, `graded_by`, `graded_at`, `submitted_at`, `is_late`, `created_at`, `updated_at`
+
+**Submission Status Workflow:**
+```
+not_started → in_progress → submitted → graded
+                                      → resubmit_requested → submitted (resubmit)
+If submitted after deadline → is_late = true
+```
+
+**Grading:** Creator can set score (0 to max_score) and leave feedback comment. Student is notified via bell icon. Optional email notification.
+
+### 6.6.3 Deadlines
+
+- `user_lesson_deadlines`: `id`, `user_id`, `lesson_id`, `group_id` (nullable), `course_id` (nullable), `deadline_at`, `set_by_user_id`, `note`, `created_at`, `updated_at`
+- Bulk deadline setting: set deadline for all members of a group at once
+- Late flag auto-set on submissions after deadline
+- Future: deadline reminder notifications via N8N cron
+
+### 6.6.4 Student "My Assignments" View
+
+- Route: `/assignments`
+- Shows all assignments across all lessons the student is engaged with
+- Grouped by lesson, sorted by deadline (upcoming first)
+- Status badges: Not Started, In Progress, Submitted, Graded, Late
+- Click to view details, upload file, see grade/feedback
+
+### 6.6.5 API Endpoints
+
+**Groups:**
+- `GET /lessons/:lessonId/groups` — list groups for a lesson (default + custom)
+- `POST /lessons/:lessonId/groups` — create custom group
+- `PATCH /lesson-groups/:groupId` — update group name/description
+- `DELETE /lesson-groups/:groupId` — delete custom group (not default)
+- `GET /lesson-groups/:groupId/members` — list members (dynamic for default, stored for custom)
+- `POST /lesson-groups/:groupId/members` — add member to custom group
+- `DELETE /lesson-groups/:groupId/members/:userId` — remove member
+
+**Assignments:**
+- `GET /lessons/:lessonId/assignments` — list assignments for a lesson
+- `POST /lessons/:lessonId/assignments` — create assignment
+- `PATCH /assignments/:id` — update assignment
+- `DELETE /assignments/:id` — delete assignment
+- `GET /assignments/:id/submissions` — list all submissions (creator view)
+- `POST /assignments/:id/submit` — student submits (with optional file upload)
+- `PATCH /assignment-submissions/:id/grade` — creator grades a submission
+- `PATCH /assignment-submissions/:id/resubmit-request` — creator requests resubmission
+- `GET /my/assignments` — student's aggregate view (all their assignments across lessons)
+
+**Deadlines:**
+- `GET /lessons/:lessonId/deadlines` — list deadlines for a lesson
+- `POST /lessons/:lessonId/deadlines` — set deadline (single user or bulk for group)
+- `PATCH /deadlines/:id` — update deadline
+- `DELETE /deadlines/:id` — remove deadline
+- `GET /my/deadlines` — student's upcoming deadlines
+
+### 6.6.6 Entry Points
+
+- **Lesson-editor**: "Groups" tab (replaces/augments "View Engagers")
+  - Default group shows current engagers (same data as View Engagers)
+  - Custom groups can be created
+  - Within each group: Members, Assignments, Deadlines, Progress tabs
+- **Student nav**: "My Assignments" link → `/assignments`
+- **Lesson view**: Assignment panel showing pending assignments for current lesson
 
 ---
 
-## Phase 6.7: Course Creation UI
+## Phase 6.7: Course Creation UI + Course Groups
 
 - **Current state**: `lesson-builder.component.ts` has `createNewCourse()` → `alert('Course creation coming soon!')`; `course.entity.ts` and `lesson.entity.ts` exist; lessons have `courseId`
 - **Backend**: Add CoursesModule, CoursesService, CoursesController; endpoints `POST /courses`, `GET /courses`, `PATCH /courses/:id`, `GET /courses/:id/lessons`
 - **Frontend**: Replace `createNewCourse()` with modal or route `/lesson-builder/courses/new`; form for title, description; "Add lessons" from creator's lessons; course-details: "Add Lesson" / "Remove from Course"
-
----
-
-## Phase 6.8: Groups (Lesson Groups & Course Groups)
-
-**Overview**: Lesson-builders and course-creators can create Lesson Groups and Course Groups, invite users, manage group views, post notices, track progress, and manage membership. **Groups are separate from hubs** and accessible from the lesson-builder page.
-
-### 6.8.1 Group Types
-
-- **Lesson Groups**: Groups of users assigned to a specific lesson by a lesson-creator
-- **Course Groups**: Groups of users assigned to a course by a course-creator
-- **Default Groups**: Each lesson/course automatically has a default group containing all engagers (users who have viewed/interacted). This default group uses the same group management views and messaging as custom groups.
-
-### 6.8.2 Features
-
-- Create Lesson Groups and Course Groups
-- **Default groups**: Automatically created for each lesson/course, containing all engagers
-- Invite users: email + in-app invite
-- Manage group views: Managed Course/Lesson views (filtered content for group members)
-- Post notices: rich text, attachments, deadlines, announcements
-- Track group progress: aggregate progress per group
-- Manage group membership: add/remove members, roles within group
-- **Messaging**: Message individual members or broadcast to entire group (reuses Phase 6.5 messaging system)
-
-### 6.8.3 Data Model (Proposed)
-
-- `lesson_groups` / `course_groups`: `id`, `lesson_id` or `course_id`, `created_by`, `tenant_id`, `name`, `is_default` (boolean), `created_at`
-- `group_members`: `id`, `group_id`, `user_id`, `role`, `invited_at`, `joined_at`
-- `group_notices`: `id`, `group_id`, `author_id`, `title`, `body`, `attachments` (JSONB), `deadline_at`, `created_at`
-- Groups are **separate from hubs**; access control is per-group, not per-hub
-- Default groups are auto-populated from engagers (usages + user_interaction_progress)
-
-### 6.8.4 Entry Point
-
-- **"Manage Groups" buttons** on lesson and course panels at `/lesson-builder`
-- Opens group management view showing:
-  - Default group (all engagers) + any custom groups
-  - Group member list (reuses UserManagementComponent/UserDashboardComponent patterns)
-  - Message buttons for individual members or group broadcast
-  - Group notices, progress tracking, membership management
-- Course-creator: groups for courses; Lesson-creator: groups for lessons
-
-### 6.8.5 Messaging Integration
-
-- Messaging system (Phase 6.5) is extensible to groups:
-  - Message individual group members (same as messaging from View Engagers tab)
-  - Broadcast messages to entire group (creates notification for each member)
-  - Group management views reuse MessagesModalComponent with group context
-- Permissions: lesson-creator can message members of their lesson groups; course-creator can message members of their course groups
+- **Course Groups**: Same pattern as Lesson Groups but scoped to courses. `course_groups` table follows `lesson_groups` pattern. Course engagers = union of all lesson engagers within the course. Group management view reused.
+- **Course Assignments & Deadlines**: Same as lesson-level, but `course_id` column links to course context
 
 ### 6.8.6 Open Questions
 
@@ -486,14 +517,13 @@ interface ViewerContext {
 1. **Phase 1**: Cognito + basic login/signup + JWT validation (backend + frontend)
 2. **Phase 2**: DONE
 3. **Phase 3**: DONE
-4. **Phase 4**: Content cache (images first, then processed content)
+4. **Phase 4**: DONE – Content cache (param_hash, dictionary labels, component map on generated_images; ProcessedContentCache entity + table; ContentCacheService for image and content dedup; ImageGeneratorService and ContentAnalyzerService integrated; Process Explorer interaction type as testbed)
 5. **Phase 5**: Apply guards to all protected routes, polish UX
-6. **Phase 6 (core)**: Shared User Management – UserManagementComponent, UserDashboardComponent, super-admin tile, backend APIs
-7. **Phase 6.5**: Creator Engagement View – engagers APIs, reuse UserManagementComponent
-8. **Phase 6.6**: Assignments & Deadlines – tables, APIs, UI
-9. **Phase 6.7**: Course Creation UI – Courses CRUD, frontend create/add-lessons flow
-10. **Phase 6.5**: Messaging – messages/notifications, compose modal, Message buttons on user rows (IN PROGRESS)
-11. **Phase 6.8**: Groups – Lesson Groups, Course Groups, default groups (all engagers), "Manage Groups" buttons on lesson-builder, group management views with messaging integration
+6. **Phase 6 (core)**: DONE – Shared User Management – UserManagementComponent, UserDashboardComponent, super-admin tile, backend APIs
+7. **Phase 6.5 Creator Engagement View**: DONE (lessons) – engagers APIs (`GET /lessons/:id/engagers`, `/lessons/:lessonId/engagers/:userId/dashboard`), View Engagers tab in lesson-editor, engager details modal, messaging, user profile navigation. Course engagers deferred to Phase 6.7.
+8. **Phase 6.5 Messaging**: DONE – messages/notifications, compose modal, Message buttons on user rows, feedback system, email via N8N/Brevo, real-time bell alerts
+9. **Phase 6.6+6.8 (Combined)**: DONE – Lesson Groups + Assignments & Deadlines – lesson_groups, group_members, assignments, assignment_submissions, user_lesson_deadlines tables; group management UI (Members/Assignments/Deadlines/Progress tabs); 3 assignment types (offline, file submission, interaction); grading + resubmission; bulk deadlines; student "My Assignments" page with file uploads; "Assignments" nav item
+10. **Phase 6.7**: Course Creation UI – Courses CRUD, frontend create/add-lessons flow, course engagers, course groups (follows lesson groups pattern)
 12. **Phase 7**: Hub System
 13. **Phase 8**: Notifications (full system)
 

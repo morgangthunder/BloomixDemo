@@ -197,6 +197,32 @@ interface ChangeGroup {
                     </div>
                   </div>
 
+                  <!-- Media Preview (audio/video) -->
+                  <div class="field media-preview" *ngIf="source.type === 'media' && source.filePath">
+                    <label>Preview:</label>
+                    <audio *ngIf="isAudioSource(source)" controls preload="metadata" style="width: 100%; max-width: 480px; margin-top: 4px;">
+                      <source [src]="source.filePath" [type]="source.metadata?.mimeType || 'audio/mpeg'">
+                      Your browser does not support the audio element.
+                    </audio>
+                    <video *ngIf="isVideoSource(source)" controls preload="metadata" style="width: 100%; max-width: 480px; max-height: 270px; margin-top: 4px; border-radius: 6px; background: #000;">
+                      <source [src]="source.filePath" [type]="source.metadata?.mimeType || 'video/mp4'">
+                      Your browser does not support the video element.
+                    </video>
+                    <div class="media-meta-info" style="margin-top: 4px; font-size: 0.8rem; color: #94a3b8;">
+                      <span *ngIf="source.metadata?.originalFileName">{{source.metadata.originalFileName}}</span>
+                      <span *ngIf="source.metadata?.fileSize"> &middot; {{formatFileSize(source.metadata.fileSize)}}</span>
+                      <span *ngIf="source.metadata?.duration"> &middot; {{formatDuration(source.metadata.duration)}}</span>
+                    </div>
+                  </div>
+
+                  <!-- Hub-wide Interaction Builder Badge -->
+                  <div class="field" *ngIf="source.metadata?.contentScope === 'interaction-type-default'">
+                    <span class="hub-wide-badge">Hub-wide Default</span>
+                    <span *ngIf="source.metadata?.interactionTypeName" style="color: #7dd3fc; font-size: 0.85rem; margin-left: 8px;">
+                      for {{source.metadata.interactionTypeName}}
+                    </span>
+                  </div>
+
                   <!-- Creator Info -->
                   <div class="field" *ngIf="source.creator">
                     <label>Submitted by:</label>
@@ -1031,6 +1057,21 @@ interface ChangeGroup {
       font-size: 12px;
     }
 
+    .hub-wide-badge {
+      display: inline-block;
+      background: rgba(168, 85, 247, 0.15);
+      color: #c084fc;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid rgba(168, 85, 247, 0.3);
+    }
+
+    .media-preview audio {
+      border-radius: 6px;
+    }
+
     .content-actions {
       border-top: 1px solid rgba(255, 255, 255, 0.1);
       padding-top: 20px;
@@ -1381,6 +1422,32 @@ export class ApprovalQueueComponent implements OnInit, AfterViewInit {
     if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
     if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
     return date.toLocaleDateString();
+  }
+
+  isAudioSource(source: any): boolean {
+    const mime = source.metadata?.mimeType || '';
+    if (mime.startsWith('audio/')) return true;
+    const ext = (source.filePath || '').split('.').pop()?.toLowerCase();
+    return ['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a', 'weba'].includes(ext || '');
+  }
+
+  isVideoSource(source: any): boolean {
+    if (source.type !== 'media') return false;
+    return !this.isAudioSource(source);
+  }
+
+  formatFileSize(bytes: number): string {
+    if (!bytes) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  formatDuration(seconds: number): string {
+    if (!seconds) return '';
+    const m = Math.floor(seconds / 60);
+    const s = Math.round(seconds % 60);
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
   }
 
   goBack() {

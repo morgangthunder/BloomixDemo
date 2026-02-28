@@ -392,6 +392,12 @@ export class WebSocketService {
       this.newMessageSubject.next(data);
     });
 
+    // General notification (Phase 8 - group invites, etc.)
+    this.socket.on('new_notification', (data: any) => {
+      console.log('[WebSocketService] 🔔 New notification:', data?.type, data?.title);
+      this.newMessageSubject.next(data); // Reuse same observable to increment bell count
+    });
+
     // Error events
     this.socket.on('error', (error: any) => {
       console.error('[WebSocketService] ❌ Error:', error);

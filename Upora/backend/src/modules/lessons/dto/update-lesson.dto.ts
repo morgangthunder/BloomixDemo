@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsObject, IsEnum, IsNumber, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsObject, IsEnum, IsNumber, IsArray, ValidateIf } from 'class-validator';
 import { ApprovalStatus } from '../../../common/enums/approval-status.enum';
 
 export class UpdateLessonDto {
@@ -37,4 +37,17 @@ export class UpdateLessonDto {
   @IsOptional()
   @IsEnum(ApprovalStatus)
   status?: ApprovalStatus;
+
+  @IsOptional()
+  @IsString()
+  accessLevel?: string;
+
+  @IsOptional()
+  @ValidateIf((o) => o.requiredSubscriptionTier !== null)
+  @IsString()
+  requiredSubscriptionTier?: string | null;
+
+  @IsOptional()
+  @IsObject()
+  objectives?: any;
 }

@@ -131,6 +131,21 @@ if (authConfig?.enabled && authConfig?.userPoolId && authConfig?.userPoolClientI
   } else {
     console.log('[Amplify Config] ⚠️ Manual OAuth detected - skipping Amplify OAuth listener initialization');
     console.log('[Amplify Config] Manual exchange will handle the callback');
+
+    // CRITICAL: Strip ?code= from URL BEFORE Amplify.configure() so Amplify doesn't
+    // attempt its own token exchange and consume the single-use authorization code.
+    // Save the code in sessionStorage for our manual exchange to use.
+    if (typeof window !== 'undefined' && window.location.search?.includes('code=')) {
+      const cbParams = new URLSearchParams(window.location.search);
+      const savedCode = cbParams.get('code');
+      const savedState = cbParams.get('state');
+      if (savedCode) {
+        sessionStorage.setItem('__oauth_code', savedCode);
+        if (savedState) sessionStorage.setItem('__oauth_state', savedState);
+        window.history.replaceState({}, '', window.location.pathname);
+        console.log('[Amplify Config] ✅ Saved OAuth code to sessionStorage and stripped from URL to prevent Amplify consumption');
+      }
+    }
   }
   
   const amplifyConfig = {
@@ -409,7 +424,7 @@ if (authConfig?.enabled && authConfig?.userPoolId && authConfig?.userPoolClientI
 // ========================================
 // Version is read from package.json at build time
 // This will be replaced by the build process or read dynamically
-const FRONTEND_VERSION = '0.3.134'; // Fix feedback toggle, real-time notifications, double /api prefix
+const FRONTEND_VERSION = '0.8.58'; // Semantic prompts for text-free images, fix cached mobile overflow reset
 const CACHE_BUST_ID = `v${FRONTEND_VERSION}-${Math.random().toString(36).substr(2, 9)}`;
 console.log('');
 console.log('═══════════════════════════════════════════════════════════');

@@ -13,9 +13,16 @@ import { Subscription } from 'rxjs';
          [class.show]="currentMessage">
       <div class="snack-content">
         <div class="snack-icon">💬</div>
-        <div class="snack-text">{{ currentMessage.content }}</div>
+        <div class="snack-body">
+          <div class="snack-text">{{ currentMessage.content }}</div>
+          <div *ngIf="currentMessage.actions?.length" class="snack-actions">
+            <button *ngFor="let action of currentMessage.actions"
+                    class="snack-action-btn"
+                    (click)="onActionClick(action)">{{ action }}</button>
+          </div>
+        </div>
         <button class="snack-close" (click)="close()" title="Close">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
             <path d="M16 1.41L14.59 0L8 6.59L1.41 0L0 1.41L6.59 8L0 14.59L1.41 16L8 9.41L14.59 16L16 14.59L9.41 8L16 1.41Z"/>
           </svg>
         </button>
@@ -25,10 +32,10 @@ import { Subscription } from 'rxjs';
   styles: [`
     .snack-message {
       position: fixed;
-      bottom: 20px; /* Bottom center of viewport */
-      left: 50%;
+      bottom: 70px;
+      left: calc(50% + 100px);
       transform: translateX(-50%) translateY(100px);
-      z-index: 99999; /* Very high z-index to appear above everything including fullscreen */
+      z-index: 99999;
       max-width: 90%;
       width: 100%;
       max-width: 600px;
@@ -45,35 +52,66 @@ import { Subscription } from 'rxjs';
 
     .snack-content {
       background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-      border: 2px solid #00d4ff;
-      border-radius: 12px;
-      padding: 1rem 1.25rem;
+      border: 1px solid #00d4ff;
+      border-radius: 10px;
+      padding: 0.5rem 0.75rem;
       display: flex;
       align-items: center;
-      gap: 1rem;
-      box-shadow: 0 8px 32px rgba(0, 212, 255, 0.3);
+      justify-content: center;
+      gap: 0.5rem;
+      box-shadow: 0 4px 16px rgba(0, 212, 255, 0.25);
       backdrop-filter: blur(10px);
     }
 
     .snack-icon {
-      font-size: 1.5rem;
+      font-size: 1rem;
       flex-shrink: 0;
     }
 
-    .snack-text {
+    .snack-body {
       flex: 1;
+      min-width: 0;
+      text-align: center;
+    }
+
+    .snack-text {
       color: #ffffff;
-      font-size: 0.9375rem;
-      line-height: 1.5;
+      font-size: 0.715rem;
+      line-height: 1.4;
       word-wrap: break-word;
+    }
+
+    .snack-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .snack-action-btn {
+      padding: 2px 10px;
+      border-radius: 5px;
+      background: rgba(0, 212, 255, 0.15);
+      border: 1px solid rgba(0, 212, 255, 0.4);
+      color: #00d4ff;
+      cursor: pointer;
+      font-size: 0.6rem;
+      font-weight: 600;
+      transition: all 0.15s ease;
+    }
+
+    .snack-action-btn:hover {
+      background: rgba(0, 212, 255, 0.3);
+      border-color: #00d4ff;
     }
 
     .snack-close {
       background: rgba(255, 255, 255, 0.1);
       border: 1px solid rgba(255, 255, 255, 0.2);
-      border-radius: 6px;
-      width: 28px;
-      height: 28px;
+      border-radius: 5px;
+      width: 20px;
+      height: 20px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -89,10 +127,9 @@ import { Subscription } from 'rxjs';
       border-color: rgba(255, 255, 255, 0.4);
     }
 
-    /* Mobile adjustments */
     @media (max-width: 768px) {
       .snack-message {
-        bottom: 20px;
+        bottom: 70px;
         max-width: calc(100% - 2rem);
         left: 1rem;
         right: 1rem;
@@ -104,23 +141,11 @@ import { Subscription } from 'rxjs';
       }
 
       .snack-content {
-        padding: 0.875rem 1rem;
+        padding: 0.4rem 0.6rem;
       }
 
       .snack-text {
-        font-size: 0.875rem;
-      }
-    }
-
-    /* Animation */
-    @keyframes slideIn {
-      from {
-        opacity: 0;
-        transform: translateX(-50%) translateY(20px);
-      }
-      to {
-        opacity: 1;
-        transform: translateX(-50%) translateY(0);
+        font-size: 0.66rem;
       }
     }
   `],
@@ -147,6 +172,10 @@ export class SnackMessageComponent implements OnInit, OnDestroy {
 
   close() {
     this.snackService.hide();
+  }
+
+  onActionClick(action: string) {
+    this.snackService.onAction(action);
   }
 }
 

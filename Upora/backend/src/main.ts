@@ -9,7 +9,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-let BACKEND_VERSION = '0.3.5'; // Onboarding popular selections API, update options.
+let BACKEND_VERSION = '0.8.42'; // Semantic negative prompts + systemInstruction for text-free full-bleed images
 console.log(`🔍 [VERSION DEBUG] __dirname: ${__dirname}`);
 console.log(`🔍 [VERSION DEBUG] process.cwd(): ${process.cwd()}`);
 
@@ -72,6 +72,7 @@ async function bootstrap() {
   app.enableCors({
     origin: corsOrigins,
     credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-tenant-id', 'x-user-role'],
   });
   
   // Global validation pipe
@@ -91,6 +92,49 @@ async function bootstrap() {
   
   // Global prefix for all API routes
   app.setGlobalPrefix('api');
+
+  // ── Run critical schema migrations BEFORE any request handling ──
+  try {
+    const { DataSource } = require('typeorm');
+    const ds: any = app.get(DataSource);
+    if (ds?.isInitialized) {
+      await ds.query(`ALTER TABLE hubs ADD COLUMN IF NOT EXISTS auth_config JSONB`);
+      await ds.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(255) DEFAULT 'cognito'`);
+      await ds.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider_sub VARCHAR(500)`);
+      await ds.query(`ALTER TABLE hubs ADD COLUMN IF NOT EXISTS shelf_config JSONB`);
+
+      // ── Phase 4: Content Caching columns on generated_images ──
+      await ds.query(`ALTER TABLE generated_images ADD COLUMN IF NOT EXISTS param_hash VARCHAR(64)`);
+      await ds.query(`ALTER TABLE generated_images ADD COLUMN IF NOT EXISTS personalisation_tags TEXT[]`);
+      await ds.query(`ALTER TABLE generated_images ADD COLUMN IF NOT EXISTS component_map JSONB`);
+      await ds.query(`ALTER TABLE generated_images ADD COLUMN IF NOT EXISTS dictionary_labels TEXT[]`);
+      await ds.query(`CREATE INDEX IF NOT EXISTS idx_generated_images_param_hash ON generated_images (param_hash)`);
+      await ds.query(`CREATE INDEX IF NOT EXISTS idx_generated_images_dict_labels ON generated_images USING GIN (dictionary_labels)`);
+
+      // ── Phase 4: processed_content_cache table ──
+      await ds.query(`
+        CREATE TABLE IF NOT EXISTS processed_content_cache (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID NOT NULL,
+          content_type VARCHAR(50) NOT NULL,
+          param_hash VARCHAR(64) NOT NULL,
+          source_content_id UUID,
+          lesson_id UUID,
+          output_reference_id UUID,
+          output_type VARCHAR(50),
+          personalisation_tags TEXT[],
+          cached_data JSONB,
+          created_at TIMESTAMP DEFAULT NOW(),
+          UNIQUE(tenant_id, content_type, param_hash)
+        )
+      `);
+      await ds.query(`CREATE INDEX IF NOT EXISTS idx_pcc_param_hash ON processed_content_cache (param_hash)`);
+
+      console.log('✅ SSO + shelf + content-cache schema columns verified');
+    }
+  } catch (e: any) {
+    console.warn('⚠️ SSO schema migration skipped:', e.message);
+  }
   
   const port = process.env.PORT || 3000;
   // Bind to 0.0.0.0 so Docker port mapping works; 127.0.0.1 causes ERR_EMPTY_RESPONSE from host

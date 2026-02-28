@@ -10,6 +10,7 @@ import {
   InteractionAIResponseEvent,
 } from './interaction-ai-context.service';
 import { SnackMessageService } from './snack-message.service';
+import { AudioService, SfxName, BgMusicStyle, BgMusicLoopConfig } from './audio.service';
 import { AuthService } from './auth.service';
 import { environment } from '../../../environments/environment';
 
@@ -83,6 +84,7 @@ export interface PublicProfile {
 })
 export class InteractionAISDK {
   private snackService = inject(SnackMessageService);
+  private audioService = inject(AudioService);
   private http = inject(HttpClient);
   private authService = inject(AuthService);
   private teacherWidgetRef: any = null; // Reference to FloatingTeacherWidgetComponent
@@ -272,25 +274,24 @@ export class InteractionAISDK {
    * @param openChat If true, opens/restores the chat widget if minimized
    */
   postToChat(content: string, role: 'user' | 'assistant' | 'error' = 'assistant', openChat: boolean = false): void {
-    // Ensure widget is visible first
-    const showEvent = new CustomEvent('interaction-request-show-widget', {
-      detail: { source: 'interaction-sdk' }
-    });
-    window.dispatchEvent(showEvent);
-    
-    // Wait a moment for widget to be shown, then post message
+    if (openChat) {
+      const showEvent = new CustomEvent('interaction-request-show-widget', {
+        detail: { source: 'interaction-sdk' }
+      });
+      window.dispatchEvent(showEvent);
+    }
+
     setTimeout(() => {
       if (this.teacherWidgetRef) {
         if (openChat) {
           this.teacherWidgetRef.openWidget();
         }
-        // Use addChatMessage which will update the widget's chatMessages
         this.teacherWidgetRef.addChatMessage(content, role);
         console.log('[InteractionAISDK] ✅ Posted message to chat:', content.substring(0, 50));
       } else {
         console.warn('[InteractionAISDK] ⚠️ Teacher widget reference not set, cannot post to chat');
       }
-    }, 100);
+    }, openChat ? 100 : 0);
   }
 
   /**
@@ -299,13 +300,13 @@ export class InteractionAISDK {
    * @param openChat If true, opens/restores the chat widget if minimized
    */
   showScript(text: string, openChat: boolean = false): void {
-    // Ensure widget is visible first
-    const showEvent = new CustomEvent('interaction-request-show-widget', {
-      detail: { source: 'interaction-sdk' }
-    });
-    window.dispatchEvent(showEvent);
-    
-    // Wait a moment for widget to be shown, then show script
+    if (openChat) {
+      const showEvent = new CustomEvent('interaction-request-show-widget', {
+        detail: { source: 'interaction-sdk' }
+      });
+      window.dispatchEvent(showEvent);
+    }
+
     setTimeout(() => {
       if (this.teacherWidgetRef) {
         if (openChat) {
@@ -316,7 +317,7 @@ export class InteractionAISDK {
       } else {
         console.warn('[InteractionAISDK] Teacher widget reference not set, cannot show script');
       }
-    }, 100);
+    }, openChat ? 100 : 0);
   }
 
   /**
@@ -325,16 +326,14 @@ export class InteractionAISDK {
    * @param duration Duration in milliseconds (undefined = until manually closed or replaced)
    * @param hideFromChatUI If true, don't post to chat UI (default: false, posts to chat by default)
    */
-  showSnack(content: string, duration?: number, hideFromChatUI: boolean = false): string {
-    const snackId = this.snackService.show(content, duration);
+  showSnack(content: string, duration?: number, hideFromChatUI: boolean = false, actions?: string[]): string {
+    const snackId = this.snackService.show(content, duration, actions);
     this.transcriptEvent$.next({
       type: 'snack',
       content: (content || '').substring(0, 200),
-      metadata: { duration, hideFromChatUI, snackId },
+      metadata: { duration, hideFromChatUI, snackId, actions },
     });
-    // By default, also post to chat UI unless hideFromChatUI is true
     if (!hideFromChatUI) {
-      // Use postToChat which will ensure widget is visible
       this.postToChat(content, 'assistant', false);
     }
     
@@ -347,6 +346,29 @@ export class InteractionAISDK {
   hideSnack(): void {
     this.snackService.hide();
     this.transcriptEvent$.next({ type: 'snack', content: 'Snack hidden', metadata: {} });
+  }
+
+  // ── Audio ──────────────────────────────────────────────────────────
+
+  playSfx(name: SfxName): void {
+    this.audioService.playSfx(name);
+  }
+
+  startBgMusic(style: BgMusicStyle = 'calm'): void {
+    this.audioService.startBgMusic(style);
+  }
+
+  startBgMusicFromUrl(url: string, loopConfig?: BgMusicLoopConfig): void {
+    this.audioService.startBgMusicFromUrl(url, loopConfig);
+  }
+
+  stopBgMusic(): void {
+    this.audioService.stopBgMusic();
+  }
+
+  setAudioVolume(channel: 'sfx' | 'music', level: number): void {
+    if (channel === 'sfx') this.audioService.setSfxVolume(level);
+    else this.audioService.setBgVolume(level);
   }
 
   /**
@@ -386,7 +408,7 @@ export class InteractionAISDK {
       // Fallback to provided values or environment defaults
       this.currentUserId = userId || environment.defaultUserId || null;
       this.currentTenantId = tenantId || environment.tenantId || null;
-      this.currentUserRole = environment.userRole || null;
+      this.currentUserRole = null;
     }
     console.log('[InteractionAISDK] ✅ Refreshed user context:', {
       userId: this.currentUserId,
@@ -404,7 +426,7 @@ export class InteractionAISDK {
     const currentUser = this.authService.currentUser();
     const userId = currentUser?.userId || this.currentUserId || environment.defaultUserId;
     const tenantId = currentUser?.tenantId || this.currentTenantId || environment.tenantId;
-    const role = currentUser?.role || this.currentUserRole || environment.userRole;
+    const role = currentUser?.role || this.currentUserRole;
     
     const headers: { [key: string]: string } = {};
     if (userId) {
@@ -891,33 +913,46 @@ export class InteractionAISDK {
     userInput?: string;
     screenshot?: string;
     customInstructions?: string;
-    width?: number; // Image width in pixels
-    height?: number; // Image height in pixels
-    lessonId?: string; // Optional: override current lesson ID
-    substageId?: string; // Optional: substage ID
-    interactionId?: string; // Optional: interaction ID
-    accountId?: string; // Optional: account ID (defaults to current user)
-  }): Promise<{ 
-    imageUrl?: string; 
-    imageData?: string; 
-    imageId?: string; // ID of saved image record
-    success: boolean; 
-    error?: string; 
+    width?: number;
+    height?: number;
+    lessonId?: string;
+    substageId?: string;
+    interactionId?: string;
+    accountId?: string;
+    /** Request labelled bounding-box coordinates for objects in the image */
+    includeComponentMap?: boolean;
+    /** Hint about which component types to detect (e.g. "buttons,labels,icons") */
+    componentPromptContent?: string;
+    /** Tag the image with simple-word dictionary labels for cross-interaction reuse */
+    dictionaryLabels?: string[];
+    /** Skip cache and force a fresh generation */
+    skipCache?: boolean;
+    /** When true, also generate a mobile-optimised variant */
+    dualViewport?: boolean;
+    /** Override mobile width (default 720) */
+    mobileWidth?: number;
+    /** Override mobile height (default 1080) */
+    mobileHeight?: number;
+  }): Promise<{
+    imageUrl?: string;
+    imageData?: string;
+    imageId?: string;
+    success: boolean;
+    error?: string;
     requestId?: string;
+    /** True when the result came from cache */
+    cached?: boolean;
+    /** Labelled bounding-box coordinates (when includeComponentMap was true) */
+    componentMap?: any;
+    /** Mobile-optimised variant (when dualViewport was true) */
+    mobileVariant?: { imageUrl?: string; imageId?: string; componentMap?: any };
   }> {
     try {
       const lessonId = options.lessonId || this.currentLessonId;
       const accountId = options.accountId || this.currentUserId;
-      
+
       const response = await firstValueFrom(
-        this.http.post<{ 
-          imageUrl?: string; 
-          imageData?: string; 
-          imageId?: string;
-          success: boolean; 
-          error?: string; 
-          requestId?: string;
-        }>(
+        this.http.post<any>(
           `${environment.apiUrl}/image-generator/generate`,
           {
             prompt: options.prompt,
@@ -930,20 +965,21 @@ export class InteractionAISDK {
             substageId: options.substageId || this.currentSubstageId,
             interactionId: options.interactionId || this.currentInteractionTypeId,
             accountId: accountId,
+            includeComponentMap: options.includeComponentMap,
+            componentPromptContent: options.componentPromptContent,
+            dictionaryLabels: options.dictionaryLabels,
+            skipCache: options.skipCache,
+            dualViewport: options.dualViewport,
+            mobileWidth: options.mobileWidth,
+            mobileHeight: options.mobileHeight,
           },
           { headers: this.getHeaders() }
         )
       );
-      console.log('[InteractionAISDK] ✅ Image generated:', response.success ? 'success' : 'failed');
-      console.log('[InteractionAISDK] Response keys:', Object.keys(response || {}));
-      console.log('[InteractionAISDK] Full response:', JSON.stringify(response, null, 2).substring(0, 500));
-      if (response.imageUrl) {
-        console.log('[InteractionAISDK] Image saved to:', response.imageUrl);
-      }
-      if (response.imageId) {
-        console.log('[InteractionAISDK] Image ID returned:', response.imageId);
+      if (response.cached) {
+        console.log('[InteractionAISDK] ♻️ Image served from cache:', response.imageId);
       } else {
-        console.warn('[InteractionAISDK] ⚠️ No imageId in response. Response keys:', Object.keys(response || {}));
+        console.log('[InteractionAISDK] ✅ Image generated:', response.imageId || '(no id)');
       }
       return response;
     } catch (error: any) {
@@ -1065,6 +1101,43 @@ export class InteractionAISDK {
     } catch (error: any) {
       console.error('[InteractionAISDK] ❌ Failed to get lesson image IDs:', error);
       return [];
+    }
+  }
+
+  /**
+   * Find a cached image pair by interests for personalisation-based lookup.
+   * Returns desktop + mobile image pair if one exists for the given interests.
+   */
+  async findImagePair(options: {
+    lessonId?: string;
+    interactionId?: string;
+    interests?: string[];
+    dictionaryLabel?: string;
+  }): Promise<{ found: boolean; pair?: { desktop: any; mobile: any } }> {
+    try {
+      const targetLessonId = options.lessonId || this.currentLessonId;
+      if (!targetLessonId) {
+        console.warn('[InteractionAISDK] No lesson ID for findImagePair');
+        return { found: false };
+      }
+
+      const response = await firstValueFrom(
+        this.http.post<{ found: boolean; pair?: { desktop: any; mobile: any } }>(
+          `${environment.apiUrl}/image-generator/lesson/${targetLessonId}/find-pair`,
+          {
+            interactionId: options.interactionId || this.currentInteractionTypeId,
+            interests: options.interests || [],
+            dictionaryLabel: options.dictionaryLabel,
+          },
+          { headers: this.getHeaders() }
+        )
+      );
+
+      console.log(`[InteractionAISDK] findImagePair:`, response.found ? 'found' : 'not found');
+      return response;
+    } catch (error: any) {
+      console.error('[InteractionAISDK] ❌ findImagePair error:', error);
+      return { found: false };
     }
   }
 

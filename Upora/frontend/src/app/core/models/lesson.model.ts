@@ -59,6 +59,7 @@ export interface Lesson {
   updatedAt?: string; // From backend
   createdBy?: string; // From backend
   realId?: string; // Real UUID from backend API (for navigation)
+  courseId?: string | null; // Course this lesson belongs to
 }
 
 export interface Category {

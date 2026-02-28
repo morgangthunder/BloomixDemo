@@ -92,21 +92,16 @@ export class ApiService {
       headers = headers.set('x-tenant-id', this.tenantId);
     }
 
-    // Add user ID if available (for future auth)
     const userId = this.getUserId();
     if (userId) {
       headers = headers.set('x-user-id', userId);
-      console.log('[ApiService] Setting x-user-id header:', userId);
-    } else {
-      console.warn('[ApiService] No user ID available');
     }
 
-    // Add user role from AuthService (or fallback to environment)
+    // Add user role from AuthService — only fall back to env if no user is logged in
     const currentUser = this.authService.currentUser();
-    const userRole = currentUser?.role || environment.userRole;
+    const userRole = currentUser?.role || (!currentUser ? environment.userRole : null);
     if (userRole) {
       headers = headers.set('x-user-role', userRole);
-      console.log('[ApiService] Setting x-user-role header:', userRole);
     }
 
     return headers;
@@ -134,15 +129,10 @@ export class ApiService {
    */
   private getUserId(): string | null {
     const currentUser = this.authService.currentUser();
-    console.log('[ApiService] Current user from AuthService:', currentUser);
-    if (currentUser?.userId) {
-      console.log('[ApiService] Using user ID from AuthService:', currentUser.userId);
-      return currentUser.userId;
-    }
-    // Fallback to localStorage or environment default
-    const fallbackId = localStorage.getItem('userId') || environment.defaultUserId;
-    console.log('[ApiService] Using fallback user ID:', fallbackId);
-    return fallbackId;
+    if (currentUser?.userId) return currentUser.userId;
+    // Only fall back to env/localStorage when no user is authenticated
+    if (!currentUser) return localStorage.getItem('userId') || environment.defaultUserId;
+    return null;
   }
 
   /**

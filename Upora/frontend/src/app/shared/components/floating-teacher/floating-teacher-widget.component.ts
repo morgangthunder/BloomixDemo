@@ -32,7 +32,15 @@ export interface ChatMessage {
          [style.left.px]="isDraggable && widgetLeft > 0 ? widgetLeft : null"
          [style.top.px]="isDraggable && widgetTop > 0 ? widgetTop : null">
       <!-- Minimized State -->
-      <div *ngIf="isMinimized" class="teacher-icon-minimized" (click)="restore()">
+      <div *ngIf="isMinimized" class="teacher-icon-minimized"
+           [class.custom-pos]="minimizedPos.x > 0 || minimizedPos.y > 0"
+           [style.left.px]="minimizedPos.x > 0 ? minimizedPos.x : null"
+           [style.top.px]="minimizedPos.y > 0 ? minimizedPos.y : null"
+           (touchstart)="onMinTouchStart($event)"
+           (touchmove)="onMinTouchMove($event)"
+           (touchend)="onMinTouchEnd($event)"
+           (mousedown)="onMinMouseDown($event)"
+           (dblclick)="onMinDblClick($event)">
         <div class="avatar">🎓</div>
         <div *ngIf="isPlaying" class="speaking-indicator">...</div>
       </div>
@@ -173,6 +181,12 @@ export interface ChatMessage {
       cursor: pointer;
       box-shadow: 0 4px 12px rgba(255, 59, 63, 0.4);
       transition: all 0.3s ease;
+    }
+
+    .teacher-icon-minimized.custom-pos {
+      position: fixed;
+      bottom: auto !important;
+      right: auto !important;
     }
 
     .teacher-icon-minimized:hover {
@@ -667,13 +681,15 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy, Aft
   /**
    * Show a script block programmatically
    */
-  showScript(text: string): void {
+  showScript(text: string, forceOpen: boolean = false): void {
     const script: ScriptBlock = {
       text,
       estimatedDuration: 10,
     };
     this.currentScript = script;
-    this.isMinimized = false; // Ensure widget is visible
+    if (forceOpen) {
+      this.isMinimized = false;
+    }
   }
 
   /**
@@ -692,12 +708,18 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy, Aft
   isHidden = false;
   chatInput = '';
   
-  // Dragging state
+  // Dragging state (expanded widget)
   private isDragging = false;
   private dragStartX = 0;
   private dragStartY = 0;
-  widgetLeft = 0; // Public for template binding
-  widgetTop = 0;  // Public for template binding
+  widgetLeft = 0;
+  widgetTop = 0;
+
+  // Minimized icon drag state (always works on mobile)
+  minimizedPos = { x: 0, y: 0 };
+  private minDragStart = { x: 0, y: 0, posX: 0, posY: 0 };
+  private minDragging = false;
+  private minDragMoved = false;
   
   // Track previous message count for auto-scroll
   private previousMessageCount = 0;
@@ -826,6 +848,75 @@ export class FloatingTeacherWidgetComponent implements OnChanges, OnDestroy, Aft
   restore() {
     this.isMinimized = false;
     this.widgetOpened.emit();
+  }
+
+  // ── Minimized icon drag (touch + mouse) ──
+  onMinTouchStart(e: TouchEvent) {
+    const t = e.touches[0];
+    this.initMinDrag(t.clientX, t.clientY, e.target as HTMLElement);
+    e.preventDefault();
+  }
+
+  onMinTouchMove(e: TouchEvent) {
+    if (!this.minDragging) return;
+    this.moveMinDrag(e.touches[0].clientX, e.touches[0].clientY);
+    e.preventDefault();
+  }
+
+  onMinTouchEnd(_e: TouchEvent) {
+    this.endMinDrag();
+  }
+
+  onMinMouseDown(e: MouseEvent) {
+    if (e.button !== 0) return;
+    this.initMinDrag(e.clientX, e.clientY, e.target as HTMLElement);
+    const onMove = (ev: MouseEvent) => this.moveMinDrag(ev.clientX, ev.clientY);
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      this.endMinDrag();
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  onMinDblClick(e: Event) {
+    e.stopPropagation();
+    this.restore();
+  }
+
+  private initMinDrag(clientX: number, clientY: number, target: HTMLElement) {
+    const el = target.closest('.teacher-icon-minimized') as HTMLElement;
+    if (this.minimizedPos.x === 0 && this.minimizedPos.y === 0 && el) {
+      const rect = el.getBoundingClientRect();
+      this.minimizedPos = { x: rect.left, y: rect.top };
+    }
+    this.minDragStart = { x: clientX, y: clientY, posX: this.minimizedPos.x, posY: this.minimizedPos.y };
+    this.minDragging = true;
+    this.minDragMoved = false;
+  }
+
+  private moveMinDrag(clientX: number, clientY: number) {
+    if (!this.minDragging) return;
+    const dx = clientX - this.minDragStart.x;
+    const dy = clientY - this.minDragStart.y;
+    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) this.minDragMoved = true;
+    if (this.minDragMoved) {
+      let x = this.minDragStart.posX + dx;
+      let y = this.minDragStart.posY + dy;
+      x = Math.max(0, Math.min(x, window.innerWidth - 70));
+      y = Math.max(0, Math.min(y, window.innerHeight - 70));
+      this.minimizedPos = { x, y };
+    }
+  }
+
+  private endMinDrag() {
+    this.minDragging = false;
+    if (!this.minDragMoved) {
+      this.restore();
+    }
   }
 
   close() {

@@ -36,6 +36,10 @@ export interface MessageResponse {
   createdAt: Date;
   emailRequested?: boolean;
   emailDeliveryStatus?: string | null;
+  /** Notification type (e.g. 'direct_message', 'group_invite', 'group_deleted') */
+  notificationType?: string;
+  /** Action URL (e.g. /my-lessons?acceptGroup=UUID) */
+  actionUrl?: string | null;
   fromUser?: {
     id: string;
     email: string;
@@ -356,6 +360,7 @@ export class MessagesService {
     tenantId?: string,
   ): Promise<{ sent: MessageResponse[]; received: MessageResponse[] }> {
     const [sentNotifications, receivedNotifications] = await Promise.all([
+      // Sent: only show direct messages the user sent
       this.notificationRepo.find({
         where: {
           type: NotificationType.DIRECT_MESSAGE,
@@ -364,11 +369,9 @@ export class MessagesService {
         order: { createdAt: 'DESC' },
         take: 100,
       }),
+      // Received: show ALL notification types (direct messages, group invites, group deletions, etc.)
       this.notificationRepo.find({
-        where: {
-          type: NotificationType.DIRECT_MESSAGE,
-          toUserId: userId,
-        },
+        where: { toUserId: userId },
         order: { createdAt: 'DESC' },
         take: 100,
       }),
@@ -401,6 +404,8 @@ export class MessagesService {
       createdAt: n.createdAt,
       emailRequested: n.emailRequested || false,
       emailDeliveryStatus: n.emailDeliveryStatus || null,
+      notificationType: n.type,
+      actionUrl: n.actionUrl || null,
       fromUser: n.fromUserId && userMap[n.fromUserId]
         ? {
             id: userMap[n.fromUserId].id,
@@ -427,10 +432,10 @@ export class MessagesService {
    * Get unread message count for the current user.
    */
   async getUnreadCount(userId: string): Promise<{ count: number }> {
+    // Count ALL unread notifications for this user (direct messages, group invites, etc.)
     const result = await this.notificationRepo
       .createQueryBuilder('n')
-      .where('n.type = :type', { type: NotificationType.DIRECT_MESSAGE })
-      .andWhere('n.toUserId = :userId', { userId })
+      .where('(n.userId = :userId OR n.toUserId = :userId)', { userId })
       .andWhere('n.read_at IS NULL')
       .getCount();
     return { count: result };
@@ -449,7 +454,8 @@ export class MessagesService {
       throw new NotFoundException(`Message ${messageId} not found`);
     }
 
-    if (notification.toUserId !== userId) {
+    // Allow marking as read if the user is the recipient (toUserId) or the target (userId)
+    if (notification.toUserId !== userId && notification.userId !== userId) {
       throw new ForbiddenException('You can only mark your own received messages as read');
     }
 
@@ -471,6 +477,8 @@ export class MessagesService {
       body: notification.body || '',
       readAt: notification.readAt,
       createdAt: notification.createdAt,
+      notificationType: notification.type,
+      actionUrl: notification.actionUrl || null,
       fromUser: fromUser
         ? {
             id: fromUser.id,
@@ -486,5 +494,19 @@ export class MessagesService {
           }
         : undefined,
     };
+  }
+
+  /**
+   * Mark all unread notifications as read for the current user.
+   */
+  async markAllAsRead(userId: string): Promise<{ marked: number }> {
+    const result = await this.notificationRepo
+      .createQueryBuilder()
+      .update(Notification)
+      .set({ readAt: new Date() })
+      .where('(toUserId = :userId OR userId = :userId)', { userId })
+      .andWhere('readAt IS NULL')
+      .execute();
+    return { marked: result.affected || 0 };
   }
 }

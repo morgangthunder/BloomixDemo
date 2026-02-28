@@ -12,7 +12,7 @@ import { UpdateOnboardingOptionsDto } from './dto/update-onboarding-options.dto'
 
 @Controller('super-admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('super-admin')
+@Roles('super-admin', 'admin')
 export class SuperAdminController {
   constructor(
     private readonly superAdminService: SuperAdminService,

@@ -1,6 +1,6 @@
 import { Injectable, signal, computed } from '@angular/core';
 import { Amplify } from '@aws-amplify/core';
-import { signIn, signUp, signOut, fetchAuthSession } from '@aws-amplify/auth';
+import { signIn, signUp, signOut, fetchAuthSession, resetPassword, confirmResetPassword } from '@aws-amplify/auth';
 import { cognitoUserPoolsTokenProvider } from '@aws-amplify/auth/cognito';
 import { environment } from '../../../environments/environment';
 import { oauthFlowCompletePromise } from './oauth-callback-helper';
@@ -11,6 +11,7 @@ export interface AuthUser {
   name?: string;
   tenantId?: string;
   role: string;
+  subscriptionTier?: string;
   idToken?: string;
   accessToken?: string;
 }
@@ -32,12 +33,16 @@ export class AuthService {
   );
 
   private currentUserSig = signal<AuthUser | null>(null);
+  private authReadySig = signal(false);
 
   readonly currentUser = this.currentUserSig.asReadonly();
   readonly isAuthenticated = computed(() => !!this.currentUserSig());
+  /** True once the initial auth state has been resolved (from storage or mock). */
+  readonly authReady = this.authReadySig.asReadonly();
 
   constructor() {
     this.loadStoredUser();
+    this.authReadySig.set(true);
   }
 
   private loadStoredUser(): void {
@@ -63,7 +68,6 @@ export class AuthService {
   async login(email: string, password: string): Promise<AuthUser> {
     if (this.COGNITO_CONFIGURED) {
       this.ensureAmplifyConfigured();
-      // Diagnostic: verify config before signIn (SRP flow needs Auth.Cognito)
       const preSignInConfig = Amplify.getConfig().Auth?.Cognito;
       if (!preSignInConfig?.userPoolId || !preSignInConfig?.userPoolClientId) {
         console.error('[AuthService] Auth.Cognito missing before signIn:', { preSignInConfig });
@@ -81,18 +85,60 @@ export class AuthService {
         console.error('[AuthService] No sub/userSub in session after signIn. tokens:', !!tokens, 'payload keys:', payload ? Object.keys(payload) : []);
         throw new Error('Sign-in succeeded but could not retrieve user ID. Please refresh and try again.');
       }
+
+      // Always resolve role and tier from backend DB (Cognito tokens may not carry custom:role or tier)
+      let resolvedRole = (payload?.['custom:role'] as string) ?? '';
+      let resolvedTier = 'free';
+      try {
+        const resp = await fetch(`${environment.apiUrl}/users/resolve-by-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data?.role) resolvedRole = data.role;
+          if (data?.subscriptionTier) resolvedTier = data.subscriptionTier;
+        }
+      } catch { /* ignore */ }
+
       const user: AuthUser = {
         userId: sub,
         email,
         tenantId: environment.tenantId,
-        role: (payload?.['custom:role'] as string) ?? (session as any)?.customRole ?? environment.userRole,
+        role: resolvedRole || 'student',
+        subscriptionTier: resolvedTier,
         idToken: tokens?.idToken?.toString(),
         accessToken: tokens?.accessToken?.toString(),
       };
       this.setUser(user);
       return user;
     }
-    // Mock: accept any credentials
+    // Mock: look up real user by email from backend
+    try {
+      const resp = await fetch(`${environment.apiUrl}/users/resolve-by-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data?.userId) {
+          const user: AuthUser = {
+            userId: data.userId,
+            email: data.email || email,
+            name: data.name,
+            tenantId: data.tenantId || environment.tenantId,
+            role: data.role || environment.userRole,
+            subscriptionTier: data.subscriptionTier || 'free',
+          };
+          this.setUser(user);
+          return user;
+        }
+      }
+    } catch { /* fall through to default */ }
+
+    // Fallback if backend lookup fails
     const user: AuthUser = {
       userId: environment.defaultUserId,
       email,
@@ -173,11 +219,16 @@ export class AuthService {
   }
 
   getRole(): string | null {
-    return this.currentUserSig()?.role ?? environment.userRole ?? null;
+    const user = this.currentUserSig();
+    return user?.role || null;
   }
 
   getEmail(): string | null {
     return this.currentUserSig()?.email ?? null;
+  }
+
+  getSubscriptionTier(): string | null {
+    return this.currentUserSig()?.subscriptionTier ?? null;
   }
 
   private setUser(user: AuthUser): void {
@@ -249,8 +300,14 @@ export class AuthService {
       }
       
       // On OAuth callback, don't try to fetch session immediately here
-      // Let the handleOAuthCallback method handle it after waiting for the flow to complete
-      if (typeof window !== 'undefined' && window.location?.search?.includes('code=')) {
+      // Let the handleOAuthCallback method handle it after waiting for the flow to complete.
+      // Check both the URL (normal flow) and sessionStorage (code may have been stripped by main.ts)
+      const isOAuthCallback = typeof window !== 'undefined' && (
+        window.location?.search?.includes('code=') ||
+        window.location?.pathname?.includes('/auth/callback') ||
+        sessionStorage.getItem('__oauth_code')
+      );
+      if (isOAuthCallback) {
         console.log('[AuthService] OAuth callback detected in initCognito - will be handled by handleOAuthCallback');
       } else {
         await this.tryRestoreSessionFromAmplify();
@@ -291,12 +348,32 @@ export class AuthService {
       const sub = (payload['sub'] as string) ?? '';
       const email = (payload['email'] as string) ?? (payload['cognito:username'] as string) ?? '';
       const name = (payload['name'] as string) ?? '';
+
+      // Resolve role and subscription tier from token or backend
+      let resolvedRole = (payload['custom:role'] as string) ?? '';
+      let resolvedTier = 'free';
+      if (email) {
+        try {
+          const resp = await fetch(`${environment.apiUrl}/users/resolve-by-email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: String(email) }),
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data?.role) resolvedRole = data.role;
+            if (data?.subscriptionTier) resolvedTier = data.subscriptionTier;
+          }
+        } catch { /* ignore */ }
+      }
+
       const user: AuthUser = {
         userId: sub,
         email: String(email),
         name: name || undefined,
         tenantId: environment.tenantId,
-        role: (payload['custom:role'] as string) ?? environment.userRole,
+        role: resolvedRole || 'student',
+        subscriptionTier: resolvedTier,
         idToken: tokens.idToken.toString(),
         accessToken: tokens.accessToken.toString(),
       };
@@ -594,7 +671,7 @@ export class AuthService {
           email: implicitTokens.email,
           name: implicitTokens.name,
           tenantId: environment.tenantId,
-          role: implicitTokens.role ?? environment.userRole,
+          role: implicitTokens.role ?? 'student',
           idToken: implicitTokens.idToken,
           accessToken: implicitTokens.accessToken,
         };
@@ -602,8 +679,12 @@ export class AuthService {
         return { success: true };
       }
       
-      // Authorization code flow
-      const isCodeFlow = typeof window !== 'undefined' && window.location.search?.includes('code=');
+      // Authorization code flow — check URL and sessionStorage (code may have been
+      // stripped from the URL by main.ts to prevent Amplify from consuming it)
+      const isCodeFlow = typeof window !== 'undefined' && (
+        window.location.search?.includes('code=') ||
+        !!sessionStorage.getItem('__oauth_code')
+      );
       if (isCodeFlow) {
         console.log('[AuthService] Authorization code flow detected');
         
@@ -659,18 +740,23 @@ export class AuthService {
           using: pkceSession ? 'sessionStorage' : pkceLocal ? 'localStorage' : 'none',
         });
         
-        // Extract authorization code from URL
+        // Extract authorization code — check sessionStorage first (may have been
+        // stripped from the URL in main.ts to prevent Amplify from consuming it)
         const urlParams = new URLSearchParams(window.location.search);
-        const authCode = urlParams.get('code');
-        const stateParam = urlParams.get('state');
+        const authCode = urlParams.get('code') || sessionStorage.getItem('__oauth_code');
+        const stateParam = urlParams.get('state') || sessionStorage.getItem('__oauth_state');
+        // Clear the saved code immediately so it can't be replayed
+        sessionStorage.removeItem('__oauth_code');
+        sessionStorage.removeItem('__oauth_state');
         
         if (!authCode) {
-          console.error('[AuthService] ❌ No authorization code in URL');
+          console.error('[AuthService] ❌ No authorization code in URL or sessionStorage');
           return { 
             success: false, 
             error: 'No authorization code found in callback URL. Please try signing in again.' 
           };
         }
+        console.log('[AuthService] Authorization code source:', urlParams.get('code') ? 'URL' : 'sessionStorage');
         
           // Check if we have manually stored PKCE (from our manual OAuth flow)
           // Try sessionStorage first, then localStorage
@@ -819,17 +905,34 @@ export class AuthService {
       const sub = (payload['sub'] as string) ?? '';
       const email = (payload['email'] as string) ?? (payload['cognito:username'] as string) ?? '';
       const name = (payload['name'] as string) ?? '';
+
+      // Resolve role from token or backend
+      let resolvedRole = (payload['custom:role'] as string) ?? '';
+      if (!resolvedRole && email) {
+        try {
+          const resp = await fetch(`${environment.apiUrl}/users/resolve-by-email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: String(email) }),
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data?.role) resolvedRole = data.role;
+          }
+        } catch { /* ignore */ }
+      }
+
       const user: AuthUser = {
         userId: sub,
         email: String(email),
         name: name || undefined,
         tenantId: environment.tenantId,
-        role: (payload['custom:role'] as string) ?? environment.userRole,
+        role: resolvedRole || 'student',
         idToken: tokens.idToken.toString(),
         accessToken: tokens.accessToken.toString(),
       };
       this.setUser(user);
-      console.log('[AuthService] ✅ User authenticated:', user.email);
+      console.log('[AuthService] ✅ User authenticated:', user.email, 'role:', user.role);
       return { success: true };
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to complete sign-in';
@@ -982,19 +1085,38 @@ export class AuthService {
       const sub = (idTokenPayload['sub'] as string) ?? '';
       const email = (idTokenPayload['email'] as string) ?? (idTokenPayload['cognito:username'] as string) ?? '';
       const name = (idTokenPayload['name'] as string) || undefined;
+
+      // Resolve role and subscription tier from token or backend
+      let manualRole = (idTokenPayload['custom:role'] as string) ?? '';
+      let manualTier = 'free';
+      if (email) {
+        try {
+          const resp = await fetch(`${environment.apiUrl}/users/resolve-by-email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: String(email) }),
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data?.role) manualRole = data.role;
+            if (data?.subscriptionTier) manualTier = data.subscriptionTier;
+          }
+        } catch { /* ignore */ }
+      }
       
       const user: AuthUser = {
         userId: sub,
         email: String(email),
         name: name,
         tenantId: environment.tenantId,
-        role: (idTokenPayload['custom:role'] as string) ?? environment.userRole,
+        role: manualRole || 'student',
+        subscriptionTier: manualTier,
         idToken: tokenData.id_token,
         accessToken: tokenData.access_token,
       };
       
       this.setUser(user);
-      console.log('[AuthService] ✅ User authenticated via manual exchange:', user.email);
+      console.log('[AuthService] ✅ User authenticated via manual exchange:', user.email, 'role:', user.role);
       
       return { success: true };
     } catch (e) {
@@ -1028,6 +1150,24 @@ export class AuthService {
       .replace(/\+/g, '-')
       .replace(/\//g, '_')
       .replace(/=/g, '');
+  }
+
+  async forgotPassword(email: string): Promise<void> {
+    if (this.COGNITO_CONFIGURED) {
+      this.ensureAmplifyConfigured();
+      await resetPassword({ username: email });
+    } else {
+      console.warn('[AuthService] Cognito not configured — forgotPassword is a no-op in mock mode');
+    }
+  }
+
+  async confirmForgotPassword(email: string, code: string, newPassword: string): Promise<void> {
+    if (this.COGNITO_CONFIGURED) {
+      this.ensureAmplifyConfigured();
+      await confirmResetPassword({ username: email, confirmationCode: code, newPassword });
+    } else {
+      console.warn('[AuthService] Cognito not configured — confirmForgotPassword is a no-op in mock mode');
+    }
   }
 
   private parseImplicitTokensFromHash(): { idToken: string; accessToken: string; sub: string; email: string; name?: string; role?: string } | null {

@@ -1,15 +1,18 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
 import { IonContent } from '@ionic/angular/standalone';
 import { LessonService } from '../../core/services/lesson.service';
+import { LessonGroupsService, LessonGroup } from '../../core/services/lesson-groups.service';
+import { ApiService } from '../../core/services/api.service';
 import { Observable } from 'rxjs';
 import { Lesson } from '../../core/models/lesson.model';
 
 @Component({
   selector: 'app-lesson-overview',
   standalone: true,
-  imports: [CommonModule, IonContent],
+  imports: [CommonModule, FormsModule, IonContent],
   template: `
     <ion-content [scrollEvents]="true" (ionScroll)="onScroll($event)">
       <div class="min-h-screen bg-brand-black text-white page-with-header">
@@ -86,6 +89,27 @@ import { Lesson } from '../../core/models/lesson.model';
                 </button>
               </div>
 
+              <!-- Group Selection -->
+              <div *ngIf="myLessonGroups.length > 0" class="mt-8 p-5 bg-gray-900 border border-gray-800 rounded-lg">
+                <h3 class="text-lg font-semibold text-white mb-3">Your Groups</h3>
+                <div *ngIf="myLessonGroups.length === 1 && myLessonGroups[0].isDefault" class="flex items-center justify-between">
+                  <span class="text-gray-400 text-sm">You're in the open group for this lesson.</span>
+                  <button (click)="enterGroupView(myLessonGroups[0])" class="px-4 py-2 bg-cyan-700 hover:bg-cyan-600 text-white text-sm rounded transition">
+                    Enter Group View
+                  </button>
+                </div>
+                <div *ngIf="myLessonGroups.length > 1 || (myLessonGroups.length === 1 && !myLessonGroups[0].isDefault)">
+                  <select [(ngModel)]="selectedGroupId" class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white mb-3 text-sm">
+                    <option *ngFor="let g of myLessonGroups" [value]="g.id">
+                      {{ g.name }}{{ g.isDefault ? ' (Open)' : '' }}
+                    </option>
+                  </select>
+                  <button (click)="enterSelectedGroupView()" class="px-4 py-2 bg-cyan-700 hover:bg-cyan-600 text-white text-sm rounded transition">
+                    Enter Group View
+                  </button>
+                </div>
+              </div>
+
               <!-- What You'll Learn -->
               <div *ngIf="getLearningObjectives(lesson).length > 0" class="mt-12 p-6 bg-brand-dark rounded-lg border border-gray-800">
                 <h2 class="text-2xl font-bold mb-4">What you'll learn</h2>
@@ -131,17 +155,79 @@ export class LessonOverviewComponent implements OnInit {
   rating = 4.8;
   ratingCount = '12.5k';
   instructor = 'Dr. Evelyn Reed';
+  myLessonGroups: LessonGroup[] = [];
+  selectedGroupId = '';
 
   constructor(
     private lessonService: LessonService,
     private router: Router,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private groupsService: LessonGroupsService,
+    private apiService: ApiService,
   ) {
     this.overviewLesson$ = this.lessonService.overviewLesson$;
   }
 
   ngOnInit() {
     this.lessonService.setCurrentPage('lessonOverview');
+    const lessonId = this.route.snapshot.paramMap.get('id');
+    if (!lessonId) return;
+
+    // If overviewLesson$ is null (direct navigation from group-view, course-overview, etc.),
+    // fetch the lesson from the API and populate it
+    this.lessonService.overviewLesson$.subscribe(lesson => {
+      if (!lesson && lessonId) {
+        this.apiService.get<any>(`/lessons/${lessonId}`).subscribe({
+          next: (backendLesson) => {
+            if (backendLesson) {
+              // Transform to the frontend Lesson format
+              const transformed: Lesson = {
+                id: backendLesson.id,
+                title: backendLesson.title || 'Untitled',
+                description: backendLesson.description || '',
+                thumbnailUrl: backendLesson.thumbnailUrl || backendLesson.thumbnail_url || '',
+                image: backendLesson.thumbnailUrl || backendLesson.thumbnail_url || '',
+                category: backendLesson.category || '',
+                duration: `${backendLesson.durationMinutes || 0} min`,
+                rating: parseFloat(backendLesson.ratingAverage) || 0,
+                tags: backendLesson.tags?.split?.(' ') || [],
+                difficulty: backendLesson.difficulty || 'Beginner',
+                courseId: backendLesson.courseId || null,
+                stages: backendLesson.data?.structure?.stages || [],
+              };
+              this.lessonService.showOverview(transformed);
+            }
+          },
+          error: (err) => console.error('[LessonOverview] Failed to load lesson:', err),
+        });
+      }
+    }).unsubscribe(); // Only check current value once
+
+    // Load groups for this lesson
+    this.groupsService.getMyLessonGroups(lessonId).subscribe({
+      next: (groups) => {
+        // Non-default first
+        this.myLessonGroups = [...groups].sort((a, b) => {
+          if (a.isDefault && !b.isDefault) return 1;
+          if (!a.isDefault && b.isDefault) return -1;
+          return 0;
+        });
+        if (this.myLessonGroups.length > 0) {
+          this.selectedGroupId = this.myLessonGroups[0].id;
+        }
+      },
+      error: () => { /* silently ignore if groups not available */ }
+    });
+  }
+
+  enterGroupView(group: LessonGroup) {
+    this.router.navigate(['/groups', group.id, 'view']);
+  }
+
+  enterSelectedGroupView() {
+    if (this.selectedGroupId) {
+      this.router.navigate(['/groups', this.selectedGroupId, 'view']);
+    }
   }
 
   onScroll(event: any) {

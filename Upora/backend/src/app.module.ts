@@ -26,6 +26,7 @@ import { UserInteractionProgress } from './entities/user-interaction-progress.en
 import { UserPublicProfile } from './entities/user-public-profile.entity';
 import { LessonDraft } from './lesson-drafts/entities/lesson-draft.entity';
 import { GeneratedImage } from './entities/generated-image.entity';
+import { ProcessedContentCache } from './entities/processed-content-cache.entity';
 import { UserPersonalization } from './entities/user-personalization.entity';
 import { PersonalizationOption } from './entities/personalization-option.entity';
 import { LessonEngagementTranscription } from './entities/lesson-engagement-transcription.entity';
@@ -52,9 +53,18 @@ import { UserPersonalizationModule } from './modules/user-personalization/user-p
 import { ProfileModule } from './modules/profile/profile.module';
 import { MessagesModule } from './modules/messages/messages.module';
 import { FeedbackModule } from './modules/feedback/feedback.module';
+import { LessonGroupsModule } from './modules/lesson-groups/lesson-groups.module';
+import { CoursesModule } from './modules/courses/courses.module';
 import { Notification } from './entities/notification.entity';
 import { MessageDeliverySettings } from './entities/message-delivery-settings.entity';
 import { Feedback, FeedbackReply } from './entities/feedback.entity';
+import { LessonGroup, GroupMember } from './entities/lesson-group.entity';
+import { Assignment, AssignmentSubmission, UserLessonDeadline } from './entities/assignment.entity';
+import { CourseGroupLessonVisibility } from './entities/course-group-lesson-visibility.entity';
+import { Hub } from './entities/hub.entity';
+import { HubMember } from './entities/hub-member.entity';
+import { HubContentLink } from './entities/hub-content-link.entity';
+import { HubsModule } from './modules/hubs/hubs.module';
 
 @Module({
   imports: [
@@ -72,7 +82,7 @@ import { Feedback, FeedbackReply } from './entities/feedback.entity';
         username: configService.get('database.username'),
         password: configService.get('database.password'),
         database: configService.get('database.database'),
-        entities: [User, Lesson, InteractionType, Workflow, Usage, ContentSource, LessonDataLink, ProcessedContentOutput, ScriptBlock, Course, LlmGenerationLog, StudentTopicScore, StudentMistake, LlmProvider, AiPrompt, InteractionResult, InteractionAverage, InteractionInstanceData, UserInteractionProgress, UserPublicProfile, LessonDraft, GeneratedImage, UserPersonalization, PersonalizationOption, LessonEngagementTranscription, Notification, MessageDeliverySettings, Feedback, FeedbackReply],
+        entities: [User, Lesson, InteractionType, Workflow, Usage, ContentSource, LessonDataLink, ProcessedContentOutput, ScriptBlock, Course, LlmGenerationLog, StudentTopicScore, StudentMistake, LlmProvider, AiPrompt, InteractionResult, InteractionAverage, InteractionInstanceData, UserInteractionProgress, UserPublicProfile, LessonDraft, GeneratedImage, UserPersonalization, PersonalizationOption, LessonEngagementTranscription, Notification, MessageDeliverySettings, Feedback, FeedbackReply, LessonGroup, GroupMember, Assignment, AssignmentSubmission, UserLessonDeadline, CourseGroupLessonVisibility, Hub, HubMember, HubContentLink, ProcessedContentCache],
         synchronize: configService.get('database.synchronize'),
         logging: configService.get('database.logging'),
       }),
@@ -100,6 +110,9 @@ import { Feedback, FeedbackReply } from './entities/feedback.entity';
     ProfileModule,
     MessagesModule,
     FeedbackModule,
+    LessonGroupsModule,
+    CoursesModule,
+    HubsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

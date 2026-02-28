@@ -175,7 +175,7 @@ export class InteractionAIBridgeService {
         break;
 
       case 'ai-sdk-show-snack':
-        const snackId = this.aiSDK.showSnack(message.content, message.duration, message.hideFromChatUI || false);
+        const snackId = this.aiSDK.showSnack(message.content, message.duration, message.hideFromChatUI || false, message.actions);
         this.sendToIframe(sourceWindow, {
           type: 'ai-sdk-show-snack-ack',
           snackId,
@@ -445,6 +445,25 @@ export class InteractionAIBridgeService {
           });
         break;
 
+      case 'ai-sdk-find-image-pair':
+        this.aiSDK.findImagePair(message.options || {})
+          .then((result) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-find-image-pair-ack',
+              ...result,
+              requestId: message.requestId,
+            });
+          })
+          .catch((error) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-find-image-pair-ack',
+              found: false,
+              error: error.message,
+              requestId: message.requestId,
+            });
+          });
+        break;
+
       case 'ai-sdk-delete-image':
         this.aiSDK.deleteImage(message.imageId)
           .then((result) => {
@@ -561,6 +580,42 @@ export class InteractionAIBridgeService {
       case 'ai-sdk-set-media-volume-ack':
         // Acknowledgment messages - no action needed, just log
         console.log('[AIBridge] ✅ Received acknowledgment:', message.type);
+        break;
+
+      case 'ai-sdk-content-overflow':
+        console.log('[AIBridge] Content overflow report:', message.overflow,
+          'scrollH:', message.scrollHeight, 'viewportH:', message.viewportHeight);
+        document.dispatchEvent(new CustomEvent('ai-sdk-content-overflow', { detail: message }));
+        break;
+
+      case 'ai-sdk-request-next':
+        console.log('[AIBridge] Iframe requested next sub-stage');
+        document.dispatchEvent(new CustomEvent('ai-sdk-request-next'));
+        break;
+
+      case 'ai-sdk-play-sfx':
+        this.aiSDK.playSfx(message.name);
+        this.sendToIframe(sourceWindow, { type: 'ai-sdk-play-sfx-ack', requestId: message.requestId });
+        break;
+
+      case 'ai-sdk-start-bg-music':
+        this.aiSDK.startBgMusic(message.style || 'calm');
+        this.sendToIframe(sourceWindow, { type: 'ai-sdk-start-bg-music-ack', requestId: message.requestId });
+        break;
+
+      case 'ai-sdk-start-bg-music-url':
+        this.aiSDK.startBgMusicFromUrl(message.url, message.loopConfig);
+        this.sendToIframe(sourceWindow, { type: 'ai-sdk-start-bg-music-url-ack', requestId: message.requestId });
+        break;
+
+      case 'ai-sdk-stop-bg-music':
+        this.aiSDK.stopBgMusic();
+        this.sendToIframe(sourceWindow, { type: 'ai-sdk-stop-bg-music-ack', requestId: message.requestId });
+        break;
+
+      case 'ai-sdk-set-audio-volume':
+        this.aiSDK.setAudioVolume(message.channel || 'sfx', message.level ?? 0.5);
+        this.sendToIframe(sourceWindow, { type: 'ai-sdk-set-audio-volume-ack', requestId: message.requestId });
         break;
 
       default:
@@ -703,8 +758,8 @@ export const createIframeAISDK = () => {
       sendMessage('ai-sdk-show-script', { text, openChat });
     },
 
-    showSnack: (content: string, duration?: number, hideFromChatUI: boolean = false, callback?: (snackId: string) => void) => {
-      sendMessage('ai-sdk-show-snack', { content, duration, hideFromChatUI }, (response) => {
+    showSnack: (content: string, duration?: number, hideFromChatUI: boolean = false, actions?: string[], callback?: (snackId: string) => void) => {
+      sendMessage('ai-sdk-show-snack', { content, duration, hideFromChatUI, actions: actions || [] }, (response) => {
         if (callback && response.snackId) {
           callback(response.snackId);
         }
@@ -806,7 +861,7 @@ export const createIframeAISDK = () => {
       });
     },
 
-    generateImage: (options: { prompt: string; userInput?: string; screenshot?: string; customInstructions?: string }, callback?: (response: any) => void) => {
+    generateImage: (options: { prompt: string; userInput?: string; screenshot?: string; customInstructions?: string; [key: string]: any }, callback?: (response: any) => void) => {
       sendMessage('ai-sdk-generate-image', { options }, (response) => {
         if (callback) {
           callback(response);

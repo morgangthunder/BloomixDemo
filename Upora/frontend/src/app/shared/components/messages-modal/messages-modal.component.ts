@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MessagesService, Message, CreateMessageDto } from '../../../core/services/messages.service';
 import { FeedbackService, FeedbackItem } from '../../../core/services/feedback.service';
+import { LessonGroupsService } from '../../../core/services/lesson-groups.service';
 import { Subject, forkJoin, of } from 'rxjs';
 import { takeUntil, catchError } from 'rxjs/operators';
 
@@ -75,18 +76,27 @@ import { takeUntil, catchError } from 'rxjs/operators';
 
         <!-- Messages list (all messages / sent & received) -->
         <div *ngIf="(!showCompose || !toUserId) && !selectedMessage" class="messages-list">
-          <div class="tabs">
+          <div class="tabs-row">
+            <div class="tabs">
+              <button
+                class="tab-btn"
+                [class.active]="activeTab === 'received'"
+                (click)="activeTab = 'received'">
+                Received ({{ receivedMessages.length }})
+              </button>
+              <button
+                class="tab-btn"
+                [class.active]="activeTab === 'sent'"
+                (click)="activeTab = 'sent'">
+                Sent ({{ sentMessages.length }})
+              </button>
+            </div>
             <button
-              class="tab-btn"
-              [class.active]="activeTab === 'received'"
-              (click)="activeTab = 'received'">
-              Received ({{ receivedMessages.length }})
-            </button>
-            <button
-              class="tab-btn"
-              [class.active]="activeTab === 'sent'"
-              (click)="activeTab = 'sent'">
-              Sent ({{ sentMessages.length }})
+              *ngIf="activeTab === 'received' && hasUnread()"
+              class="mark-all-read-btn"
+              [disabled]="markingAllRead"
+              (click)="markAllAsRead()">
+              {{ markingAllRead ? 'Marking...' : 'Mark all as read' }}
             </button>
           </div>
 
@@ -111,6 +121,11 @@ import { takeUntil, catchError } from 'rxjs/operators';
                 <span class="message-date">{{ msg.createdAt | date:'short' }}</span>
               </div>
               <div class="message-title">
+                <span *ngIf="msg.notificationType && msg.notificationType !== 'direct_message'" class="notif-type-badge"
+                      [class.notif-invite]="msg.notificationType === 'group_invite'"
+                      [class.notif-deleted]="msg.notificationType === 'group_deleted'">
+                  {{ getNotifTypeLabel(msg.notificationType) }}
+                </span>
                 {{ msg.title }}
                 <span *ngIf="activeTab === 'sent' && msg.emailRequested" class="delivery-badge"
                       [class.delivery-sent]="msg.emailDeliveryStatus === 'sent'"
@@ -120,11 +135,20 @@ import { takeUntil, catchError } from 'rxjs/operators';
                 </span>
               </div>
               <div class="message-preview">{{ msg.body }}</div>
-              <button *ngIf="!msg.readAt && activeTab === 'received'"
-                      class="quick-read-btn"
-                      (click)="quickMarkAsRead($event, msg)">
-                Mark as read
-              </button>
+              <div class="tile-actions">
+                <button *ngIf="msg.notificationType === 'group_invite' && !isInviteAccepted(msg)"
+                        class="quick-accept-btn"
+                        [disabled]="acceptingInviteId === msg.id"
+                        (click)="quickAcceptInvite($event, msg)">
+                  {{ acceptingInviteId === msg.id ? 'Accepting...' : 'Accept Invite' }}
+                </button>
+                <span *ngIf="msg.notificationType === 'group_invite' && isInviteAccepted(msg)" class="accepted-badge">Accepted</span>
+                <button *ngIf="!msg.readAt && activeTab === 'received'"
+                        class="quick-read-btn"
+                        (click)="quickMarkAsRead($event, msg)">
+                  Mark as read
+                </button>
+              </div>
             </div>
             <!-- Feedback items in Sent tab -->
             <div *ngIf="activeTab === 'sent' && myFeedback.length > 0" class="feedback-divider">
@@ -158,8 +182,15 @@ import { takeUntil, catchError } from 'rxjs/operators';
           </div>
           <div class="message-detail-title">{{ selectedMessage.title }}</div>
           <div class="message-detail-body">{{ selectedMessage.body }}</div>
-          <div *ngIf="!selectedMessage.readAt && activeTab === 'received'" class="message-actions">
-            <button class="btn-primary" (click)="markAsRead(selectedMessage)">Mark as read</button>
+          <div class="message-actions">
+            <button *ngIf="selectedMessage.notificationType === 'group_invite' && !isInviteAccepted(selectedMessage)"
+                    class="btn-accept"
+                    [disabled]="acceptingInviteId === selectedMessage.id"
+                    (click)="quickAcceptInvite($event, selectedMessage)">
+              {{ acceptingInviteId === selectedMessage.id ? 'Accepting...' : 'Accept Invite' }}
+            </button>
+            <span *ngIf="selectedMessage.notificationType === 'group_invite' && isInviteAccepted(selectedMessage)" class="accepted-badge-detail">Accepted</span>
+            <button *ngIf="!selectedMessage.readAt && activeTab === 'received'" class="btn-primary" (click)="markAsRead(selectedMessage)">Mark as read</button>
           </div>
         </div>
       </div>
@@ -342,11 +373,16 @@ import { takeUntil, catchError } from 'rxjs/operators';
       border-radius: 4px;
       color: #00d4ff;
     }
+    .tabs-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
     .tabs {
       display: flex;
       gap: 0.5rem;
-      margin-bottom: 1.5rem;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     }
     .tab-btn {
       padding: 0.75rem 1.5rem;
@@ -480,8 +516,52 @@ import { takeUntil, catchError } from 'rxjs/operators';
       color: #eab308;
       border: 1px solid rgba(234, 179, 8, 0.3);
     }
-    .quick-read-btn {
+    .mark-all-read-btn {
+      background: rgba(0, 212, 255, 0.1);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      color: #00d4ff;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: background 0.15s;
+      margin-bottom: 6px;
+      white-space: nowrap;
+    }
+    .mark-all-read-btn:hover:not(:disabled) {
+      background: rgba(0, 212, 255, 0.2);
+    }
+    .mark-all-read-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .notif-type-badge {
+      display: inline-block;
+      font-size: 0.65rem;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin-right: 0.4rem;
+      vertical-align: middle;
+      text-transform: uppercase;
+    }
+    .notif-invite {
+      background: rgba(34, 197, 94, 0.15);
+      color: #22c55e;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+    .notif-deleted {
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .tile-actions {
+      display: flex;
+      gap: 0.5rem;
       margin-top: 0.5rem;
+      align-items: center;
+    }
+    .quick-read-btn {
       background: rgba(0, 212, 255, 0.1);
       border: 1px solid rgba(0, 212, 255, 0.3);
       color: #00d4ff;
@@ -493,6 +573,56 @@ import { takeUntil, catchError } from 'rxjs/operators';
     }
     .quick-read-btn:hover {
       background: rgba(0, 212, 255, 0.2);
+    }
+    .quick-accept-btn {
+      background: rgba(34, 197, 94, 0.15);
+      border: 1px solid rgba(34, 197, 94, 0.4);
+      color: #22c55e;
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: background 0.15s;
+      font-weight: 600;
+    }
+    .quick-accept-btn:hover:not(:disabled) {
+      background: rgba(34, 197, 94, 0.25);
+    }
+    .quick-accept-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn-accept {
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: 600;
+      background: #22c55e;
+      color: #fff;
+    }
+    .btn-accept:hover:not(:disabled) {
+      background: #16a34a;
+    }
+    .btn-accept:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .accepted-badge, .accepted-badge-detail {
+      color: #22c55e;
+      font-size: 0.75rem;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+    .accepted-badge::before, .accepted-badge-detail::before {
+      content: '\\2713';
+    }
+    .accepted-badge-detail {
+      font-size: 0.95rem;
+      padding: 0.75rem 0;
     }
     .feedback-divider {
       font-size: 0.75rem;
@@ -553,12 +683,17 @@ export class MessagesModalComponent implements OnInit, OnDestroy {
   sendSuccess = false;
   /** When true, show compose form; when false, show messages list (used after send to show Sent list). */
   showCompose = true;
+  markingAllRead = false;
+  acceptingInviteId: string | null = null;
+  /** Set of notification IDs whose invites have been accepted (in this session). */
+  acceptedInviteIds = new Set<string>();
 
   private destroy$ = new Subject<void>();
 
   constructor(
     private messagesService: MessagesService,
     private feedbackService: FeedbackService,
+    private groupsService: LessonGroupsService,
     private router: Router,
   ) {}
 
@@ -696,6 +831,94 @@ export class MessagesModalComponent implements OnInit, OnDestroy {
   quickMarkAsRead(event: Event, message: Message) {
     event.stopPropagation(); // Don't open the detail view
     this.markAsRead(message);
+  }
+
+  /** Returns true if there are any unread received messages. */
+  hasUnread(): boolean {
+    return this.receivedMessages.some(m => !m.readAt);
+  }
+
+  /** Mark all received notifications as read (backend + local state). */
+  markAllAsRead() {
+    this.markingAllRead = true;
+    this.messagesService.markAllAsRead()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (res) => {
+          this.markingAllRead = false;
+          // Update all received messages locally
+          this.receivedMessages.forEach(m => {
+            if (!m.readAt) {
+              m.readAt = new Date();
+            }
+          });
+          // Emit to parent so badge resets to 0
+          this.messageRead.emit();
+        },
+        error: (err) => {
+          this.markingAllRead = false;
+          console.error('[MessagesModal] Failed to mark all as read:', err);
+        },
+      });
+  }
+
+  /** Extract groupId from actionUrl (e.g., /my-lessons?acceptGroup=UUID). */
+  private extractGroupId(msg: Message): string | null {
+    if (!msg?.actionUrl) return null;
+    const match = msg.actionUrl.match(/acceptGroup=([a-f0-9-]+)/i);
+    return match ? match[1] : null;
+  }
+
+  /** Check if an invite notification has been accepted. */
+  isInviteAccepted(msg: Message): boolean {
+    return this.acceptedInviteIds.has(msg.id);
+  }
+
+  /** Accept a group invite directly from the notification tile. */
+  quickAcceptInvite(event: Event, msg: Message) {
+    event.stopPropagation();
+    const groupId = this.extractGroupId(msg);
+    if (!groupId) {
+      // Fallback: navigate to my-lessons where they can accept
+      this.close();
+      this.router.navigate(['/my-lessons']);
+      return;
+    }
+    this.acceptingInviteId = msg.id;
+    this.groupsService.acceptInvite(groupId)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.acceptingInviteId = null;
+          this.acceptedInviteIds.add(msg.id);
+          // Notify other components (e.g., my-lessons) that group membership changed
+          window.dispatchEvent(new Event('groupsUpdated'));
+          // Also mark as read
+          if (!msg.readAt) {
+            this.markAsRead(msg);
+          }
+        },
+        error: (err) => {
+          this.acceptingInviteId = null;
+          const errMsg = err?.error?.message || err?.message || 'Failed to accept invite';
+          // If "already joined", treat as success
+          if (errMsg.toLowerCase().includes('already') || errMsg.toLowerCase().includes('joined')) {
+            this.acceptedInviteIds.add(msg.id);
+          } else {
+            alert(errMsg);
+          }
+          console.error('[MessagesModal] Failed to accept invite:', err);
+        },
+      });
+  }
+
+  /** Human-readable label for notification type badges. */
+  getNotifTypeLabel(type: string): string {
+    switch (type) {
+      case 'group_invite': return 'Invite';
+      case 'group_deleted': return 'Deleted';
+      default: return type?.replace(/_/g, ' ') || '';
+    }
   }
 
   navigateToFeedback(fb: FeedbackItem) {

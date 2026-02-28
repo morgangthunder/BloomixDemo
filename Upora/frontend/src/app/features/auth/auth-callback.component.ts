@@ -59,7 +59,8 @@ export class AuthCallbackComponent implements OnInit {
     }
 
     // Check if we have a code (authorization code flow)
-    const hasCode = params['code'] || hashParams?.get('code');
+    // Code may have been stripped from URL and saved to sessionStorage by main.ts
+    const hasCode = params['code'] || hashParams?.get('code') || sessionStorage.getItem('__oauth_code');
     const hasImplicitTokens = hashParams?.get('id_token') && hashParams?.get('access_token');
     
     if (!hasCode && !hasImplicitTokens) {

@@ -26,12 +26,23 @@ export class UsersService {
     if (!userId?.trim()) return null as any;
     const existing = await this.usersRepository.findOne({ where: { id: userId } });
     if (existing) return existing;
-    const tenantId = opts?.tenantId?.trim() || DEFAULT_TENANT_ID;
+
+    // Cognito users sign in with a sub that may differ from a pre-seeded DB id.
+    // Check by email first; if found, update the id to the Cognito sub so FK
+    // references (e.g. user_personalization) resolve correctly.
     const email =
       opts?.email?.trim() ||
       `${userId.replace(/[^a-zA-Z0-9-]/g, '_')}@cognito-synced.local`;
+    const byEmail = opts?.email
+      ? await this.usersRepository.findOne({ where: { email } })
+      : null;
+    if (byEmail) {
+      byEmail.id = userId;
+      return await this.usersRepository.save(byEmail);
+    }
+
+    const tenantId = opts?.tenantId?.trim() || DEFAULT_TENANT_ID;
     try {
-      // Use raw query for PostgreSQL ON CONFLICT (id) DO NOTHING
       await this.usersRepository
         .createQueryBuilder()
         .insert()
@@ -45,7 +56,6 @@ export class UsersService {
         .orIgnore()
         .execute();
     } catch (err) {
-      // Ignore duplicate key - user was created by another request
       const msg = (err as Error)?.message || '';
       if (!msg.includes('duplicate key') && !msg.includes('unique constraint')) {
         throw err;

@@ -37,6 +37,12 @@ export class Course {
   @Column({ name: 'rating_average', type: 'decimal', precision: 3, scale: 2, default: 0 })
   ratingAverage: string;
 
+  @Column({ type: 'varchar', length: 20, name: 'access_level', default: 'public' })
+  accessLevel: string; // 'public' | 'login_required' | 'paid'
+
+  @Column({ type: 'varchar', length: 20, name: 'required_subscription_tier', nullable: true })
+  requiredSubscriptionTier: string | null; // 'free' | 'pro' | 'enterprise' | null
+
   @Column({ name: 'created_by', type: 'uuid' })
   createdBy: string;
 

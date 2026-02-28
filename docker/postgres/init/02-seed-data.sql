@@ -222,24 +222,7 @@ INSERT INTO lessons (id, tenant_id, title, description, category, difficulty, du
   "stages": []
 }', 'rejected', '00000000-0000-0000-0000-000000000011', 'Lesson content is incomplete. Please add at least one stage with substages.', ARRAY['test']);
 
--- Tenant 2 Lesson (Enterprise Client)
-INSERT INTO lessons (id, tenant_id, title, description, category, difficulty, duration_minutes, data, status, created_by, approved_by, approved_at, tags) VALUES
-('30000000-0000-0000-0000-000000000010', '00000000-0000-0000-0000-000000000002', 'Company Training: Sales 101', 'Internal sales training for Client ABC', 'Business', 'Beginner', 120,
-'{
-  "stages": [
-    {
-      "id": "stage-1",
-      "title": "Sales Fundamentals",
-      "substages": [
-        {
-          "id": "substage-1-1",
-          "title": "Introduction",
-          "content": "Welcome to sales training."
-        }
-      ]
-    }
-  ]
-}', 'approved', '00000000-0000-0000-0000-000000000021', '00000000-0000-0000-0000-000000000020', NOW(), ARRAY['sales', 'training', 'internal']);
+-- Tenant 2 Lesson removed — was leaking across tenants into shelf resolvers
 
 -- =====================================================
 -- USAGE TRACKING (Simulate some activity)

@@ -45,7 +45,11 @@ interface LessonProgress {
               <div>
                 <h2 class="text-2xl font-bold text-white">{{ displayName() }}</h2>
                 <p class="text-gray-400">{{ displayEmail() }}</p>
-                <p class="text-sm text-brand-red font-semibold mt-1">{{ mockUser.subscription }}</p>
+                <p class="text-sm font-semibold mt-1" [ngClass]="{
+                  'text-gray-400': subscriptionTier() === 'free',
+                  'text-brand-red': subscriptionTier() === 'pro',
+                  'text-yellow-400': subscriptionTier() === 'enterprise'
+                }">{{ subscriptionLabel() }}</p>
               </div>
             </div>
 
@@ -77,11 +81,17 @@ interface LessonProgress {
               </div>
               <div>
                 <label class="block text-sm font-medium text-brand-gray mb-1">Subscription Plan</label>
-                <select 
-                  [(ngModel)]="mockUser.subscription"
-                  class="w-full bg-brand-dark border border-gray-600 rounded-md p-2 text-white focus:outline-none focus:ring-2 focus:ring-brand-red">
-                  <option *ngFor="let plan of subscriptionPlans" [value]="plan">{{ plan }}</option>
-                </select>
+                <div class="flex items-center gap-3">
+                  <div class="flex-1 bg-brand-dark border border-gray-600 rounded-md p-2 text-white">
+                    {{ subscriptionLabel() }}
+                  </div>
+                  <a *ngIf="subscriptionTier() !== 'enterprise'"
+                    routerLink="/subscription/upgrade"
+                    [queryParams]="{ returnUrl: '/profile' }"
+                    class="text-sm text-brand-red hover:underline whitespace-nowrap font-medium">
+                    Upgrade →
+                  </a>
+                </div>
               </div>
               <div class="flex items-end">
                 <button class="w-full bg-brand-red text-white font-bold py-2 px-4 rounded hover:bg-opacity-80 transition">
@@ -203,10 +213,6 @@ interface LessonProgress {
 export class ProfileComponent implements OnInit {
   editableDisplayName = '';
 
-  mockUser = {
-    subscription: 'Student: Premium Plan',
-  };
-
   displayName = computed(() => {
     const u = this.auth.currentUser();
     if (u?.name) return u.name;
@@ -221,12 +227,13 @@ export class ProfileComponent implements OnInit {
     return name.charAt(0).toUpperCase();
   });
 
-  subscriptionPlans = [
-    'Student: Free Plan',
-    'Student: Premium Plan',
-    'Lesson-builder',
-    'Interaction Builder'
-  ];
+  subscriptionTier = computed(() => this.auth.currentUser()?.subscriptionTier || 'free');
+
+  subscriptionLabel = computed(() => {
+    const tier = this.subscriptionTier();
+    const labels: Record<string, string> = { free: 'Free Tier', pro: 'Pro', enterprise: 'Enterprise' };
+    return labels[tier] || 'Free Tier';
+  });
 
   mockLessonProgress = [
     { id: '9', status: 'completed' as const, passed: true, public: true },

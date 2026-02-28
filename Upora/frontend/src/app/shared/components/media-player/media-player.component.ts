@@ -313,6 +313,14 @@ export class MediaPlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    // Stop media playback to prevent audio continuing after component is removed
+    const el = this.mediaElementRef?.nativeElement;
+    if (el) {
+      el.pause();
+      el.src = '';
+      el.load();
+    }
+
     if (this.overlayScriptElement) {
       this.overlayScriptElement.remove();
     }

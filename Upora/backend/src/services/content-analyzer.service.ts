@@ -11,6 +11,7 @@ import { ProcessedContentOutput } from '../entities/processed-content-output.ent
 import { LlmGenerationLog } from '../entities/llm-generation-log.entity';
 import { LlmProvider } from '../entities/llm-provider.entity';
 import { AiPrompt } from '../entities/ai-prompt.entity';
+import { ContentCacheService } from './content-cache.service';
 
 interface AnalysisResult {
   interactionTypeId: string;
@@ -38,6 +39,7 @@ export class ContentAnalyzerService {
     @InjectRepository(AiPrompt)
     private aiPromptRepository: Repository<AiPrompt>,
     private readonly httpService: HttpService,
+    private readonly contentCacheService: ContentCacheService,
   ) {}
 
   /**
@@ -104,6 +106,38 @@ export class ContentAnalyzerService {
     if (!contentText || contentText.length < 50) {
       this.logger.warn('[ContentAnalyzer] ⚠️ Content too short for analysis');
       return [];
+    }
+
+    // 2b. Check processed content cache before making LLM call
+    const cacheHash = this.contentCacheService.computeContentHash({
+      contentType: 'content-analysis',
+      sourceText: contentText,
+      sourceContentId: contentSourceId,
+    });
+    const cachedEntry = await this.contentCacheService.findCachedContent(
+      contentSource.tenantId,
+      'content-analysis',
+      cacheHash,
+    );
+    if (cachedEntry?.cachedData) {
+      this.logger.log(`[ContentAnalyzer] ♻️ CACHE HIT for content analysis (hash ${cacheHash.substring(0, 12)}…)`);
+      // Re-save as processed output for this content source (links it properly)
+      await this.saveProcessedOutput({
+        contentSourceId,
+        interactionTypeId: 'true-false-selection',
+        output: cachedEntry.cachedData,
+        confidence: cachedEntry.cachedData?._metadata?.confidence || 0.8,
+        tokensUsed: 0,
+        userId,
+        tenantId: contentSource.tenantId,
+      });
+      return [{
+        interactionTypeId: 'true-false-selection',
+        confidence: cachedEntry.cachedData?._metadata?.confidence || 0.8,
+        output: cachedEntry.cachedData,
+        tokensUsed: 0,
+        providerId: '',
+      }];
     }
 
     // 3. Get Fragment Builder interaction type
@@ -203,6 +237,15 @@ export class ContentAnalyzerService {
         `[ContentAnalyzer] ⚠️ Confidence ${result.confidence} below threshold ${fragmentBuilder.minConfidence}, but processed content created anyway for approval`,
       );
     }
+
+    // Store in processed content cache for future deduplication
+    await this.contentCacheService.storeContentCache({
+      tenantId: contentSource.tenantId,
+      contentType: 'content-analysis',
+      paramHash: cacheHash,
+      sourceContentId: contentSourceId,
+      cachedData: { ...result.output, _metadata: { confidence: result.confidence } },
+    });
     
     return [result];
   }

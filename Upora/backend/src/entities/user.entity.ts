@@ -43,6 +43,14 @@ export class User {
   @Column({ type: 'boolean', default: true, name: 'feedback_enabled' })
   feedbackEnabled: boolean;
 
+  /** Auth provider: 'cognito' (default), or 'oidc:<hub_id>' for SSO users */
+  @Column({ name: 'auth_provider', type: 'varchar', length: 255, default: 'cognito' })
+  authProvider: string;
+
+  /** External subject ID from SSO provider (null for Cognito users) */
+  @Column({ name: 'auth_provider_sub', type: 'varchar', length: 500, nullable: true })
+  authProviderSub: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

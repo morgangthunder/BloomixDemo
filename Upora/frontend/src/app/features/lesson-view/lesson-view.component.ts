@@ -3,7 +3,6 @@ import { CommonModule } from '@angular/common';
 // html2canvas will be dynamically imported
 import { Router, ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { IonContent } from '@ionic/angular/standalone';
 import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { LessonService } from '../../core/services/lesson.service';
@@ -14,6 +13,7 @@ import { InteractionAIBridgeService } from '../../core/services/interaction-ai-b
 import { SnackMessageService } from '../../core/services/snack-message.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ApiService } from '../../core/services/api.service';
+import { AudioService } from '../../core/services/audio.service';
 import { Subject, firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { Lesson, Stage, SubStage } from '../../core/models/lesson.model';
@@ -27,19 +27,79 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
 @Component({
   selector: 'app-lesson-view',
   standalone: true,
-  imports: [CommonModule, FormsModule, IonContent, FloatingTeacherWidgetComponent, SnackMessageComponent, MediaPlayerComponent, VideoUrlPlayerComponent],
+  imports: [CommonModule, FormsModule, FloatingTeacherWidgetComponent, SnackMessageComponent, MediaPlayerComponent, VideoUrlPlayerComponent],
   template: `
+    <!-- Access Wall Overlay -->
+    <div *ngIf="accessDenied" class="access-wall-overlay">
+      <div class="access-wall-card">
+        <div class="access-wall-icon" *ngIf="accessDeniedReason === 'login_required'">🔐</div>
+        <div class="access-wall-icon" *ngIf="accessDeniedReason === 'tier_required'">⭐</div>
+        <div class="access-wall-icon" *ngIf="accessDeniedReason === 'paid'">💎</div>
+
+        <h2 class="access-wall-title" *ngIf="accessDeniedReason === 'login_required'">Sign in to Continue</h2>
+        <h2 class="access-wall-title" *ngIf="accessDeniedReason === 'tier_required'">Upgrade to Unlock This Lesson</h2>
+        <h2 class="access-wall-title" *ngIf="accessDeniedReason === 'paid'">Premium Lesson</h2>
+
+        <p class="access-wall-lesson-title">{{ lesson?.title }}</p>
+
+        <p class="access-wall-message" *ngIf="accessDeniedReason === 'login_required'">
+          This lesson requires a free account to access. Sign in or create an account to start learning.
+        </p>
+        <p class="access-wall-message" *ngIf="accessDeniedReason === 'tier_required'">
+          This lesson is available to <strong>{{ accessDeniedTier | titlecase }}</strong> subscribers and above.
+          Upgrade your plan to unlock this and many more lessons.
+        </p>
+        <p class="access-wall-message" *ngIf="accessDeniedReason === 'paid'">
+          This lesson requires a one-time purchase. Payment integration is coming soon.
+        </p>
+
+        <div class="access-wall-actions">
+          <button *ngIf="accessDeniedReason === 'login_required'" (click)="goToLogin()" class="access-wall-btn primary">
+            Sign In
+          </button>
+          <button *ngIf="accessDeniedReason === 'tier_required'" (click)="goToUpgrade()" class="access-wall-btn primary">
+            View Plans & Upgrade
+          </button>
+          <button (click)="goBackFromAccessWall()" class="access-wall-btn secondary">
+            Browse Other Lessons
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Next Lesson Upgrade Popup (shown at end of lesson when next requires higher tier) -->
+    <div *ngIf="showNextLessonUpgrade" class="access-wall-overlay">
+      <div class="access-wall-card">
+        <div class="access-wall-icon">🌟</div>
+        <h2 class="access-wall-title">Great Progress!</h2>
+        <p class="access-wall-lesson-title">You've completed "{{ lesson?.title }}"</p>
+        <p class="access-wall-message">
+          The next lessons in this course are available to
+          <strong>{{ nextLessonRequiredTier | titlecase }}</strong> subscribers.
+          Upgrading unlocks the rest of this course and opens up a whole world of new learning.
+        </p>
+        <div class="access-wall-actions">
+          <button (click)="goToUpgradeForNext()" class="access-wall-btn primary">
+            Upgrade & Keep Learning
+          </button>
+          <button (click)="dismissNextLessonUpgrade()" class="access-wall-btn secondary">
+            Maybe Later
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div class="bg-brand-dark text-white overflow-hidden flex flex-col md:flex-row lesson-view-wrapper" [class.fullscreen-active]="isFullscreen">
       <!-- Mobile overlay -->
       <div *ngIf="isMobileNavOpen" 
            (click)="closeMobileNav()"
-           class="fixed inset-0 bg-black/60 z-30 md:hidden"></div>
+           class="fixed inset-0 bg-black/60 z-[400] md:hidden"></div>
 
       <!-- Sidebar -->
       <aside 
         [style.width.px]="navWidth"
         [class.hidden]="navWidth === 0"
-        class="sidebar bg-brand-black transition-all duration-300 ease-in-out z-40 
+        class="sidebar bg-brand-black transition-all duration-300 ease-in-out z-[500] 
                md:flex md:flex-shrink-0"
         [class.-translate-x-full]="!isMobileNavOpen"
         [class.translate-x-0]="isMobileNavOpen">
@@ -81,7 +141,7 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
             <!-- Sub-stages -->
             <div *ngIf="expandedStages.has(stage.id)" class="bg-gray-900">
               <div *ngFor="let subStage of stage.subStages"
-                   (click)="selectSubStage(stage.id, subStage.id)"
+                   (click)="selectSubStage(stage.id, subStage.id, true)"
                    [class.bg-brand-red]="activeSubStageId === subStage.id"
                    [class.bg-gray-800]="activeSubStageId !== subStage.id"
                    class="p-3 pl-8 hover:bg-gray-700 cursor-pointer border-l-4 border-transparent hover:border-brand-red transition-all">
@@ -134,9 +194,11 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
       </div>
 
       <!-- Main Content -->
-      <main class="flex-1 flex flex-col overflow-hidden relative">
+      <main class="flex-1 flex flex-col overflow-hidden relative"
+            [class.main-fullscreen]="isFullscreen"
+            style="min-height:0;">
         <!-- Collapse button (Desktop) -->
-        <button *ngIf="navWidth === 0"
+        <button *ngIf="navWidth === 0 && !isFullscreen"
                 (click)="toggleNavCollapse()"
                 class="absolute hidden md:block z-20 top-6 left-4 bg-gray-800 hover:bg-brand-red text-white p-2 rounded-full transition">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -145,12 +207,22 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
         </button>
 
         <!-- Mobile Header (No burger - FAB handles stages) -->
-        <header class="md:hidden flex items-center justify-center px-4 bg-brand-black border-b border-gray-700 flex-shrink-0" style="height: 48px;">
+        <header *ngIf="!isFullscreen" class="md:hidden flex items-center justify-center px-4 bg-brand-black border-b border-gray-700 flex-shrink-0" style="height: 48px;">
           <h1 class="font-semibold text-sm truncate">{{ lesson?.title }}</h1>
         </header>
 
         <!-- Content Area -->
-        <div class="flex-1 p-6 md:p-8 lg:p-12 overflow-y-auto pb-32 md:pb-8 relative content-area" [class.fullscreen]="isFullscreen">
+        <div class="flex-1 relative content-area" 
+             [class.p-6]="!isNoScrollInteraction() && !isFullscreen"
+             [class.md:p-8]="!isNoScrollInteraction() && !isFullscreen"
+             [class.lg:p-12]="!isNoScrollInteraction() && !isFullscreen"
+             [class.overflow-y-auto]="!isNoScrollInteraction()"
+             [class.pb-32]="!isNoScrollInteraction() && !isFullscreen"
+             [class.md:pb-8]="!isNoScrollInteraction() && !isFullscreen"
+             [class.overflow-hidden]="isNoScrollInteraction()"
+             [class.p-0]="isNoScrollInteraction()"
+             [class.noscroll-content]="isNoScrollInteraction()"
+             #contentArea>
           <!-- Fullscreen Toggle -->
           <button 
             class="fullscreen-toggle"
@@ -164,7 +236,10 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
             </svg>
           </button>
 
-          <div *ngIf="activeSubStage; else selectPrompt">
+          <div *ngIf="activeSubStage; else selectPrompt"
+               [class.noscroll-substage-wrapper]="isNoScrollInteraction()"
+               [style]="isNoScrollInteraction() ? 'flex: 1; min-height: 0; display: flex; flex-direction: column;' : ''"
+               >
             <!-- Loading State -->
             <div *ngIf="isLoadingInteraction" class="bg-brand-black rounded-lg p-12 flex items-center justify-center">
               <div class="text-center">
@@ -229,10 +304,26 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
             </div>
 
             <!-- PixiJS/HTML/iframe Interactions -->
-            <div *ngIf="!isLoadingInteraction && interactionBuild && interactionBuild?.interactionTypeCategory !== 'uploaded-media' && interactionBlobUrl && !interactionError" class="interaction-build-container">
+            <div *ngIf="!isLoadingInteraction && interactionBuild && interactionBuild?.interactionTypeCategory !== 'uploaded-media' && interactionBlobUrl && !interactionError" 
+                 class="interaction-build-container"
+                 [class.noscroll-interaction-container]="isNoScrollInteraction()"
+                 [style]="isNoScrollInteraction() ? 'flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; overflow: hidden;' : ''">
+              
+              <!-- "Does not fit" overlay for noScroll interactions -->
+              <div *ngIf="isNoScrollInteraction() && noScrollTooSmall" class="noscroll-too-small-overlay">
+                <div class="noscroll-too-small-message">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="margin: 0 auto 16px;">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/>
+                  </svg>
+                  <p style="font-size: 1.1rem; font-weight: 600; margin-bottom: 8px;">Interaction does not fit this window size</p>
+                  <p style="font-size: 0.85rem; opacity: 0.7;">Please resize your browser window or use fullscreen mode.</p>
+                </div>
+              </div>
+
               <!-- iFrame interactions -->
-              <div *ngIf="interactionBuild?.interactionTypeCategory === 'iframe'" class="iframe-interaction-wrapper">
-                <!-- iFrame - always visible -->
+              <div *ngIf="interactionBuild?.interactionTypeCategory === 'iframe'" 
+                   class="iframe-interaction-wrapper"
+                   [class.noscroll-iframe-wrapper]="isNoScrollInteraction()">
                 <iframe 
                   #interactionIframe
                   [src]="interactionBlobUrl" 
@@ -241,7 +332,7 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
                   frameborder="0"
                   sandbox="allow-scripts allow-same-origin"
                   (load)="onInteractionIframeLoad()"
-                  style="width: 100%; min-height: 600px; max-height: 90vh; border: none; display: block;"></iframe>
+                  [style]="isNoScrollInteraction() ? 'border: none; display: block;' : 'width: 100%; min-height: 600px; max-height: 90vh; border: none; display: block;'"></iframe>
                 
                 <!-- Section below iFrame (when overlayMode is 'section' and HTML/CSS/JS exists) -->
                 <div *ngIf="getIframeOverlayMode() === 'section' && (interactionBuild.htmlCode || interactionBuild.cssCode || interactionBuild.jsCode)" 
@@ -251,8 +342,20 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
               </div>
               
               <!-- Regular iframe for non-iframe interactions (PixiJS/HTML) -->
+              <div *ngIf="interactionBuild?.interactionTypeCategory !== 'iframe' && isNoScrollInteraction()"
+                   class="noscroll-iframe-wrapper">
+                <iframe 
+                  #interactionIframe
+                  [src]="interactionBlobUrl" 
+                  [attr.data-key]="interactionPreviewKey"
+                  class="interaction-iframe"
+                  frameborder="0"
+                  sandbox="allow-scripts allow-same-origin"
+                  (load)="onInteractionIframeLoad()"
+                  style="border: none; display: block;"></iframe>
+              </div>
               <iframe 
-                *ngIf="interactionBuild?.interactionTypeCategory !== 'iframe'"
+                *ngIf="interactionBuild?.interactionTypeCategory !== 'iframe' && !isNoScrollInteraction()"
                 #interactionIframe
                 [src]="interactionBlobUrl" 
                 [attr.data-key]="interactionPreviewKey"
@@ -321,6 +424,33 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
                 <p class="completion-message">
                   Congratulations! You've completed this lesson.
                 </p>
+
+                <!-- Next lesson in course (if available and accessible) -->
+                <div *ngIf="nextLessonInCourse && !nextLessonAccessBlocked" class="next-lesson-card" (click)="goToNextLesson()">
+                  <p class="text-xs text-gray-400 mb-1">Up next in this course</p>
+                  <p class="text-lg font-bold text-white">{{ nextLessonInCourse.title }}</p>
+                  <button class="next-lesson-btn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z"/>
+                    </svg>
+                    Continue Learning
+                  </button>
+                </div>
+
+                <!-- Next lesson requires upgrade -->
+                <div *ngIf="nextLessonInCourse && nextLessonAccessBlocked" class="next-lesson-upgrade-card">
+                  <div class="text-2xl mb-2">🌟</div>
+                  <p class="text-sm text-gray-300 mb-1">The next lessons in this course are waiting for you</p>
+                  <p class="text-lg font-bold text-white mb-3">{{ nextLessonInCourse.title }}</p>
+                  <p class="text-sm text-gray-400 mb-4">
+                    Available to <strong class="text-yellow-400">{{ nextLessonRequiredTier | titlecase }}</strong> subscribers.
+                    Upgrade to continue your learning journey.
+                  </p>
+                  <button (click)="goToUpgradeForNext()" class="upgrade-cta-btn">
+                    Upgrade & Keep Learning
+                  </button>
+                </div>
+
                 <div class="end-actions">
                   <button class="btn-primary" (click)="router.navigate(['/'])">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -345,10 +475,12 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
           </ng-template>
         </div>
 
-        <!-- Bottom Control Bar -->
-        <div class="lesson-control-bar">
-          <!-- Left: Toggle Stages -->
-          <button 
+        <!-- Bottom Control Bar (hidden in fullscreen unless interaction info is active) -->
+        <div class="lesson-control-bar"
+             [class.fullscreen-control-bar]="isFullscreen"
+             [class.has-interaction-info]="!!interactionInfoMessage">
+          <!-- Left: Toggle Stages (hidden in fullscreen) -->
+          <button *ngIf="!isFullscreen"
             class="control-bar-btn left-btn"
             (click)="toggleSidebar()"
             [class.active]="isSidebarOpen"
@@ -358,38 +490,40 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
             </svg>
           </button>
 
-          <!-- Center: Playback Controls -->
+          <!-- Center: Playback Controls (hidden in fullscreen) -->
           <div class="center-controls">
-            <button 
-              class="control-bar-btn playback-btn"
-              (click)="toggleScriptPlay()"
-              [class.active]="isScriptPlaying"
-              [title]="isScriptPlaying ? 'Pause' : 'Play'">
-              <svg *ngIf="!isScriptPlaying" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M8 5v14l11-7z"/>
-              </svg>
-              <svg *ngIf="isScriptPlaying" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
-              </svg>
-            </button>
-            <button 
-              class="control-bar-btn playback-btn"
-              (click)="skipScript()"
-              [disabled]="!currentTeacherScript"
-              title="Skip">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M6 4l10 8-10 8V4zm10 0v16h2V4h-2z"/>
-              </svg>
-            </button>
-            <button 
-              class="control-bar-btn timer-btn"
-              (click)="toggleTimer()"
-              [class.active]="showTimer"
-              title="Toggle Timer">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M15,1H9v2h6V1z M11,14h1.5V8H11V14z M19.03,7.39l1.42-1.42c-0.43-0.51-0.9-0.99-1.41-1.41l-1.42,1.42 C16.07,4.74,14.12,4,12,4c-4.97,0-9,4.03-9,9s4.02,9,9,9s9-4.03,9-9C21,10.88,20.26,8.93,19.03,7.39z M12,20c-3.87,0-7-3.13-7-7 s3.13-7,7-7s7,3.13,7,7S15.87,20,12,20z"/>
-              </svg>
-            </button>
+            <ng-container *ngIf="!interactionInfoMessage && !isFullscreen">
+              <button 
+                class="control-bar-btn playback-btn"
+                (click)="toggleScriptPlay()"
+                [class.active]="isScriptPlaying"
+                [title]="isScriptPlaying ? 'Pause' : 'Play'">
+                <svg *ngIf="!isScriptPlaying" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+                <svg *ngIf="isScriptPlaying" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+                </svg>
+              </button>
+              <button 
+                class="control-bar-btn playback-btn"
+                (click)="skipScript()"
+                [disabled]="!currentTeacherScript"
+                title="Skip">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M6 4l10 8-10 8V4zm10 0v16h2V4h-2z"/>
+                </svg>
+              </button>
+              <button 
+                class="control-bar-btn timer-btn"
+                (click)="toggleTimer()"
+                [class.active]="showTimer"
+                title="Toggle Timer">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M15,1H9v2h6V1z M11,14h1.5V8H11V14z M19.03,7.39l1.42-1.42c-0.43-0.51-0.9-0.99-1.41-1.41l-1.42,1.42 C16.07,4.74,14.12,4,12,4c-4.97,0-9,4.03-9,9s4.02,9,9,9s9-4.03,9-9C21,10.88,20.26,8.93,19.03,7.39z M12,20c-3.87,0-7-3.13-7-7 s3.13-7,7-7s7,3.13,7,7S15.87,20,12,20z"/>
+                </svg>
+              </button>
+            </ng-container>
             <div class="script-progress-info">
               <!-- Show volume control when media player or video URL is present or TTS is active, but hide when timer is shown or interaction has ended -->
               <div *ngIf="(isMediaPlayerReady || isVideoUrlReady || isTTSActive) && !showTimer && !interactionEnded" class="volume-control-container">
@@ -413,8 +547,26 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
                   Next →
                 </button>
               </div>
-              <!-- Show script text when no media player, no video URL, and no TTS -->
-              <ng-container *ngIf="!isMediaPlayerReady && !isVideoUrlReady && !isTTSActive">
+              <!-- Interaction info message (quiz questions/feedback for noScroll interactions) -->
+              <div *ngIf="interactionInfoMessage" class="interaction-info-bar">
+                <div class="interaction-info-progress" *ngIf="interactionInfoMessage.progress">
+                  {{ interactionInfoMessage.progress }}
+                </div>
+                <div class="interaction-info-text">{{ interactionInfoMessage.text }}</div>
+                <div *ngIf="interactionInfoMessage.feedbackText" 
+                     class="interaction-info-feedback"
+                     [class.correct]="interactionInfoMessage.feedbackType === 'correct'"
+                     [class.incorrect]="interactionInfoMessage.feedbackType === 'incorrect'">
+                  {{ interactionInfoMessage.feedbackText }}
+                </div>
+                <div class="interaction-info-actions" *ngIf="interactionInfoMessage.actions?.length">
+                  <button *ngFor="let action of interactionInfoMessage.actions" 
+                          class="interaction-info-action-btn"
+                          (click)="onInteractionInfoAction(action)">{{ action }}</button>
+                </div>
+              </div>
+              <!-- Show script text when no media player, no video URL, and no TTS, and no interaction info -->
+              <ng-container *ngIf="!interactionInfoMessage && !isMediaPlayerReady && !isVideoUrlReady && !isTTSActive">
                 <span *ngIf="!showTimer" class="script-title">{{ currentTeacherScript?.text?.substring(0, 40) || 'Ready to teach' }}{{ (currentTeacherScript?.text?.length || 0) > 40 ? '...' : '' }}</span>
                 <span *ngIf="showTimer" class="timer-display">⏱️ {{ formatTime(elapsedSeconds) }}</span>
               </ng-container>
@@ -430,13 +582,13 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
       <div 
         *ngIf="teacherWidgetHidden"
         class="teacher-fab"
-        [class.draggable-fab]="isFullscreen"
-        [style.left.px]="isFullscreen && fabLeft > 0 ? fabLeft : null"
-        [style.top.px]="isFullscreen && fabTop > 0 ? fabTop : null"
+        [class.draggable-fab]="isFullscreen || isMobileViewport"
+        [style.left.px]="(isFullscreen || isMobileViewport) && fabLeft > 0 ? fabLeft : null"
+        [style.top.px]="(isFullscreen || isMobileViewport) && fabTop > 0 ? fabTop : null"
         (click)="onFabClick($event)"
         (mousedown)="startFabDrag($event)"
         (touchstart)="startFabDrag($event)"
-        [title]="isFullscreen ? 'Hold to drag' : 'Open AI Teacher'">
+        [title]="(isFullscreen || isMobileViewport) ? 'Hold to drag' : 'Open AI Teacher'">
         <span class="fab-icon">🎓</span>
         <span *ngIf="unreadMessageCount > 0" class="fab-badge">{{ unreadMessageCount }}</span>
       </div>
@@ -537,12 +689,8 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
       }
     }
 
-    /* Lesson Control Bar */
+    /* Lesson Control Bar — sits at the bottom of the flex-col <main> */
     .lesson-control-bar {
-      position: sticky;
-      bottom: 0;
-      left: 0;
-      right: 0;
       background: #000000;
       border-top: 2px solid #ff3b3f;
       padding: 0.75rem 1rem;
@@ -552,6 +700,7 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
       gap: 1rem;
       z-index: 100;
       box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.5);
+      flex-shrink: 0;
     }
 
     .center-controls {
@@ -673,8 +822,8 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
 
     .script-progress-info {
       flex: 1;
-      overflow: hidden;
-      max-width: 400px;
+      min-width: 0;
+      overflow: visible;
     }
 
     .script-title {
@@ -773,21 +922,19 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
       font-variant-numeric: tabular-nums;
     }
 
-    /* Fullscreen Mode */
-    .fullscreen-active .sidebar,
-    .fullscreen-active .mobile-header {
-      display: none !important;
-    }
-
-    .content-area.fullscreen {
-      position: fixed;
+    /* Fullscreen Mode — applied to <main> so both content area AND control bar are inside */
+    .main-fullscreen {
+      position: fixed !important;
       top: 0;
       left: 0;
       right: 0;
       bottom: 0;
       z-index: 9999;
       background: #0a0a0a;
-      padding: 2rem !important;
+    }
+
+    .fullscreen-active .sidebar {
+      display: none !important;
     }
 
     /* Hide global header when fullscreen active */
@@ -828,19 +975,153 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
       }
     }
     
-    /* When fullscreen - ALL screens - move to very bottom and left edge */
-    body.fullscreen-active .fullscreen-toggle,
-    .content-area.fullscreen .fullscreen-toggle,
-    .fullscreen-active .content-area .fullscreen-toggle {
-      bottom: 1rem !important; /* Very close to bottom */
-      left: 1.5rem !important; /* FORCE to left edge */
-      z-index: 9998 !important; /* Above everything in fullscreen */
+    /* When fullscreen - move above the control bar */
+    .main-fullscreen .fullscreen-toggle {
+      bottom: calc(60px + 1rem) !important;
+      left: 1.5rem !important;
+      z-index: 10000 !important;
     }
 
     .fullscreen-toggle:hover {
       background: #ff3b3f;
       border-color: #ff3b3f;
       transform: scale(1.1);
+    }
+
+    /* No-scroll interaction layout — the entire flex chain must propagate
+       min-height:0 so that each level can shrink to fit above the control bar. */
+    .noscroll-content {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .noscroll-substage-wrapper {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .noscroll-interaction-container {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .noscroll-iframe-wrapper {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .noscroll-iframe-wrapper .interaction-iframe {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .noscroll-too-small-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(10, 10, 10, 0.95);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      border-radius: 8px;
+    }
+
+    .noscroll-too-small-message {
+      text-align: center;
+      color: #999;
+      padding: 2rem;
+    }
+
+    /* Interaction info bar (quiz questions/feedback in control bar) */
+    .interaction-info-bar {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      flex: 1;
+      min-width: 0;
+      overflow-y: auto;
+      max-height: 120px;
+      font-size: 0.85rem;
+      flex-wrap: wrap;
+      padding: 4px 0;
+    }
+    .interaction-info-progress {
+      color: #00d4ff;
+      font-weight: 600;
+      font-size: 0.75rem;
+      flex-shrink: 0;
+    }
+    .interaction-info-text {
+      color: #e0e0e0;
+      font-weight: 500;
+      white-space: normal;
+      word-wrap: break-word;
+      min-width: 0;
+      flex: 1;
+      line-height: 1.3;
+    }
+    .interaction-info-feedback {
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .interaction-info-feedback.correct {
+      color: #4ade80;
+    }
+    .interaction-info-feedback.incorrect {
+      color: #f87171;
+    }
+    .interaction-info-actions {
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .interaction-info-action-btn {
+      padding: 2px 10px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #e0e0e0;
+      cursor: pointer;
+      font-size: 0.75rem;
+      transition: background 0.15s;
+    }
+    .interaction-info-action-btn:hover {
+      background: rgba(255, 59, 63, 0.5);
+    }
+
+    /* Fullscreen + noScroll: content area fills the main container */
+    .main-fullscreen .noscroll-content {
+      padding: 0 !important;
+    }
+
+    /* Fullscreen control bar: hide entirely unless interaction info is active */
+    .lesson-control-bar.fullscreen-control-bar {
+      border-top: none;
+      background: transparent;
+      box-shadow: none;
+      padding: 0.5rem 1rem;
+    }
+    .lesson-control-bar.fullscreen-control-bar:not(.has-interaction-info) {
+      display: none !important;
+    }
+    .lesson-control-bar.fullscreen-control-bar.has-interaction-info {
+      background: rgba(0, 0, 0, 0.85);
+      border-top: 1px solid rgba(255, 59, 63, 0.4);
     }
 
     /* End of Lesson Screen */
@@ -941,6 +1222,150 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
       border-color: rgba(255, 255, 255, 0.4);
     }
 
+    /* Next Lesson Card (End of Lesson) */
+    .next-lesson-card {
+      background: rgba(0, 212, 255, 0.08);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.5rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: left;
+    }
+    .next-lesson-card:hover {
+      border-color: rgba(0, 212, 255, 0.6);
+      background: rgba(0, 212, 255, 0.12);
+    }
+    .next-lesson-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+      padding: 0.5rem 1.25rem;
+      background: #00d4ff;
+      color: #0f0f23;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .next-lesson-btn:hover {
+      background: #00bce6;
+    }
+    .next-lesson-upgrade-card {
+      background: rgba(204, 0, 0, 0.08);
+      border: 1px solid rgba(204, 0, 0, 0.3);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      text-align: center;
+    }
+    .upgrade-cta-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 2rem;
+      background: #cc0000;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .upgrade-cta-btn:hover {
+      background: #a30000;
+      transform: translateY(-1px);
+    }
+
+    /* Access Wall Overlay */
+    .access-wall-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.85);
+      z-index: 20000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      backdrop-filter: blur(8px);
+    }
+    .access-wall-card {
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 20px;
+      padding: 2.5rem;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+      animation: accessWallIn 0.3s ease-out;
+    }
+    @keyframes accessWallIn {
+      from { opacity: 0; transform: scale(0.95) translateY(10px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .access-wall-icon {
+      font-size: 3.5rem;
+      margin-bottom: 1rem;
+    }
+    .access-wall-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 0.5rem;
+    }
+    .access-wall-lesson-title {
+      font-size: 1rem;
+      color: #999;
+      margin-bottom: 1rem;
+    }
+    .access-wall-message {
+      font-size: 0.9rem;
+      color: #bbb;
+      line-height: 1.5;
+      margin-bottom: 2rem;
+    }
+    .access-wall-message strong {
+      color: #ffcc00;
+    }
+    .access-wall-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .access-wall-btn {
+      display: block;
+      width: 100%;
+      padding: 0.875rem;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+    }
+    .access-wall-btn.primary {
+      background: #cc0000;
+      color: #fff;
+    }
+    .access-wall-btn.primary:hover {
+      background: #a30000;
+      transform: translateY(-1px);
+    }
+    .access-wall-btn.secondary {
+      background: rgba(255,255,255,0.08);
+      color: #ccc;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    .access-wall-btn.secondary:hover {
+      background: rgba(255,255,255,0.12);
+      color: #fff;
+    }
+
     /* Teacher FAB */
     .teacher-fab {
       position: fixed;
@@ -1037,7 +1462,7 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
       }
 
       .script-progress-info {
-        max-width: 150px;
+        max-width: none;
       }
 
       .teacher-fab {
@@ -1099,6 +1524,10 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   // Fullscreen
   isFullscreen = false;
   
+  get isMobileViewport(): boolean {
+    return window.innerWidth < 768;
+  }
+  
   // Lesson Timer
   showTimer = false;
   elapsedSeconds = 0;
@@ -1124,6 +1553,22 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   interactionBlobUrl: SafeResourceUrl | null = null;
   interactionPreviewKey = 0;
   interactionError: string | null = null;
+  private resolvedBgMusicUrl: string | null = null;
+  
+  // No-scroll interaction support
+  noScrollTooSmall = false;
+  noScrollWidth = 0;
+  noScrollHeight = 0;
+  private noScrollResizeObserver: ResizeObserver | null = null;
+  
+  // Interaction info message (displayed in control bar area for noScroll interactions)
+  interactionInfoMessage: {
+    text: string;
+    feedbackText?: string;
+    feedbackType?: 'correct' | 'incorrect' | null;
+    progress?: string;
+    actions?: string[];
+  } | null = null;
   
   // Media player properties (for uploaded-media interactions)
   mediaPlayerData: {
@@ -1167,6 +1612,17 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   isVideoUrlReady = false; // Video URL player is ready
   Math = Math; // Expose Math to template
   
+  // Access wall state
+  accessDenied = false;
+  accessDeniedReason: 'login_required' | 'tier_required' | 'paid' | '' = '';
+  accessDeniedTier = '';
+
+  // Next lesson in course (end-of-lesson)
+  nextLessonInCourse: any = null;
+  nextLessonAccessBlocked = false;
+  nextLessonRequiredTier = '';
+  showNextLessonUpgrade = false;
+
   private destroy$ = new Subject<void>();
   private processedOutputsCache = new Map<string, any[]>();
 
@@ -1177,6 +1633,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   
   @ViewChild('teacherWidget') teacherWidget?: FloatingTeacherWidgetComponent;
   @ViewChild('interactionIframe', { static: false }) interactionIframe?: any;
+  @ViewChild('contentArea', { static: false }) contentAreaRef?: any;
 
   constructor(
     private lessonService: LessonService,
@@ -1192,7 +1649,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     private snackService: SnackMessageService,
     private sanitizer: DomSanitizer,
     private cdr: ChangeDetectorRef,
-    private ngZone: NgZone
+    private ngZone: NgZone,
+    private audioService: AudioService,
   ) {}
 
   ngOnInit() {
@@ -1226,6 +1684,61 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       }
     }) as EventListener);
     
+    // Listen for content overflow events dispatched by AIBridge
+    document.addEventListener('ai-sdk-content-overflow', ((e: CustomEvent) => {
+      const detail = e.detail;
+      if (this.isNoScrollInteraction()) {
+        const contentH = detail.scrollHeight || 0;
+        const containerH = this.noScrollHeight || detail.viewportHeight || 0;
+        const overflows = contentH > containerH + 2;
+        console.log('[LessonView] Iframe overflow report: contentH=' + contentH +
+          ' containerH=' + containerH + ' overflows=' + overflows);
+        this.ngZone.run(() => {
+          if (overflows && !this.noScrollTooSmall) {
+            this.noScrollTooSmall = true;
+            this.cdr.detectChanges();
+          } else if (!overflows && this.noScrollTooSmall) {
+            const minW = this.interactionBuild?.iframeConfig?.minWidth || 500;
+            const minH = this.interactionBuild?.iframeConfig?.minHeight || 400;
+            if (this.noScrollWidth >= minW && this.noScrollHeight >= minH) {
+              this.noScrollTooSmall = false;
+              this.cdr.detectChanges();
+            }
+          }
+        });
+      }
+    }) as EventListener);
+
+    // Handle "Next" requests from iframe interactions (e.g. completion modal)
+    document.addEventListener('ai-sdk-request-next', (() => {
+      console.log('[LessonView] Iframe requested next sub-stage');
+      this.ngZone.run(() => {
+        this.snackService.hide();
+        this.onNextButtonClick();
+      });
+    }) as EventListener);
+
+    // Route snack action button clicks back to the iframe or handle locally
+    this.snackService.actionClicked.subscribe((evt) => {
+      if (evt) {
+        console.log('[LessonView] Snack action clicked:', evt.action);
+        if (evt.action === 'Next →' || evt.action === 'Next') {
+          this.ngZone.run(() => {
+            this.snackService.hide();
+            this.onNextButtonClick();
+          });
+          return;
+        }
+        const iframes = document.querySelectorAll('iframe.interaction-iframe');
+        iframes.forEach((iframe) => {
+          const htmlIframe = iframe as HTMLIFrameElement;
+          if (htmlIframe.contentWindow) {
+            htmlIframe.contentWindow.postMessage({ type: 'interaction-action', action: evt.action }, '*');
+          }
+        });
+      }
+    });
+
     // Listen for interaction completion requests (from iframe interactions)
     window.addEventListener('interaction-request-progress', (() => {
       console.log('[LessonView] 📨 Received interaction-request-progress event');
@@ -1288,7 +1801,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
           console.log('[LessonView] ✅ Showed script from SDK message');
           break;
         case 'ai-sdk-show-snack':
-          this.interactionAISDK.showSnack(message.content, message.duration, message.hideFromChatUI || false);
+          this.interactionAISDK.showSnack(message.content, message.duration, message.hideFromChatUI || false, message.actions);
           console.log('[LessonView] ✅ Showed snack from SDK message');
           break;
         case 'ai-sdk-hide-snack':
@@ -1306,6 +1819,26 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         case 'ai-sdk-get-state':
           // This one needs a callback, but SDK test doesn't use it with callback
           console.log('[LessonView] 📊 Get state requested from SDK message');
+          break;
+        case 'ai-sdk-set-interaction-info':
+          this.interactionInfoMessage = message.content || null;
+          console.log('[LessonView] ℹ️ Interaction info updated:', message.content?.text || '(cleared)');
+          this.cdr.detectChanges();
+          break;
+        case 'ai-sdk-play-sfx':
+          this.interactionAISDK.playSfx(message.name);
+          break;
+        case 'ai-sdk-start-bg-music':
+          this.interactionAISDK.startBgMusic(message.style || 'calm');
+          break;
+        case 'ai-sdk-start-bg-music-url':
+          this.interactionAISDK.startBgMusicFromUrl(message.url, message.loopConfig);
+          break;
+        case 'ai-sdk-stop-bg-music':
+          this.interactionAISDK.stopBgMusic();
+          break;
+        case 'ai-sdk-set-audio-volume':
+          this.interactionAISDK.setAudioVolume(message.channel || 'sfx', message.level ?? 0.5);
           break;
         default:
           console.log('[LessonView] 📨 Unhandled SDK message type:', message.type);
@@ -1571,6 +2104,20 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     setTimeout(() => {
       this.sendSDKReadyToIframe();
     }, 100);
+    
+    // Set up ResizeObserver for no-scroll interactions
+    if (this.isNoScrollInteraction()) {
+      setTimeout(() => {
+        this.setupNoScrollResizeObserver();
+      }, 200);
+      // Run parent-side overflow check after iframe has had time to render
+      setTimeout(() => {
+        this.checkNoScrollOverflowFromParent();
+      }, 600);
+      setTimeout(() => {
+        this.checkNoScrollOverflowFromParent();
+      }, 1500);
+    }
   }
   
   /**
@@ -1591,6 +2138,20 @@ export class LessonViewComponent implements OnInit, OnDestroy {
           accountId: this.interactionAISDK.getCurrentUserId(),
         }, '*');
         console.log('[LessonView] ✅ Sent SDK ready message to iframe');
+        
+        // For noScroll interactions, also send initial container dimensions
+        if (this.isNoScrollInteraction() && this.contentAreaRef?.nativeElement) {
+          const rect = this.contentAreaRef.nativeElement.getBoundingClientRect();
+          const isMobile = window.innerWidth < 768;
+          htmlIframe.contentWindow.postMessage({
+            type: 'container-dimensions',
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+            isFullscreen: this.isFullscreen,
+            isMobile,
+          }, '*');
+          console.log('[LessonView] ✅ Sent initial container dimensions:', Math.round(rect.width), 'x', Math.round(rect.height), 'fullscreen:', this.isFullscreen, 'mobile:', isMobile);
+        }
       }
     });
   }
@@ -1719,26 +2280,52 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   /**
    * Load lesson data from API
    */
-  private loadLessonData(lessonId: string) {
-    console.log('[LessonView] Loading lesson data for ID:', lessonId);
+  private loadLessonData(lessonId: string, isRetry = false) {
+    console.log('[LessonView] Loading lesson data for ID:', lessonId, isRetry ? '(retry)' : '');
     
     // Check if this is a default/mock lesson ID
     if (isDefaultLessonId(lessonId)) {
       console.warn('[LessonView] ⚠️ Default/mock lesson ID detected, skipping API call');
       return;
     }
+
+    // Reset access state before each load to clear stale denials
+    this.accessDenied = false;
+    this.accessDeniedReason = '';
+    this.accessDeniedTier = '';
     
-    // Fetch lesson from API using environment.apiUrl
-    this.http.get<Lesson>(`${environment.apiUrl}/lessons/${lessonId}`)
+    // Cache-bust to prevent browsers from serving a stale access-denied response
+    const cacheBust = `_t=${Date.now()}`;
+    const separator = `${environment.apiUrl}/lessons/${lessonId}`.includes('?') ? '&' : '?';
+
+    this.http.get<any>(`${environment.apiUrl}/lessons/${lessonId}${separator}${cacheBust}`)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (lesson) => {
+          // Check for access denial from backend
+          if (lesson.accessDenied) {
+            // If user IS authenticated but backend says login_required, it's likely
+            // a race condition (auth state not propagated to the interceptor yet).
+            // Retry once after a short delay to let auth headers settle.
+            if (!isRetry && lesson.reason === 'login_required' && this.authService.isAuthenticated()) {
+              console.log('[LessonView] 🔄 Access denied but user is authenticated — retrying in 500ms');
+              setTimeout(() => this.loadLessonData(lessonId, true), 500);
+              return;
+            }
+
+            console.log('[LessonView] 🔒 Access denied:', lesson.reason, 'requiredTier:', lesson.requiredTier);
+            this.lesson = lesson as Lesson;
+            this.accessDenied = true;
+            this.accessDeniedReason = lesson.reason || 'login_required';
+            this.accessDeniedTier = lesson.requiredTier || 'pro';
+            return;
+          }
           console.log('[LessonView] ✅ Loaded lesson from API:', lesson.title);
           this.setLessonData(lesson);
+          this.loadNextLessonInfo(lesson);
         },
         error: (error) => {
           console.error('[LessonView] ❌ Error loading lesson from API:', error);
-          // Don't fall back to mock data - show error instead
           this.interactionError = `Failed to load lesson: ${error.message || 'Unknown error'}. Please ensure the lesson exists in the database.`;
         }
       });
@@ -1898,6 +2485,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       this.interactionBlobUrl = null;
     }
     
+    // Clean up noScroll ResizeObserver
+    this.teardownNoScrollResizeObserver();
+    
     // Clean up fullscreen class
     document.body.classList.remove('fullscreen-active');
     
@@ -1947,12 +2537,24 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     }
   }
 
-  selectSubStage(stageId: string | number, subStageId: string | number) {
-    // Pause media player if switching substages
-    if (this.mediaPlayerRef && this.mediaPlayerRef.isPlaying()) {
-      this.mediaPlayerRef.pause();
-      console.log('[LessonView] ⏸ Media player paused on substage switch');
+  selectSubStage(stageId: string | number, subStageId: string | number, closeMobileNav = false) {
+    // Force-stop media player when switching substages (prevents audio bleed)
+    if (this.mediaPlayerRef) {
+      try {
+        this.mediaPlayerRef.pause();
+        const el = (this.mediaPlayerRef as any).mediaElementRef?.nativeElement;
+        if (el) { el.pause(); el.src = ''; el.load(); }
+      } catch { /* ok */ }
+      console.log('[LessonView] ⏸ Media player stopped on substage switch');
     }
+
+    // Stop video URL player if active
+    if (this.videoUrlPlayerRef) {
+      try { this.videoUrlPlayerRef.pauseVideoUrl(); } catch { /* ok */ }
+    }
+
+    // Stop background music so new substage can start its own
+    this.audioService.stopBgMusic();
     
     // Pause script playback - defer to avoid change detection error
     setTimeout(() => {
@@ -1963,7 +2565,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     
     this.activeStageId = stageId;
     this.activeSubStageId = subStageId;
-    this.isMobileNavOpen = false;
+    if (closeMobileNav) {
+      this.isMobileNavOpen = false;
+    }
     
     // Save state to localStorage
     if (this.lesson) {
@@ -2529,6 +3133,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       // Clear cached HTML when clearing video URL data
       this.cachedVideoUrlSectionHtml = null;
       this.isMediaPlayerReady = false;
+      // Tear down noScroll observer and clear interaction info when clearing interaction
+      this.teardownNoScrollResizeObserver();
+      this.interactionInfoMessage = null;
     }
     
     this.interactionBlobUrl = null;
@@ -3441,6 +4048,14 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       console.log('[LessonView] ⏸ Media player paused at end of lesson');
     }
     
+    // Show next-lesson upgrade popup if access is blocked and there is a next lesson
+    if (this.nextLessonInCourse && this.nextLessonAccessBlocked) {
+      setTimeout(() => {
+        this.showNextLessonUpgrade = true;
+        this.cdr.detectChanges();
+      }, 800);
+    }
+    
     console.log('[LessonView] Showing end of lesson screen');
   }
   
@@ -3480,6 +4095,79 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         this.selectSubStage(firstStage.id, firstStage.subStages[0].id);
       }
     }
+  }
+
+  // ─── Access Wall & Subscription Methods ───
+
+  goToLogin() {
+    this.router.navigate(['/login'], { queryParams: { returnUrl: this.router.url } });
+  }
+
+  goToUpgrade() {
+    this.router.navigate(['/subscription/upgrade'], {
+      queryParams: { tier: this.accessDeniedTier, returnUrl: this.router.url }
+    });
+  }
+
+  goBackFromAccessWall() {
+    this.router.navigate(['/home']);
+  }
+
+  goToUpgradeForNext() {
+    this.showNextLessonUpgrade = false;
+    this.router.navigate(['/subscription/upgrade'], {
+      queryParams: { tier: this.nextLessonRequiredTier, returnUrl: this.router.url }
+    });
+  }
+
+  dismissNextLessonUpgrade() {
+    this.showNextLessonUpgrade = false;
+  }
+
+  goToNextLesson() {
+    if (this.nextLessonInCourse?.id) {
+      this.router.navigate(['/lesson-view', this.nextLessonInCourse.id]);
+    }
+  }
+
+  private loadNextLessonInfo(lesson: any) {
+    const courseId = lesson.courseId || (lesson as any).course_id;
+    if (!courseId) {
+      this.nextLessonInCourse = null;
+      return;
+    }
+
+    this.http.get<any[]>(`${environment.apiUrl}/courses/${courseId}/lessons`)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (lessons) => {
+          const currentIndex = lessons.findIndex((l: any) => l.id === lesson.id);
+          if (currentIndex >= 0 && currentIndex < lessons.length - 1) {
+            const next = lessons[currentIndex + 1];
+            this.nextLessonInCourse = next;
+
+            const nextAccess = next.accessLevel || 'public';
+            const nextTier = next.requiredSubscriptionTier || null;
+            const userTier = this.authService.getSubscriptionTier() || 'free';
+            const tierOrder: Record<string, number> = { free: 0, pro: 1, enterprise: 2 };
+
+            if (nextAccess === 'login_required' && nextTier) {
+              const userLevel = tierOrder[userTier] ?? 0;
+              const requiredLevel = tierOrder[nextTier] ?? 0;
+              if (userLevel < requiredLevel) {
+                this.nextLessonAccessBlocked = true;
+                this.nextLessonRequiredTier = nextTier;
+              }
+            } else if (nextAccess === 'paid') {
+              this.nextLessonAccessBlocked = true;
+              this.nextLessonRequiredTier = 'paid';
+            }
+          }
+        },
+        error: () => {
+          this.nextLessonInCourse = null;
+        }
+      });
   }
 
   /**
@@ -3881,9 +4569,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       }, 100);
     }
     
-    // Timer will now increment (if visible)
-    // TODO: Integrate TTS here when ready
-    // Script stays visible until user closes or new script starts
+    // Resume background music if it was paused
+    this.audioService.resumeBgMusic();
   }
 
   onTeacherPause() {
@@ -3901,8 +4588,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         console.log('[LessonView] ⏸ Media player paused via script pause');
       }
     }
-    
-    // Timer will now pause (stops incrementing)
+
+    // Pause background music
+    this.audioService.pauseBgMusic();
   }
 
   onTeacherSkip() {
@@ -4412,8 +5100,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    * Start dragging FAB
    */
   startFabDrag(event: MouseEvent | TouchEvent) {
-    if (!this.isFullscreen) {
-      return; // Not in fullscreen, let click handler work
+    const isMobileViewport = window.innerWidth < 768;
+    if (!this.isFullscreen && !isMobileViewport) {
+      return; // Desktop non-fullscreen: let click handler work
     }
     
     console.log('[LessonView] FAB mousedown - checking for drag');
@@ -4542,7 +5231,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   /**
    * Create blob URL for interaction build (PixiJS/HTML/iframe)
    */
-  private createInteractionBlobUrl() {
+  private async createInteractionBlobUrl() {
     if (!this.interactionBuild) {
       this.interactionBlobUrl = null;
       return;
@@ -4646,6 +5335,25 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       });
     }
     
+    // Resolve bgMusicContentOutputId to a URL if present (from either iframeConfig defaults or substage config)
+    const mergedAudioId = config?.bgMusicContentOutputId || this.interactionBuild?.iframeConfig?.bgMusicContentOutputId;
+    if (mergedAudioId && (config?.bgMusicStyle === 'custom' || this.interactionBuild?.iframeConfig?.bgMusicStyle === 'custom')) {
+      try {
+        const output = await firstValueFrom(
+          this.http.get<any>(`${environment.apiUrl}/lesson-editor/processed-outputs/${mergedAudioId}`, {
+            headers: { 'x-tenant-id': environment.tenantId, 'x-user-id': environment.defaultUserId },
+          })
+        );
+        this.resolvedBgMusicUrl = output?.outputData?.mediaFileUrl || null;
+        if (this.resolvedBgMusicUrl) {
+          (config as any).bgMusicUrl = this.resolvedBgMusicUrl;
+          console.log('[LessonView] Resolved bgMusicContentOutputId to URL:', this.resolvedBgMusicUrl);
+        }
+      } catch (err) {
+        console.warn('[LessonView] Failed to resolve bgMusicContentOutputId:', mergedAudioId, err);
+      }
+    }
+
     // Create HTML document
     const htmlDoc = this.createInteractionHtmlDoc(this.interactionBuild, config, sampleData);
     
@@ -4997,8 +5705,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         showScript: (script, autoPlay) => {
           sendMessage("ai-sdk-show-script", { script, autoPlay });
         },
-        showSnack: (content, duration, hideFromChatUI, callback) => {
-          sendMessage("ai-sdk-show-snack", { content, duration, hideFromChatUI: hideFromChatUI || false }, (response) => {
+        showSnack: (content, duration, hideFromChatUI, actions, callback) => {
+          sendMessage("ai-sdk-show-snack", { content, duration, hideFromChatUI: hideFromChatUI || false, actions: actions || [] }, (response) => {
             if (callback && response.snackId) {
               callback(response.snackId);
             }
@@ -6148,8 +6856,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         showScript: (script, autoPlay) => {
           sendMessage("ai-sdk-show-script", { script, autoPlay });
         },
-        showSnack: (content, duration, hideFromChatUI, callback) => {
-          sendMessage("ai-sdk-show-snack", { content, duration, hideFromChatUI: hideFromChatUI || false }, (response) => {
+        showSnack: (content, duration, hideFromChatUI, actions, callback) => {
+          sendMessage("ai-sdk-show-snack", { content, duration, hideFromChatUI: hideFromChatUI || false, actions: actions || [] }, (response) => {
             if (callback && response.snackId) {
               callback(response.snackId);
             }
@@ -6620,15 +7328,22 @@ ${escapedCss}
    */
   private createInteractionHtmlDoc(build: any, config: any, sampleData: any): string {
     const category = build.interactionTypeCategory;
+
+    // Merge audio settings: interaction-type iframeConfig as defaults, substage config as overrides
+    const audioKeys = ['bgMusicStyle', 'bgMusicUrl', 'bgMusicFileName', 'bgMusicContentOutputId', 'bgMusicLoopStart', 'bgMusicLoopEnd', 'bgMusicCrossfade'];
+    const audioDefaults: any = {};
+    if (build.iframeConfig) {
+      for (const k of audioKeys) {
+        if (build.iframeConfig[k] !== undefined) audioDefaults[k] = build.iframeConfig[k];
+      }
+    }
+    const mergedConfig = { ...audioDefaults, ...config };
     
     if (category === 'iframe') {
-      // For iframe interactions, use wrapper HTML with button overlay
-      // Get iframeUrl from config (lesson-builder configured) or build or sampleData
-      const iframeUrl = config.iframeUrl || build.iframeUrl || sampleData.url || 'https://en.wikipedia.org/wiki/Main_Page';
+      const iframeUrl = mergedConfig.iframeUrl || build.iframeUrl || sampleData.url || 'https://en.wikipedia.org/wiki/Main_Page';
       
-      // Inject interaction data and config into wrapper
       const sampleDataJson = JSON.stringify(sampleData);
-      const configJson = JSON.stringify({ ...config, iframeUrl });
+      const configJson = JSON.stringify({ ...mergedConfig, iframeUrl });
       
       // Check overlay mode from iframeConfig
       const overlayMode = build.iframeConfig?.overlayMode || 'overlay';
@@ -6743,9 +7458,9 @@ ${escapedCss}
     console.log('[LessonView] 🔍 HTML code length:', normalizedHtml.length);
     console.log('[LessonView] 🔍 HTML code includes input field:', normalizedHtml.includes('image-prompt-input'));
     
-    // Inject interaction data and config
+    // Inject interaction data and config (with audio defaults merged)
     const sampleDataJson = JSON.stringify(sampleData);
-    const configJson = JSON.stringify(config);
+    const configJson = JSON.stringify(mergedConfig);
 
     return `<!DOCTYPE html>
 <html>
@@ -7946,6 +8661,164 @@ ${escapedHtml}
   }
 
   /**
+   * Check if the current interaction is a no-scroll interaction
+   * No-scroll interactions fill the available space exactly without scrolling
+   */
+  isNoScrollInteraction(): boolean {
+    return !!this.interactionBuild?.iframeConfig?.noScroll;
+  }
+
+  /**
+   * Set up ResizeObserver for no-scroll interactions to track available dimensions
+   * and send them to the iframe
+   */
+  private setupNoScrollResizeObserver(): void {
+    this.teardownNoScrollResizeObserver();
+    
+    if (!this.isNoScrollInteraction()) return;
+    
+    const contentEl = this.contentAreaRef?.nativeElement;
+    if (!contentEl) {
+      console.warn('[LessonView] No content area element found for noScroll ResizeObserver');
+      return;
+    }
+
+    const minWidth = this.interactionBuild?.iframeConfig?.minWidth || 500;
+    const minHeight = this.interactionBuild?.iframeConfig?.minHeight || 400;
+
+    this.noScrollResizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width === 0 || height === 0) continue;
+        console.log('[LessonView] NoScroll container resize:', Math.round(width), 'x', Math.round(height));
+        
+        this.ngZone.run(() => {
+          this.noScrollWidth = Math.round(width);
+          this.noScrollHeight = Math.round(height);
+          
+          const tooSmall = width < minWidth || height < minHeight;
+          if (tooSmall) {
+            this.noScrollTooSmall = true;
+          } else {
+            // Dimensions meet minimums — run parent-side content overflow check
+            setTimeout(() => this.checkNoScrollOverflowFromParent(), 100);
+          }
+          this.cdr.detectChanges();
+        });
+        
+        // Always send container dimensions so the iframe knows isMobile state,
+        // even if the container is below minimum size for content display.
+        this.sendContainerDimensions(Math.round(width), Math.round(height));
+      }
+    });
+
+    this.noScrollResizeObserver.observe(contentEl);
+    console.log('[LessonView] NoScroll ResizeObserver attached');
+  }
+
+  /**
+   * Tear down the noScroll ResizeObserver
+   */
+  private teardownNoScrollResizeObserver(): void {
+    if (this.noScrollResizeObserver) {
+      this.noScrollResizeObserver.disconnect();
+      this.noScrollResizeObserver = null;
+    }
+    this.noScrollTooSmall = false;
+    this.noScrollWidth = 0;
+    this.noScrollHeight = 0;
+  }
+
+  /**
+   * Parent-side overflow check: access the iframe's contentDocument to measure
+   * whether the content naturally overflows the iframe's visible area.
+   * This is more reliable than waiting for the iframe to postMessage back.
+   */
+  private checkNoScrollOverflowFromParent(): void {
+    if (!this.isNoScrollInteraction()) return;
+
+    try {
+      const iframes = document.querySelectorAll('iframe.interaction-iframe');
+      for (const iframe of Array.from(iframes)) {
+        const htmlIframe = iframe as HTMLIFrameElement;
+        const iframeHeight = htmlIframe.clientHeight;
+        if (iframeHeight === 0) continue;
+
+        const doc = htmlIframe.contentDocument;
+        if (!doc) continue;
+
+        const app = doc.getElementById('app');
+        if (!app) continue;
+
+        // Temporarily unlock height constraints to measure natural content height
+        const origHeight = app.style.height;
+        const origOverflow = app.style.overflow;
+        app.style.height = 'auto';
+        app.style.overflow = 'visible';
+        const naturalH = app.scrollHeight;
+        app.style.height = origHeight;
+        app.style.overflow = origOverflow;
+
+        const overflows = naturalH > iframeHeight + 2;
+        console.log('[LessonView] Parent-side overflow check: naturalH=' + naturalH +
+          ' iframeH=' + iframeHeight + ' overflows=' + overflows);
+
+        if (overflows && !this.noScrollTooSmall) {
+          this.noScrollTooSmall = true;
+          this.cdr.detectChanges();
+        } else if (!overflows && this.noScrollTooSmall) {
+          // Only clear if ResizeObserver min-size check also passes
+          const minW = this.interactionBuild?.iframeConfig?.minWidth || 500;
+          const minH = this.interactionBuild?.iframeConfig?.minHeight || 400;
+          if (this.noScrollWidth >= minW && this.noScrollHeight >= minH) {
+            this.noScrollTooSmall = false;
+            this.cdr.detectChanges();
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[LessonView] Parent-side overflow check failed (cross-origin?):', e);
+    }
+  }
+
+  /**
+   * Handle action button click from interaction info bar (e.g., Skip, Retry)
+   */
+  onInteractionInfoAction(action: string): void {
+    console.log('[LessonView] Interaction info action:', action);
+    const iframes = document.querySelectorAll('iframe.interaction-iframe');
+    iframes.forEach((iframe) => {
+      const htmlIframe = iframe as HTMLIFrameElement;
+      if (htmlIframe.contentWindow) {
+        htmlIframe.contentWindow.postMessage({
+          type: 'interaction-action',
+          action: action,
+        }, '*');
+      }
+    });
+  }
+
+  /**
+   * Send container dimensions to the iframe via postMessage
+   */
+  private sendContainerDimensions(width: number, height: number): void {
+    const isMobile = window.innerWidth < 768;
+    const iframes = document.querySelectorAll('iframe.interaction-iframe');
+    iframes.forEach((iframe) => {
+      const htmlIframe = iframe as HTMLIFrameElement;
+      if (htmlIframe.contentWindow) {
+        htmlIframe.contentWindow.postMessage({
+          type: 'container-dimensions',
+          width,
+          height,
+          isFullscreen: this.isFullscreen,
+          isMobile,
+        }, '*');
+      }
+    });
+  }
+
+  /**
    * Get sanitized HTML for iFrame overlay
    */
   getSanitizedIframeOverlayHtml(): any {
@@ -8165,8 +9038,8 @@ ${escapedHtml}
               showScript: (script, autoPlay) => {
                 sendMessage("ai-sdk-show-script", { script, autoPlay });
               },
-              showSnack: (content, duration, hideFromChatUI, callback) => {
-                sendMessage("ai-sdk-show-snack", { content, duration, hideFromChatUI: hideFromChatUI || false }, (response) => {
+              showSnack: (content, duration, hideFromChatUI, actions, callback) => {
+                sendMessage("ai-sdk-show-snack", { content, duration, hideFromChatUI: hideFromChatUI || false, actions: actions || [] }, (response) => {
                   if (callback && response.snackId) {
                     callback(response.snackId);
                   }

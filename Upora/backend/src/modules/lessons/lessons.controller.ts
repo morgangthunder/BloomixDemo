@@ -16,6 +16,7 @@ import { LessonLoaderService } from './lesson-loader.service';
 import { SuperAdminUsersService } from '../super-admin/super-admin-users.service';
 import { CreateLessonDto } from './dto/create-lesson.dto';
 import { UpdateLessonDto } from './dto/update-lesson.dto';
+import { hasRequiredTier } from '../../common/utils/subscription-tiers';
 
 @Controller('lessons')
 export class LessonsController {
@@ -33,13 +34,17 @@ export class LessonsController {
   @Get()
   findAll(
     @Headers('x-tenant-id') tenantId?: string,
+    @Headers('x-user-id') userId?: string,
     @Query('status') status?: string,
     @Query('approved') approved?: string,
+    @Query('createdBy') createdBy?: string,
   ) {
     // Support both ?status=approved and ?approved=true for backwards compatibility
     const onlyApproved = status === 'approved' || approved === 'true';
-    console.log(`[LessonsController] GET /lessons - tenantId: ${tenantId}, status: ${status}, onlyApproved: ${onlyApproved}`);
-    return this.lessonsService.findAll(tenantId, onlyApproved);
+    // Support ?createdBy=me to filter by the requesting user
+    const filterCreatedBy = createdBy === 'me' ? userId : createdBy;
+    console.log(`[LessonsController] GET /lessons - tenantId: ${tenantId}, status: ${status}, onlyApproved: ${onlyApproved}, createdBy: ${filterCreatedBy}`);
+    return this.lessonsService.findAll(tenantId, onlyApproved, filterCreatedBy);
   }
 
   /**
@@ -59,16 +64,36 @@ export class LessonsController {
   }
 
   @Get(':id')
-  findOne(
+  async findOne(
     @Param('id') id: string,
     @Headers('x-tenant-id') tenantId?: string,
+    @Headers('x-user-id') userId?: string,
+    @Headers('x-user-role') userRole?: string,
+    @Headers('x-subscription-tier') subscriptionTier?: string,
   ) {
-    // Validate UUID format, but allow numeric IDs for backwards compatibility
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(id) && !/^\d+$/.test(id)) {
       throw new BadRequestException('Invalid lesson ID format. Expected UUID or numeric ID.');
     }
-    return this.lessonsService.findOne(id, tenantId);
+    const lesson = await this.lessonsService.findOne(id, tenantId);
+    if (!lesson) return lesson;
+
+    const accessLevel = (lesson as any).accessLevel || 'public';
+    const requiredTier = (lesson as any).requiredSubscriptionTier || null;
+
+    if (accessLevel === 'paid') {
+      return { ...lesson, accessDenied: true, reason: 'paid', message: 'This lesson requires a purchase (coming soon).' };
+    }
+    if (accessLevel === 'login_required') {
+      if (!userId) {
+        return { ...lesson, accessDenied: true, reason: 'login_required', requiredTier };
+      }
+      if (requiredTier && !hasRequiredTier(subscriptionTier || null, requiredTier)) {
+        return { ...lesson, accessDenied: true, reason: 'tier_required', requiredTier };
+      }
+    }
+
+    return lesson;
   }
 
   @Patch(':id')
@@ -77,14 +102,13 @@ export class LessonsController {
     @Body() updateLessonDto: UpdateLessonDto,
     @Headers('x-user-id') userId: string,
     @Headers('x-tenant-id') tenantId?: string,
+    @Headers('x-user-role') userRole?: string,
   ) {
-    console.log('🔥🔥🔥 BACKEND LESSONS API VERSION 0.0.1 🔥🔥🔥');
-    console.log('[LessonsController] PATCH /:id - Version 0.0.1');
-    console.log('[LessonsController] Updating lesson:', id);
+    console.log('[LessonsController] PATCH /:id');
+    console.log('[LessonsController] Updating lesson:', id, 'by user:', userId, 'role:', userRole);
     console.log('[LessonsController] Payload keys:', Object.keys(updateLessonDto));
-    console.log('[LessonsController] Has data field:', !!updateLessonDto.data);
     
-    return this.lessonsService.update(id, updateLessonDto, userId, tenantId);
+    return this.lessonsService.update(id, updateLessonDto, userId, tenantId, userRole);
   }
 
   @Delete(':id')
@@ -201,20 +225,9 @@ export class LessonsController {
     @Headers('x-user-role') userRole?: string,
     @Query('q') searchQuery?: string,
   ) {
-    console.log('[LessonsController] 📊 getEngagers called:', { lessonId: id, userId, tenantId, searchQuery, userRole });
+    console.log('[LessonsController] getEngagers:', { lessonId: id, searchQuery });
     const engagers = await this.lessonsService.getEngagers(id, userId, tenantId, searchQuery, userRole);
-    console.log('[LessonsController] ✅ Returning engagers:', engagers.length);
-    engagers.forEach((engager) => {
-      const interactionCount = engager.engagement?.interactions?.length ?? 0;
-      console.log(`[LessonsController]   - ${engager.name} (${engager.email}): ${interactionCount} interactions`);
-      if (interactionCount > 0) {
-        console.log(`[LessonsController]     Interactions:`, engager.engagement.interactions.map((i: any) => ({
-          interactionTypeId: i.interactionTypeId,
-          score: i.score,
-          completed: i.completed,
-        })));
-      }
-    });
+    console.log('[LessonsController] Returning', engagers.length, 'engagers');
     return engagers;
   }
 }

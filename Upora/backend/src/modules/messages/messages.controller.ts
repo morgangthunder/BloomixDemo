@@ -51,6 +51,17 @@ export class MessagesController {
   }
 
   /**
+   * Mark all notifications as read for the current user.
+   * NOTE: This route MUST be before ':id/read' to avoid conflict.
+   */
+  @Patch('mark-all-read')
+  async markAllAsRead(
+    @Headers('x-user-id') userId: string,
+  ) {
+    return this.messagesService.markAllAsRead(userId);
+  }
+
+  /**
    * Mark a message as read.
    */
   @Patch(':id/read')

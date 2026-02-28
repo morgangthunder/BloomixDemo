@@ -692,6 +692,124 @@ aiSDK.deleteImage(imageIdToDelete, (result, error) => {
 - This operation cannot be undone
 - Only images associated with the current lesson/account context can be deleted (enforced by backend)
 
+### `findImagePair(options, callback?)`
+
+Find a cached image pair (desktop + mobile variants) by interests or dictionary label. Used for personalisation-based image reuse — avoids regenerating images when a suitable pair already exists.
+
+**Parameters:**
+| Field | Type | Description |
+|---|---|---|
+| `options.interests` | `string[]` | User interests to match against `userInput` on cached images |
+| `options.dictionaryLabel` | `string` | Dictionary label to match (e.g. `"paper-recycling"`) |
+| `options.lessonId` | `string` | (optional) Lesson ID — defaults to current lesson |
+| `options.interactionId` | `string` | (optional) Interaction ID — defaults to current interaction |
+
+**Callback Response:**
+| Field | Type | Description |
+|---|---|---|
+| `found` | `boolean` | Whether a matching pair was found |
+| `pair.desktop` | `object` | Desktop image: `{ imageId, imageUrl, componentMap, userInput }` |
+| `pair.mobile` | `object` | Mobile image: `{ imageId, imageUrl, componentMap }` |
+
+**Example:**
+```javascript
+aiSDK.findImagePair({
+  dictionaryLabel: 'paper-recycling',
+  interests: ['Breaking Bad', 'Studio Ghibli']
+}, (response) => {
+  if (response.found) {
+    console.log('Using cached pair:', response.pair.desktop.imageId);
+    displayImage(response.pair.desktop.imageUrl);
+  } else {
+    console.log('No pair found, generating fresh...');
+    generateNewImage();
+  }
+});
+```
+
+### `setInteractionInfo(content)`
+
+Send quiz questions, progress, feedback, and action buttons to the parent lesson-view's control bar. This is used by no-scroll interactions to display questions outside the iframe.
+
+**Parameters:**
+| Field | Type | Description |
+|---|---|---|
+| `content` | `object\|null` | Pass `null` to clear. Object with fields below. |
+| `content.text` | `string` | Main text (e.g. the question) |
+| `content.progress` | `string` | Progress indicator (e.g. `"2/7"`) |
+| `content.feedbackText` | `string` | Feedback after an action (e.g. `"Correct!"`) |
+| `content.feedbackType` | `string` | `"correct"` or `"incorrect"` for styling |
+| `content.actions` | `string[]` | Button labels (e.g. `["Skip", "Retry"]`) |
+
+Action button clicks are sent back to the iframe as `interaction-action` postMessages with `event.data.action` matching the button label.
+
+**Example:**
+```javascript
+aiSDK.setInteractionInfo({
+  text: 'Click on: "Mix with water"',
+  progress: '3/7',
+  feedbackText: null,
+  feedbackType: null,
+  actions: ['Skip'],
+});
+
+// Listen for action button clicks from parent
+window.addEventListener('message', (event) => {
+  if (event.data.type === 'interaction-action') {
+    if (event.data.action === 'Skip') skipQuestion();
+  }
+});
+```
+
+## Test Mode for Interactions
+
+Interactions can define a `testMode` flag in their config to toggle between manual testing and production behaviour.
+
+### How it works
+
+In **test mode** (`testMode: true`, the default), the interaction shows manual input controls (e.g. a text input for entering a movie/TV show theme). This is useful during development and content authoring.
+
+In **production mode** (`testMode: false`), the interaction automatically uses personalisation data to find or generate images. The flow is:
+
+1. Check for an existing cached image pair matching the user's interests via `findImagePair()`
+2. Fall back to any available cached pair for the lesson
+3. If no cached images exist, generate a new pair using a fallback theme
+
+### Setting test mode in interaction config
+
+In the Interaction Builder, add `testMode` to the interaction's config JSON:
+
+```json
+{
+  "processTitle": "Paper Recycling",
+  "processSteps": "Collect used paper\nSort and shred\nMix with water",
+  "testMode": false
+}
+```
+
+When `testMode` is omitted or set to `true`, the interaction defaults to test mode for backward compatibility.
+
+### Using test mode in your interaction code
+
+```javascript
+const config = window.interactionConfig || {};
+const isTestMode = config.testMode !== false;
+
+if (isTestMode) {
+  // Show manual input UI
+  showInputSection();
+} else {
+  // Auto-generate from personalisation
+  aiSDK.findImagePair({ dictionaryLabel: 'my-label' }, (response) => {
+    if (response.found) {
+      useCachedPair(response.pair);
+    } else {
+      generateNewImage();
+    }
+  });
+}
+```
+
 ## Data Storage Methods
 
 ### `saveInstanceData(data)`
@@ -1297,6 +1415,171 @@ window.addEventListener('message', (event) => {
 3. **Always provide fallback** if widget config is missing
 4. **Check for container existence** before manipulating widget DOM
 5. **Use instance IDs** consistently (from `window.interactionConfig.widgetConfigs`)
+
+## Audio (Sound Effects & Background Music)
+
+The SDK provides built-in audio capabilities so interactions can play sound effects and background music without managing their own Web Audio context. Audio is centralised in the parent app so the user has a single mute toggle (in the header) that applies to all interactions.
+
+### `playSfx(name)`
+
+Play a named sound effect. Available names:
+
+| Name | Description |
+|------|-------------|
+| `"correct"` | Rising major arpeggio (C-E-G) — for correct answers |
+| `"incorrect"` | Descending minor tones — for wrong answers |
+| `"complete"` | Full ascending arpeggio — for completing a section |
+| `"click"` | Short high-pitched click — for button presses |
+| `"whoosh"` | Quick sweep — for transitions/reveals |
+| `"pop"` | Soft pop — for items appearing |
+| `"tick"` | Minimal tick — for selections/toggles |
+| `"levelup"` | Extended ascending arpeggio — for major achievements |
+
+```javascript
+// Play a sound when the user gets an answer right
+aiSDK.playSfx("correct");
+
+// Play a sound on wrong answer
+aiSDK.playSfx("incorrect");
+
+// Celebrate completing all questions
+aiSDK.playSfx("complete");
+```
+
+### `startBgMusic(style?)`
+
+Start soft ambient synthesised background music. The music loops until stopped. Calling again with the same style is a no-op; calling with a different style switches to it.
+
+Available styles: `"calm"` (default), `"ambient"`, `"focus"`, `"upbeat"`.
+
+```javascript
+// Start calm background music when quiz begins
+aiSDK.startBgMusic("calm");
+
+// Switch to upbeat when a bonus round starts
+aiSDK.startBgMusic("upbeat");
+```
+
+### `startBgMusicFromUrl(url, loopConfig?)`
+
+Play a custom audio file as background music with seamless crossfade looping. The file is fetched, decoded, and looped between the specified loop points. A crossfade is applied at the loop boundary for a gapless transition.
+
+**Parameters:**
+- `url` (string) — URL of the audio file (MP3, WAV, OGG, etc.)
+- `loopConfig` (object, optional):
+  - `loopStart` (number) — seconds, where the loop region starts (default: 0)
+  - `loopEnd` (number) — seconds, where the loop region ends (default: end of file; 0 also means end of file)
+  - `crossfade` (number) — seconds of crossfade at the loop point (default: 2)
+
+If the audio file fails to load, the service automatically falls back to synthesised "calm" music.
+
+```javascript
+// Loop an uploaded audio file from the start
+aiSDK.startBgMusicFromUrl("https://storage.example.com/audio/my-loop.mp3");
+
+// Loop with specific loop points and crossfade
+aiSDK.startBgMusicFromUrl("https://storage.example.com/audio/my-loop.mp3", {
+  loopStart: 2.5,
+  loopEnd: 30.0,
+  crossfade: 3
+});
+```
+
+### `stopBgMusic()`
+
+Stop the background music (both synthesised and custom file playback).
+
+```javascript
+// Stop music when activity finishes
+aiSDK.stopBgMusic();
+```
+
+### `setAudioVolume(channel, level)`
+
+Adjust volume for a specific channel. `level` is 0.0 (silent) to 1.0 (full).
+
+- `"sfx"` — sound effects volume
+- `"music"` — background music volume
+
+```javascript
+// Lower music volume
+aiSDK.setAudioVolume("music", 0.02);
+
+// Increase SFX volume
+aiSDK.setAudioVolume("sfx", 0.25);
+```
+
+### Audio Configuration
+
+Background music style and custom audio files can be configured at two levels:
+
+1. **Interaction Builder** (interaction type defaults) — set `bgMusicStyle` and optionally select approved audio content in the Audio Settings section. Stored in `iframeConfig`.
+2. **Lesson Builder** (per-substage override) — override the default in the Configure Interaction modal's Audio Settings section. Stored in `interaction.config`.
+
+The substage config takes precedence over the interaction type default. Available `bgMusicStyle` values:
+- `"calm"`, `"ambient"`, `"focus"`, `"upbeat"` — synthesised presets
+- `"custom"` — plays approved audio from the Content Library. The `bgMusicContentOutputId` references a processed content output; the lesson-view resolves it to a `bgMusicUrl` at runtime.
+- `"none"` — no background music
+
+Custom audio follows the content approval pipeline:
+- Audio files are uploaded as content sources (type `media`) and require super-admin approval.
+- Interaction Builders can upload hub-wide default audio via Audio Settings; these are flagged with `contentScope: 'interaction-type-default'` in the approval queue.
+- Once approved, the audio appears in the Content Library selector for both Interaction Builders and Lesson Builders.
+- The super-admin approval queue includes an inline audio player for reviewing content.
+
+Interactions should read the audio config from `window.interactionConfig` and call the appropriate SDK method. Example:
+
+```javascript
+var config = window.interactionConfig || {};
+var style = config.bgMusicStyle || "calm";
+
+if (style === "none") {
+  // No music
+} else if (style === "custom" && config.bgMusicUrl) {
+  // bgMusicUrl is resolved at runtime from bgMusicContentOutputId
+  aiSDK.startBgMusicFromUrl(config.bgMusicUrl, {
+    loopStart: config.bgMusicLoopStart || 0,
+    loopEnd: config.bgMusicLoopEnd || 0,
+    crossfade: config.bgMusicCrossfade != null ? config.bgMusicCrossfade : 2
+  });
+} else {
+  aiSDK.startBgMusic(style);
+}
+```
+
+### Audio Notes
+
+- Audio requires a user gesture to start (browser policy). The first `playSfx` or `startBgMusic` call should happen after a user click/tap.
+- Users can mute/unmute all audio via the speaker icon in the header. The mute state persists across sessions.
+- Synthesised presets use the Web Audio API — no external files needed.
+- Custom audio files go through the content approval pipeline and are stored in S3/MinIO. The lesson-view resolves `bgMusicContentOutputId` to a `bgMusicUrl` before injecting it into the iframe config.
+- Custom audio files are loaded via `fetch()` and decoded by the Web Audio API. A dual-source crossfade loop ensures seamless repetition.
+- Sound effects are fire-and-forget; they do not block execution.
+
+### Iframe postMessage Reference
+
+For iframe interactions using `postMessage` directly:
+
+```javascript
+// Play SFX
+window.parent.postMessage({ type: "ai-sdk-play-sfx", name: "correct" }, "*");
+
+// Start synthesised background music
+window.parent.postMessage({ type: "ai-sdk-start-bg-music", style: "calm" }, "*");
+
+// Start custom audio file background music
+window.parent.postMessage({
+  type: "ai-sdk-start-bg-music-url",
+  url: "https://storage.example.com/audio/loop.mp3",
+  loopConfig: { loopStart: 0, loopEnd: 0, crossfade: 2 }
+}, "*");
+
+// Stop background music
+window.parent.postMessage({ type: "ai-sdk-stop-bg-music" }, "*");
+
+// Set volume
+window.parent.postMessage({ type: "ai-sdk-set-audio-volume", channel: "sfx", level: 0.2 }, "*");
+```
 
 ## Notes
 

@@ -106,6 +106,93 @@ interface AIAssistant {
               {{ savingAll ? 'Saving All...' : 'Save All Changes' }}
             </button>
           </div>
+
+          <!-- Troublesome References (only for image-generator assistant) -->
+          <div *ngIf="selectedAssistant?.id === 'image-generator'" class="troublesome-refs-section">
+            <div class="section-header">
+              <h3>⚠️ Troublesome References for Image Gen</h3>
+              <button class="btn-refresh" (click)="loadTroublesomeRefs()" [disabled]="loadingTroublesomeRefs">
+                {{ loadingTroublesomeRefs ? 'Loading...' : '🔄 Refresh' }}
+              </button>
+            </div>
+            <p class="section-description">
+              Movie/TV references that have caused image generation failures (auto-logged on finishReason=OTHER). 
+              Consider removing these from onboarding options.
+            </p>
+            <div *ngIf="troublesomeRefs.length === 0 && !loadingTroublesomeRefs" class="empty-state">
+              No troublesome references logged yet.
+            </div>
+            <div class="troublesome-list">
+              <div *ngFor="let ref of troublesomeRefs" class="troublesome-item">
+                <div class="ref-info">
+                  <span class="ref-name">{{ ref.reference }}</span>
+                  <span class="ref-count">{{ ref.count }} failure{{ ref.count > 1 ? 's' : '' }}</span>
+                  <span class="ref-reason">{{ ref.reason }}</span>
+                  <span class="ref-date">Last: {{ ref.lastSeen | date:'short' }}</span>
+                </div>
+                <button class="btn-remove-ref" (click)="removeTroublesomeRef(ref.reference)" title="Remove from list">
+                  ✕
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Image Responses (only for image-generator assistant) -->
+          <div *ngIf="selectedAssistant?.id === 'image-generator'" class="recent-images-section">
+            <div class="section-header">
+              <h3>📸 Recent Image Responses</h3>
+              <button class="btn-refresh" (click)="loadRecentImages()" [disabled]="loadingRecentImages">
+                {{ loadingRecentImages ? 'Loading...' : '🔄 Refresh' }}
+              </button>
+            </div>
+            <div *ngIf="recentImages.length === 0 && !loadingRecentImages" class="empty-state">
+              No images generated yet. Click Refresh to check.
+            </div>
+            <div class="images-grid">
+              <div *ngFor="let img of recentImages" class="image-card">
+                <div class="image-thumb-container">
+                  <img [src]="img.imageUrl" class="image-thumb" alt="Generated image" loading="lazy" />
+                  <span *ngIf="img.componentMap?.components?.length" class="component-badge">{{ img.componentMap.components.length }} regions</span>
+                </div>
+                <div class="image-details">
+                  <p class="image-prompt" [title]="img.prompt">{{ img.prompt?.substring(0, 80) }}{{ img.prompt?.length > 80 ? '...' : '' }}</p>
+                  <div class="image-meta">
+                    <span class="meta-item" *ngIf="img.paramHash">🔑 {{ img.paramHash.substring(0, 12) }}…</span>
+                    <span class="meta-item" *ngIf="img.width && img.height">📐 {{ img.width }}×{{ img.height }}</span>
+                    <span class="meta-item time">🕐 {{ img.createdAt | date:'short' }}</span>
+                  </div>
+                  <div *ngIf="img.dictionaryLabels?.length" class="image-tags">
+                    <span class="tag dict" *ngFor="let label of img.dictionaryLabels">{{ label }}</span>
+                  </div>
+                  <div *ngIf="img.personalisationTags?.length" class="image-tags">
+                    <span class="tag pref" *ngFor="let tag of img.personalisationTags">{{ tag }}</span>
+                  </div>
+                  <div *ngIf="img.metadata" class="image-meta-json">
+                    <details>
+                      <summary class="meta-toggle">Metadata</summary>
+                      <pre class="meta-json">{{ img.metadata | json }}</pre>
+                    </details>
+                  </div>
+                  <div *ngIf="img.componentMap?.components?.length" class="component-map-section">
+                    <details>
+                      <summary class="meta-toggle">🗺️ Component Map ({{ img.componentMap.components.length }} regions)</summary>
+                      <div class="component-list">
+                        <div *ngFor="let comp of img.componentMap.components; let i = index" class="component-item">
+                          <span class="comp-index">{{ i + 1 }}.</span>
+                          <span class="comp-label">{{ comp.label }}</span>
+                          <span class="comp-coords">x:{{ comp.x }}% y:{{ comp.y }}% w:{{ comp.width }}% h:{{ comp.height }}%</span>
+                          <span *ngIf="comp.confidence" class="comp-confidence">{{ (comp.confidence * 100).toFixed(0) }}%</span>
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+                  <div *ngIf="!img.componentMap?.components?.length" class="no-component-map">
+                    <span class="muted-text">No component map</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </ion-content>
@@ -457,10 +544,260 @@ interface AIAssistant {
         width: 100%;
       }
     }
+
+    /* Troublesome References Section */
+    .troublesome-refs-section {
+      margin-top: 2rem;
+      padding-top: 2rem;
+      border-top: 1px solid rgba(255,255,255,0.1);
+    }
+    .section-description {
+      font-size: 0.82rem;
+      color: rgba(255,255,255,0.45);
+      margin: 0 0 1rem;
+      line-height: 1.4;
+    }
+    .troublesome-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .troublesome-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      background: rgba(255,100,100,0.06);
+      border: 1px solid rgba(255,100,100,0.15);
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+    }
+    .ref-info {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem;
+      flex: 1;
+      min-width: 0;
+    }
+    .ref-name {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #ff8a8a;
+    }
+    .ref-count {
+      font-size: 0.72rem;
+      background: rgba(255,100,100,0.2);
+      color: #ff6b6b;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .ref-reason {
+      font-size: 0.72rem;
+      color: rgba(255,255,255,0.4);
+      font-family: monospace;
+    }
+    .ref-date {
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.3);
+      white-space: nowrap;
+    }
+    .btn-remove-ref {
+      background: rgba(255,100,100,0.15);
+      border: 1px solid rgba(255,100,100,0.3);
+      color: #ff6b6b;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+    .btn-remove-ref:hover {
+      background: rgba(255,100,100,0.3);
+      border-color: #ff6b6b;
+    }
+
+    /* Recent Images Section */
+    .recent-images-section {
+      margin-top: 2rem;
+      padding-top: 2rem;
+      border-top: 1px solid rgba(255,255,255,0.1);
+    }
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    .section-header h3 {
+      font-size: 1.25rem;
+      color: #fff;
+      margin: 0;
+    }
+    .btn-refresh {
+      padding: 0.4rem 1rem;
+      background: rgba(0,212,255,0.1);
+      border: 1px solid rgba(0,212,255,0.3);
+      border-radius: 6px;
+      color: #00d4ff;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .btn-refresh:hover { background: rgba(0,212,255,0.2); }
+    .btn-refresh:disabled { opacity: 0.5; cursor: default; }
+    .empty-state {
+      color: rgba(255,255,255,0.4);
+      font-size: 0.9rem;
+      text-align: center;
+      padding: 1.5rem;
+    }
+    .images-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .image-card {
+      display: flex;
+      gap: 1rem;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 0.75rem;
+      align-items: flex-start;
+    }
+    .image-thumb-container {
+      position: relative;
+      flex-shrink: 0;
+    }
+    .image-thumb {
+      width: 120px;
+      height: 80px;
+      object-fit: cover;
+      border-radius: 6px;
+      background: rgba(0,0,0,0.3);
+    }
+    .component-badge {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      background: rgba(0,212,255,0.85);
+      color: #fff;
+      font-size: 0.65rem;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 8px;
+    }
+    .image-details {
+      flex: 1;
+      min-width: 0;
+    }
+    .image-prompt {
+      font-size: 0.85rem;
+      color: rgba(255,255,255,0.8);
+      margin: 0 0 0.4rem;
+      line-height: 1.3;
+    }
+    .image-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 0.3rem;
+    }
+    .meta-item {
+      font-size: 0.72rem;
+      color: rgba(255,255,255,0.45);
+      font-family: monospace;
+    }
+    .image-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 4px;
+    }
+    .tag {
+      font-size: 0.68rem;
+      padding: 1px 8px;
+      border-radius: 10px;
+      font-weight: 500;
+    }
+    .tag.dict { background: rgba(0,255,136,0.12); color: #00ff88; }
+    .tag.pref { background: rgba(255,170,0,0.12); color: #ffaa00; }
+    .meta-toggle {
+      font-size: 0.75rem;
+      color: #00d4ff;
+      cursor: pointer;
+      margin-top: 4px;
+    }
+    .meta-json {
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.5);
+      background: rgba(0,0,0,0.3);
+      padding: 6px 8px;
+      border-radius: 4px;
+      max-height: 150px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      margin-top: 4px;
+    }
+    .component-list {
+      margin-top: 4px;
+    }
+    .component-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.72rem;
+      padding: 3px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .comp-index {
+      color: rgba(255,255,255,0.3);
+      font-size: 0.68rem;
+      min-width: 18px;
+    }
+    .comp-label {
+      color: rgba(255,255,255,0.7);
+      font-weight: 500;
+      flex: 1;
+    }
+    .comp-coords {
+      color: rgba(255,255,255,0.35);
+      font-family: monospace;
+      font-size: 0.68rem;
+    }
+    .comp-confidence {
+      color: rgba(100,255,100,0.5);
+      font-family: monospace;
+      font-size: 0.65rem;
+    }
+    .no-component-map {
+      margin-top: 4px;
+    }
+    .no-component-map .muted-text {
+      color: rgba(255,255,255,0.25);
+      font-size: 0.7rem;
+      font-style: italic;
+    }
   `]
 })
 export class AiPromptsComponent implements OnInit {
   selectedAssistant: AIAssistant | null = null;
+
+  // Recent image responses
+  recentImages: any[] = [];
+  loadingRecentImages = false;
+
+  // Troublesome references
+  troublesomeRefs: any[] = [];
+  loadingTroublesomeRefs = false;
   assistants: AIAssistant[] = [
     {
       id: 'auto-populator',
@@ -1194,7 +1531,7 @@ await aiSDK.saveUserProgress({
       prompts: {
         'default': {
           label: 'Image Generation Prompt',
-          content: 'You are an image generation assistant. Generate high-quality educational images based on the following prompt:\n\n{prompt}\n\nGuidelines:\n- Create clear, educational, age-appropriate images\n- Focus on accuracy and clarity\n- Ensure images are suitable for educational contexts',
+          content: 'You are an AI image generator assistant. Generate high-quality educational images based on user descriptions. When a visual style or theme is referenced (e.g. a movie or TV show), use it as creative inspiration for the color palette, art style, and overall aesthetic.',
           placeholder: 'Enter the prompt template for generating educational images. Use {prompt} as a placeholder for the user\'s prompt.'
         },
         'api-config': {
@@ -1368,6 +1705,56 @@ await aiSDK.saveUserProgress({
       relativeTo: this.route,
       queryParams: { assistant: assistant.id },
       queryParamsHandling: 'merge'
+    });
+
+    // Auto-load recent images and troublesome refs when selecting image-generator
+    if (assistant.id === 'image-generator') {
+      this.loadRecentImages();
+      this.loadTroublesomeRefs();
+    }
+  }
+
+  loadRecentImages() {
+    this.loadingRecentImages = true;
+    this.http.get<any[]>(`${environment.apiUrl}/image-generator/recent?limit=10`).subscribe({
+      next: (images) => {
+        this.recentImages = images;
+        this.loadingRecentImages = false;
+      },
+      error: (err) => {
+        console.error('[AIPrompts] Failed to load recent images:', err);
+        this.recentImages = [];
+        this.loadingRecentImages = false;
+      },
+    });
+  }
+
+  loadTroublesomeRefs() {
+    this.loadingTroublesomeRefs = true;
+    this.http.get<any[]>(`${environment.apiUrl}/image-generator/troublesome-references`).subscribe({
+      next: (refs) => {
+        this.troublesomeRefs = (refs || []).sort((a: any, b: any) => b.count - a.count);
+        this.loadingTroublesomeRefs = false;
+        console.log('[AIPrompts] Loaded troublesome refs:', this.troublesomeRefs.length);
+      },
+      error: (err) => {
+        console.error('[AIPrompts] Failed to load troublesome refs:', err);
+        this.troublesomeRefs = [];
+        this.loadingTroublesomeRefs = false;
+      },
+    });
+  }
+
+  removeTroublesomeRef(reference: string) {
+    this.http.delete(`${environment.apiUrl}/image-generator/troublesome-reference/${encodeURIComponent(reference)}`).subscribe({
+      next: () => {
+        this.troublesomeRefs = this.troublesomeRefs.filter(r => r.reference !== reference);
+        this.toastService.success(`Removed "${reference}" from troublesome references`, 3000);
+      },
+      error: (err) => {
+        console.error('[AIPrompts] Failed to remove troublesome ref:', err);
+        this.toastService.error('Failed to remove reference', 3000);
+      },
     });
   }
 

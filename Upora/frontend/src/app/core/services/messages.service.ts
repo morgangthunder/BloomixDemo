@@ -22,6 +22,10 @@ export interface Message {
   createdAt: Date;
   emailRequested?: boolean;
   emailDeliveryStatus?: string | null;
+  /** Notification type (e.g. 'direct_message', 'group_invite', 'group_deleted') */
+  notificationType?: string;
+  /** Action URL (e.g. /my-lessons?acceptGroup=UUID) */
+  actionUrl?: string | null;
   fromUser?: {
     id: string;
     email: string;
@@ -57,5 +61,9 @@ export class MessagesService {
 
   getUnreadCount(): Observable<{ count: number }> {
     return this.api.get<{ count: number }>('/messages/unread-count');
+  }
+
+  markAllAsRead(): Observable<{ marked: number }> {
+    return this.api.patch<{ marked: number }>('/messages/mark-all-read', {});
   }
 }

@@ -44,13 +44,13 @@ interface ProcessedMediaContent {
     <div class="modal-overlay" *ngIf="isOpen" (click)="closeModal()">
       <div class="modal-content" (click)="$event.stopPropagation()">
         <div class="modal-header">
-          <h2>🎬 Select Media Content</h2>
+          <h2>{{ filterMediaTypeOnly === 'audio' ? '🎵 Select Audio Content' : filterMediaTypeOnly === 'video' ? '🎥 Select Video Content' : '🎬 Select Media Content' }}</h2>
           <button (click)="closeModal()" class="close-btn">&times;</button>
         </div>
 
         <div class="modal-body">
-          <!-- Filter -->
-          <div class="filter-section">
+          <!-- Filter (hidden when a fixed filter is applied) -->
+          <div class="filter-section" *ngIf="filterMediaTypeOnly === 'all'">
             <div class="filter-toggle">
               <button 
                 [class.active]="mediaTypeFilter === 'all'"
@@ -441,8 +441,9 @@ interface ProcessedMediaContent {
 })
 export class MediaContentSelectorComponent implements OnInit, OnChanges {
   @Input() isOpen = false;
+  @Input() filterMediaTypeOnly: 'all' | 'video' | 'audio' = 'all';
   @Output() close = new EventEmitter<void>();
-  @Output() selected = new EventEmitter<string>(); // Emits processed content ID
+  @Output() selected = new EventEmitter<string>();
 
   mediaContent: ProcessedMediaContent[] = [];
   loading = false;
@@ -453,6 +454,9 @@ export class MediaContentSelectorComponent implements OnInit, OnChanges {
   constructor(private http: HttpClient) {}
 
   ngOnInit() {
+    if (this.filterMediaTypeOnly !== 'all') {
+      this.mediaTypeFilter = this.filterMediaTypeOnly;
+    }
     if (this.isOpen) {
       this.loadMediaContent();
     }

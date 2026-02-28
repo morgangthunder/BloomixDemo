@@ -17,6 +17,8 @@ export enum NotificationType {
   PROGRESS_REMINDER = 'progress_reminder',
   ASSIGNMENT_SCORE_UPDATE = 'assignment_score_update',
   HUB_INVITE = 'hub_invite',
+  GROUP_INVITE = 'group_invite',
+  GROUP_DELETED = 'group_deleted',
   ASSIGNMENT_MARKED_DONE = 'assignment_marked_done',
   DEADLINE_REMINDER = 'deadline_reminder',
 }

@@ -246,6 +246,124 @@ interface ChatMessage {
                 </div>
                 </div>
 
+                <!-- Layout Options (all interaction types) -->
+                <div class="info-section" style="margin-top: 30px;">
+                  <h3>Layout Options</h3>
+                  <div class="form-group">
+                    <label class="checkbox-label" style="font-weight: 500;">
+                      <input type="checkbox" 
+                             [checked]="getIframeConfigValue('noScroll')"
+                             (change)="toggleNoScroll($event)" />
+                      <span>No-Scroll Mode</span>
+                    </label>
+                    <small class="hint">When enabled, the lesson view will not scroll — the interaction must fit entirely within the available space. Recommended for image-based interactions, games, and fullscreen experiences. The interaction receives the available dimensions via <code>container-dimensions</code> postMessages.</small>
+                  </div>
+                  <div *ngIf="getIframeConfigValue('noScroll')" class="form-group" style="margin-top: 8px;">
+                    <label>Minimum Width (px)</label>
+                    <input type="number" [value]="getIframeConfigValue('minWidth') || 640"
+                           (change)="setIframeConfigValue('minWidth', +$any($event.target).value); markChanged()"
+                           class="form-control" style="max-width: 120px;" min="200" />
+                    <label style="margin-top: 8px;">Minimum Height (px)</label>
+                    <input type="number" [value]="getIframeConfigValue('minHeight') || 404"
+                           (change)="setIframeConfigValue('minHeight', +$any($event.target).value); markChanged()"
+                           class="form-control" style="max-width: 120px;" min="200" />
+                    <small class="hint">If the lesson panel is smaller than these dimensions, a "does not fit" warning will show instead of the interaction.</small>
+                  </div>
+                  <div class="form-group" style="margin-top: 8px;">
+                    <label class="checkbox-label" style="font-weight: 500;">
+                      <input type="checkbox"
+                             [checked]="currentInteraction?.config?.testMode !== false"
+                             (change)="toggleTestMode($event)" />
+                      <span>Test Mode</span>
+                    </label>
+                    <small class="hint">When enabled, the interaction shows manual input controls for testing (e.g. a text prompt for theming). Disable for production to use personalisation data.</small>
+                  </div>
+                </div>
+
+                <!-- Audio Settings -->
+                <div class="info-section" style="margin-top: 30px;">
+                  <h3>Audio Settings</h3>
+                  <div class="form-group">
+                    <label>Background Music</label>
+                    <select [value]="getIframeConfigValue('bgMusicStyle') || 'calm'"
+                            (change)="setIframeConfigValue('bgMusicStyle', $any($event.target).value); markChanged()"
+                            class="form-control">
+                      <option value="none">None</option>
+                      <option value="calm">Calm (lo-fi arpeggio)</option>
+                      <option value="ambient">Ambient (slow, spacious)</option>
+                      <option value="focus">Focus (steady rhythm)</option>
+                      <option value="upbeat">Upbeat (energetic)</option>
+                      <option value="custom">Custom Audio (from Content Library)</option>
+                    </select>
+                    <small class="hint">Default background music style for this interaction. Lesson-builders can override per substage.</small>
+                  </div>
+
+                  <div *ngIf="getIframeConfigValue('bgMusicStyle') === 'custom'" style="margin-top: 12px;">
+                    <!-- Select approved audio content -->
+                    <div class="form-group">
+                      <label>Audio Content</label>
+                      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                        <span *ngIf="bgAudioContentName" style="font-size: 0.85rem; color: #7dd3fc; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                          {{ bgAudioContentName }}
+                        </span>
+                        <span *ngIf="!getIframeConfigValue('bgMusicContentOutputId') && !bgAudioContentName" style="color: #94a3b8; font-size: 0.85rem;">No audio selected</span>
+                        <button type="button" class="btn btn-primary" style="font-size: 0.8rem; padding: 4px 12px;" (click)="showBgAudioSelector = true">
+                          {{ getIframeConfigValue('bgMusicContentOutputId') ? 'Change' : 'Select Audio' }}
+                        </button>
+                        <button *ngIf="getIframeConfigValue('bgMusicContentOutputId')" type="button" class="btn btn-danger" style="font-size: 0.8rem; padding: 4px 12px;" (click)="clearBgAudioContent()">Remove</button>
+                      </div>
+                      <small class="hint">Select approved audio from the Content Library.</small>
+                    </div>
+
+                    <!-- Upload new audio as hub-wide default (creates content source for approval) -->
+                    <div class="form-group" style="margin-top: 12px; padding: 12px; background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.2); border-radius: 8px;">
+                      <label style="color: #c084fc;">Upload New Audio (Hub-wide Default)</label>
+                      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                        <label class="btn btn-primary" style="cursor: pointer; margin: 0; font-size: 0.8rem; padding: 4px 12px;">
+                          Upload Audio File
+                          <input type="file" accept="audio/*" (change)="onBgAudioFileSelected($event)" style="display: none;" />
+                        </label>
+                        <small *ngIf="bgAudioUploading" style="color: #fbbf24;">Uploading...</small>
+                        <small *ngIf="bgAudioUploadStatus" [style.color]="bgAudioUploadStatus.includes('Pending') ? '#fbbf24' : '#4ade80'" style="font-size: 0.8rem;">{{ bgAudioUploadStatus }}</small>
+                      </div>
+                      <small class="hint">Upload MP3, WAV, OGG, AAC, or FLAC (max 50 MB). The file will be submitted for approval. Once approved by a super-admin, it becomes available hub-wide to all lesson-builders.</small>
+                    </div>
+
+                    <!-- Loop point config (only when audio is selected) -->
+                    <div *ngIf="getIframeConfigValue('bgMusicContentOutputId')" style="margin-top: 12px;">
+                      <div class="form-group" style="margin-top: 8px;">
+                        <label>Loop Start (seconds)</label>
+                        <input type="number" [value]="getIframeConfigValue('bgMusicLoopStart') || 0"
+                               (change)="setIframeConfigValue('bgMusicLoopStart', +$any($event.target).value); markChanged()"
+                               class="form-control" style="max-width: 120px;" min="0" step="0.1" />
+                        <small class="hint">Where the loop region begins (0 = start of file).</small>
+                      </div>
+                      <div class="form-group" style="margin-top: 8px;">
+                        <label>Loop End (seconds)</label>
+                        <input type="number" [value]="getIframeConfigValue('bgMusicLoopEnd') || 0"
+                               (change)="setIframeConfigValue('bgMusicLoopEnd', +$any($event.target).value); markChanged()"
+                               class="form-control" style="max-width: 120px;" min="0" step="0.1" />
+                        <small class="hint">Where the loop region ends (0 = end of file).</small>
+                      </div>
+                      <div class="form-group" style="margin-top: 8px;">
+                        <label>Crossfade Duration (seconds)</label>
+                        <input type="number" [value]="getIframeConfigValue('bgMusicCrossfade') ?? 2"
+                               (change)="setIframeConfigValue('bgMusicCrossfade', +$any($event.target).value); markChanged()"
+                               class="form-control" style="max-width: 120px;" min="0" max="10" step="0.5" />
+                        <small class="hint">Duration of the crossfade at the loop point for a seamless transition.</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Audio Content Selector Modal -->
+                <app-media-content-selector
+                  [isOpen]="showBgAudioSelector"
+                  [filterMediaTypeOnly]="'audio'"
+                  (close)="showBgAudioSelector = false"
+                  (selected)="onBgAudioContentSelected($event)">
+                </app-media-content-selector>
+
                 <!-- iFrame Type Configuration (in Settings tab) -->
                 <div *ngIf="currentInteraction?.interactionTypeCategory === 'iframe'" class="info-section" style="margin-top: 30px;">
                   <h3>iFrame Configuration</h3>
@@ -3388,6 +3506,10 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
   mediaConfigText = '';
   videoUrlConfigText = '';
   uploadingDocument = false;
+  bgAudioUploading = false;
+  bgAudioUploadStatus = '';
+  bgAudioContentName = '';
+  showBgAudioSelector = false;
   
   // AI configuration fields
   aiPromptTemplateText = '';
@@ -3594,6 +3716,18 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
     this.mediaConfigText = (interaction as any).mediaConfig ? JSON.stringify((interaction as any).mediaConfig, null, 2) : '';
     this.videoUrlConfigText = (interaction as any).videoUrlConfig ? JSON.stringify((interaction as any).videoUrlConfig, null, 2) : '';
     
+    // Load audio content name if a bgMusicContentOutputId is set
+    this.bgAudioContentName = '';
+    this.bgAudioUploadStatus = '';
+    if (interaction.iframeConfig?.bgMusicContentOutputId) {
+      this.http.get<any>(`${environment.apiUrl}/lesson-editor/processed-outputs/${interaction.iframeConfig.bgMusicContentOutputId}`, {
+        headers: { 'x-tenant-id': environment.tenantId, 'x-user-id': environment.defaultUserId },
+      }).subscribe({
+        next: (output) => { this.bgAudioContentName = output?.outputName || output?.contentSource?.title || 'Audio'; },
+        error: () => { this.bgAudioContentName = 'Audio (unavailable)'; },
+      });
+    }
+
     // Load overlay mode from iframeConfig
     if (interaction.iframeConfig?.overlayMode) {
       this.iframeOverlayMode = interaction.iframeConfig.overlayMode;
@@ -4068,6 +4202,99 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
       return undefined;
     }
     return this.currentInteraction.iframeConfig[key];
+  }
+
+  setIframeConfigValue(key: string, value: any): void {
+    if (!this.currentInteraction!.iframeConfig) {
+      this.currentInteraction!.iframeConfig = {};
+    }
+    this.currentInteraction!.iframeConfig[key] = value;
+    this.updateIframeConfigText();
+  }
+
+  toggleNoScroll(event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.markChanged();
+    if (!this.currentInteraction!.iframeConfig) {
+      this.currentInteraction!.iframeConfig = {};
+    }
+    this.currentInteraction!.iframeConfig.noScroll = checked;
+    if (checked && !this.currentInteraction!.iframeConfig.minWidth) {
+      this.currentInteraction!.iframeConfig.minWidth = 640;
+    }
+    if (checked && !this.currentInteraction!.iframeConfig.minHeight) {
+      this.currentInteraction!.iframeConfig.minHeight = 404;
+    }
+    this.updateIframeConfigText();
+  }
+
+  toggleTestMode(event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.markChanged();
+    if (!this.currentInteraction!.config) {
+      (this.currentInteraction as any).config = {};
+    }
+    (this.currentInteraction as any).config.testMode = checked;
+  }
+
+  onBgAudioFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input?.files?.[0];
+    if (!file) return;
+
+    this.bgAudioUploading = true;
+    this.bgAudioUploadStatus = '';
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('title', file.name);
+    formData.append('contentScope', 'interaction-type-default');
+    if (this.currentInteraction?.id) {
+      formData.append('interactionTypeId', this.currentInteraction.id);
+    }
+    if (this.currentInteraction?.name) {
+      formData.append('interactionTypeName', this.currentInteraction.name);
+    }
+
+    this.http.post<any>(`${environment.apiUrl}/interaction-types/upload-audio`, formData).subscribe({
+      next: (res) => {
+        this.bgAudioUploading = false;
+        this.bgAudioUploadStatus = `Pending approval: "${res.title || file.name}"`;
+        console.log('[InteractionBuilder] Audio content source created:', res);
+      },
+      error: (err) => {
+        console.error('[InteractionBuilder] Audio upload failed:', err);
+        this.bgAudioUploading = false;
+        this.bgAudioUploadStatus = 'Upload failed';
+      },
+    });
+
+    input.value = '';
+  }
+
+  onBgAudioContentSelected(processedContentId: string): void {
+    this.setIframeConfigValue('bgMusicContentOutputId', processedContentId);
+    this.showBgAudioSelector = false;
+    this.markChanged();
+
+    this.http.get<any>(`${environment.apiUrl}/lesson-editor/processed-outputs/${processedContentId}`, {
+      headers: { 'x-tenant-id': environment.tenantId, 'x-user-id': environment.defaultUserId },
+    }).subscribe({
+      next: (output) => {
+        this.bgAudioContentName = output?.outputName || output?.contentSource?.title || 'Audio';
+      },
+      error: () => {
+        this.bgAudioContentName = 'Audio (ID: ' + processedContentId.substring(0, 8) + '...)';
+      },
+    });
+  }
+
+  clearBgAudioContent(): void {
+    this.setIframeConfigValue('bgMusicContentOutputId', undefined);
+    this.setIframeConfigValue('bgMusicLoopStart', undefined);
+    this.setIframeConfigValue('bgMusicLoopEnd', undefined);
+    this.setIframeConfigValue('bgMusicCrossfade', undefined);
+    this.bgAudioContentName = '';
+    this.markChanged();
   }
 
   getScreenshotTrigger(trigger: string): boolean {

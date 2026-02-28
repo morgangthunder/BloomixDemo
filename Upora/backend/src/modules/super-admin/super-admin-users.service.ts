@@ -1,6 +1,9 @@
 import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+// Dynamically imported below — avoids compile error when SDK is not installed
+type CognitoClient = any;
+type ResetCommand = any;
 import { User } from '../../entities/user.entity';
 import { UserPublicProfile } from '../../entities/user-public-profile.entity';
 import { UserPersonalization } from '../../entities/user-personalization.entity';
@@ -427,11 +430,29 @@ export class SuperAdminUsersService {
     if (!user) {
       throw new NotFoundException(`User ${userId} not found`);
     }
-    // TODO: Integrate with Cognito AdminInitiateAuth / ForgotPassword
-    return {
-      sent: false,
-      message: 'Password reset email integration coming soon. Configure Cognito ForgotPassword flow.',
-    };
+
+    const userPoolId = process.env.COGNITO_USER_POOL_ID;
+    if (!userPoolId) {
+      this.logger.warn('COGNITO_USER_POOL_ID not set — cannot send admin password reset');
+      return { sent: false, message: 'Cognito User Pool not configured. Set COGNITO_USER_POOL_ID environment variable.' };
+    }
+
+    try {
+      // @ts-expect-error SDK may not be installed in local dev; runtime try/catch handles it
+      const { CognitoIdentityProviderClient, AdminResetUserPasswordCommand } = await import('@aws-sdk/client-cognito-identity-provider');
+      const client = new CognitoIdentityProviderClient({
+        region: process.env.AWS_REGION || 'eu-west-2',
+      });
+      await client.send(new AdminResetUserPasswordCommand({
+        UserPoolId: userPoolId,
+        Username: user.email,
+      }));
+      this.logger.log(`Admin password reset sent for user ${user.email}`);
+      return { sent: true, message: `Password reset email sent to ${user.email}` };
+    } catch (err: any) {
+      this.logger.error(`Failed to send admin password reset for ${user.email}: ${err.message}`);
+      return { sent: false, message: `Failed to send reset: ${err.message}` };
+    }
   }
 
   private buildAssistantBreakdown(

@@ -7,27 +7,51 @@ import { LlmProvider } from '../entities/llm-provider.entity';
 import { GeneratedImage } from '../entities/generated-image.entity';
 import { FileStorageService } from './file-storage.service';
 import { UsersService } from '../modules/users/users.service';
+import { ContentCacheService } from './content-cache.service';
 
 export interface ImageGenerationRequest {
   prompt: string;
-  userInput?: string; // Additional user input to append to prompt
-  screenshot?: string; // Optional base64-encoded screenshot
-  customInstructions?: string; // Builder-defined custom instructions
-  width?: number; // Image width in pixels
-  height?: number; // Image height in pixels
-  lessonId?: string; // Lesson ID to associate image with
-  substageId?: string; // Optional substage ID
-  interactionId?: string; // Optional interaction ID
-  accountId?: string; // Account ID that created the lesson or is generating the image
+  userInput?: string;
+  screenshot?: string;
+  customInstructions?: string;
+  width?: number;
+  height?: number;
+  lessonId?: string;
+  substageId?: string;
+  interactionId?: string;
+  accountId?: string;
+  /** When true, a follow-up LLM call labels objects with bounding-box coordinates */
+  includeComponentMap?: boolean;
+  /** Optional hint about component types to detect (e.g. "buttons,labels,icons") */
+  componentPromptContent?: string;
+  /** Tag the resulting image with these dictionary labels for cross-interaction reuse */
+  dictionaryLabels?: string[];
+  /** Skip cache lookup and force a fresh generation */
+  skipCache?: boolean;
+  /** When true, also generate a mobile-optimised variant (portrait) alongside the desktop image */
+  dualViewport?: boolean;
+  /** Override mobile dimensions (default: 720x1280 i.e. 9:16) */
+  mobileWidth?: number;
+  mobileHeight?: number;
 }
 
 export interface ImageGenerationResponse {
-  imageUrl?: string; // URL to the generated image (persisted in MinIO/S3)
-  imageData?: string; // Base64-encoded image data (if returned directly, for immediate display)
+  imageUrl?: string;
+  imageData?: string;
   success: boolean;
   error?: string;
   requestId?: string;
-  imageId?: string; // ID of the saved image record in database
+  imageId?: string;
+  /** True when the result came from cache instead of a fresh generation */
+  cached?: boolean;
+  /** Component map with labelled bounding boxes (when includeComponentMap was true) */
+  componentMap?: Record<string, any>;
+  /** Mobile-optimised variant (when dualViewport was true) */
+  mobileVariant?: {
+    imageUrl?: string;
+    imageId?: string;
+    componentMap?: Record<string, any>;
+  };
 }
 
 /**
@@ -51,6 +75,7 @@ export class ImageGeneratorService {
     private fileStorageService: FileStorageService,
     @Inject(forwardRef(() => UsersService))
     private usersService: UsersService,
+    private contentCacheService: ContentCacheService,
   ) {}
 
   /**
@@ -143,6 +168,66 @@ export class ImageGeneratorService {
     const startTime = Date.now();
     this.logger.log('[ImageGenerator] Generating image with prompt:', request.prompt.substring(0, 100));
 
+    // ── 0. Cache lookup ──────────────────────────────────────────
+    // Build personalisation tags for this user (used in hash and stored with result)
+    const personalisationTags = userId
+      ? await this.contentCacheService.getPersonalisationTags(userId)
+      : [];
+
+    // Check dictionary first for simple single-word prompts (no userInput, no customInstructions)
+    if (!request.skipCache && !request.userInput && !request.customInstructions && !request.screenshot) {
+      const words = request.prompt.trim().split(/\s+/);
+      if (words.length <= 2) {
+        const dictHit = await this.contentCacheService.findImageByDictionaryLabel(request.prompt.trim());
+        if (dictHit) {
+          this.logger.log(`[ImageGenerator] DICTIONARY CACHE HIT for "${request.prompt.trim()}" → ${dictHit.id}`);
+          const signedUrl = await this.getSignedUrlSafe(dictHit.imageUrl);
+          return {
+            success: true,
+            imageUrl: signedUrl,
+            imageId: dictHit.id,
+            cached: true,
+            componentMap: dictHit.componentMap || undefined,
+          };
+        }
+      }
+    }
+
+    // Compute param hash for full cache lookup
+    const paramHash = this.contentCacheService.computeImageHash({
+      prompt: request.prompt,
+      userInput: request.userInput,
+      customInstructions: request.customInstructions,
+      width: request.width,
+      height: request.height,
+      personalisationTags,
+    });
+
+    if (!request.skipCache) {
+      const cached = await this.contentCacheService.findCachedImage(paramHash);
+      if (cached) {
+        this.logger.log(`[ImageGenerator] CACHE HIT → ${cached.id} (hash ${paramHash.substring(0, 12)}…)`);
+        const signedUrl = await this.getSignedUrlSafe(cached.imageUrl);
+
+        // If component map was requested but the cached image doesn't have one yet, generate it
+        if (request.includeComponentMap && !cached.componentMap) {
+          const componentMap = await this.generateComponentMap(cached, request.componentPromptContent);
+          if (componentMap) {
+            cached.componentMap = componentMap;
+            await this.generatedImageRepository.update(cached.id, { componentMap });
+          }
+        }
+
+        return {
+          success: true,
+          imageUrl: signedUrl,
+          imageId: cached.id,
+          cached: true,
+          componentMap: cached.componentMap || undefined,
+        };
+      }
+    }
+
     // 1. Get API configuration
     const apiConfig = await this.getApiConfig();
     if (!apiConfig || !apiConfig.apiEndpoint || !apiConfig.apiKey) {
@@ -208,20 +293,33 @@ export class ImageGeneratorService {
       fullPrompt += `\n\nCustom instructions: ${request.customInstructions}`;
     }
 
-    // Note: Gemini API does NOT support width/height in generationConfig
-    // Instead, we add dimension instructions to the prompt if specified
-    if (request.width || request.height) {
-      const width = request.width || apiConfig.width;
-      const height = request.height || apiConfig.height;
-      if (width && height) {
-        fullPrompt += `\n\nGenerate an image with dimensions ${width}x${height} pixels.`;
+    // Use semantic negative prompting (Google's recommended approach):
+    // describe what we WANT positively rather than listing prohibitions.
+    const styleEnforcement = 'This is a purely visual, wordless painted artwork — a fine art mural with only shapes, colours, and imagery. ' +
+      'The painting is full-bleed: the artwork touches all four edges of the canvas with zero padding, zero margins, and zero border of any kind.';
+    fullPrompt = styleEnforcement + '\n\n' + fullPrompt + '\n\n' + styleEnforcement;
+
+    // Determine aspect ratio for imageConfig (Gemini API proper parameter).
+    // Supported: "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"
+    let requestedAspectRatio: string | null = null;
+    const w = request.width || apiConfig.width;
+    const h = request.height || apiConfig.height;
+    if (w && h) {
+      const supported = [
+        { r: '21:9', v: 21/9 }, { r: '16:9', v: 16/9 }, { r: '3:2', v: 3/2 },
+        { r: '5:4', v: 5/4 },  { r: '4:3', v: 4/3 },   { r: '1:1', v: 1 },
+        { r: '4:5', v: 4/5 },  { r: '3:4', v: 3/4 },   { r: '2:3', v: 2/3 },
+        { r: '9:16', v: 9/16 },
+      ];
+      const actual = w / h;
+      let best = supported[0];
+      let bestDiff = Math.abs(actual - best.v);
+      for (const s of supported) {
+        const diff = Math.abs(actual - s.v);
+        if (diff < bestDiff) { best = s; bestDiff = diff; }
       }
-    } else if (apiConfig.width || apiConfig.height) {
-      const width = apiConfig.width;
-      const height = apiConfig.height;
-      if (width && height) {
-        fullPrompt += `\n\nGenerate an image with dimensions ${width}x${height} pixels.`;
-      }
+      requestedAspectRatio = best.r;
+      this.logger.log(`[ImageGenerator] Requested ${w}x${h} → mapped to aspect ratio ${requestedAspectRatio}`);
     }
 
     // 4. Build request payload for Google Gemini API (Nano-Banana is Gemini 2.5 Flash Image)
@@ -265,32 +363,62 @@ export class ImageGeneratorService {
       ],
     };
 
-    // Add generation config if specified
-    const generationConfig: any = {};
+    // Add generation config - MUST include responseModalities for image generation
+    const generationConfig: any = {
+      responseModalities: ['TEXT', 'IMAGE'],
+    };
     if (apiConfig.temperature !== undefined) {
       generationConfig.temperature = apiConfig.temperature;
     }
     if (apiConfig.maxTokens) {
       generationConfig.maxOutputTokens = apiConfig.maxTokens;
     }
-    // Note: width/height are already added to the prompt text above, not in generationConfig
-    // Gemini API does NOT support width/height in generationConfig
-    
-    if (Object.keys(generationConfig).length > 0) {
-      requestPayload.generationConfig = generationConfig;
+    // Use imageConfig.aspectRatio — the proper Gemini API parameter for controlling output dimensions
+    if (requestedAspectRatio) {
+      generationConfig.imageConfig = { aspectRatio: requestedAspectRatio };
+      this.logger.log(`[ImageGenerator] Set generationConfig.imageConfig.aspectRatio = "${requestedAspectRatio}"`);
     }
+    
+    requestPayload.generationConfig = generationConfig;
+
+    // System instruction: the model respects this at a higher level than prompt text.
+    // Uses semantic negative prompting — positive description of desired output.
+    requestPayload.systemInstruction = {
+      parts: [{
+        text: 'You are an image generator that produces purely visual, wordless artwork. ' +
+          'Every image you create is a painted illustration containing only shapes, colours, objects, and scenery. ' +
+          'You never include any text, letters, numbers, words, labels, captions, titles, watermarks, or written characters of any kind in any image. ' +
+          'Every image fills the entire canvas edge-to-edge (full bleed) with zero padding, zero margins, zero borders, and zero blank space on any side.'
+      }]
+    };
+
+    // Add safety settings to reduce false-positive content blocks
+    // (finishReason=OTHER often comes from overly strict default filters)
+    requestPayload.safetySettings = [
+      { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+      { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
+      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' },
+    ];
 
     // 5. Determine API key header (Google Gemini uses x-goog-api-key)
     const apiKeyHeader = apiConfig.apiKeyHeader || 'x-goog-api-key';
     const apiKeyValue = apiConfig.apiKey; // Google API key doesn't use Bearer prefix
 
-    // 6. Make API call
+    // 6. Make API call with retry logic for finishReason=OTHER
+    const MAX_RETRIES = 3;
+    let lastFinishReason = '';
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       const model = apiConfig.model || 'gemini-2.0-flash-exp';
-      this.logger.log(`[ImageGenerator] Calling API: ${apiConfig.apiEndpoint} with model: ${model}`);
-      this.logger.log(`[ImageGenerator] Using API key header: ${apiKeyHeader}`);
-      this.logger.log(`[ImageGenerator] API key value preview: ${apiKeyValue.substring(0, 8)}...${apiKeyValue.substring(apiKeyValue.length - 4)} (length: ${apiKeyValue.length})`);
-      this.logger.log(`[ImageGenerator] Full API key being sent: ${apiKeyValue}`);
+      this.logger.log(`[ImageGenerator] Attempt ${attempt}/${MAX_RETRIES}: Calling ${apiConfig.apiEndpoint} (model: ${model})`);
+      if (attempt === 1) {
+        this.logger.log(`[ImageGenerator] Using API key header: ${apiKeyHeader}`);
+        this.logger.log(`[ImageGenerator] API key preview: ${apiKeyValue.substring(0, 8)}...${apiKeyValue.substring(apiKeyValue.length - 4)} (length: ${apiKeyValue.length})`);
+        this.logger.log(`[ImageGenerator] generationConfig: ${JSON.stringify(requestPayload.generationConfig)}`);
+        this.logger.log(`[ImageGenerator] Prompt preview (first 200 chars): ${request.prompt.substring(0, 200)}`);
+      }
       this.logger.debug(`[ImageGenerator] Request payload:`, JSON.stringify(requestPayload, null, 2));
       
       const requestHeaders: Record<string, string> = {
@@ -298,10 +426,6 @@ export class ImageGeneratorService {
         'Content-Type': 'application/json',
         ...(apiConfig.additionalHeaders || {}), // Allow custom headers
       };
-      
-      this.logger.debug(`[ImageGenerator] Request headers:`, Object.keys(requestHeaders).map(key => 
-        key === apiKeyHeader ? `${key}: ${apiKeyValue.substring(0, 10)}...` : `${key}: ${requestHeaders[key]}`
-      ));
       
       const response = await fetch(apiConfig.apiEndpoint, {
         method: 'POST',
@@ -323,52 +447,88 @@ export class ImageGeneratorService {
       try {
         data = await response.json();
       } catch (jsonError: any) {
-        const textResponse = await response.text();
         this.logger.error('[ImageGenerator] Failed to parse JSON response');
-        this.logger.error('[ImageGenerator] Response text:', textResponse.substring(0, 500));
         return {
           success: false,
           error: `Failed to parse API response: ${jsonError.message}`,
         };
       }
       
-      this.logger.log('[ImageGenerator] API response received');
-      this.logger.debug('[ImageGenerator] Response structure:', {
+      const apiDurationMs = Date.now() - startTime;
+      this.logger.log(`[ImageGenerator] API response received in ${apiDurationMs}ms`);
+      this.logger.log('[ImageGenerator] Response structure:', {
         hasError: !!data.error,
         topLevelKeys: Object.keys(data),
         hasCandidates: !!data.candidates,
         candidatesLength: data.candidates?.length,
+        modelVersion: data.modelVersion,
+        finishReason: data.candidates?.[0]?.finishReason,
+        hasContent: !!data.candidates?.[0]?.content,
       });
       
       // Log full response for debugging (truncated)
-      if (process.env.LOG_LEVEL === 'debug') {
-        this.logger.debug('[ImageGenerator] Full API response:', JSON.stringify(data, null, 2).substring(0, 1000));
-      }
+      this.logger.log('[ImageGenerator] Full API response (truncated):', JSON.stringify(data, null, 2).substring(0, 1500));
 
       // 7. Parse Google Gemini API response format
-      // Possible formats:
-      // - { "image": "base64_data" } or { "image_data": "base64_data" }
-      // - { "image_url": "https://..." }
-      // - { "data": { "image": "base64_data" } }
-      
       let imageData: string | undefined;
 
       try {
         // Check for error in response first
         if (data.error) {
-          this.logger.error('[ImageGenerator] API returned error:', JSON.stringify(data.error));
+          this.logger.error('[ImageGenerator] ❌ API returned error:', JSON.stringify(data.error));
           return {
             success: false,
             error: data.error.message || data.error.error || `API error: ${JSON.stringify(data.error)}`,
           };
         }
 
+        // Check for Gemini finishReason issues BEFORE trying to extract image
+        const candidate = data.candidates?.[0];
+        if (candidate && !candidate.content) {
+          const finishReason = candidate.finishReason || 'UNKNOWN';
+          lastFinishReason = finishReason;
+          const safetyRatings = candidate.safetyRatings ? JSON.stringify(candidate.safetyRatings) : 'none';
+          
+          this.logger.warn(`[ImageGenerator] ⚠️ Attempt ${attempt}/${MAX_RETRIES}: Gemini returned no content. finishReason="${finishReason}"`);
+          this.logger.warn(`[ImageGenerator] Safety ratings: ${safetyRatings}`);
+          this.logger.warn(`[ImageGenerator] Full candidate: ${JSON.stringify(candidate)}`);
+          
+          // For finishReason=OTHER, retry (known intermittent issue with Gemini image models)
+          if (finishReason === 'OTHER' && attempt < MAX_RETRIES) {
+            const delayMs = attempt * 2000; // 2s, 4s backoff
+            this.logger.log(`[ImageGenerator] Retrying in ${delayMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})...`);
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+            continue; // retry the loop
+          }
+          
+          // All retries exhausted or non-retryable reason
+          const finishReasonMessages: Record<string, string> = {
+            'OTHER': `The model failed to generate an image after ${attempt} attempt(s) (finishReason=OTHER). This is a known intermittent issue with Gemini image models. The prompt may also reference copyrighted content that triggers content filters. Try again, or use a different theme/style.`,
+            'SAFETY': 'The image generation was blocked by safety filters. Try a different prompt that avoids potentially sensitive content.',
+            'RECITATION': 'The image generation was blocked due to recitation/copyright concerns. Try a more original or abstract prompt.',
+            'MAX_TOKENS': 'The response was cut off due to token limits. Try a shorter/simpler prompt.',
+            'STOP': 'The model stopped without producing an image. It may have returned text instead.',
+          };
+          
+          const userMessage = finishReasonMessages[finishReason] 
+            || `Image generation failed (finishReason=${finishReason}). The Gemini model did not produce an image. Try simplifying or rephrasing the prompt.`;
+          
+          // Auto-report the movie/TV reference as troublesome
+          if (request.userInput) {
+            this.addTroublesomeReference(request.userInput, `finishReason=${finishReason} after ${attempt} attempt(s)`).catch(() => {});
+            this.logger.warn(`[ImageGenerator] Auto-reported troublesome reference: "${request.userInput}"`);
+          }
+
+          return {
+            success: false,
+            error: userMessage,
+          };
+        }
+
         // Try different possible response formats
         // Google Gemini format: data.candidates[0].content.parts[].inlineData.data
-        // Note: parts array may contain multiple items (text, image, etc.) - we need to find the one with inlineData
         if (data.candidates?.[0]?.content?.parts) {
           const parts = data.candidates[0].content.parts;
-          // Find the part that contains inlineData (image)
           const imagePart = Array.isArray(parts) 
             ? parts.find((part: any) => part.inlineData?.data)
             : null;
@@ -380,10 +540,21 @@ export class ImageGeneratorService {
             imageData = base64Data.startsWith('data:') 
               ? base64Data 
               : `data:${mimeType};base64,${base64Data}`;
-            this.logger.log('[ImageGenerator] ✅ Image extracted from Gemini candidates[0].content.parts[].inlineData');
+            this.logger.log(`[ImageGenerator] ✅ Image extracted from Gemini parts[].inlineData (${mimeType}, ~${Math.round(base64Data.length / 1024)}KB base64)`);
+          } else {
+            // Content exists but no image part found - log what parts we got
+            const partsArray = Array.isArray(parts) ? parts : [];
+            this.logger.warn(`[ImageGenerator] ⚠️ Gemini returned ${partsArray.length} parts but none contain inlineData:`, 
+              partsArray.map((p: any, i: number) => ({
+                index: i,
+                keys: Object.keys(p),
+                hasText: !!p.text,
+                textPreview: p.text ? p.text.substring(0, 200) : undefined,
+                hasInlineData: !!p.inlineData,
+              }))
+            );
           }
         } else if (data.image) {
-          // Direct base64 image data
           const base64Data = data.image;
           const mimeType = data.mime_type || data.mimeType || 'image/png';
           imageData = base64Data.startsWith('data:') 
@@ -391,7 +562,6 @@ export class ImageGeneratorService {
             : `data:${mimeType};base64,${base64Data}`;
           this.logger.log('[ImageGenerator] ✅ Image extracted from data.image');
         } else if (data.image_data) {
-          // Alternative field name
           const base64Data = data.image_data;
           const mimeType = data.mime_type || data.mimeType || 'image/png';
           imageData = base64Data.startsWith('data:') 
@@ -399,7 +569,6 @@ export class ImageGeneratorService {
             : `data:${mimeType};base64,${base64Data}`;
           this.logger.log('[ImageGenerator] ✅ Image extracted from data.image_data');
         } else if (data.image_url || data.imageUrl) {
-          // Image URL instead of base64
           const imageUrl = data.image_url || data.imageUrl;
           this.logger.log('[ImageGenerator] ✅ Image URL received:', imageUrl);
           return {
@@ -408,7 +577,6 @@ export class ImageGeneratorService {
             requestId: data.request_id || data.requestId || undefined,
           };
         } else if (data.data?.image) {
-          // Nested structure
           const base64Data = data.data.image;
           const mimeType = data.data.mime_type || data.data.mimeType || 'image/png';
           imageData = base64Data.startsWith('data:') 
@@ -416,7 +584,6 @@ export class ImageGeneratorService {
             : `data:${mimeType};base64,${base64Data}`;
           this.logger.log('[ImageGenerator] ✅ Image extracted from data.data.image');
         } else if (data.result?.image) {
-          // Another possible nested structure
           const base64Data = data.result.image;
           const mimeType = data.result.mime_type || data.result.mimeType || 'image/png';
           imageData = base64Data.startsWith('data:') 
@@ -426,22 +593,21 @@ export class ImageGeneratorService {
         }
 
         if (!imageData && !data.image_url && !data.imageUrl) {
-          this.logger.error('[ImageGenerator] No image found in API response');
+          this.logger.error('[ImageGenerator] ❌ No image found in API response');
           this.logger.error('[ImageGenerator] Response keys:', Object.keys(data));
-          this.logger.error('[ImageGenerator] Response structure:', JSON.stringify(data).substring(0, 500));
+          this.logger.error('[ImageGenerator] Response (truncated):', JSON.stringify(data).substring(0, 800));
           
-          // Log more details about Gemini response structure
           if (data.candidates && Array.isArray(data.candidates)) {
             const parts = data.candidates[0]?.content?.parts;
             const partsArray = Array.isArray(parts) ? parts : [];
             
-            this.logger.error('[ImageGenerator] Gemini candidates structure:', {
+            this.logger.error('[ImageGenerator] Gemini candidates detail:', {
               candidatesLength: data.candidates.length,
               firstCandidateKeys: data.candidates[0] ? Object.keys(data.candidates[0]) : [],
+              finishReason: data.candidates[0]?.finishReason,
               hasContent: !!data.candidates[0]?.content,
               contentKeys: data.candidates[0]?.content ? Object.keys(data.candidates[0].content) : [],
-              hasParts: !!parts,
-              partsLength: partsArray.length,
+              partsCount: partsArray.length,
               partsTypes: partsArray.map((p: any, i: number) => ({
                 index: i,
                 keys: Object.keys(p),
@@ -449,16 +615,11 @@ export class ImageGeneratorService {
                 hasInlineData: !!p.inlineData,
               })),
             });
-            
-            // Log each part structure
-            partsArray.forEach((part: any, index: number) => {
-              this.logger.error(`[ImageGenerator] Part ${index} structure:`, JSON.stringify(part, null, 2).substring(0, 300));
-            });
           }
           
           return {
             success: false,
-            error: 'API response did not contain an image in the expected format. Expected: candidates[0].content.parts[0].inlineData.data (Gemini), image, image_data, image_url, data.image, or result.image',
+            error: 'The Gemini API returned a response but no image was found. The model may have returned only text. Check backend logs for full response details.',
           };
         }
       } catch (parseError: any) {
@@ -504,6 +665,34 @@ export class ImageGeneratorService {
           // Convert base64 to buffer
           const imageBuffer = Buffer.from(base64Data, 'base64');
           
+          // Detect actual pixel dimensions from image header
+          let actualWidth = 0, actualHeight = 0;
+          try {
+            if (mimeType === 'image/png' && imageBuffer.length > 24) {
+              actualWidth = imageBuffer.readUInt32BE(16);
+              actualHeight = imageBuffer.readUInt32BE(20);
+            } else if (mimeType === 'image/jpeg' && imageBuffer.length > 4) {
+              let offset = 2;
+              while (offset < imageBuffer.length - 1) {
+                if (imageBuffer[offset] !== 0xFF) break;
+                const marker = imageBuffer[offset + 1];
+                if (marker === 0xC0 || marker === 0xC2) {
+                  actualHeight = imageBuffer.readUInt16BE(offset + 5);
+                  actualWidth = imageBuffer.readUInt16BE(offset + 7);
+                  break;
+                }
+                const segLen = imageBuffer.readUInt16BE(offset + 2);
+                offset += 2 + segLen;
+              }
+            }
+            if (actualWidth > 0 && actualHeight > 0) {
+              const ratio = (actualWidth / actualHeight).toFixed(3);
+              this.logger.log(`[ImageGenerator] Actual image dimensions: ${actualWidth}x${actualHeight} (ratio: ${ratio}, requested: ${requestedAspectRatio || 'none'})`);
+            }
+          } catch (dimErr: any) {
+            this.logger.warn(`[ImageGenerator] Could not detect image dimensions: ${dimErr.message}`);
+          }
+
           // Determine file extension from mime type
           const extension = mimeType === 'image/jpeg' ? '.jpg' : 
                            mimeType === 'image/png' ? '.png' : 
@@ -532,28 +721,52 @@ export class ImageGeneratorService {
           
           savedImageUrl = publicImageUrl;
           
-          // Store metadata in database (store the original URL, not the signed URL)
+          // Normalise dictionary labels
+          const normDictLabels = (request.dictionaryLabels || [])
+            .map(l => l.trim().toLowerCase().replace(/\s+/g, '-'))
+            .filter(l => l.length > 0);
+          // For short prompts (1-2 words), auto-add the prompt as a dictionary label
+          const promptWords = request.prompt.trim().split(/\s+/);
+          if (promptWords.length <= 2) {
+            const autoLabel = request.prompt.trim().toLowerCase().replace(/\s+/g, '-');
+            if (!normDictLabels.includes(autoLabel)) normDictLabels.push(autoLabel);
+          }
+
+          // Store metadata in database with cache fields
           const generatedImage = this.generatedImageRepository.create({
             lessonId: request.lessonId,
             accountId: request.accountId,
-            imageUrl: savedFile.url, // Store original URL, we'll generate signed URLs when retrieving
+            imageUrl: savedFile.url,
             mimeType: mimeType,
-            width: request.width || null,
-            height: request.height || null,
+            width: actualWidth || request.width || null,
+            height: actualHeight || request.height || null,
             prompt: fullPrompt,
             substageId: request.substageId && this.isValidUUID(request.substageId) ? request.substageId : null,
             interactionId: request.interactionId && this.isValidUUID(request.interactionId) ? request.interactionId : null,
+            paramHash,
+            personalisationTags: personalisationTags.length > 0 ? personalisationTags : null,
+            dictionaryLabels: normDictLabels.length > 0 ? normDictLabels : null,
+            userInput: request.userInput || null,
             metadata: {
               model: apiConfig.model || 'gemini-2.0-flash-exp',
               processingTimeMs,
               tokensUsed: this.estimateTokens(fullPrompt, request.screenshot),
-              originalPrompt: request.prompt, // Store the original user prompt
+              originalPrompt: request.prompt,
             },
           });
           
           const savedImage = await this.generatedImageRepository.save(generatedImage);
           
           savedImageId = savedImage.id;
+
+          // Generate component map if requested
+          if (request.includeComponentMap) {
+            const componentMap = await this.generateComponentMap(savedImage, request.componentPromptContent);
+            if (componentMap) {
+              savedImage.componentMap = componentMap;
+              await this.generatedImageRepository.update(savedImage.id, { componentMap });
+            }
+          }
           this.logger.log(`[ImageGenerator] ✅ Image saved to storage: ${savedImageUrl} (ID: ${savedImage.id})`);
         } catch (saveError: any) {
           this.logger.error(`[ImageGenerator] Failed to save image to storage: ${saveError.message}`);
@@ -564,7 +777,8 @@ export class ImageGeneratorService {
       // Return result with imageId if available (even if save failed)
       const result: any = {
         success: true,
-        imageData, // Gemini returns base64 data (always return for immediate display)
+        imageData,
+        cached: false,
       };
       
       if (savedImageUrl) {
@@ -574,12 +788,90 @@ export class ImageGeneratorService {
       if (savedImageId) {
         result.imageId = savedImageId;
         this.logger.log(`[ImageGenerator] ✅ Returning imageId: ${savedImageId}`);
+        // Attach component map if it was generated
+        const img = await this.generatedImageRepository.findOne({ where: { id: savedImageId } });
+        if (img?.componentMap) result.componentMap = img.componentMap;
       } else {
         this.logger.warn(`[ImageGenerator] ⚠️ No imageId to return. lessonId: ${request.lessonId}, accountId: ${request.accountId}`);
       }
       
       if (data.candidates?.[0]?.finishReason) {
         result.requestId = data.candidates[0].finishReason;
+      }
+
+      // ── Dual-viewport: generate mobile variant and link as pair ──
+      if (request.dualViewport && result.success) {
+        const mobileW = request.mobileWidth || 720;
+        const mobileH = request.mobileHeight || 1280;
+        this.logger.log(`[ImageGenerator] Dual-viewport: generating mobile variant ${mobileW}x${mobileH}`);
+        try {
+          let mobilePrompt = request.prompt;
+          const isSceneImage = (request.customInstructions || '').toLowerCase().includes('single scene');
+
+          if (isSceneImage) {
+            mobilePrompt = mobilePrompt.replace(/wide landscape/gi, 'tall portrait');
+          } else {
+            mobilePrompt = mobilePrompt.replace(/wide landscape/gi, 'tall portrait');
+            mobilePrompt = mobilePrompt.replace(/arranged left-to-right/gi, 'arranged in a 2-column grid from top to bottom');
+            mobilePrompt = mobilePrompt.replace(/left-to-right/gi, 'top-to-bottom');
+            mobilePrompt = mobilePrompt.replace(/left to right/gi, 'top to bottom');
+            mobilePrompt = mobilePrompt.replace(/single row left-to-right/gi, 'single column top-to-bottom');
+            mobilePrompt = mobilePrompt.replace(/TWO rows/gi, 'TWO columns');
+          }
+
+          // Semantic negative prompting for mobile: positive framing, not prohibitions
+          const mobileStylePrefix = 'This is a purely visual, wordless painted artwork — a fine art mural with only shapes, colours, and imagery. The painting is full-bleed and fills the entire canvas edge-to-edge. ';
+          if (!mobilePrompt.startsWith('This is a purely visual')) {
+            mobilePrompt = mobileStylePrefix + mobilePrompt;
+          }
+
+          let mobileCustom = (request.customInstructions || '') +
+            ' This image is for a mobile phone screen in portrait (9:16) orientation.' +
+            ' The artwork is a full-bleed painting that fills the entire canvas edge-to-edge — every pixel is painted.' +
+            ' Panels sit directly adjacent with artwork touching on all sides.' +
+            ' If any background is needed, it must be very dark (#0f0f23 or near-black) to blend with a dark UI.';
+
+          if (isSceneImage) {
+            mobileCustom += ' This is a single cohesive scene (NOT a grid). All items must be clearly visible in portrait orientation.';
+          } else {
+            mobileCustom += ' Arrange content in TWO COLUMNS side by side, filling the full width.' +
+              ' NEVER add empty padding or blank space on ANY side — prefer using 2 columns to fill the width.' +
+              ' If there is an odd number of panels, the column with fewer panels must have those panels stretched taller to fill the full height — NO empty or blank cells allowed.';
+          }
+
+          const mobileRequest: ImageGenerationRequest = {
+            ...request,
+            prompt: mobilePrompt,
+            width: mobileW,
+            height: mobileH,
+            dualViewport: false,
+            customInstructions: mobileCustom,
+          };
+          const mobileResult = await this.generateImage(mobileRequest, userId, tenantId);
+          if (mobileResult.success) {
+            result.mobileVariant = {
+              imageUrl: mobileResult.imageUrl,
+              imageId: mobileResult.imageId,
+              componentMap: mobileResult.componentMap,
+            };
+            this.logger.log(`[ImageGenerator] ✅ Mobile variant generated: ${mobileResult.imageId}`);
+
+            // Link the pair: desktop → mobile, mobile → desktop
+            if (savedImageId && mobileResult.imageId) {
+              try {
+                await this.generatedImageRepository.update(savedImageId, { pairedImageId: mobileResult.imageId });
+                await this.generatedImageRepository.update(mobileResult.imageId, { pairedImageId: savedImageId });
+                this.logger.log(`[ImageGenerator] 🔗 Linked image pair: ${savedImageId} ↔ ${mobileResult.imageId}`);
+              } catch (linkErr: any) {
+                this.logger.warn(`[ImageGenerator] ⚠️ Failed to link pair: ${linkErr.message}`);
+              }
+            }
+          } else {
+            this.logger.warn(`[ImageGenerator] ⚠️ Mobile variant failed: ${mobileResult.error}`);
+          }
+        } catch (mobileErr: any) {
+          this.logger.warn(`[ImageGenerator] ⚠️ Mobile variant error: ${mobileErr.message}`);
+        }
       }
       
       return result;
@@ -607,6 +899,19 @@ export class ImageGeneratorService {
         error: errorMessage,
       };
     }
+    } // end retry for-loop
+
+    // Auto-report the movie/TV reference as troublesome when all retries exhausted
+    if (request.userInput && lastFinishReason) {
+      this.addTroublesomeReference(request.userInput, `finishReason=${lastFinishReason} after ${MAX_RETRIES} retries`).catch(() => {});
+      this.logger.warn(`[ImageGenerator] Auto-reported troublesome reference: "${request.userInput}"`);
+    }
+
+    // Should not reach here, but safety net
+    return {
+      success: false,
+      error: `Image generation failed after ${MAX_RETRIES} attempts (last finishReason=${lastFinishReason}). Try a different prompt or theme.`,
+    };
   }
 
   /**
@@ -701,6 +1006,38 @@ export class ImageGeneratorService {
   }
 
   /**
+   * Returns the N most recent generated images (all lessons) for admin observability.
+   */
+  async getRecentImages(limit = 10): Promise<any[]> {
+    try {
+      const images = await this.generatedImageRepository.find({
+        order: { createdAt: 'DESC' },
+        take: limit,
+      });
+      return Promise.all(images.map(async (image) => {
+        const signedUrl = await this.getSignedUrlSafe(image.imageUrl);
+        return {
+          id: image.id,
+          prompt: image.prompt,
+          imageUrl: signedUrl,
+          width: image.width,
+          height: image.height,
+          lessonId: image.lessonId,
+          paramHash: image.paramHash,
+          personalisationTags: image.personalisationTags,
+          dictionaryLabels: image.dictionaryLabels,
+          componentMap: image.componentMap,
+          metadata: image.metadata,
+          createdAt: image.createdAt,
+        };
+      }));
+    } catch (err: any) {
+      this.logger.warn(`[ImageGenerator] getRecentImages error: ${err.message}`);
+      return [];
+    }
+  }
+
+  /**
    * Get all images generated for a lesson
    * Returns images with signed URLs for browser access
    */
@@ -749,7 +1086,7 @@ export class ImageGeneratorService {
             id: image.id,
             lessonId: image.lessonId,
             accountId: image.accountId,
-            imageUrl: publicImageUrl, // Return signed URL (or original URL for local storage)
+            imageUrl: publicImageUrl,
             mimeType: image.mimeType,
             width: image.width,
             height: image.height,
@@ -757,6 +1094,12 @@ export class ImageGeneratorService {
             substageId: image.substageId,
             interactionId: image.interactionId,
             metadata: image.metadata,
+            paramHash: image.paramHash,
+            personalisationTags: image.personalisationTags,
+            componentMap: image.componentMap,
+            dictionaryLabels: image.dictionaryLabels,
+            pairedImageId: image.pairedImageId,
+            userInput: image.userInput,
             createdAt: image.createdAt,
             updatedAt: image.updatedAt,
           };
@@ -776,6 +1119,91 @@ export class ImageGeneratorService {
       }
       throw error; // Re-throw to let NestJS handle the 500 response
     }
+  }
+
+  /**
+   * Find image pairs for a lesson by interest/userInput.
+   * Returns desktop images (16:9) that have a paired mobile variant.
+   * Search priority: matching interests first, then any available pair.
+   */
+  async findImagePairsByInterest(
+    lessonId: string,
+    interactionId: string | null,
+    interests: string[],
+    dictionaryLabel?: string,
+  ): Promise<{ desktop: any; mobile: any } | null> {
+    try {
+      const qb = this.generatedImageRepository.createQueryBuilder('img')
+        .where('img.lessonId = :lessonId', { lessonId })
+        .andWhere('img.pairedImageId IS NOT NULL')
+        .andWhere('img.width >= img.height'); // desktop = landscape
+
+      if (interactionId) {
+        qb.andWhere('img.interactionId = :interactionId', { interactionId });
+      }
+
+      // Try matching interests first
+      if (interests.length > 0) {
+        const interestMatch = await qb.clone()
+          .andWhere('img.userInput IN (:...interests)', { interests })
+          .orderBy('img.createdAt', 'DESC')
+          .getOne();
+
+        if (interestMatch) {
+          return this.buildImagePairResponse(interestMatch);
+        }
+      }
+
+      // Try matching dictionary labels
+      if (dictionaryLabel) {
+        const labelMatch = await qb.clone()
+          .andWhere(':label = ANY(img.dictionaryLabels)', { label: dictionaryLabel })
+          .orderBy('img.createdAt', 'DESC')
+          .getOne();
+
+        if (labelMatch) {
+          return this.buildImagePairResponse(labelMatch);
+        }
+      }
+
+      // Fall back to any available pair for this lesson/interaction
+      const anyPair = await qb.orderBy('img.createdAt', 'DESC').getOne();
+      if (anyPair) {
+        this.logger.log(`[ImageGenerator] Falling back to any available pair for lesson ${lessonId}`);
+        return this.buildImagePairResponse(anyPair);
+      }
+
+      return null;
+    } catch (error: any) {
+      this.logger.error(`[ImageGenerator] Error finding image pairs: ${error.message}`);
+      return null;
+    }
+  }
+
+  private async buildImagePairResponse(desktopImage: GeneratedImage): Promise<{ desktop: any; mobile: any } | null> {
+    if (!desktopImage.pairedImageId) return null;
+
+    const mobileImage = await this.generatedImageRepository.findOne({ where: { id: desktopImage.pairedImageId } });
+    if (!mobileImage) return null;
+
+    const [desktopUrl, mobileUrl] = await Promise.all([
+      this.fileStorageService.getSignedUrl(desktopImage.imageUrl, 7 * 24 * 60 * 60),
+      this.fileStorageService.getSignedUrl(mobileImage.imageUrl, 7 * 24 * 60 * 60),
+    ]);
+
+    return {
+      desktop: {
+        imageId: desktopImage.id,
+        imageUrl: desktopUrl || desktopImage.imageUrl,
+        componentMap: desktopImage.componentMap,
+        userInput: desktopImage.userInput,
+      },
+      mobile: {
+        imageId: mobileImage.id,
+        imageUrl: mobileUrl || mobileImage.imageUrl,
+        componentMap: mobileImage.componentMap,
+      },
+    };
   }
 
   /**
@@ -815,6 +1243,10 @@ export class ImageGeneratorService {
         substageId: image.substageId,
         interactionId: image.interactionId,
         metadata: image.metadata,
+        paramHash: image.paramHash,
+        personalisationTags: image.personalisationTags,
+        componentMap: image.componentMap,
+        dictionaryLabels: image.dictionaryLabels,
         createdAt: image.createdAt,
         updatedAt: image.updatedAt,
       };
@@ -848,6 +1280,141 @@ export class ImageGeneratorService {
     } catch (error: any) {
       this.logger.error(`[ImageGenerator] ❌ Error getting lesson image IDs: ${error.message}`);
       throw error;
+    }
+  }
+
+  // ─── Cache / Component Map Helpers ─────────────────────────────
+
+  /**
+   * Safely generate a signed URL; returns the original URL on failure.
+   */
+  private async getSignedUrlSafe(imageUrl: string): Promise<string> {
+    try {
+      const signed = await this.fileStorageService.getSignedUrl(imageUrl, 7 * 24 * 60 * 60);
+      return signed || imageUrl;
+    } catch {
+      return imageUrl;
+    }
+  }
+
+  /**
+   * Run a follow-up LLM call to detect labelled components (objects, regions)
+   * in a generated image and return their bounding-box coordinates.
+   *
+   * Result format:
+   * { components: [{ label: string, x: number, y: number, width: number, height: number, confidence?: number }] }
+   */
+  private async generateComponentMap(
+    image: GeneratedImage,
+    componentPromptContent?: string,
+  ): Promise<Record<string, any> | null> {
+    try {
+      this.logger.log(`[ComponentMap] Starting component map generation for image ${image.id} (${image.imageUrl})`);
+      const apiConfig = await this.getApiConfig();
+      if (!apiConfig?.apiEndpoint || !apiConfig?.apiKey) {
+        this.logger.warn(`[ComponentMap] No API config available, skipping component map`);
+        return null;
+      }
+
+      let base64Data: string | null = null;
+      try {
+        const buf = await this.fileStorageService.readFile(image.imageUrl);
+        base64Data = buf.toString('base64');
+        this.logger.log(`[ComponentMap] Read ${(buf.length / 1024).toFixed(0)}KB image data from storage`);
+      } catch (err: any) {
+        this.logger.warn(`[ComponentMap] Failed to read image ${image.id} from storage: ${err.message}`);
+        try {
+          const signedUrl = await this.getSignedUrlSafe(image.imageUrl);
+          this.logger.log(`[ComponentMap] Fallback: fetching via signed URL...`);
+          const resp = await fetch(signedUrl);
+          if (resp.ok) {
+            const fetchBuf = Buffer.from(await resp.arrayBuffer());
+            base64Data = fetchBuf.toString('base64');
+            this.logger.log(`[ComponentMap] Fallback fetch succeeded: ${(fetchBuf.length / 1024).toFixed(0)}KB`);
+          }
+        } catch (fetchErr: any) {
+          this.logger.warn(`[ComponentMap] Fallback fetch also failed for ${image.id}: ${fetchErr.message}`);
+          return null;
+        }
+      }
+      if (!base64Data) {
+        this.logger.warn(`[ComponentMap] No image data available for ${image.id}`);
+        return null;
+      }
+
+      const detectPrompt = componentPromptContent
+        ? `Analyze this image and locate each of the following items/steps. They may be arranged in a grid, scattered across a scene, or depicted as objects within a single illustration.
+
+The items IN ORDER are: ${componentPromptContent}
+
+For EACH item, find the visual region or object in the image that represents it. Provide a bounding box as percentages of image width (0-100) and height (0-100).
+
+RULES:
+1. The "label" field MUST be the EXACT item name from the list above, copied verbatim — do NOT rephrase, abbreviate, or expand.
+2. Bounding boxes should be GENEROUS — extend the box well beyond the object edges by at least 3-5% in each direction. It is much better to have a slightly oversized box than to miss part of the object. The user will click anywhere inside this box, so coverage is critical.
+3. Every box must have a minimum width of 10 and minimum height of 10 (as percentages). Small objects should still get large clickable regions.
+4. The image contains NO text — identify items by their visual depiction (objects, scenes, colours, actions).
+5. If items are in a grid, go left-to-right then top-to-bottom. If scattered in a scene, locate each object wherever it appears.
+6. Boxes may overlap slightly — that is preferred over leaving gaps between nearby items.
+
+Respond ONLY with valid JSON (no markdown, no explanation):
+{"components":[{"label":"exact item name","x":0,"y":0,"width":0,"height":0}]}
+
+Where x,y is the top-left corner and width,height is the size, all as percentages (0-100).
+Return EXACTLY one entry per item, in the same order as listed above.`
+        : `Analyze this image and identify all distinct visual components, objects, or regions.
+For each component, provide its label and bounding-box coordinates as percentages of image width/height (0-100).
+
+Respond ONLY with valid JSON in this exact format (no markdown, no explanation):
+{"components":[{"label":"string","x":0,"y":0,"width":0,"height":0}]}
+
+Where x,y is the top-left corner position as a percentage, and width,height are the size as percentages.`;
+
+      const payload = {
+        contents: [{
+          parts: [
+            { text: detectPrompt },
+            { inlineData: { mimeType: image.mimeType || 'image/png', data: base64Data } },
+          ],
+        }],
+        generationConfig: { temperature: 0.1 },
+      };
+
+      const apiKeyHeader = apiConfig.apiKeyHeader || 'x-goog-api-key';
+      const response = await fetch(apiConfig.apiEndpoint, {
+        method: 'POST',
+        headers: { [apiKeyHeader]: apiConfig.apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errBody = await response.text().catch(() => '');
+        this.logger.warn(`[ComponentMap] API error ${response.status}: ${errBody.substring(0, 200)}`);
+        return null;
+      }
+
+      const data = await response.json();
+      const textPart = data.candidates?.[0]?.content?.parts?.find((p: any) => p.text);
+      if (!textPart?.text) {
+        this.logger.warn(`[ComponentMap] No text in API response. finishReason: ${data.candidates?.[0]?.finishReason}`);
+        return null;
+      }
+
+      let jsonStr = textPart.text.trim();
+      const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (jsonMatch) jsonStr = jsonMatch[1].trim();
+
+      const componentMap = JSON.parse(jsonStr);
+      this.logger.log(`[ComponentMap] ✅ Detected ${componentMap.components?.length || 0} components for image ${image.id}`);
+      if (componentMap.components) {
+        componentMap.components.forEach((c: any) => {
+          this.logger.log(`[ComponentMap]   "${c.label}" → x:${c.x} y:${c.y} w:${c.width} h:${c.height}`);
+        });
+      }
+      return componentMap;
+    } catch (err: any) {
+      this.logger.warn(`[ComponentMap] Failed to generate component map: ${err.message}`);
+      return null;
     }
   }
 
@@ -885,6 +1452,75 @@ export class ImageGeneratorService {
       this.logger.error(`[ImageGenerator] ❌ Error deleting image: ${error.message}`);
       this.logger.error(`[ImageGenerator] Error stack: ${error.stack}`);
       return { success: false, error: error.message };
+    }
+  }
+
+  // ─── Troublesome References ──────────────────────────────────────
+  // Stored in ai_prompts table: assistant_id='image-generator', prompt_key='troublesome-references'
+  // Content is a JSON array: [{ reference: string, reason?: string, count: number, firstSeen: string, lastSeen: string }]
+
+  private readonly TROUBLESOME_KEY = 'troublesome-references';
+
+  async getTroublesomeReferences(): Promise<any[]> {
+    try {
+      const row = await this.aiPromptRepository.findOne({
+        where: { assistantId: 'image-generator', promptKey: this.TROUBLESOME_KEY },
+      });
+      if (!row?.content) return [];
+      return JSON.parse(row.content);
+    } catch (err: any) {
+      this.logger.warn(`[TroublesomeRefs] Failed to load: ${err.message}`);
+      return [];
+    }
+  }
+
+  async addTroublesomeReference(reference: string, reason?: string): Promise<{ success: boolean; entry: any }> {
+    const refs = await this.getTroublesomeReferences();
+    const normalised = reference.trim().toLowerCase();
+    const now = new Date().toISOString();
+
+    const existing = refs.find((r: any) => r.reference.toLowerCase() === normalised);
+    if (existing) {
+      existing.count = (existing.count || 1) + 1;
+      existing.lastSeen = now;
+      if (reason) existing.reason = reason;
+      this.logger.log(`[TroublesomeRefs] Updated count for "${reference}" → ${existing.count}`);
+    } else {
+      const entry = { reference: reference.trim(), reason: reason || 'finishReason=OTHER', count: 1, firstSeen: now, lastSeen: now };
+      refs.push(entry);
+      this.logger.log(`[TroublesomeRefs] Added new reference: "${reference}"`);
+    }
+
+    await this.saveTroublesomeReferences(refs);
+    return { success: true, entry: existing || refs[refs.length - 1] };
+  }
+
+  async removeTroublesomeReference(reference: string): Promise<{ success: boolean }> {
+    let refs = await this.getTroublesomeReferences();
+    const normalised = reference.trim().toLowerCase();
+    refs = refs.filter((r: any) => r.reference.toLowerCase() !== normalised);
+    await this.saveTroublesomeReferences(refs);
+    this.logger.log(`[TroublesomeRefs] Removed reference: "${reference}"`);
+    return { success: true };
+  }
+
+  private async saveTroublesomeReferences(refs: any[]): Promise<void> {
+    const content = JSON.stringify(refs);
+    let row = await this.aiPromptRepository.findOne({
+      where: { assistantId: 'image-generator', promptKey: this.TROUBLESOME_KEY },
+    });
+    if (row) {
+      row.content = content;
+      await this.aiPromptRepository.save(row);
+    } else {
+      await this.aiPromptRepository.save(
+        this.aiPromptRepository.create({
+          assistantId: 'image-generator',
+          promptKey: this.TROUBLESOME_KEY,
+          label: 'Troublesome References (JSON)',
+          content,
+        }),
+      );
     }
   }
 }

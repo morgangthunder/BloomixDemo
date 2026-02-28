@@ -2,6 +2,8 @@ import { Controller, Get, Param, Post, Put, Body, Headers, Delete, UseIntercepto
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InteractionTypesService } from './interaction-types.service';
 import { CreateInteractionTypeDto, UpdateInteractionTypeDto } from './dto/interaction-type.dto';
+import { FileStorageService } from '../../services/file-storage.service';
+import { ContentSourcesService } from '../content-sources/content-sources.service';
 
 /** Entity columns allowed in PUT update (excludes id, createdAt, updatedAt). */
 const UPDATE_ALLOWED_KEYS = new Set([
@@ -26,7 +28,11 @@ function sanitizeJsonb(val: any): any {
 
 @Controller('interaction-types')
 export class InteractionTypesController {
-  constructor(private readonly interactionTypesService: InteractionTypesService) {}
+  constructor(
+    private readonly interactionTypesService: InteractionTypesService,
+    private readonly fileStorageService: FileStorageService,
+    private readonly contentSourcesService: ContentSourcesService,
+  ) {}
 
   @Get()
   async findAll() {
@@ -124,6 +130,68 @@ export class InteractionTypesController {
     }
 
     return this.interactionTypesService.uploadDocument(interactionId, file);
+  }
+
+  @Post('upload-audio')
+  @UseInterceptors(FileInterceptor('file', {
+    limits: { fileSize: 50 * 1024 * 1024 },
+  }))
+  async uploadAudio(
+    @UploadedFile() file: any,
+    @Body('title') title: string,
+    @Body('interactionTypeId') interactionTypeId: string,
+    @Body('interactionTypeName') interactionTypeName: string,
+    @Body('contentScope') contentScope: string,
+    @Headers('x-tenant-id') tenantId: string,
+    @Headers('x-user-id') userId: string,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file provided');
+    }
+
+    const allowedAudio = [
+      'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg',
+      'audio/aac', 'audio/webm', 'audio/flac', 'audio/x-m4a', 'audio/mp4',
+    ];
+
+    if (!allowedAudio.includes(file.mimetype)) {
+      throw new BadRequestException(
+        'Invalid file type. Allowed: MP3, WAV, OGG, AAC, FLAC, M4A, WebM audio.',
+      );
+    }
+
+    const saved = await this.fileStorageService.saveFile(file, 'media');
+
+    const metadata: any = {
+      mediaType: 'audio',
+      mimeType: file.mimetype,
+      fileSize: file.size,
+      originalFileName: file.originalname,
+    };
+    if (contentScope === 'interaction-type-default') {
+      metadata.contentScope = 'interaction-type-default';
+      if (interactionTypeId) metadata.interactionTypeId = interactionTypeId;
+      if (interactionTypeName) metadata.interactionTypeName = interactionTypeName;
+    }
+
+    const contentSource = await this.contentSourcesService.create(
+      {
+        type: 'media',
+        title: title || file.originalname,
+        sourceUrl: null as any,
+        filePath: saved.url,
+        metadata,
+      } as any,
+      tenantId || 'default',
+      userId || 'system',
+    );
+
+    return {
+      contentSourceId: contentSource.id,
+      status: contentSource.status,
+      fileName: file.originalname,
+      title: contentSource.title,
+    };
   }
 
   // Widget endpoints - must come before :id routes to avoid conflicts

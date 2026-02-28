@@ -87,7 +87,11 @@ import { RETURN_URL_KEY } from '../../core/guards/auth.guard';
             </button>
           </form>
 
-          <p class="mt-6 text-center text-gray-400">
+          <p class="mt-4 text-center">
+            <a routerLink="/auth/forgot-password" class="text-gray-400 hover:text-white text-sm">Forgot your password?</a>
+          </p>
+
+          <p class="mt-4 text-center text-gray-400">
             Don't have an account?
             <a routerLink="/signup" [queryParams]="returnUrl ? { returnUrl } : {}" class="text-brand-red hover:underline">Create account</a>
           </p>
@@ -182,7 +186,7 @@ export class LoginComponent implements OnInit {
     try {
       await this.auth.login(this.email, this.password);
       const target = await this.resolvePostAuthRedirect(this.returnUrl);
-      this.router.navigateByUrl(target);
+      this.router.navigateByUrl(target, { replaceUrl: true });
     } catch (e: any) {
       this.error = e?.message || 'Sign in failed. Please try again.';
     } finally {

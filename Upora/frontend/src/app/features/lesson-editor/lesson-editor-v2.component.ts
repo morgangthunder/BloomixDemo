@@ -24,8 +24,10 @@ import { AddPdfModalComponent } from '../../shared/components/add-pdf-modal/add-
 import { InteractionConfigureModalComponent } from '../../shared/components/interaction-configure-modal/interaction-configure-modal.component';
 import { ContentSourceViewModalComponent } from '../../shared/components/content-source-view-modal/content-source-view-modal.component';
 import { MessagesModalComponent } from '../../shared/components/messages-modal/messages-modal.component';
+import { GroupManagementComponent } from '../../shared/components/group-management/group-management.component';
+import { HubsService, HubSummary } from '../../core/services/hubs.service';
 
-type EditorTab = 'details' | 'structure' | 'script' | 'content' | 'preview' | 'ai-assistant' | 'engagers';
+type EditorTab = 'details' | 'structure' | 'script' | 'content' | 'preview' | 'ai-assistant' | 'engagers' | 'groups';
 
 interface Stage {
   id: string;
@@ -95,7 +97,8 @@ interface ProcessedContentOutput {
     AddImageModalComponent,
     AddPdfModalComponent,
     InteractionConfigureModalComponent,
-    ContentSourceViewModalComponent
+    ContentSourceViewModalComponent,
+    GroupManagementComponent
   ],
   template: `
     <div class="lesson-editor-v2" *ngIf="lesson">
@@ -275,6 +278,36 @@ interface ProcessedContentOutput {
           <div class="tab-content">
             <!-- Details Panel -->
             <div *ngIf="activeTab === 'details'" class="panel details-panel">
+              <!-- Access & Visibility -->
+              <div class="access-visibility-section">
+                <h2 class="panel-title">Access & Visibility</h2>
+                <div class="access-options">
+                  <label class="access-radio" [class.active]="lessonAccessLevel === 'public'">
+                    <input type="radio" name="accessLevel" value="public" [(ngModel)]="lessonAccessLevel" (ngModelChange)="onAccessLevelChange($event)" />
+                    <span class="access-label">Public <small class="access-hint">(no login required)</small></span>
+                  </label>
+                  <label class="access-radio" [class.active]="lessonAccessLevel === 'login_required'">
+                    <input type="radio" name="accessLevel" value="login_required" [(ngModel)]="lessonAccessLevel" (ngModelChange)="onAccessLevelChange($event)" />
+                    <span class="access-label">Login Required</span>
+                  </label>
+                  <label class="access-radio disabled" [class.active]="lessonAccessLevel === 'paid'">
+                    <input type="radio" name="accessLevel" value="paid" disabled />
+                    <span class="access-label">Paid Lesson <small class="access-hint">(coming soon)</small></span>
+                  </label>
+                </div>
+                <div *ngIf="lessonAccessLevel === 'login_required'" class="tier-selector">
+                  <label>Required Subscription Tier</label>
+                  <select [(ngModel)]="lessonRequiredTier" (ngModelChange)="onTierChange($event)">
+                    <option value="free">Free (any logged-in user)</option>
+                    <option value="pro">Pro</option>
+                    <option value="enterprise">Enterprise</option>
+                  </select>
+                </div>
+                <div *ngIf="courseAccessWarning" class="course-access-warning">
+                  <span>&#9888;</span> {{ courseAccessWarning }}
+                </div>
+              </div>
+              <hr class="section-divider" />
               <h2 class="panel-title">Lesson Details</h2>
               <div class="form-grid">
                 <div class="form-group full-width">
@@ -824,7 +857,21 @@ interface ProcessedContentOutput {
               </div>
             </div>
 
-            <!-- Engagers Panel (Phase 6.5) -->
+            <!-- Groups Panel (Phase 6.6+6.8) -->
+            <div *ngIf="activeTab === 'groups'" class="panel groups-panel" style="padding: 1.5rem;">
+              <div style="margin-bottom: 1rem;">
+                <h2 class="panel-title">Groups & Assignments</h2>
+                <p style="color: rgba(255,255,255,0.5); font-size: 0.9rem; margin: 0.25rem 0 0;">
+                  Manage student groups, create assignments, set deadlines, and track progress.
+                </p>
+              </div>
+              <app-group-management
+                *ngIf="lesson?.id"
+                [lessonId]="lesson!.id">
+              </app-group-management>
+            </div>
+
+            <!-- Engagers Panel (Phase 6.5 — detailed engagement view) -->
             <div *ngIf="activeTab === 'engagers'" class="panel engagers-panel">
               <div class="engagers-header">
                 <h2 class="panel-title">View Engagers</h2>
@@ -923,13 +970,6 @@ interface ProcessedContentOutput {
             <div class="interactions-list" *ngIf="selectedEngager.engagement.interactions && selectedEngager.engagement.interactions.length > 0">
               <h3>Interaction History ({{selectedEngager.engagement.interactions.length}} interactions)</h3>
               <div class="interaction-item" *ngFor="let interaction of selectedEngager.engagement.interactions; let i = index; trackBy: trackByInteractionId">
-                <!-- Debug info -->
-                <div style="font-size: 0.75rem; color: #666; margin-bottom: 0.25rem; padding: 0.25rem; background: rgba(255,255,255,0.05); border-radius: 4px;">
-                  Debug: {{i+1}}/{{selectedEngager.engagement.interactions.length}} | 
-                  TypeId: {{getInteractionTypeId(interaction)}} | 
-                  Score: {{interaction.score ?? 'NULL'}} |
-                  ID: {{interaction.id ?? 'NO-ID'}}
-                </div>
                 <div class="interaction-header">
                   <span class="interaction-stage">{{getInteractionLocationDisplay(interaction)}}</span>
                   <span class="interaction-type">{{formatInteractionTypeName(getInteractionTypeId(interaction))}}</span>
@@ -1004,6 +1044,34 @@ interface ProcessedContentOutput {
            [class.error]="snackbarType === 'error'"
            [class.info]="snackbarType === 'info'">
         {{snackbarMessage}}
+      </div>
+
+      <!-- Publish to Hubs Modal -->
+      <div *ngIf="showHubPublishModal" class="hub-publish-overlay" (click)="showHubPublishModal = false">
+        <div class="hub-publish-modal" (click)="$event.stopPropagation()">
+          <h3 class="text-lg font-semibold text-white mb-2">Publish to Hubs</h3>
+          <p class="text-sm text-gray-400 mb-4">Select which hubs this lesson should appear in:</p>
+          <div *ngIf="hubPublishOptions.length === 0" class="text-gray-500 text-sm py-4 text-center">
+            You are not a member of any hubs. <a (click)="showHubPublishModal = false; router.navigate(['/hubs/create'])" class="text-cyan-400 hover:underline cursor-pointer">Create one</a>
+          </div>
+          <div class="hub-checklist">
+            <label *ngFor="let opt of hubPublishOptions" class="hub-check-item">
+              <input type="checkbox" [(ngModel)]="opt.selected" class="accent-cyan-500 w-4 h-4" />
+              <span class="hub-check-label">
+                <span class="hub-check-initial">{{ opt.name.charAt(0).toUpperCase() }}</span>
+                {{ opt.name }}
+              </span>
+              <span *ngIf="opt.alreadyLinked" class="text-xs text-green-400">Already linked</span>
+            </label>
+          </div>
+          <div *ngIf="hubPublishSnack" class="text-sm text-yellow-400 bg-yellow-900/30 rounded px-3 py-2 mb-3">{{ hubPublishSnack }}</div>
+          <div class="flex justify-end gap-2 mt-4">
+            <button (click)="showHubPublishModal = false" class="px-4 py-2 bg-gray-700 text-white rounded text-sm hover:bg-gray-600">Skip</button>
+            <button (click)="confirmPublishToHubs()" [disabled]="hubPublishing" class="px-4 py-2 bg-cyan-600 text-white rounded text-sm hover:bg-cyan-500 disabled:opacity-50">
+              {{ hubPublishing ? 'Publishing...' : 'Publish to Selected Hubs' }}
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- Pending Changes Warning Modal -->
@@ -1694,6 +1762,104 @@ interface ProcessedContentOutput {
     .error-hint {
       font-size: 0.75rem;
       color: #ff6b6b;
+    }
+
+    /* ACCESS & VISIBILITY */
+    .access-visibility-section {
+      margin-bottom: 1.5rem;
+    }
+    .access-options {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+    }
+    .access-radio {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .access-radio:hover {
+      border-color: #555;
+    }
+    .access-radio.active {
+      border-color: #cc0000;
+      background: rgba(204, 0, 0, 0.08);
+    }
+    .access-radio.disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .access-radio input[type="radio"] {
+      accent-color: #cc0000;
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      flex-shrink: 0;
+    }
+    .access-label {
+      font-size: 0.875rem;
+      color: #e5e5e5;
+      font-weight: 500;
+    }
+    .access-hint {
+      font-weight: 400;
+      color: #999;
+    }
+    .tier-selector {
+      margin-top: 0.75rem;
+      padding: 1rem;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+    }
+    .tier-selector label {
+      display: block;
+      font-size: 0.8rem;
+      color: #999;
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+    }
+    .tier-selector select {
+      width: 100%;
+      background: #111;
+      border: 1px solid #444;
+      border-radius: 6px;
+      padding: 0.6rem 0.75rem;
+      color: white;
+      font-size: 0.875rem;
+    }
+    .tier-selector select:focus {
+      outline: none;
+      border-color: #cc0000;
+    }
+    .course-access-warning {
+      margin-top: 0.75rem;
+      padding: 0.75rem 1rem;
+      background: rgba(234, 179, 8, 0.1);
+      border: 1px solid rgba(234, 179, 8, 0.3);
+      border-radius: 8px;
+      color: #eab308;
+      font-size: 0.8rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      line-height: 1.4;
+    }
+    .course-access-warning span {
+      flex-shrink: 0;
+      font-size: 1rem;
+    }
+    .section-divider {
+      border: none;
+      border-top: 1px solid #333;
+      margin: 1.5rem 0;
     }
 
     /* LEARNING OBJECTIVES & OUTCOMES */
@@ -3799,6 +3965,32 @@ interface ProcessedContentOutput {
       font-size: 13px;
       line-height: 1.5;
     }
+
+    /* Hub Publish Modal */
+    .hub-publish-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.6); z-index: 10000;
+      display: flex; align-items: center; justify-content: center; padding: 1rem;
+    }
+    .hub-publish-modal {
+      background: #1a1a2e; border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px; padding: 1.5rem; width: 460px; max-width: 95vw;
+    }
+    .hub-checklist { display: flex; flex-direction: column; gap: 0.5rem; max-height: 300px; overflow-y: auto; }
+    .hub-check-item {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.6rem 0.75rem; background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08); border-radius: 6px;
+      cursor: pointer; font-size: 0.9rem; color: #e5e5e5;
+    }
+    .hub-check-item:hover { background: rgba(255,255,255,0.06); }
+    .hub-check-label { display: flex; align-items: center; gap: 0.5rem; flex: 1; }
+    .hub-check-initial {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 26px; height: 26px; border-radius: 6px;
+      background: rgba(0,212,255,0.15); color: #00d4ff;
+      font-size: 0.7rem; font-weight: 700; flex-shrink: 0;
+    }
   `]
 })
 export class LessonEditorV2Component implements OnInit, OnDestroy {
@@ -3826,6 +4018,11 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   snackbarVisible: boolean = false;
   snackbarType: 'success' | 'error' | 'info' = 'info';
   private snackbarTimeout: any = null;
+
+  // Hub Publish Modal
+  showHubPublishModal = false;
+  hubPublishOptions: { id: string; name: string; slug: string; selected: boolean; alreadyLinked: boolean }[] = [];
+  hubPublishing = false;
   
   // UI State
   private _activeTab: EditorTab = 'details';
@@ -3882,6 +4079,11 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   // Tags
   tagsString: string = '';
   
+  // Access & Visibility
+  lessonAccessLevel: string = 'public';
+  lessonRequiredTier: string = 'free';
+  courseAccessWarning: string = '';
+  
   // Learning Objectives
   learningObjectives: string[] = [];
   
@@ -3937,13 +4139,14 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   
   // Tab Configuration
   tabs = [
-    { id: 'details' as EditorTab, label: 'Details', icon: '📋' },
-    { id: 'structure' as EditorTab, label: 'Structure', icon: '🏗️' },
+    { id: 'details' as EditorTab, label: 'Settings', icon: '📋' },
+    { id: 'structure' as EditorTab, label: 'Stage Details', icon: '🏗️' },
     { id: 'script' as EditorTab, label: 'Script', icon: '📜' },
     { id: 'content' as EditorTab, label: 'Content', icon: '📚', badge: '' },
     { id: 'preview' as EditorTab, label: 'Preview', icon: '🔍' },
     { id: 'ai-assistant' as EditorTab, label: 'AI Assistant', icon: '🤖' },
-    { id: 'engagers' as EditorTab, label: 'View Engagers', icon: '👥' }
+    { id: 'groups' as EditorTab, label: 'Groups', icon: '👥' },
+    { id: 'engagers' as EditorTab, label: 'Engager Details', icon: '📊' }
   ];
   
   // TEACH Stage-SubStage Mapping
@@ -3992,7 +4195,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     private userManagementService: UserManagementService,
     private authService: AuthService,
     private cdr: ChangeDetectorRef,
-    private domSanitizer: DomSanitizer
+    private domSanitizer: DomSanitizer,
+    private hubsService: HubsService
   ) {}
 
   ngOnInit() {
@@ -4163,6 +4367,11 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
           console.log('[LessonEditor] ✅ Lesson loaded:', lesson);
           console.log('[LessonEditor] 📊 Full lesson.data:', lesson.data);
           this.lesson = lesson;
+          
+          // Initialize access & visibility from loaded lesson
+          this.lessonAccessLevel = lesson.accessLevel || 'public';
+          this.lessonRequiredTier = lesson.requiredSubscriptionTier || 'free';
+          this.checkCourseAccessInheritance();
           
           // If there's a pending draft, use the draft data instead of live lesson data
           let dataToUse = lesson;
@@ -4600,6 +4809,8 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       description: this.lesson.description,
       category: this.lesson.category,
       difficulty: this.lesson.difficulty,
+      accessLevel: this.lessonAccessLevel,
+      requiredSubscriptionTier: this.lessonAccessLevel === 'login_required' ? this.lessonRequiredTier : null,
       durationMinutes: this.calculateTotalDuration(),
       thumbnailUrl: this.lesson.thumbnailUrl,
       tags: this.lesson.tags,
@@ -5014,6 +5225,9 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       this.showingPendingChanges = false;
       
       this.showSnackbar('Changes published successfully!', 'success');
+
+      // Offer to publish to hubs
+      this.openHubPublishModal();
     } catch (error: any) {
       console.error('[LessonEditor] ❌ Failed to publish draft:', error);
       const errorMessage = error.error?.message || error.message || 'Failed to publish draft';
@@ -5027,6 +5241,71 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
         this.showSnackbar(`Failed to publish: ${errorMessage}`, 'error');
       }
     }
+  }
+
+  // ─── Hub Publish ───
+
+  openHubPublishModal() {
+    if (!this.lesson?.id) return;
+    this.hubsService.getMyHubs().subscribe({
+      next: (hubs) => {
+        if (hubs.length === 0) return; // No hubs - skip modal
+        this.hubPublishOptions = hubs
+          .filter(h => h.myStatus === 'joined')
+          .map(h => ({
+            id: h.id, name: h.name, slug: h.slug,
+            selected: false, alreadyLinked: false,
+          }))
+          .sort((a, b) => {
+            if (a.slug === 'default') return -1;
+            if (b.slug === 'default') return 1;
+            return a.name.localeCompare(b.name);
+          });
+        if (this.hubPublishOptions.length > 0) {
+          // Check which hubs already have this lesson linked
+          this.hubsService.getMyHubs().subscribe(); // refresh cache
+          this.showHubPublishModal = true;
+          this.cdr.detectChanges();
+        }
+      },
+      error: () => {},
+    });
+  }
+
+  hubPublishSnack = '';
+
+  confirmPublishToHubs() {
+    if (!this.lesson?.id) return;
+    const selectedIds = this.hubPublishOptions.filter(o => o.selected && !o.alreadyLinked).map(o => o.id);
+    if (selectedIds.length === 0) {
+      this.hubPublishSnack = 'You must select at least 1 hub to publish to';
+      setTimeout(() => this.hubPublishSnack = '', 3000);
+      return;
+    }
+    this.hubPublishSnack = '';
+    this.hubPublishing = true;
+    this.hubsService.publishLessonToHubs(this.lesson.id, selectedIds).subscribe({
+      next: (result) => {
+        this.hubPublishing = false;
+        this.showHubPublishModal = false;
+        if (result.linked > 0 && result.errors.length === 0) {
+          this.showSnackbar(`Published to ${result.linked} hub(s)!`, 'success');
+        } else if (result.linked > 0 && result.errors.length > 0) {
+          this.showSnackbar(`Published to ${result.linked} hub(s), but ${result.errors.length} failed.`, 'success');
+          console.warn('[LessonEditor] Hub publish errors:', result.errors);
+        } else if (result.linked === 0 && result.errors.length > 0) {
+          const firstErr = result.errors[0] || 'Unknown error';
+          this.showSnackbar(`Failed to publish: ${firstErr}`, 'error');
+          console.error('[LessonEditor] Hub publish failed:', result.errors);
+        } else {
+          this.showSnackbar('No hubs were published to.', 'error');
+        }
+      },
+      error: (err) => {
+        this.hubPublishing = false;
+        this.showSnackbar(err?.error?.message || 'Failed to publish to hubs', 'error');
+      },
+    });
   }
 
   togglePendingChanges() {
@@ -5232,6 +5511,14 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       ...lessonData,
       id: lessonData.id || this.lesson?.id
     };
+    
+    // Sync access & visibility if present in the data
+    if (lessonData.accessLevel) {
+      this.lessonAccessLevel = lessonData.accessLevel;
+    }
+    if (lessonData.requiredSubscriptionTier !== undefined) {
+      this.lessonRequiredTier = lessonData.requiredSubscriptionTier || 'free';
+    }
     
     // Try multiple paths for stages data - draft data has structure.stages, live has data.structure.stages
     const stagesData = lessonData.data?.structure?.stages 
@@ -6463,9 +6750,12 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
         }
         this.lastSaved = latestDraft.createdAt ? new Date(latestDraft.createdAt) : this.lastSaved;
       } else {
-        // No actual changes, so no pending draft
+        // Draft exists but has no meaningful changes — treat as no pending draft
         this.hasPendingDraft = false;
         this.pendingDraftData = null;
+        this.hasDraft = false;
+        this.currentDraftId = null;
+        this.hasContentChanges = false;
       }
 
       // Only show warning if there are 2+ pending drafts (meaning there's an older one to discard)
@@ -7138,6 +7428,77 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
 
   trackByObjectiveIndex(index: number, item: string): number {
     return index;
+  }
+
+  // Access & Visibility Methods
+  onAccessLevelChange(level: string) {
+    this.lessonAccessLevel = level;
+    if (level !== 'login_required') {
+      this.lessonRequiredTier = 'free';
+    }
+    this.checkCourseAccessInheritance();
+    this.saveAccessSettings();
+  }
+
+  onTierChange(tier: string) {
+    this.lessonRequiredTier = tier;
+    this.checkCourseAccessInheritance();
+    this.saveAccessSettings();
+  }
+
+  private saveAccessSettings() {
+    if (!this.lesson?.id || this.lesson.id === 'new') return;
+
+    const payload: any = {
+      accessLevel: this.lessonAccessLevel,
+      requiredSubscriptionTier: this.lessonAccessLevel === 'login_required' ? this.lessonRequiredTier : null,
+    };
+
+    console.log('[LessonEditor] 🔐 Saving access settings:', payload, 'for lesson:', this.lesson.id);
+
+    this.http.patch(`${environment.apiUrl}/lessons/${this.lesson.id}`, payload, {
+      headers: {
+        'x-tenant-id': environment.tenantId,
+        'x-user-id': this.authService.getUserId() || environment.defaultUserId,
+        'x-user-role': this.authService.getRole() || 'super-admin',
+      }
+    }).subscribe({
+        next: () => {
+          console.log('[LessonEditor] ✅ Access settings saved directly to lesson');
+          this.showSnackbar('Access settings updated', 'success');
+        },
+        error: (err) => {
+          console.error('[LessonEditor] ❌ Failed to save access settings:', err);
+          console.error('[LessonEditor] ❌ Error details:', err.status, err.error?.message || err.message);
+          this.showSnackbar(`Failed to save access settings: ${err.error?.message || err.statusText || 'Unknown error'}`, 'error');
+        }
+      });
+  }
+
+  private checkCourseAccessInheritance() {
+    this.courseAccessWarning = '';
+    if (!this.lesson?.courseId) return;
+
+    this.http.get<any>(`${environment.apiUrl}/courses/${this.lesson.courseId}`, {
+      headers: { 'x-tenant-id': environment.tenantId }
+    }).subscribe({
+      next: (course) => {
+        const courseLevel = course?.accessLevel || 'public';
+        const courseTier = course?.requiredSubscriptionTier || null;
+
+        if (courseLevel === 'login_required' && this.lessonAccessLevel === 'public') {
+          this.courseAccessWarning = `This lesson's course requires login. Setting this lesson to "Public" means it will be accessible without login, even though the course requires it.`;
+        } else if (courseTier && this.lessonRequiredTier) {
+          const tierOrder: Record<string, number> = { free: 0, pro: 1, enterprise: 2 };
+          const lessonTierLevel = tierOrder[this.lessonRequiredTier] ?? 0;
+          const courseTierLevel = tierOrder[courseTier] ?? 0;
+          if (lessonTierLevel < courseTierLevel) {
+            this.courseAccessWarning = `This lesson requires a lower tier (${this.lessonRequiredTier}) than its course (${courseTier}). The course-level restriction will still apply when accessing via the course.`;
+          }
+        }
+      },
+      error: () => {}
+    });
   }
 
   // Lesson Outcomes Management
@@ -8205,22 +8566,12 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
     
     this.loadingEngagers = true;
     try {
-      const currentUser = this.authService.currentUser();
-      console.log('[LessonEditor] Loading engagers for lesson:', this.lesson.id);
-      console.log('[LessonEditor] Current user:', JSON.stringify(currentUser, null, 2));
-      console.log('[LessonEditor] Current user ID:', currentUser?.userId);
-      console.log('[LessonEditor] Lesson createdBy:', (this.lesson as any).createdBy);
-      
       const query = this.engagersSearchQuery.trim() || undefined;
       const engagers = await firstValueFrom(
         this.userManagementService.getLessonEngagers(this.lesson.id, query)
       );
       this.engagers = engagers;
-      console.log('[LessonEditor] ✅ Loaded engagers:', engagers.length);
-      engagers.forEach((engager) => {
-        const interactionCount = engager.engagement?.interactions?.length ?? 0;
-        console.log(`[LessonEditor]   - ${engager.name}: ${interactionCount} interactions, avg score: ${engager.engagement?.averageScore ?? 'N/A'}`);
-      });
+      console.log('[LessonEditor] Loaded', engagers.length, 'engagers for lesson', this.lesson.id);
     } catch (error) {
       console.error('[LessonEditor] Failed to load engagers:', error);
       this.engagers = [];
@@ -8243,34 +8594,7 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
   viewEngagerDetails(engager: UserSearchResult) {
     this.selectedEngager = engager;
     this.showEngagerDetails = true;
-    const interactionCount = engager?.engagement?.interactions?.length ?? 0;
-    console.log(`[LessonEditor] 👁️ Viewing engager details for ${engager.name}:`, {
-      interactionCount,
-      interactions: engager.engagement?.interactions?.map((i: any, idx: number) => ({
-        index: idx,
-        id: i.id,
-        interactionTypeId: i.interactionTypeId || i.interaction_type_id,
-        score: i.score,
-        completed: i.completed,
-        stageId: i.stageId || i.stage_id,
-        substageId: i.substageId || i.substage_id,
-        hasCustomData: !!i.customData,
-        hasEvents: !!(i.interactionEvents && Array.isArray(i.interactionEvents) && i.interactionEvents.length > 0),
-      })),
-      averageScore: engager.engagement?.averageScore,
-      engagement: engager?.engagement ? 'present' : 'missing',
-    });
-    // Log each interaction individually to catch any issues
-    if (engager.engagement?.interactions) {
-      engager.engagement.interactions.forEach((interaction: any, idx: number) => {
-        console.log(`[LessonEditor]   Interaction ${idx + 1}:`, {
-          id: interaction.id,
-          typeId: interaction.interactionTypeId || interaction.interaction_type_id,
-          score: interaction.score,
-          completed: interaction.completed,
-        });
-      });
-    }
+    console.log('[LessonEditor] Viewing engager details:', engager.name, '-', engager.engagement?.interactions?.length ?? 0, 'interactions');
     // Hide header and lock scroll (same approach as other modals)
     document.body.style.overflow = 'hidden';
     const header = document.querySelector('app-header');
@@ -8289,8 +8613,6 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       const updated = engagers.find((e) => e.id === this.selectedEngager!.id);
       if (updated) {
         this.selectedEngager = updated;
-        const count = updated.engagement?.interactions?.length ?? 0;
-        console.log('[LessonEditor] Refreshed engager details:', updated.name, 'interactions:', count);
       }
     } catch (error) {
       console.error('[LessonEditor] Failed to refresh engager details:', error);

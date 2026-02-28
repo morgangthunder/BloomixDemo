@@ -139,6 +139,15 @@ export class Lesson {
   @Column({ type: 'decimal', precision: 5, scale: 2, default: 0, name: 'rating_average' })
   completionRate: number;
 
+  @Column({ type: 'varchar', length: 20, name: 'access_level', default: 'public' })
+  accessLevel: string; // 'public' | 'login_required' | 'paid'
+
+  @Column({ type: 'varchar', length: 20, name: 'required_subscription_tier', nullable: true })
+  requiredSubscriptionTier: string | null; // 'free' | 'pro' | 'enterprise' | null
+
+  @Column({ type: 'int', name: 'sort_order', default: 0 })
+  sortOrder: number;
+
   @Column({ name: 'course_id', type: 'uuid', nullable: true })
   courseId: string | null;
 

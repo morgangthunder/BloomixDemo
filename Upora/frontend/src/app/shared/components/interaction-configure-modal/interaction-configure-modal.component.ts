@@ -345,6 +345,73 @@ import { environment } from '../../../../environments/environment';
               <p class="hint">Add a <code>configSchema</code> to this interaction type to enable dynamic form generation.</p>
             </div>
 
+            <!-- Audio Settings (override interaction-type defaults per substage) -->
+            <div class="audio-settings-section" style="margin-top: 24px;">
+              <h3 class="section-title">Audio Settings</h3>
+              <p class="section-description">Override the interaction type's default background music for this substage.</p>
+
+              <div class="form-group">
+                <label>Background Music</label>
+                <select [(ngModel)]="config.bgMusicStyle"
+                        (ngModelChange)="onConfigChange()"
+                        class="form-input">
+                  <option [ngValue]="undefined">Use Interaction Default</option>
+                  <option value="none">None</option>
+                  <option value="calm">Calm (lo-fi arpeggio)</option>
+                  <option value="ambient">Ambient (slow, spacious)</option>
+                  <option value="focus">Focus (steady rhythm)</option>
+                  <option value="upbeat">Upbeat (energetic)</option>
+                  <option value="custom">Custom Audio (from Content Library)</option>
+                </select>
+              </div>
+
+              <div *ngIf="config.bgMusicStyle === 'custom'" style="margin-top: 12px;">
+                <div class="form-group">
+                  <label>Audio Content</label>
+                  <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    <span *ngIf="bgAudioContentName" style="font-size: 0.85rem; color: #7dd3fc; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                      {{ bgAudioContentName }}
+                    </span>
+                    <span *ngIf="!config.bgMusicContentOutputId && !bgAudioContentName" style="color: #94a3b8; font-size: 0.85rem;">No audio selected</span>
+                    <button type="button" class="btn-small" (click)="showBgAudioSelector = true">
+                      {{ config.bgMusicContentOutputId ? 'Change' : 'Select Audio' }}
+                    </button>
+                    <button *ngIf="config.bgMusicContentOutputId" type="button" class="btn-small btn-secondary" (click)="clearBgAudioContent()">Remove</button>
+                  </div>
+                  <p class="hint">Select approved audio from the Content Library.</p>
+                </div>
+
+                <div *ngIf="config.bgMusicContentOutputId" style="margin-top: 8px;">
+                  <div class="form-group">
+                    <label>Loop Start (seconds)</label>
+                    <input type="number" [(ngModel)]="config.bgMusicLoopStart" (ngModelChange)="onConfigChange()"
+                           class="form-input" style="max-width: 120px;" min="0" step="0.1" placeholder="0" />
+                    <p class="hint">Where the loop region begins (0 = start of file).</p>
+                  </div>
+                  <div class="form-group" style="margin-top: 8px;">
+                    <label>Loop End (seconds)</label>
+                    <input type="number" [(ngModel)]="config.bgMusicLoopEnd" (ngModelChange)="onConfigChange()"
+                           class="form-input" style="max-width: 120px;" min="0" step="0.1" placeholder="0 (= end of file)" />
+                    <p class="hint">Where the loop region ends (0 = end of file).</p>
+                  </div>
+                  <div class="form-group" style="margin-top: 8px;">
+                    <label>Crossfade (seconds)</label>
+                    <input type="number" [(ngModel)]="config.bgMusicCrossfade" (ngModelChange)="onConfigChange()"
+                           class="form-input" style="max-width: 120px;" min="0" max="10" step="0.5" placeholder="2" />
+                    <p class="hint">Duration of the crossfade at the loop point for a seamless transition.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Background Audio Selector Modal -->
+            <app-media-content-selector
+              [isOpen]="showBgAudioSelector"
+              [filterMediaTypeOnly]="'audio'"
+              (close)="showBgAudioSelector = false"
+              (selected)="onBgAudioContentSelected($event)">
+            </app-media-content-selector>
+
             <!-- iFrame Guide Document & Webpage (only for iframe interactions) -->
             <div *ngIf="interactionCategory === 'iframe'" class="iframe-guide-section">
               <h3 class="section-title">iFrame Guide Resources</h3>
@@ -1047,6 +1114,9 @@ export class InteractionConfigureModalComponent implements OnChanges {
 
   iframeGuideDocFile: File | null = null;
   uploadingDocument = false;
+  bgAudioUploading = false;
+  bgAudioContentName = '';
+  showBgAudioSelector = false;
   processingWebpage = false;
 
   // Media content selector
@@ -1287,6 +1357,17 @@ export class InteractionConfigureModalComponent implements OnChanges {
         console.log('[ConfigModal] Ã¢Å¡Â Ã¯Â¸Â No media in config, cleared selectedMediaId');
       }
       
+      // Load audio content name if bgMusicContentOutputId is set
+      this.bgAudioContentName = '';
+      if (this.config.bgMusicContentOutputId) {
+        this.http.get<any>(`${environment.apiUrl}/lesson-editor/processed-outputs/${this.config.bgMusicContentOutputId}`, {
+          headers: { 'x-tenant-id': environment.tenantId, 'x-user-id': environment.defaultUserId },
+        }).subscribe({
+          next: (output: any) => { this.bgAudioContentName = output?.outputName || output?.contentSource?.title || 'Audio'; },
+          error: () => { this.bgAudioContentName = 'Audio (unavailable)'; },
+        });
+      }
+
       // Merge sample data with config for preview
       this.updatePreviewData();
       
@@ -1305,6 +1386,32 @@ export class InteractionConfigureModalComponent implements OnChanges {
     // Dynamically update preview data based on config changes
     console.log('[ConfigModal] Ã¢Å¡â„¢Ã¯Â¸Â Config changed:', this.config);
     this.updatePreviewData();
+  }
+
+  onBgAudioContentSelected(processedContentId: string): void {
+    this.config.bgMusicContentOutputId = processedContentId;
+    this.showBgAudioSelector = false;
+    this.onConfigChange();
+
+    this.http.get<any>(`${environment.apiUrl}/lesson-editor/processed-outputs/${processedContentId}`, {
+      headers: { 'x-tenant-id': environment.tenantId, 'x-user-id': environment.defaultUserId },
+    }).subscribe({
+      next: (output) => {
+        this.bgAudioContentName = output?.outputName || output?.contentSource?.title || 'Audio';
+      },
+      error: () => {
+        this.bgAudioContentName = 'Audio (ID: ' + processedContentId.substring(0, 8) + '...)';
+      },
+    });
+  }
+
+  clearBgAudioContent(): void {
+    delete this.config.bgMusicContentOutputId;
+    delete this.config.bgMusicLoopStart;
+    delete this.config.bgMusicLoopEnd;
+    delete this.config.bgMusicCrossfade;
+    this.bgAudioContentName = '';
+    this.onConfigChange();
   }
 
   updatePreviewData() {

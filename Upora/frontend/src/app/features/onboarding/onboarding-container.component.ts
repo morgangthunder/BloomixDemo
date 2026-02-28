@@ -194,20 +194,29 @@ export class OnboardingContainerComponent implements OnInit {
       '/home';
     this.onboarding.setReturnUrl(returnUrl);
 
-    if (this.auth.isAuthenticated()) {
+    const isFromProfile = returnUrl === '/profile' || returnUrl === 'profile';
+    const editStartStep = this.steps.findIndex(s => s.id === 'tv_movies');
+
+    if (this.auth.isAuthenticated() || isFromProfile) {
       this.checkingAuth.set(true);
+      if (isFromProfile) {
+        this.isReturningUser = true;
+        this.currentIndex = editStartStep > 0 ? editStartStep : 1;
+      }
       this.onboarding.getMine().subscribe({
         next: (prefs) => {
           this.checkingAuth.set(false);
           this.formData = { ...this.formData, ...prefs };
-          this.isReturningUser = this.onboarding.hasCompletedOnboarding(prefs);
-          // Returning users: start at first content step (profile). New users: same.
-          this.currentIndex = 1;
+          const completed = this.onboarding.hasCompletedOnboarding(prefs) || isFromProfile;
+          this.isReturningUser = completed;
+          this.currentIndex = completed && isFromProfile
+            ? (editStartStep > 0 ? editStartStep : 1)
+            : 1;
           this.cdr.detectChanges();
         },
         error: () => {
           this.checkingAuth.set(false);
-          this.currentIndex = 1;
+          this.currentIndex = isFromProfile ? (editStartStep > 0 ? editStartStep : 1) : 1;
           this.cdr.detectChanges();
         },
       });
