@@ -1,6 +1,6 @@
 {
     "name": "upora",
-    "version": "0.8.51",
+    "version": "0.8.52",
     "scripts": {
         "ng": "ng",
         "start": "ng serve --poll 2000 --live-reload true",

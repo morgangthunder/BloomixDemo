@@ -634,6 +634,30 @@ export class ImageGeneratorService {
         };
       }
 
+      // 7b. Text detection — if the image contains text, retry generation (up to MAX_RETRIES)
+      if (imageData && attempt < MAX_RETRIES) {
+        try {
+          let rawBase64 = imageData;
+          let detectedMime = 'image/png';
+          if (rawBase64.startsWith('data:')) {
+            const mimeMatch = rawBase64.match(/data:([^;]+)/);
+            if (mimeMatch) detectedMime = mimeMatch[1];
+            rawBase64 = rawBase64.split(',')[1];
+          }
+          const hasText = await this.detectTextInImage(rawBase64, detectedMime);
+          if (hasText) {
+            this.logger.warn(`[ImageGenerator] ⚠️ Text detected in generated image (attempt ${attempt}/${MAX_RETRIES}). Regenerating...`);
+            imageData = undefined; // Clear so we retry
+            const delayMs = attempt * 1500;
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+            continue;
+          }
+          this.logger.log(`[ImageGenerator] ✅ Text detection passed — image is text-free (attempt ${attempt})`);
+        } catch (detectErr: any) {
+          this.logger.warn(`[ImageGenerator] Text detection check failed, proceeding: ${detectErr.message}`);
+        }
+      }
+
       // 8. Log LLM usage for tracking and cost calculation
       const processingTimeMs = Date.now() - startTime;
       await this.logUsage({
@@ -1417,6 +1441,65 @@ Where x,y is the top-left corner position as a percentage, and width,height are 
     } catch (err: any) {
       this.logger.warn(`[ComponentMap] Failed to generate component map: ${err.message}`);
       return null;
+    }
+  }
+
+  /**
+   * Detect whether a generated image contains text/captions/labels.
+   * Uses Gemini vision to inspect the base64 image data.
+   * Returns true if text is detected, false if the image is text-free.
+   */
+  private async detectTextInImage(base64Data: string, mimeType: string): Promise<boolean> {
+    try {
+      const apiConfig = await this.getApiConfig();
+      if (!apiConfig?.apiEndpoint || !apiConfig?.apiKey) return false;
+
+      const payload = {
+        contents: [{
+          parts: [
+            {
+              text: 'Look at this image carefully. Does it contain ANY visible text, letters, numbers, words, labels, captions, titles, annotations, or written characters of any kind?\n' +
+                'Respond with ONLY a JSON object: {"hasText": true} or {"hasText": false}\n' +
+                'Even a single letter or number counts as text. Be strict.'
+            },
+            { inlineData: { mimeType, data: base64Data } },
+          ],
+        }],
+        generationConfig: { temperature: 0.1 },
+      };
+
+      const apiKeyHeader = apiConfig.apiKeyHeader || 'x-goog-api-key';
+      const response = await fetch(apiConfig.apiEndpoint, {
+        method: 'POST',
+        headers: { [apiKeyHeader]: apiConfig.apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        this.logger.warn(`[TextDetect] API error ${response.status}, assuming no text`);
+        return false;
+      }
+
+      const data = await response.json();
+      const textPart = data.candidates?.[0]?.content?.parts?.find((p: any) => p.text);
+      if (!textPart?.text) return false;
+
+      let jsonStr = textPart.text.trim();
+      const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (jsonMatch) jsonStr = jsonMatch[1].trim();
+
+      try {
+        const result = JSON.parse(jsonStr);
+        this.logger.log(`[TextDetect] Result: hasText=${result.hasText}`);
+        return !!result.hasText;
+      } catch {
+        const hasTextMatch = jsonStr.toLowerCase().includes('"hastext": true') || jsonStr.toLowerCase().includes('"hastext":true');
+        this.logger.log(`[TextDetect] JSON parse fallback, hasText=${hasTextMatch}`);
+        return hasTextMatch;
+      }
+    } catch (err: any) {
+      this.logger.warn(`[TextDetect] Detection failed: ${err.message}, assuming no text`);
+      return false;
     }
   }
 
