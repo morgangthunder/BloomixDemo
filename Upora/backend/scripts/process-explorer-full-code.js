@@ -588,71 +588,73 @@
   function buildImageRequest(styleName) {
     var itemsList = steps.join(", ");
     var componentPrompt = itemsList;
-    // Semantic negative prompting: describe what we WANT positively rather than listing prohibitions.
-    // Google's own guide recommends this approach for Gemini image generation.
-    var stylePrefix = "This is a purely visual, wordless painted artwork — a fine art mural containing only shapes, colours, objects, and scenery. ";
+    // Give the model REASONS why text and margins ruin the image.
+    var gameContext =
+      "IMPORTANT CONTEXT: This image is for a visual matching game. Two rules are critical:\n" +
+      "1. NO TEXT: Players must guess which painted scene matches which concept — any text, label, caption, or number gives away answers and breaks the game.\n" +
+      "2. NO MARGINS: The game runs on a screen with very limited space. Any margin, padding, border, or blank space around or between scenes wastes precious screen area and damages the experience.\n" +
+      "The image must contain ONLY painted imagery filling the entire canvas edge-to-edge. ";
     var framingRules =
-      "FRAMING: This is a full-bleed painting where every pixel of the canvas is painted artwork. " +
-      "The painting extends to all four edges of the canvas with the entire surface covered. " +
-      "Adjacent panels share a painted edge with artwork touching directly. " +
-      "Dark backgrounds (#0f0f23 or near-black) blend with the dark UI. " +
-      "The entire canvas is a continuous painted surface — a fine art mural.";
+      "FRAMING: Full-bleed artwork — the painting touches all four edges of the canvas. " +
+      "Adjacent scenes share a painted edge with artwork touching directly. " +
+      "Dark backgrounds (#0f0f23 or near-black) blend with the dark UI.";
     var prompt, customInstr;
 
+    var scenesText = steps.join(", ");
+
     if (contentType === "items") {
-      prompt = stylePrefix +
-        "Create a single wide landscape painted mural inspired by the visual style and aesthetic of '" +
+      prompt = gameContext +
+        "Create a single wide landscape painted illustration inspired by the visual style and aesthetic of '" +
         styleName +
         "'. Use a similar color palette, art style, and character design sensibility. " +
-        "The mural is a SINGLE COHESIVE SCENE that contains ALL of the following items clearly visible and identifiable: " +
-        itemsList + ". " +
-        "Paint ONE continuous scene where each item appears naturally within the environment but is clearly distinct and easy to spot. " +
-        "EVERY item must be VISUALLY UNIQUE — no two items may look alike. Each must be instantly distinguishable from all others. " +
-        "Each item must be large enough to tap/click on and visually unambiguous. " +
-        "The entire canvas is painted artwork from edge to edge. " +
+        "The painting is a SINGLE COHESIVE SCENE that contains ALL of the following objects clearly visible and identifiable: " +
+        scenesText + ". " +
+        "Paint ONE continuous scene where each object appears naturally within the environment but is clearly distinct and easy to spot. " +
+        "EVERY object must be VISUALLY UNIQUE — no two objects may look alike. Each must be instantly distinguishable from all others. " +
+        "Each object must be large enough to tap/click on and visually unambiguous. " +
+        "Remember: this is for a game — the player must identify each object by its visual appearance alone, so there must be zero text anywhere in the image. " +
         framingRules;
-      customInstr = "This is a single scene wordless painted mural (not a grid) for a 16:9 landscape screen. " +
-        "It contains " + steps.length + " distinct identifiable items/objects within one illustration. " +
-        "Each item must be clearly visible and separately clickable. " +
-        "The mural fills the entire canvas edge-to-edge — every pixel is painted artwork. " +
-        "Any background uses very dark (#0f0f23) to blend with a dark UI.";
+      customInstr = "Single scene painting (not a grid) for a 16:9 landscape screen. " +
+        "Contains " + steps.length + " distinct identifiable objects within one illustration. " +
+        "Each object must be clearly visible and separately clickable. " +
+        "FOR THE GAME TO WORK: (1) zero text/labels/captions/numbers — only painted visuals. (2) zero margins/padding/borders — screen space is limited. " +
+        "Full-bleed artwork edge-to-edge. Any background uses very dark (#0f0f23).";
     } else {
-      var stepsText = steps.map(function (s, i) { return (i + 1) + ". " + s; }).join(", ");
       var grid = computeGridLayout(steps.length, true);
       var layoutInstruction;
       if (grid.rows === 1) {
-        layoutInstruction = "LAYOUT: Arrange all " + steps.length + " steps in a single row left-to-right, each taking equal width. ";
+        layoutInstruction = "LAYOUT: Arrange all " + steps.length + " scenes in a single row left-to-right, each taking equal width. ";
       } else {
         var topCount = grid.cols;
         var bottomCount = steps.length - topCount;
-        layoutInstruction = "LAYOUT: Arrange the " + steps.length + " steps in a grid with " +
-          topCount + " panels on the top row and " + bottomCount + " on the bottom row. ";
+        layoutInstruction = "LAYOUT: Arrange the " + steps.length + " scenes in a grid with " +
+          topCount + " painted regions on the top row and " + bottomCount + " on the bottom row. ";
         if (bottomCount < topCount) {
-          layoutInstruction += "The bottom row has fewer panels, so stretch those " + bottomCount +
-            " panels wider so they span the full width — there must be NO empty cell or blank space. ";
+          layoutInstruction += "The bottom row has fewer regions, so stretch those " + bottomCount +
+            " regions wider so they span the full width — there must be no empty or blank space. ";
         }
-        layoutInstruction += "Every panel must be filled with artwork. The grid MUST fill the ENTIRE canvas edge-to-edge. ";
+        layoutInstruction += "Every region must be filled with artwork. The grid fills the ENTIRE canvas edge-to-edge. ";
       }
-      prompt = stylePrefix +
-        "Create a single wide landscape painted mural inspired by the visual style and aesthetic of '" +
+      prompt = gameContext +
+        "Create a single wide landscape painted illustration inspired by the visual style and aesthetic of '" +
         styleName +
         "'. Use a similar color palette, art style, and character design sensibility. " +
-        "The mural depicts these process steps as distinct visual regions: " +
-        stepsText +
-        ". EVERY panel must be VISUALLY UNIQUE — no two panels may look alike or use the same composition. Each step must be instantly distinguishable from all others through different objects, colours, actions, or settings. " +
+        "The painting depicts these concepts as distinct painted scenes (each conveyed ONLY through imagery, with zero text): " +
+        scenesText +
+        ". The player will try to match each painted scene to the correct concept, so each scene must clearly represent its concept through visual imagery alone. " +
+        "EVERY scene must be VISUALLY UNIQUE — no two scenes may look alike or use the same composition. " +
         layoutInstruction +
-        "The entire canvas is painted artwork from edge to edge. " +
         framingRules;
-      customInstr = "This is a grid layout wordless painted mural for a 16:9 landscape screen with " + steps.length + " panels total. ";
+      customInstr = "Grid layout painting for a 16:9 landscape screen with " + steps.length + " painted scenes. ";
       if (grid.rows > 1) {
         var topN = grid.cols;
         var botN = steps.length - topN;
         if (botN < topN) {
-          customInstr += "Top row: " + topN + " equal panels. Bottom row: " + botN + " panels stretched wider to fill the full width. Every cell is filled. ";
+          customInstr += "Top row: " + topN + " equal scenes. Bottom row: " + botN + " scenes stretched wider to fill the full width. Every region is filled. ";
         }
       }
-      customInstr += "The mural fills the entire canvas edge-to-edge — every pixel is painted artwork. " +
-        "Any background uses very dark (#0f0f23) to blend with a dark UI.";
+      customInstr += "FOR THE GAME TO WORK: (1) zero text/labels/captions/numbers — only painted visuals. (2) zero margins/padding/borders — screen space is limited. " +
+        "Full-bleed artwork edge-to-edge. Any background uses very dark (#0f0f23).";
     }
 
     return {

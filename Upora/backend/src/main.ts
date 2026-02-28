@@ -9,7 +9,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-let BACKEND_VERSION = '0.8.42'; // Semantic negative prompts + systemInstruction for text-free full-bleed images
+let BACKEND_VERSION = '0.8.45'; // Fix mobile prompt inheriting game context, margin=waste screen space
 console.log(`🔍 [VERSION DEBUG] __dirname: ${__dirname}`);
 console.log(`🔍 [VERSION DEBUG] process.cwd(): ${process.cwd()}`);
 

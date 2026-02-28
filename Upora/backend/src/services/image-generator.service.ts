@@ -293,11 +293,14 @@ export class ImageGeneratorService {
       fullPrompt += `\n\nCustom instructions: ${request.customInstructions}`;
     }
 
-    // Use semantic negative prompting (Google's recommended approach):
-    // describe what we WANT positively rather than listing prohibitions.
-    const styleEnforcement = 'This is a purely visual, wordless painted artwork — a fine art mural with only shapes, colours, and imagery. ' +
-      'The painting is full-bleed: the artwork touches all four edges of the canvas with zero padding, zero margins, and zero border of any kind.';
-    fullPrompt = styleEnforcement + '\n\n' + fullPrompt + '\n\n' + styleEnforcement;
+    // Wrap the prompt with game context: WHY no text, and WHY no margins.
+    const prefixEnforcement = 'This artwork is for a visual matching game — any text in the image gives away answers and breaks the game. ' +
+      'The image must contain only painted imagery with zero text of any kind. ' +
+      'The game runs on screens with very limited space, so the artwork MUST fill the entire canvas edge-to-edge — ' +
+      'any margin, padding, border, or blank space wastes precious screen area and damages the player experience.';
+    const suffixEnforcement = 'Remember: (1) This is for a game — text gives away answers and ruins it. ' +
+      '(2) Screen space is limited — margins/padding/borders waste it. The artwork must touch all four edges.';
+    fullPrompt = prefixEnforcement + '\n\n' + fullPrompt + '\n\n' + suffixEnforcement;
 
     // Determine aspect ratio for imageConfig (Gemini API proper parameter).
     // Supported: "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"
@@ -385,10 +388,10 @@ export class ImageGeneratorService {
     // Uses semantic negative prompting — positive description of desired output.
     requestPayload.systemInstruction = {
       parts: [{
-        text: 'You are an image generator that produces purely visual, wordless artwork. ' +
-          'Every image you create is a painted illustration containing only shapes, colours, objects, and scenery. ' +
-          'You never include any text, letters, numbers, words, labels, captions, titles, watermarks, or written characters of any kind in any image. ' +
-          'Every image fills the entire canvas edge-to-edge (full bleed) with zero padding, zero margins, zero borders, and zero blank space on any side.'
+        text: 'You are creating artwork for a visual matching game. Two rules are critical and breaking either one ruins the game:\n' +
+          '1. NO TEXT: Players must identify concepts by visual appearance alone — any text, label, caption, number, or written character gives away answers and breaks the game.\n' +
+          '2. NO MARGINS: The game runs on screens with very limited space. Any margin, padding, border, or blank space around the artwork wastes precious screen area and damages the experience. The artwork MUST fill the entire canvas edge-to-edge (full bleed), touching all four sides.\n' +
+          'Every image you produce contains only painted imagery — objects, colours, actions, scenery — with zero text and zero margins.'
       }]
     };
 
@@ -819,16 +822,15 @@ export class ImageGeneratorService {
             mobilePrompt = mobilePrompt.replace(/TWO rows/gi, 'TWO columns');
           }
 
-          // Semantic negative prompting for mobile: positive framing, not prohibitions
-          const mobileStylePrefix = 'This is a purely visual, wordless painted artwork — a fine art mural with only shapes, colours, and imagery. The painting is full-bleed and fills the entire canvas edge-to-edge. ';
-          if (!mobilePrompt.startsWith('This is a purely visual')) {
-            mobilePrompt = mobileStylePrefix + mobilePrompt;
-          }
+          // The mobile prompt already contains the game-context prefix from the
+          // desktop prompt (via request.prompt). No need to replace it — just ensure
+          // it's present. The systemInstruction (game context) also applies to this call.
 
           let mobileCustom = (request.customInstructions || '') +
-            ' This image is for a mobile phone screen in portrait (9:16) orientation.' +
-            ' The artwork is a full-bleed painting that fills the entire canvas edge-to-edge — every pixel is painted.' +
-            ' Panels sit directly adjacent with artwork touching on all sides.' +
+            ' This image is for a MOBILE PHONE screen in portrait (9:16) orientation.' +
+            ' The screen is very small so every pixel matters — the artwork MUST fill the entire canvas edge-to-edge with zero padding, zero margins, zero borders.' +
+            ' Any margin or blank space wastes precious screen real-estate and damages the player experience on mobile.' +
+            ' Scenes sit directly adjacent with artwork touching on all sides.' +
             ' If any background is needed, it must be very dark (#0f0f23 or near-black) to blend with a dark UI.';
 
           if (isSceneImage) {
