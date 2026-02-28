@@ -33,6 +33,8 @@ export interface ImageGenerationRequest {
   /** Override mobile dimensions (default: 720x1280 i.e. 9:16) */
   mobileWidth?: number;
   mobileHeight?: number;
+  /** When true, skip the text-detection fallback to cached images on the final attempt */
+  testMode?: boolean;
 }
 
 export interface ImageGenerationResponse {
@@ -634,8 +636,8 @@ export class ImageGeneratorService {
         };
       }
 
-      // 7b. Text detection — if the image contains text, retry generation (up to MAX_RETRIES)
-      if (imageData && attempt < MAX_RETRIES) {
+      // 7b. Text detection — retry on text for attempts 1–2; on final attempt fall back to cached image
+      if (imageData) {
         try {
           let rawBase64 = imageData;
           let detectedMime = 'image/png';
@@ -646,13 +648,59 @@ export class ImageGeneratorService {
           }
           const hasText = await this.detectTextInImage(rawBase64, detectedMime);
           if (hasText) {
-            this.logger.warn(`[ImageGenerator] ⚠️ Text detected in generated image (attempt ${attempt}/${MAX_RETRIES}). Regenerating...`);
-            imageData = undefined; // Clear so we retry
-            const delayMs = attempt * 1500;
-            await new Promise(resolve => setTimeout(resolve, delayMs));
-            continue;
+            if (attempt < MAX_RETRIES) {
+              this.logger.warn(`[ImageGenerator] ⚠️ Text detected in generated image (attempt ${attempt}/${MAX_RETRIES}). Regenerating...`);
+              imageData = undefined;
+              const delayMs = attempt * 1500;
+              await new Promise(resolve => setTimeout(resolve, delayMs));
+              continue;
+            }
+
+            // Final attempt — fall back to a cached text-free image (non-test mode only)
+            if (!request.testMode) {
+              this.logger.warn(`[ImageGenerator] ⚠️ Text detected on final attempt ${attempt}/${MAX_RETRIES}. Searching for cached text-free fallback...`);
+              const fallback = await this.findTextFreeFallback(request, personalisationTags);
+              if (fallback) {
+                this.logger.log(`[ImageGenerator] ✅ Using cached text-free fallback image: ${fallback.id} (userInput: ${fallback.userInput})`);
+                const signedUrl = await this.getSignedUrlSafe(fallback.imageUrl);
+
+                if (request.includeComponentMap && !fallback.componentMap) {
+                  const cm = await this.generateComponentMap(fallback, request.componentPromptContent);
+                  if (cm) {
+                    fallback.componentMap = cm;
+                    await this.generatedImageRepository.update(fallback.id, { componentMap: cm });
+                  }
+                }
+
+                const fallbackResult: any = {
+                  success: true,
+                  imageUrl: signedUrl,
+                  imageId: fallback.id,
+                  cached: true,
+                  componentMap: fallback.componentMap || undefined,
+                };
+
+                if (request.dualViewport && fallback.pairedImageId) {
+                  const mobileImg = await this.generatedImageRepository.findOne({ where: { id: fallback.pairedImageId } });
+                  if (mobileImg) {
+                    const mobileUrl = await this.getSignedUrlSafe(mobileImg.imageUrl);
+                    fallbackResult.mobileVariant = {
+                      imageUrl: mobileUrl,
+                      imageId: mobileImg.id,
+                      componentMap: mobileImg.componentMap,
+                    };
+                  }
+                }
+
+                return fallbackResult;
+              }
+              this.logger.warn(`[ImageGenerator] No cached text-free fallback available. Accepting text-containing image as last resort.`);
+            } else {
+              this.logger.warn(`[ImageGenerator] ⚠️ Text detected on final attempt (test mode) — accepting as-is.`);
+            }
+          } else {
+            this.logger.log(`[ImageGenerator] ✅ Text detection passed — image is text-free (attempt ${attempt})`);
           }
-          this.logger.log(`[ImageGenerator] ✅ Text detection passed — image is text-free (attempt ${attempt})`);
         } catch (detectErr: any) {
           this.logger.warn(`[ImageGenerator] Text detection check failed, proceeding: ${detectErr.message}`);
         }
@@ -1233,6 +1281,108 @@ export class ImageGeneratorService {
   }
 
   /**
+   * Use an LLM call to select the best TV show/movie from user preferences
+   * that matches the lesson content theme. Falls back to a generic art style
+   * if the user has no preferences or the LLM call fails.
+   */
+  async selectBestTheme(
+    userId: string,
+    contentItems: string[],
+    contentTitle?: string,
+  ): Promise<{ theme: string; source: 'personalisation' | 'fallback' }> {
+    const FULL_THEME_CATALOGUE = [
+      'Breaking Bad', 'The Simpsons', 'Studio Ghibli', 'Pixar', 'Avatar: The Last Airbender',
+      'Stranger Things', 'Star Wars', 'Harry Potter', 'The Lord of the Rings', 'Marvel',
+      'SpongeBob SquarePants', 'Rick and Morty', 'Minecraft', 'Pokémon', 'Jurassic Park',
+      'Finding Nemo', 'Frozen', 'The Lion King', 'Toy Story', 'Shrek',
+      'Doctor Who', 'Naruto', 'Dragon Ball Z', 'One Piece', 'Demon Slayer',
+      'The Mandalorian', 'Game of Thrones', 'Gravity Falls', 'Adventure Time', 'Bluey',
+      'Back to the Future', 'Willy Wonka', 'Despicable Me', 'Spider-Verse', 'Inside Out',
+      'Moana', 'Coco', 'Wall-E', 'Up', 'The Incredibles',
+    ];
+
+    try {
+      const userPrefs = await this.contentCacheService.getUserTvMoviePreferences(userId);
+      const hasUserPrefs = userPrefs && userPrefs.length > 0;
+
+      // Build the candidate list: user prefs when available, otherwise full catalogue
+      const candidates = hasUserPrefs ? userPrefs : FULL_THEME_CATALOGUE;
+      const source: 'personalisation' | 'fallback' = hasUserPrefs ? 'personalisation' : 'fallback';
+
+      if (candidates.length === 1) {
+        this.logger.log(`[SelectTheme] Single candidate: "${candidates[0]}" (${source})`);
+        return { theme: candidates[0], source };
+      }
+
+      const apiConfig = await this.getApiConfig();
+      if (!apiConfig?.apiEndpoint || !apiConfig?.apiKey) {
+        const theme = candidates[Math.floor(Math.random() * candidates.length)];
+        this.logger.warn(`[SelectTheme] No API config, randomly picking: "${theme}"`);
+        return { theme, source };
+      }
+
+      const itemsList = contentItems.join(', ');
+      const prefsList = candidates.map((p, i) => `${i + 1}. ${p}`).join('\n');
+
+      const contextLabel = hasUserPrefs
+        ? `The user's favourite TV shows/movies are`
+        : `Choose from this list of popular TV shows/movies`;
+
+      const prompt =
+        `You are choosing a visual art style for a matching-game illustration.\n` +
+        `The game content is about: ${contentTitle ? contentTitle + ' — ' : ''}${itemsList}\n\n` +
+        `${contextLabel}:\n${prefsList}\n\n` +
+        `Which ONE show/movie has the visual style and themes most relevant to the game content? ` +
+        `Pick the single best match based on thematic and visual fit.\n` +
+        `Respond with ONLY the exact name from the list — no quotes, no explanation.`;
+
+      const payload = {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.3, maxOutputTokens: 50 },
+      };
+
+      const apiKeyHeader = apiConfig.apiKeyHeader || 'x-goog-api-key';
+      const response = await fetch(apiConfig.apiEndpoint, {
+        method: 'POST',
+        headers: { [apiKeyHeader]: apiConfig.apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const theme = candidates[Math.floor(Math.random() * candidates.length)];
+        this.logger.warn(`[SelectTheme] LLM API error ${response.status}, randomly picking: "${theme}"`);
+        return { theme, source };
+      }
+
+      const data = await response.json();
+      const textPart = data.candidates?.[0]?.content?.parts?.find((p: any) => p.text);
+      const chosen = textPart?.text?.trim();
+
+      if (chosen) {
+        const matchedCandidate =
+          candidates.find(c => c.toLowerCase() === chosen.toLowerCase()) ||
+          candidates.find(c =>
+            chosen.toLowerCase().includes(c.toLowerCase()) ||
+            c.toLowerCase().includes(chosen.toLowerCase()),
+          );
+
+        if (matchedCandidate) {
+          this.logger.log(`[SelectTheme] LLM chose: "${matchedCandidate}" (${source}) for content: "${contentTitle || itemsList.substring(0, 60)}"`);
+          return { theme: matchedCandidate, source };
+        }
+
+        this.logger.warn(`[SelectTheme] LLM returned "${chosen}" which doesn't match any candidate. Using first candidate.`);
+      }
+
+      return { theme: candidates[0], source };
+    } catch (err: any) {
+      this.logger.warn(`[SelectTheme] Error: ${err.message}`);
+      const theme = FULL_THEME_CATALOGUE[Math.floor(Math.random() * FULL_THEME_CATALOGUE.length)];
+      return { theme, source: 'fallback' };
+    }
+  }
+
+  /**
    * Get a single image by ID
    */
   async getImageById(imageId: string): Promise<any> {
@@ -1440,6 +1590,75 @@ Where x,y is the top-left corner position as a percentage, and width,height are 
       return componentMap;
     } catch (err: any) {
       this.logger.warn(`[ComponentMap] Failed to generate component map: ${err.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Find a cached text-free image to fall back to when text detection fails on all attempts.
+   * Priority: 1) matching personalisation tags (TV/movie themes), 2) matching dictionary labels,
+   * 3) any cached image for the same lesson/interaction.
+   */
+  private async findTextFreeFallback(
+    request: ImageGenerationRequest,
+    personalisationTags: string[],
+  ): Promise<GeneratedImage | null> {
+    try {
+      const qb = this.generatedImageRepository.createQueryBuilder('img')
+        .andWhere('img.width >= img.height'); // desktop = landscape
+
+      if (request.lessonId) {
+        qb.andWhere('img.lessonId = :lessonId', { lessonId: request.lessonId });
+      }
+      if (request.interactionId && this.isValidUUID(request.interactionId)) {
+        qb.andWhere('img.interactionId = :interactionId', { interactionId: request.interactionId });
+      }
+
+      // 1. Prefer images whose userInput matches one of the user's TV/movie tags
+      const tvTags = personalisationTags.filter(t => t.startsWith('tv:'));
+      if (tvTags.length > 0) {
+        const interests = tvTags.map(t => {
+          const raw = t.replace('tv:', '');
+          return raw.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        });
+        const personalisedMatch = await qb.clone()
+          .andWhere('LOWER(img.userInput) IN (:...interests)', {
+            interests: interests.map(i => i.toLowerCase()),
+          })
+          .orderBy('img.createdAt', 'DESC')
+          .getOne();
+
+        if (personalisedMatch) {
+          this.logger.log(`[TextFallback] Found personalisation-matching fallback: ${personalisedMatch.id} (${personalisedMatch.userInput})`);
+          return personalisedMatch;
+        }
+      }
+
+      // 2. Try matching dictionary labels
+      const dictLabels = (request.dictionaryLabels || [])
+        .map(l => l.trim().toLowerCase().replace(/\s+/g, '-'))
+        .filter(l => l.length > 0);
+      for (const label of dictLabels) {
+        const labelMatch = await qb.clone()
+          .andWhere(':label = ANY(img.dictionaryLabels)', { label })
+          .orderBy('img.createdAt', 'DESC')
+          .getOne();
+        if (labelMatch) {
+          this.logger.log(`[TextFallback] Found dictionary-label fallback: ${labelMatch.id} (label: ${label})`);
+          return labelMatch;
+        }
+      }
+
+      // 3. Any cached image for same lesson/interaction
+      const anyMatch = await qb.orderBy('img.createdAt', 'DESC').getOne();
+      if (anyMatch) {
+        this.logger.log(`[TextFallback] Using any available cached image: ${anyMatch.id}`);
+        return anyMatch;
+      }
+
+      return null;
+    } catch (err: any) {
+      this.logger.warn(`[TextFallback] Error finding fallback: ${err.message}`);
       return null;
     }
   }

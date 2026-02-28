@@ -393,6 +393,25 @@ export class InteractionAIBridgeService {
           });
         break;
 
+      case 'ai-sdk-select-theme':
+        this.aiSDK.selectBestTheme(message.options || {})
+          .then((response) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-select-theme-ack',
+              ...response,
+              requestId: message.requestId,
+            });
+          })
+          .catch((error) => {
+            this.sendToIframe(sourceWindow, {
+              type: 'ai-sdk-select-theme-ack',
+              theme: 'Studio Ghibli',
+              source: 'fallback',
+              requestId: message.requestId,
+            });
+          });
+        break;
+
       case 'ai-sdk-complete-interaction':
         // Dispatch custom event to trigger lesson progression
         window.dispatchEvent(new CustomEvent('interaction-request-progress'));

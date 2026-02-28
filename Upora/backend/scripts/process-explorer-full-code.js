@@ -86,6 +86,11 @@
           if (callback) callback(response);
         });
       },
+      selectBestTheme: (options, callback) => {
+        sendMessage("ai-sdk-select-theme", { options }, (response) => {
+          if (callback) callback(response);
+        });
+      },
       playSfx: (name) => {
         sendMessage("ai-sdk-play-sfx", { name });
       },
@@ -449,12 +454,19 @@
             return;
           }
 
-          // Step 3: No cached images at all — generate with a fallback theme
-          var fallbackThemes = ["Studio Ghibli", "Pixar", "Watercolor", "Comic Book", "Retro Cartoon"];
-          var theme = fallbackThemes[Math.floor(Math.random() * fallbackThemes.length)];
-          console.log("[ImageExplorer] No cached images, generating with fallback theme:", theme);
-          $("loading-text").textContent = "Generating illustration...";
-          generateWithTheme(theme);
+          // Step 3: No cached images — ask LLM to pick the best theme from user prefs
+          console.log("[ImageExplorer] No cached images, selecting best theme via LLM...");
+          $("loading-text").textContent = "Choosing the best style for you...";
+          aiSDK.selectBestTheme(
+            { contentItems: steps, contentTitle: processTitle },
+            function (themeResult) {
+              var theme = (themeResult && themeResult.theme) || "Studio Ghibli";
+              var source = (themeResult && themeResult.source) || "fallback";
+              console.log("[ImageExplorer] Selected theme:", theme, "(source:", source + ")");
+              $("loading-text").textContent = "Generating illustration in the style of " + theme + "...";
+              generateWithTheme(theme);
+            }
+          );
         });
       }
     );
@@ -669,6 +681,7 @@
       dualViewport: true,
       mobileWidth: 720,
       mobileHeight: 1280,
+      testMode: isTestMode,
     };
   }
 

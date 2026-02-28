@@ -67,6 +67,20 @@ export class ContentCacheService {
     }
   }
 
+  /**
+   * Get the user's raw TV/movie preference names (not normalised tag format).
+   */
+  async getUserTvMoviePreferences(userId: string): Promise<string[]> {
+    if (!userId) return [];
+    try {
+      const prefs = await this.personalizationRepo.findOne({ where: { userId } });
+      return prefs?.favouriteTvMovies || [];
+    } catch (err: any) {
+      this.logger.warn(`Failed to fetch TV/movie prefs for user ${userId}: ${err.message}`);
+      return [];
+    }
+  }
+
   // ─── Image Cache ──────────────────────────────────────────────
 
   /**

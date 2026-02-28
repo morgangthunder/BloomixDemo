@@ -37,6 +37,15 @@ export class ImageGeneratorController {
     return this.imageGeneratorService.getRecentImages(max);
   }
 
+  /** LLM-powered theme selection: pick the best TV show/movie style for content */
+  @Post('select-theme')
+  async selectBestTheme(
+    @Body() body: { contentItems: string[]; contentTitle?: string },
+    @Headers('x-user-id') userId?: string,
+  ) {
+    return this.imageGeneratorService.selectBestTheme(userId || '', body.contentItems || [], body.contentTitle);
+  }
+
   @Post('generate')
   async generateImage(
     @Body() request: ImageGenerationRequest,

@@ -933,6 +933,8 @@ export class InteractionAISDK {
     mobileWidth?: number;
     /** Override mobile height (default 1080) */
     mobileHeight?: number;
+    /** When true, skip text-detection fallback to cached images on final attempt */
+    testMode?: boolean;
   }): Promise<{
     imageUrl?: string;
     imageData?: string;
@@ -972,6 +974,7 @@ export class InteractionAISDK {
             dualViewport: options.dualViewport,
             mobileWidth: options.mobileWidth,
             mobileHeight: options.mobileHeight,
+            testMode: options.testMode,
           },
           { headers: this.getHeaders() }
         )
@@ -1138,6 +1141,33 @@ export class InteractionAISDK {
     } catch (error: any) {
       console.error('[InteractionAISDK] ❌ findImagePair error:', error);
       return { found: false };
+    }
+  }
+
+  /**
+   * Ask the LLM to pick the best TV show/movie from user preferences
+   * that matches the lesson content. Returns theme name + source.
+   */
+  async selectBestTheme(options: {
+    contentItems: string[];
+    contentTitle?: string;
+  }): Promise<{ theme: string; source: 'personalisation' | 'fallback' }> {
+    try {
+      const response = await firstValueFrom(
+        this.http.post<{ theme: string; source: 'personalisation' | 'fallback' }>(
+          `${environment.apiUrl}/image-generator/select-theme`,
+          {
+            contentItems: options.contentItems,
+            contentTitle: options.contentTitle,
+          },
+          { headers: this.getHeaders() }
+        )
+      );
+      console.log(`[InteractionAISDK] selectBestTheme: "${response.theme}" (${response.source})`);
+      return response;
+    } catch (error: any) {
+      console.error('[InteractionAISDK] ❌ selectBestTheme error:', error);
+      return { theme: 'Studio Ghibli', source: 'fallback' };
     }
   }
 
