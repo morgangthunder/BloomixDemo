@@ -82,13 +82,35 @@ export interface PublicProfile {
 @Injectable({
   providedIn: 'root',
 })
+export interface LessonStructureSubstage {
+  id: string | number;
+  title?: string;
+  interactionTypeId?: string;
+  interactionTitle?: string;
+  config?: Record<string, any>;
+}
+
+export interface LessonStructureStage {
+  id: string | number;
+  title?: string;
+  subStages: LessonStructureSubstage[];
+}
+
+export interface PrefetchResult {
+  status: 'pending' | 'ready' | 'error';
+  data?: any;
+  error?: string;
+  startedAt: number;
+  completedAt?: number;
+}
+
 export class InteractionAISDK {
   private snackService = inject(SnackMessageService);
   private audioService = inject(AudioService);
   private http = inject(HttpClient);
   private authService = inject(AuthService);
-  private teacherWidgetRef: any = null; // Reference to FloatingTeacherWidgetComponent
-  private mediaPlayerRef: any = null; // Reference to MediaPlayerComponent
+  private teacherWidgetRef: any = null;
+  private mediaPlayerRef: any = null;
 
   // Current interaction context (set by lesson-view component)
   private currentLessonId: string | null = null;
@@ -99,6 +121,15 @@ export class InteractionAISDK {
   private currentUserId: string | null = null;
   private currentTenantId: string | null = null;
   private currentUserRole: string | null = null;
+
+  // Feature: Lesson structure (for cross-interaction navigation)
+  private lessonStructure: LessonStructureStage[] = [];
+
+  // Feature: Shared lesson data (for cross-interaction data passing)
+  private sharedLessonData = new Map<string, any>();
+
+  // Feature: Prefetch results (for lesson-load pre-execution)
+  private prefetchResults = new Map<string, PrefetchResult>();
 
   /** Emits events for lesson engagement transcript (lesson-view subscribes and pushes to transcript) */
   readonly transcriptEvent$ = new Subject<{ type: string; content: string; metadata?: Record<string, unknown> }>();
@@ -1199,6 +1230,290 @@ export class InteractionAISDK {
         error: error?.message || 'Failed to delete image',
       };
     }
+  }
+
+  // ========================================
+  // Cross-Interaction Navigation
+  // ========================================
+
+  /**
+   * Store the lesson structure so interactions can query it.
+   * Called by lesson-view when lesson data is set.
+   */
+  setLessonStructure(stages: LessonStructureStage[]): void {
+    this.lessonStructure = stages;
+    console.log('[InteractionAISDK] ✅ Lesson structure set:', stages.length, 'stages');
+  }
+
+  /**
+   * Get the lesson structure (stages and substages with IDs/titles/interaction info).
+   * Used by interactions to know what they can navigate to.
+   */
+  getLessonStructure(): LessonStructureStage[] {
+    return this.lessonStructure;
+  }
+
+  /**
+   * Navigate to a specific substage. Dispatches event for lesson-view to handle.
+   */
+  navigateToSubstage(stageId: string | number, substageId: string | number): void {
+    window.dispatchEvent(new CustomEvent('interaction-navigate-to-substage', {
+      detail: { stageId, substageId }
+    }));
+    console.log('[InteractionAISDK] ✅ Navigation requested:', stageId, '/', substageId);
+    this.transcriptEvent$.next({
+      type: 'navigation',
+      content: `Navigate to stage ${stageId}, substage ${substageId}`,
+      metadata: { stageId, substageId },
+    });
+  }
+
+  // ========================================
+  // Shared Lesson Data (Cross-Interaction Data Passing)
+  // ========================================
+
+  /**
+   * Store shared data accessible by any interaction in this lesson.
+   */
+  setSharedData(key: string, value: any): void {
+    this.sharedLessonData.set(key, value);
+    console.log('[InteractionAISDK] ✅ Shared data set:', key);
+  }
+
+  /**
+   * Read shared data written by any interaction.
+   */
+  getSharedData(key: string): any {
+    return this.sharedLessonData.get(key) ?? null;
+  }
+
+  /**
+   * Get all shared lesson data as a plain object.
+   */
+  getAllSharedData(): Record<string, any> {
+    const result: Record<string, any> = {};
+    this.sharedLessonData.forEach((value, key) => {
+      result[key] = value;
+    });
+    return result;
+  }
+
+  /**
+   * Clear all shared lesson data (called when lesson is unloaded).
+   */
+  clearSharedData(): void {
+    this.sharedLessonData.clear();
+    console.log('[InteractionAISDK] ✅ Shared data cleared');
+  }
+
+  // ========================================
+  // Prefetch System (Lesson-Load Pre-execution)
+  // ========================================
+
+  /**
+   * Store a prefetch result (called by lesson-view after executing a prefetch task).
+   */
+  storePrefetchResult(substageId: string | number, key: string, result: PrefetchResult): void {
+    const compositeKey = `${substageId}:${key}`;
+    this.prefetchResults.set(compositeKey, result);
+    console.log(`[InteractionAISDK] Prefetch [${compositeKey}] → ${result.status}`);
+  }
+
+  /**
+   * Get a prefetch result for the given substage and key.
+   * Returns null if no prefetch was registered.
+   */
+  getPrefetchResult(substageId: string | number, key: string): PrefetchResult | null {
+    return this.prefetchResults.get(`${substageId}:${key}`) ?? null;
+  }
+
+  /**
+   * Get a prefetch result for the *current* substage.
+   * Convenience method used by interactions that don't know their own substageId.
+   */
+  getCurrentPrefetchResult(key: string): PrefetchResult | null {
+    if (!this.currentSubstageId) return null;
+    return this.getPrefetchResult(this.currentSubstageId, key);
+  }
+
+  /**
+   * Clear all prefetch results (called when lesson is unloaded).
+   */
+  clearPrefetchResults(): void {
+    this.prefetchResults.clear();
+    console.log('[InteractionAISDK] ✅ Prefetch results cleared');
+  }
+
+  /**
+   * Reset all lesson-level state (structure, shared data, prefetch).
+   * Called by lesson-view on lesson load/unload.
+   */
+  resetLessonState(): void {
+    this.lessonStructure = [];
+    this.sharedLessonData.clear();
+    this.prefetchResults.clear();
+    console.log('[InteractionAISDK] ✅ All lesson state reset');
+  }
+
+  // ========================================
+  // Cross-Lesson Navigation & Data
+  // ========================================
+
+  private static readonly CROSS_LESSON_PREFIX = 'cross-lesson-data-';
+  private static readonly DEEP_LINK_PREFIX = 'lesson-deeplink-';
+  private static readonly CROSS_LESSON_MAX_AGE = 30 * 60 * 1000; // 30 minutes
+
+  /**
+   * Navigate to a different lesson, optionally targeting a specific interaction.
+   * Cross-lesson shared data is only accepted when both lessons share the same builder (createdBy).
+   *
+   * @param targetLessonId  Lesson to navigate to
+   * @param options.stageId / substageId  Jump to a specific substage
+   * @param options.interactionTypeId     Find substage by interaction type ID
+   * @param options.interactionName       Find substage by interaction title (fuzzy)
+   * @param options.sharedData            Key-value data to pass to the target lesson
+   */
+  navigateToLesson(
+    targetLessonId: string,
+    options?: {
+      stageId?: string | number;
+      substageId?: string | number;
+      interactionTypeId?: string;
+      interactionName?: string;
+      sharedData?: Record<string, any>;
+    }
+  ): void {
+    const opts = options || {};
+
+    // Store deep-link target in localStorage
+    if (opts.stageId || opts.substageId || opts.interactionTypeId || opts.interactionName) {
+      try {
+        localStorage.setItem(
+          `${InteractionAISDK.DEEP_LINK_PREFIX}${targetLessonId}`,
+          JSON.stringify({
+            stageId: opts.stageId ?? null,
+            substageId: opts.substageId ?? null,
+            interactionTypeId: opts.interactionTypeId ?? null,
+            interactionName: opts.interactionName ?? null,
+            timestamp: Date.now(),
+          })
+        );
+      } catch (e) {
+        console.warn('[InteractionAISDK] Failed to store deep-link target:', e);
+      }
+    }
+
+    // Store cross-lesson shared data (with builder ID for ownership check)
+    if (opts.sharedData && Object.keys(opts.sharedData).length > 0) {
+      this.storeCrossLessonData(targetLessonId, opts.sharedData);
+    }
+
+    // Dispatch navigation event for lesson-view to handle
+    window.dispatchEvent(new CustomEvent('interaction-navigate-to-lesson', {
+      detail: { lessonId: targetLessonId }
+    }));
+    console.log('[InteractionAISDK] ✅ Cross-lesson navigation requested → lesson', targetLessonId);
+    this.transcriptEvent$.next({
+      type: 'cross_lesson_navigation',
+      content: `Navigate to lesson ${targetLessonId}`,
+      metadata: { targetLessonId, ...opts },
+    });
+  }
+
+  /**
+   * Store data for a target lesson. Only accessible if both lessons
+   * share the same builder (createdBy).
+   */
+  storeCrossLessonData(targetLessonId: string, data: Record<string, any>): void {
+    try {
+      const currentUser = this.authService.currentUser();
+      const builderId = (this as any).currentLessonCreatedBy || currentUser?.userId || null;
+
+      const existing = this.readCrossLessonDataRaw(targetLessonId);
+      const merged = existing ? { ...existing.data, ...data } : data;
+
+      localStorage.setItem(
+        `${InteractionAISDK.CROSS_LESSON_PREFIX}${targetLessonId}`,
+        JSON.stringify({
+          data: merged,
+          fromLessonId: this.currentLessonId,
+          fromBuilderId: builderId,
+          timestamp: Date.now(),
+        })
+      );
+      console.log('[InteractionAISDK] ✅ Cross-lesson data stored for', targetLessonId);
+    } catch (e) {
+      console.warn('[InteractionAISDK] Failed to store cross-lesson data:', e);
+    }
+  }
+
+  /**
+   * Read raw cross-lesson data from localStorage (internal helper).
+   */
+  private readCrossLessonDataRaw(lessonId: string): { data: Record<string, any>; fromLessonId: string; fromBuilderId: string; timestamp: number } | null {
+    try {
+      const raw = localStorage.getItem(`${InteractionAISDK.CROSS_LESSON_PREFIX}${lessonId}`);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (Date.now() - parsed.timestamp > InteractionAISDK.CROSS_LESSON_MAX_AGE) {
+        localStorage.removeItem(`${InteractionAISDK.CROSS_LESSON_PREFIX}${lessonId}`);
+        return null;
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Load cross-lesson data for the current lesson, verifying builder ownership.
+   * Called by lesson-view during setLessonData().
+   * @returns the data if valid, or null if missing/expired/wrong builder
+   */
+  loadCrossLessonData(lessonId: string, lessonCreatedBy: string): Record<string, any> | null {
+    const raw = this.readCrossLessonDataRaw(lessonId);
+    if (!raw) return null;
+
+    if (raw.fromBuilderId !== lessonCreatedBy) {
+      console.warn('[InteractionAISDK] ⚠️ Cross-lesson data rejected: builder mismatch',
+        { from: raw.fromBuilderId, to: lessonCreatedBy });
+      localStorage.removeItem(`${InteractionAISDK.CROSS_LESSON_PREFIX}${lessonId}`);
+      return null;
+    }
+
+    // Accepted — clean up localStorage
+    localStorage.removeItem(`${InteractionAISDK.CROSS_LESSON_PREFIX}${lessonId}`);
+    console.log('[InteractionAISDK] ✅ Cross-lesson data accepted from lesson', raw.fromLessonId);
+    return raw.data;
+  }
+
+  /**
+   * Read a deep-link target for a lesson. Called by lesson-view during setLessonData().
+   */
+  consumeDeepLinkTarget(lessonId: string): {
+    stageId?: string | null;
+    substageId?: string | null;
+    interactionTypeId?: string | null;
+    interactionName?: string | null;
+  } | null {
+    try {
+      const key = `${InteractionAISDK.DEEP_LINK_PREFIX}${lessonId}`;
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      localStorage.removeItem(key);
+      const parsed = JSON.parse(raw);
+      if (Date.now() - parsed.timestamp > InteractionAISDK.CROSS_LESSON_MAX_AGE) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Store the current lesson's createdBy for cross-lesson ownership checks.
+   */
+  setCurrentLessonCreatedBy(createdBy: string): void {
+    (this as any).currentLessonCreatedBy = createdBy;
   }
 }
 

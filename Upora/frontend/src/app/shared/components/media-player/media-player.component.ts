@@ -1,6 +1,7 @@
 import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { buildInteractionSDKScript } from '../../../core/services/interaction-sdk-builder';
 
 interface MediaConfig {
   autoplay?: boolean;
@@ -434,21 +435,33 @@ export class MediaPlayerComponent implements OnInit, AfterViewInit, OnDestroy {
     // Wait for overlay HTML to be rendered before injecting script
     // This ensures the elements with IDs exist when the script runs
     setTimeout(() => {
+      const overlayContainer = document.querySelector('.overlay-container');
+      const target = overlayContainer || document.head;
+
+      // Inject SDK before overlay script so builders can use window.aiSDK
+      if (!(window as any).aiSDK) {
+        const sdkScript = document.createElement('script');
+        sdkScript.textContent = this.buildMediaPlayerSDK();
+        target.appendChild(sdkScript);
+        console.log('[MediaPlayer] ✅ SDK injected for overlay');
+      }
+
       // Create new script element
       this.overlayScriptElement = document.createElement('script');
       this.overlayScriptElement.textContent = this.overlayJs;
       
-      // Inject into the component's overlay container
-      const overlayContainer = document.querySelector('.overlay-container');
       if (overlayContainer) {
         overlayContainer.appendChild(this.overlayScriptElement);
         console.log('[MediaPlayer] ✅ Overlay script injected');
       } else {
-        // Fallback: inject into document head
         document.head.appendChild(this.overlayScriptElement);
         console.warn('[MediaPlayer] Overlay container not found, injected script into head');
       }
-    }, 100); // Small delay to ensure HTML is rendered
+    }, 100);
+  }
+
+  private buildMediaPlayerSDK(): string {
+    return buildInteractionSDKScript({ transport: 'customEvent' });
   }
 
   onMediaLoaded() {

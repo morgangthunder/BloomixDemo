@@ -106,6 +106,40 @@
       setAudioVolume: (channel, level) => {
         sendMessage("ai-sdk-set-audio-volume", { channel, level });
       },
+      // Cross-interaction navigation
+      navigateToSubstage: (stageId, substageId) => {
+        sendMessage("ai-sdk-navigate-to-substage", { stageId, substageId });
+      },
+      getLessonStructure: (callback) => {
+        sendMessage("ai-sdk-get-lesson-structure", {}, (r) => {
+          if (callback) callback(r.structure);
+        });
+      },
+      // Shared lesson data
+      setSharedData: (key, value, callback) => {
+        sendMessage("ai-sdk-set-shared-data", { key, value }, () => {
+          if (callback) callback();
+        });
+      },
+      getSharedData: (key, callback) => {
+        sendMessage("ai-sdk-get-shared-data", { key }, (r) => {
+          if (callback) callback(r.value);
+        });
+      },
+      // Prefetch results
+      getPrefetchResult: (key, callback) => {
+        sendMessage("ai-sdk-get-prefetch-result", { key }, (r) => {
+          if (callback) callback({ result: r.result, status: r.status, error: r.error });
+        });
+      },
+      navigateToLesson: (lessonId, options) => {
+        sendMessage("ai-sdk-navigate-to-lesson", { lessonId, options: options || {} });
+      },
+      setCrossLessonData: (targetLessonId, data, callback) => {
+        sendMessage("ai-sdk-set-cross-lesson-data", { targetLessonId, data }, () => {
+          if (callback) callback();
+        });
+      },
     };
   };
 
@@ -425,6 +459,69 @@
     $("loading-text").textContent = "Finding the best image for you...";
     clearQuizInfo();
 
+    // Check if lesson-load prefetch already prepared our images
+    if (aiSDK && aiSDK.getPrefetchResult) {
+      aiSDK.getPrefetchResult("personalisedImage", function (prefetch) {
+        if (prefetch && prefetch.status === "ready" && prefetch.result) {
+          console.log("[ImageExplorer] ✅ Using prefetched result (source: " + prefetch.result.source + ")");
+          usePrefetchedResult(prefetch.result);
+          return;
+        }
+        if (prefetch && prefetch.status === "pending") {
+          console.log("[ImageExplorer] ⏳ Prefetch still pending, polling...");
+          pollPrefetch(0);
+          return;
+        }
+        // No prefetch or error — fall through to normal pipeline
+        console.log("[ImageExplorer] No prefetch available (status: " + (prefetch ? prefetch.status : "none") + "), running normal pipeline");
+        runPersonalisationPipeline();
+      });
+    } else {
+      runPersonalisationPipeline();
+    }
+  }
+
+  function pollPrefetch(attempt) {
+    if (attempt > 60) {
+      console.warn("[ImageExplorer] Prefetch poll timeout, falling back to normal pipeline");
+      runPersonalisationPipeline();
+      return;
+    }
+    setTimeout(function () {
+      aiSDK.getPrefetchResult("personalisedImage", function (prefetch) {
+        if (prefetch && prefetch.status === "ready" && prefetch.result) {
+          console.log("[ImageExplorer] ✅ Prefetch ready after " + (attempt + 1) + " poll(s)");
+          usePrefetchedResult(prefetch.result);
+        } else if (prefetch && prefetch.status === "pending") {
+          $("loading-text").textContent = "Almost ready...";
+          pollPrefetch(attempt + 1);
+        } else {
+          runPersonalisationPipeline();
+        }
+      });
+    }, 1000);
+  }
+
+  function usePrefetchedResult(result) {
+    if (result.source === "cachedPair" && result.pair) {
+      useCachedImagePair(result.pair);
+    } else if (result.source === "cachedImage" && result.image) {
+      useCachedImage(result.image);
+    } else if (result.source === "generated" && result.imageResult) {
+      var resp = result.imageResult;
+      if (!resp.success) {
+        console.warn("[ImageExplorer] Prefetched generation failed, running normal pipeline");
+        runPersonalisationPipeline();
+        return;
+      }
+      onImageResponse(resp);
+    } else {
+      console.warn("[ImageExplorer] Unknown prefetch result format, running normal pipeline");
+      runPersonalisationPipeline();
+    }
+  }
+
+  function runPersonalisationPipeline() {
     var interactionLabel = processTitle.toLowerCase().replace(/\s+/g, "-");
 
     // Step 1: Try to find an existing image pair via the dedicated pair-lookup API

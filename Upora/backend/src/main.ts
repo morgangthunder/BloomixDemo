@@ -9,7 +9,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-let BACKEND_VERSION = '0.8.48'; // LLM always picks best theme from full catalogue (no random fallback)
+let BACKEND_VERSION = '0.8.52'; // SDK recovery: cross-interaction/lesson nav handler support
 console.log(`🔍 [VERSION DEBUG] __dirname: ${__dirname}`);
 console.log(`🔍 [VERSION DEBUG] process.cwd(): ${process.cwd()}`);
 

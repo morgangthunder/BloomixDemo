@@ -8,7 +8,8 @@ import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { LessonService } from '../../core/services/lesson.service';
 import { WebSocketService, ChatMessage } from '../../core/services/websocket.service';
 import { ScreenshotStorageService } from '../../core/services/screenshot-storage.service';
-import { InteractionAISDK } from '../../core/services/interaction-ai-sdk.service';
+import { InteractionAISDK, LessonStructureStage } from '../../core/services/interaction-ai-sdk.service';
+import { buildInteractionSDKScript } from '../../core/services/interaction-sdk-builder';
 import { InteractionAIBridgeService } from '../../core/services/interaction-ai-bridge.service';
 import { SnackMessageService } from '../../core/services/snack-message.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -1635,6 +1636,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   @ViewChild('interactionIframe', { static: false }) interactionIframe?: any;
   @ViewChild('contentArea', { static: false }) contentAreaRef?: any;
 
+  private _iframeSDKScript = buildInteractionSDKScript({ transport: 'postMessage' });
+  private _sameDocSDKScript = buildInteractionSDKScript({ transport: 'customEvent' });
+
   constructor(
     private lessonService: LessonService,
     private authService: AuthService,
@@ -1755,6 +1759,24 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       this.onNextButtonClick();
     }) as EventListener);
     
+    // Cross-interaction navigation: jump to any substage from within an interaction
+    window.addEventListener('interaction-navigate-to-substage', ((e: CustomEvent) => {
+      const { stageId, substageId } = e.detail || {};
+      if (stageId != null && substageId != null) {
+        console.log('[LessonView] Cross-interaction nav to stage:', stageId, 'substage:', substageId);
+        this.ngZone.run(() => this.selectSubStage(stageId, substageId));
+      }
+    }) as EventListener);
+
+    // Cross-lesson navigation: jump to another lesson
+    window.addEventListener('interaction-navigate-to-lesson', ((e: CustomEvent) => {
+      const { lessonId } = e.detail || {};
+      if (lessonId) {
+        console.log('[LessonView] Cross-lesson nav to:', lessonId);
+        this.ngZone.run(() => this.router.navigate(['/lesson-view', lessonId]));
+      }
+    }) as EventListener);
+
     // Listen for ai-sdk-message custom events from video-url section SDK
     // These are sent via CustomEvent (same-document communication) instead of postMessage
     document.addEventListener('ai-sdk-message', ((e: CustomEvent) => {
@@ -1840,8 +1862,59 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         case 'ai-sdk-set-audio-volume':
           this.interactionAISDK.setAudioVolume(message.channel || 'sfx', message.level ?? 0.5);
           break;
+        case 'ai-sdk-navigate-to-substage':
+          if (message.stageId != null && message.substageId != null) {
+            this.ngZone.run(() => this.selectSubStage(message.stageId, message.substageId));
+          }
+          break;
+        case 'ai-sdk-get-lesson-structure': {
+          const structure = this.interactionAISDK.getLessonStructure();
+          break;
+        }
+        case 'ai-sdk-set-shared-data':
+          this.interactionAISDK.setSharedData(message.key, message.value);
+          break;
+        case 'ai-sdk-get-shared-data': {
+          const val = this.interactionAISDK.getSharedData(message.key);
+          break;
+        }
+        case 'ai-sdk-get-all-shared-data': {
+          const all = this.interactionAISDK.getAllSharedData();
+          break;
+        }
+        case 'ai-sdk-get-prefetch-result': {
+          const pr = this.interactionAISDK.getCurrentPrefetchResult(message.key);
+          break;
+        }
+        case 'ai-sdk-navigate-to-lesson':
+          this.interactionAISDK.navigateToLesson(message.lessonId, message.options || {});
+          break;
+        case 'ai-sdk-set-cross-lesson-data':
+          this.interactionAISDK.storeCrossLessonData(message.targetLessonId, message.data || {});
+          break;
+        case 'ai-sdk-complete-interaction':
+          this.ngZone.run(() => this.onNextButtonClick());
+          break;
+        case 'ai-sdk-save-user-progress':
+        case 'ai-sdk-get-user-progress':
+        case 'ai-sdk-mark-completed':
+        case 'ai-sdk-increment-attempts':
+        case 'ai-sdk-save-instance-data':
+        case 'ai-sdk-get-instance-data-history':
+        case 'ai-sdk-get-user-public-profile':
+        case 'ai-sdk-generate-image':
+        case 'ai-sdk-get-lesson-images':
+        case 'ai-sdk-get-lesson-image-ids':
+        case 'ai-sdk-find-image-pair':
+        case 'ai-sdk-select-theme':
+        case 'ai-sdk-delete-image':
+        case 'ai-sdk-subscribe':
+        case 'ai-sdk-unsubscribe':
+          // Route data-heavy messages through bridge via synthetic postMessage
+          window.postMessage(message, '*');
+          break;
         default:
-          console.log('[LessonView] 📨 Unhandled SDK message type:', message.type);
+          console.log('[LessonView] Unhandled SDK message type:', message.type);
       }
     }) as EventListener);
     
@@ -2356,17 +2429,44 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       metadata: { lessonId: lesson.id },
     });
     console.log('[LessonView] Lesson set - ID:', lesson.id, 'Stages:', this.lessonStages.length);
-    console.log('[LessonView] First stage:', JSON.stringify(this.lessonStages[0], null, 2).substring(0, 800));
-    console.log('[LessonView] First substage full:', JSON.stringify(this.lessonStages[0]?.subStages?.[0], null, 2));
-    
+
+    // SDK wiring: reset state, publish structure, handle cross-lesson data
+    this.interactionAISDK.resetLessonState();
+    this.publishLessonStructure();
+    this.interactionAISDK.setCurrentLessonCreatedBy((lesson as any).createdBy || '');
+
+    // Load cross-lesson data if arriving from another lesson (same-builder only)
+    const crossData = this.interactionAISDK.loadCrossLessonData(lesson.id.toString(), (lesson as any).createdBy || '');
+    if (crossData) {
+      Object.entries(crossData).forEach(([k, v]) => this.interactionAISDK.setSharedData(k, v));
+      console.log('[LessonView] Loaded cross-lesson data:', Object.keys(crossData));
+    }
+
     // Track lesson view (Phase 6.5)
     this.trackLessonView(lesson.id.toString());
-    
+
+    // Check for deep-link target (from cross-lesson navigation)
+    const deepLink = this.interactionAISDK.consumeDeepLinkTarget(lesson.id.toString());
+
     // Try to restore saved state from localStorage
     const savedState = this.getSavedLessonState(lesson.id.toString());
     let restored = false;
-    
-    if (savedState && savedState.stageId && savedState.subStageId) {
+
+    // Deep-link takes priority over saved state
+    if (deepLink) {
+      const target = this.resolveDeepLinkTarget(deepLink);
+      if (target) {
+        this.activeStageId = target.stageId;
+        this.activeSubStageId = target.substageId;
+        this.expandedStages.add(target.stageId as number);
+        this.updateActiveSubStage();
+        this.loadInteractionData();
+        restored = true;
+        console.log('[LessonView] Deep-link resolved:', target);
+      }
+    }
+
+    if (!restored && savedState && savedState.stageId && savedState.subStageId) {
       // Find the saved stage and substage
       const savedStage = this.lessonStages.find(s => String(s.id) === String(savedState.stageId));
       if (savedStage) {
@@ -2419,6 +2519,163 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     } else {
       console.warn('[LessonView] ❌ WebSocket not enabled or no lesson ID');
     }
+
+    // Prefetch: run background tasks for interactions (e.g., image generation)
+    this.runPrefetchTasks();
+  }
+
+  private publishLessonStructure(): void {
+    const stages: LessonStructureStage[] = (this.lessonStages || []).map(stage => ({
+      id: stage.id,
+      title: (stage as any).title || '',
+      subStages: (stage.subStages || []).map(ss => ({
+        id: ss.id,
+        title: (ss as any).title || '',
+        interactionTypeId: (ss as any).interactionType?.id || (ss as any).interactionTypeId || '',
+        interactionTitle: (ss as any).interactionType?.name || (ss as any).interactionTitle || '',
+        config: (ss as any).interactionConfig || (ss as any).config || {},
+      })),
+    }));
+    this.interactionAISDK.setLessonStructure(stages);
+    console.log('[LessonView] Published lesson structure:', stages.length, 'stages');
+  }
+
+  private runPrefetchTasks(): void {
+    if (!this.lessonStages?.length) return;
+
+    for (const stage of this.lessonStages) {
+      for (const ss of (stage.subStages || [])) {
+        // Skip first substage of first stage (it loads immediately)
+        if (stage === this.lessonStages[0] && ss === stage.subStages![0]) continue;
+
+        const config = (ss as any).interactionConfig || (ss as any).config || {};
+        const interactionTypeId = (ss as any).interactionType?.id || (ss as any).interactionTypeId || '';
+
+        // Explicit prefetch tasks from config
+        if (Array.isArray(config.prefetch)) {
+          for (const task of config.prefetch) {
+            this.executePrefetchTask(String(ss.id), String(stage.id), task, config);
+          }
+        }
+
+        // Auto-prefetch for Image Explorer (process-explorer) when testMode is off
+        if (interactionTypeId === 'process-explorer' && config.testMode === false) {
+          this.prefetchImageExplorer(String(ss.id), String(stage.id), config);
+        }
+      }
+    }
+  }
+
+  private async executePrefetchTask(substageId: string, stageId: string, task: any, config: any): Promise<void> {
+    const taskKey = task.key || task.type;
+    console.log('[LessonView] Prefetch task:', task.type, 'key:', taskKey);
+    try {
+      let result: any;
+      switch (task.type) {
+        case 'generateImage':
+          result = await firstValueFrom(this.api.post('/images/generate', { prompt: '', ...task.options } as any));
+          break;
+        case 'selectBestTheme':
+          result = await firstValueFrom(this.api.post('/images/select-theme', { contentItems: [], ...task.options } as any));
+          break;
+        case 'findImagePair':
+          result = await firstValueFrom(this.api.post('/images/find-pair', task.options || {}));
+          break;
+        case 'imageExplorerPreload':
+          await this.prefetchImageExplorer(substageId, stageId, config);
+          return;
+        default:
+          console.warn('[LessonView] Unknown prefetch type:', task.type);
+          return;
+      }
+      this.interactionAISDK.storePrefetchResult(substageId, taskKey, { status: 'ready', data: result, startedAt: Date.now(), completedAt: Date.now() });
+    } catch (err) {
+      console.error('[LessonView] Prefetch error:', taskKey, err);
+      this.interactionAISDK.storePrefetchResult(substageId, taskKey, { status: 'error', error: String(err), startedAt: Date.now(), completedAt: Date.now() });
+    }
+  }
+
+  private async prefetchImageExplorer(substageId: string, _stageId: string, config: any): Promise<void> {
+    console.log('[LessonView] Prefetching Image Explorer for substage:', substageId);
+    try {
+      // Step 1: Check for cached image pair
+      const lessonId = this.lesson?.id?.toString() || '';
+      const pairResult = await firstValueFrom(
+        this.api.post('/images/find-pair', { lessonId, substageId, processTitle: config['processTitle'] || '' })
+      );
+      if ((pairResult as any)?.found) {
+        this.interactionAISDK.storePrefetchResult(substageId, 'personalisedImage', { status: 'ready', data: pairResult, startedAt: Date.now(), completedAt: Date.now() });
+        console.log('[LessonView] Prefetch: found cached image pair');
+        return;
+      }
+
+      // Step 2: Select best theme using personalisation
+      const themeResult = await firstValueFrom(
+        this.api.post('/images/select-theme', {
+          contentItems: config['processSteps'] || [],
+          contentType: config['contentType'] || 'educational',
+        })
+      );
+
+      // Step 3: Generate image with selected theme
+      const prompt = (themeResult as any)?.adjustedPrompt || config['processTitle'] || 'educational content';
+      const imgResult = await firstValueFrom(
+        this.api.post('/images/generate', {
+          prompt,
+          width: 1024,
+          height: 768,
+          dualViewport: true,
+          lessonId,
+          substageId,
+        })
+      );
+
+      this.interactionAISDK.storePrefetchResult(substageId, 'personalisedImage', { status: 'ready', data: { theme: themeResult, image: imgResult }, startedAt: Date.now(), completedAt: Date.now() });
+      console.log('[LessonView] Prefetch: image generated for', substageId);
+    } catch (err) {
+      console.error('[LessonView] Prefetch Image Explorer error:', substageId, err);
+      this.interactionAISDK.storePrefetchResult(substageId, 'personalisedImage', { status: 'error', error: String(err), startedAt: Date.now(), completedAt: Date.now() });
+    }
+  }
+
+  private resolveDeepLinkTarget(deepLink: any): { stageId: string | number; substageId: string | number } | null {
+    if (!deepLink || !this.lessonStages?.length) return null;
+
+    // Direct stage+substage match
+    if (deepLink.stageId && deepLink.substageId) {
+      const stage = this.lessonStages.find(s => String(s.id) === String(deepLink.stageId));
+      if (stage) {
+        const ss = stage.subStages?.find(sub => String(sub.id) === String(deepLink.substageId));
+        if (ss) return { stageId: stage.id, substageId: ss.id };
+      }
+    }
+
+    // Match by interactionTypeId
+    if (deepLink.interactionTypeId) {
+      for (const stage of this.lessonStages) {
+        for (const ss of (stage.subStages || [])) {
+          const typeId = (ss as any).interactionType?.id || (ss as any).interactionTypeId || '';
+          if (typeId === deepLink.interactionTypeId) {
+            return { stageId: stage.id, substageId: ss.id };
+          }
+        }
+      }
+    }
+
+    // Match by interactionName (case-insensitive partial)
+    if (deepLink.interactionName) {
+      const needle = deepLink.interactionName.toLowerCase();
+      for (const stage of this.lessonStages) {
+        for (const ss of (stage.subStages || [])) {
+          const name = ((ss as any).interactionType?.name || (ss as any).interactionTitle || '').toLowerCase();
+          if (name.includes(needle)) {
+            return { stageId: stage.id, substageId: ss.id };
+          }
+        }
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -6755,6 +7012,27 @@ export class LessonViewComponent implements OnInit, OnDestroy {
             console.warn('[Widget] ⚠️ Unknown widget type: ' + widgetId);
           }
         },
+        // ── Cross-Interaction Navigation ──
+        navigateToSubstage: function(stageId, substageId) { sendMessage("ai-sdk-navigate-to-substage", { stageId: stageId, substageId: substageId }); },
+        getLessonStructure: function(callback) { sendMessage("ai-sdk-get-lesson-structure", {}, function(r) { if (callback) callback(r.structure); }); },
+        setSharedData: function(key, value, callback) { sendMessage("ai-sdk-set-shared-data", { key: key, value: value }, function() { if (callback) callback(); }); },
+        getSharedData: function(key, callback) { sendMessage("ai-sdk-get-shared-data", { key: key }, function(r) { if (callback) callback(r); }); },
+        getAllSharedData: function(callback) { sendMessage("ai-sdk-get-all-shared-data", {}, function(r) { if (callback) callback(r); }); },
+        getPrefetchResult: function(key, callback) { sendMessage("ai-sdk-get-prefetch-result", { key: key }, function(r) { if (callback) callback({ result: r.result, status: r.status, error: r.error }); }); },
+        // ── Cross-Lesson Navigation & Data ──
+        navigateToLesson: function(lessonId, options) { sendMessage("ai-sdk-navigate-to-lesson", { lessonId: lessonId, options: options || {} }); },
+        setCrossLessonData: function(targetLessonId, data, callback) { sendMessage("ai-sdk-set-cross-lesson-data", { targetLessonId: targetLessonId, data: data }, function() { if (callback) callback(); }); },
+        // ── Missing standard methods ──
+        setInteractionInfo: function(content) { sendMessage("ai-sdk-set-interaction-info", { content: content }); },
+        playSfx: function(name) { sendMessage("ai-sdk-play-sfx", { name: name }); },
+        startBgMusic: function(style) { sendMessage("ai-sdk-start-bg-music", { style: style || "calm" }); },
+        startBgMusicFromUrl: function(url, loopConfig) { sendMessage("ai-sdk-start-bg-music-url", { url: url, loopConfig: loopConfig }); },
+        stopBgMusic: function() { sendMessage("ai-sdk-stop-bg-music", {}); },
+        setAudioVolume: function(channel, level) { sendMessage("ai-sdk-set-audio-volume", { channel: channel, level: level }); },
+        generateImage: function(options, callback) { sendMessage("ai-sdk-generate-image", { options: options }, function(r) { if (callback) callback(r); }); },
+        findImagePair: function(options, callback) { sendMessage("ai-sdk-find-image-pair", { options: options }, function(r) { if (callback) callback(r); }); },
+        selectBestTheme: function(options, callback) { sendMessage("ai-sdk-select-theme", { options: options }, function(r) { if (callback) callback(r); }); },
+        completeInteraction: function() { sendMessage("ai-sdk-complete-interaction", {}); },
       };
       
       // Set up resize listeners for layering utilities
@@ -6915,6 +7193,14 @@ export class LessonViewComponent implements OnInit, OnDestroy {
             }
           });
         },
+        navigateToSubstage: (stageId, substageId) => { sendMessage("ai-sdk-navigate-to-substage", { stageId, substageId }); },
+        getLessonStructure: (callback) => { sendMessage("ai-sdk-get-lesson-structure", {}, (r) => { if (callback) callback(r.structure); }); },
+        setSharedData: (key, value, callback) => { sendMessage("ai-sdk-set-shared-data", { key, value }, () => { if (callback) callback(); }); },
+        getSharedData: (key, callback) => { sendMessage("ai-sdk-get-shared-data", { key }, (r) => { if (callback) callback(r); }); },
+        getAllSharedData: (callback) => { sendMessage("ai-sdk-get-all-shared-data", {}, (r) => { if (callback) callback(r); }); },
+        getPrefetchResult: (key, callback) => { sendMessage("ai-sdk-get-prefetch-result", { key }, (r) => { if (callback) callback({ result: r.result, status: r.status, error: r.error }); }); },
+        navigateToLesson: (lessonId, options) => { sendMessage("ai-sdk-navigate-to-lesson", { lessonId, options: options || {} }); },
+        setCrossLessonData: (targetLessonId, data, callback) => { sendMessage("ai-sdk-set-cross-lesson-data", { targetLessonId, data }, () => { if (callback) callback(); }); },
       };
     };
 
@@ -8475,7 +8761,56 @@ ${escapedHtml}
               sendMessage("ai-sdk-delete-image", { imageId }, (response) => {
                 if (callback) callback(response.success, response.error);
               });
-            }
+            },
+            // ── Cross-Interaction Navigation ──
+            navigateToSubstage: (stageId, substageId) => { sendMessage("ai-sdk-navigate-to-substage", { stageId, substageId }); },
+            getLessonStructure: (callback) => { sendMessage("ai-sdk-get-lesson-structure", {}, (r) => { if (callback) callback(r.structure); }); },
+            setSharedData: (key, value, callback) => { sendMessage("ai-sdk-set-shared-data", { key, value }, () => { if (callback) callback(); }); },
+            getSharedData: (key, callback) => { sendMessage("ai-sdk-get-shared-data", { key }, (r) => { if (callback) callback(r); }); },
+            getAllSharedData: (callback) => { sendMessage("ai-sdk-get-all-shared-data", {}, (r) => { if (callback) callback(r); }); },
+            getPrefetchResult: (key, callback) => { sendMessage("ai-sdk-get-prefetch-result", { key }, (r) => { if (callback) callback({ result: r.result, status: r.status, error: r.error }); }); },
+            // ── Cross-Lesson Navigation & Data ──
+            navigateToLesson: (lessonId, options) => { sendMessage("ai-sdk-navigate-to-lesson", { lessonId, options: options || {} }); },
+            setCrossLessonData: (targetLessonId, data, callback) => { sendMessage("ai-sdk-set-cross-lesson-data", { targetLessonId, data }, () => { if (callback) callback(); }); },
+            // ── Missing standard methods ──
+            onResponse: (callback) => {
+              const subId = "sub-" + Date.now() + "-" + Math.random();
+              sendMessage("ai-sdk-subscribe", { subscriptionId: subId }, () => {
+                const listener = (event) => {
+                  if (event.data && event.data.type === "ai-sdk-response" && event.data.subscriptionId === subId) { callback(event.data.response); }
+                };
+                window.addEventListener("message", listener);
+              });
+            },
+            setInteractionInfo: (content) => { sendMessage("ai-sdk-set-interaction-info", { content }); },
+            playSfx: (name) => { sendMessage("ai-sdk-play-sfx", { name }); },
+            startBgMusic: (style) => { sendMessage("ai-sdk-start-bg-music", { style: style || "calm" }); },
+            startBgMusicFromUrl: (url, loopConfig) => { sendMessage("ai-sdk-start-bg-music-url", { url, loopConfig }); },
+            stopBgMusic: () => { sendMessage("ai-sdk-stop-bg-music", {}); },
+            setAudioVolume: (channel, level) => { sendMessage("ai-sdk-set-audio-volume", { channel, level }); },
+            saveInstanceData: (data, callback) => { sendMessage("ai-sdk-save-instance-data", { data }, (r) => { if (callback) callback(r.success, r.error); }); },
+            getInstanceDataHistory: (filters, callback) => { sendMessage("ai-sdk-get-instance-data-history", { filters: filters || {} }, (r) => { if (callback) callback(r.data, r.error); }); },
+            getUserPublicProfile: (userId, callback) => { sendMessage("ai-sdk-get-user-public-profile", { userId }, (r) => { if (callback) callback(r.profile, r.error); }); },
+            generateImage: (options, callback) => { sendMessage("ai-sdk-generate-image", { options }, (r) => { if (callback) callback(r); }); },
+            findImagePair: (options, callback) => { sendMessage("ai-sdk-find-image-pair", { options }, (r) => { if (callback) callback(r); }); },
+            selectBestTheme: (options, callback) => { sendMessage("ai-sdk-select-theme", { options }, (r) => { if (callback) callback(r); }); },
+            playMedia: (callback) => { sendMessage("ai-sdk-play-media", {}, (r) => { if (callback) callback(r.success, r.error); }); },
+            pauseMedia: () => { sendMessage("ai-sdk-pause-media", {}); },
+            seekMedia: (time) => { sendMessage("ai-sdk-seek-media", { time }); },
+            setMediaVolume: (volume) => { sendMessage("ai-sdk-set-media-volume", { volume }); },
+            getMediaCurrentTime: (callback) => { sendMessage("ai-sdk-get-media-current-time", {}, (r) => { if (callback) callback(r.currentTime); }); },
+            getMediaDuration: (callback) => { sendMessage("ai-sdk-get-media-duration", {}, (r) => { if (callback) callback(r.duration); }); },
+            isMediaPlaying: (callback) => { sendMessage("ai-sdk-is-media-playing", {}, (r) => { if (callback) callback(r.isPlaying); }); },
+            showOverlayHtml: () => { sendMessage("ai-sdk-show-overlay-html", {}); },
+            hideOverlayHtml: () => { sendMessage("ai-sdk-hide-overlay-html", {}); },
+            showSnack: (content, duration, hideFromChatUI, actions, callback) => { sendMessage("ai-sdk-show-snack", { content, duration, hideFromChatUI: hideFromChatUI || false, actions: actions || [] }, (r) => { if (callback && r.snackId) callback(r.snackId); }); },
+            hideSnack: () => { sendMessage("ai-sdk-hide-snack", {}); },
+            minimizeChatUI: () => { sendMessage("ai-sdk-minimize-chat-ui", {}); },
+            showChatUI: () => { sendMessage("ai-sdk-show-chat-ui", {}); },
+            activateFullscreen: () => { sendMessage("ai-sdk-activate-fullscreen", {}); },
+            deactivateFullscreen: () => { sendMessage("ai-sdk-deactivate-fullscreen", {}); },
+            postToChat: (content, role, show) => { sendMessage("ai-sdk-post-to-chat", { content, role: role || "assistant", showInWidget: show || false }); },
+            showScript: (script, autoPlay) => { sendMessage("ai-sdk-show-script", { script, autoPlay: autoPlay || false }); },
           };
         };
         window.__lessonViewCreateIframeAISDK = window.createIframeAISDK;
@@ -9097,6 +9432,14 @@ ${escapedHtml}
                   }
                 });
               },
+              navigateToSubstage: (stageId, substageId) => { sendMessage("ai-sdk-navigate-to-substage", { stageId, substageId }); },
+              getLessonStructure: (callback) => { sendMessage("ai-sdk-get-lesson-structure", {}, (r) => { if (callback) callback(r.structure); }); },
+              setSharedData: (key, value, callback) => { sendMessage("ai-sdk-set-shared-data", { key, value }, () => { if (callback) callback(); }); },
+              getSharedData: (key, callback) => { sendMessage("ai-sdk-get-shared-data", { key }, (r) => { if (callback) callback(r); }); },
+              getAllSharedData: (callback) => { sendMessage("ai-sdk-get-all-shared-data", {}, (r) => { if (callback) callback(r); }); },
+              getPrefetchResult: (key, callback) => { sendMessage("ai-sdk-get-prefetch-result", { key }, (r) => { if (callback) callback({ result: r.result, status: r.status, error: r.error }); }); },
+              navigateToLesson: (lessonId, options) => { sendMessage("ai-sdk-navigate-to-lesson", { lessonId, options: options || {} }); },
+              setCrossLessonData: (targetLessonId, data, callback) => { sendMessage("ai-sdk-set-cross-lesson-data", { targetLessonId, data }, () => { if (callback) callback(); }); },
             };
           };
 
@@ -9869,7 +10212,34 @@ ${escapedHtml}
                 callback(response.profile, response.error);
               }
             });
-          }
+          },
+          // ── Cross-Interaction Navigation ──
+          navigateToSubstage: (stageId, substageId) => { sendMessage("ai-sdk-navigate-to-substage", { stageId: stageId, substageId: substageId }); },
+          getLessonStructure: (callback) => { sendMessage("ai-sdk-get-lesson-structure", {}, (r) => { if (callback) callback(r.structure); }); },
+          setSharedData: (key, value, callback) => { sendMessage("ai-sdk-set-shared-data", { key: key, value: value }, () => { if (callback) callback(); }); },
+          getSharedData: (key, callback) => { sendMessage("ai-sdk-get-shared-data", { key: key }, (r) => { if (callback) callback(r); }); },
+          getAllSharedData: (callback) => { sendMessage("ai-sdk-get-all-shared-data", {}, (r) => { if (callback) callback(r); }); },
+          getPrefetchResult: (key, callback) => { sendMessage("ai-sdk-get-prefetch-result", { key: key }, (r) => { if (callback) callback({ result: r.result, status: r.status, error: r.error }); }); },
+          // ── Cross-Lesson Navigation & Data ──
+          navigateToLesson: (lessonId, options) => { sendMessage("ai-sdk-navigate-to-lesson", { lessonId: lessonId, options: options || {} }); },
+          setCrossLessonData: (targetLessonId, data, callback) => { sendMessage("ai-sdk-set-cross-lesson-data", { targetLessonId: targetLessonId, data: data }, () => { if (callback) callback(); }); },
+          // ── Missing standard methods ──
+          completeInteraction: () => { sendMessage("ai-sdk-complete-interaction", {}); },
+          setInteractionInfo: (content) => { sendMessage("ai-sdk-set-interaction-info", { content: content }); },
+          playSfx: (name) => { sendMessage("ai-sdk-play-sfx", { name: name }); },
+          startBgMusic: (style) => { sendMessage("ai-sdk-start-bg-music", { style: style || "calm" }); },
+          startBgMusicFromUrl: (url, loopConfig) => { sendMessage("ai-sdk-start-bg-music-url", { url: url, loopConfig: loopConfig }); },
+          stopBgMusic: () => { sendMessage("ai-sdk-stop-bg-music", {}); },
+          setAudioVolume: (channel, level) => { sendMessage("ai-sdk-set-audio-volume", { channel: channel, level: level }); },
+          generateImage: (options, callback) => { sendMessage("ai-sdk-generate-image", { options: options }, (r) => { if (callback) callback(r); }); },
+          getLessonImages: (callback) => { sendMessage("ai-sdk-get-lesson-images", {}, (r) => { if (callback) callback(r.images || [], r.error); }); },
+          getLessonImageIds: (callback) => { sendMessage("ai-sdk-get-lesson-image-ids", {}, (r) => { if (callback) callback(r.imageIds || [], r.error); }); },
+          findImagePair: (options, callback) => { sendMessage("ai-sdk-find-image-pair", { options: options }, (r) => { if (callback) callback(r); }); },
+          selectBestTheme: (options, callback) => { sendMessage("ai-sdk-select-theme", { options: options }, (r) => { if (callback) callback(r); }); },
+          deleteImage: (imageId, callback) => { sendMessage("ai-sdk-delete-image", { imageId: imageId }, (r) => { if (callback) callback(r); }); },
+          onResponse: (callback) => {
+            setTimeout(() => { if (callback) callback(true); }, 100);
+          },
         };
         
         console.log('[VideoUrlSection] ✅ SDK created');
