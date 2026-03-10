@@ -944,7 +944,7 @@ export class HubsService implements OnModuleInit {
     if (data.courseId) where.courseId = data.courseId;
     const existing = await this.contentLinkRepo.findOne({ where });
     if (existing && existing.status !== HubContentStatus.REMOVED) {
-      throw new ConflictException('This content is already linked to this hub');
+      return existing;
     }
 
     if (existing) {

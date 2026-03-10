@@ -303,8 +303,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             context: {
               lessonId: lessonId,
               lessonData: lessonDataToUse,
-              screenshot: screenshot, // Pass screenshot to context
-              currentStageInfo: payload.currentStageInfo, // Pass current stage/sub-stage info
+              screenshot: screenshot,
+              currentStageInfo: payload.currentStageInfo,
+              personaOverride: (payload as any).personaOverride || null,
             },
             conversationHistory: formattedHistory,
           },

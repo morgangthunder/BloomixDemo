@@ -89,7 +89,28 @@ This document defines all interaction types for the Upora AI lessons platform. E
 | **CULTIVATE** | Grip, Repurpose, Originate | Skill Drill Arcade, Scenario Remix Sorter, Blank Canvas Creator, Stepping Stones |
 | **HONE** | Verify, Evaluate, Target | Retrieval Race, Reflection Blocks, Exit Bridge Maze |
 
-**Total:** 20 unique interaction types
+**Total:** 20 unique interaction types (PixiJS-based) + HTML-category interactions below
+
+---
+
+## HTML-Category Interactions (Iframe-Based)
+
+These interactions are implemented as self-contained HTML/CSS/JS running inside an iframe, communicating with the lesson view via the Interaction AI SDK message bridge.
+
+| ID | Name | Stage Fit | Description |
+|----|------|-----------|-------------|
+| `image-with-questions` | Image with Questions | Tease, Absorb | AI-generated themed banner image + WWTBAM-style quiz (MC + slider questions). Supports custom scales, correct answer reveal, community averages. |
+| `process-explorer` | Image Explorer | Absorb, Explore | Interactive image with clickable components for process/concept exploration. |
+
+### Image with Questions — Quick Reference
+
+- **Question types:** `multiple-choice` (default) and `slider`
+- **Slider fields:** `min`, `max`, `step`, `unit`, `correct` (optional), `labels: {low, high}`
+- **Data persistence:** Uses `saveInstanceData` / `getInstanceDataHistory` for slider community averages
+- **Image pipeline:** `selectBestTheme` → `generateImage` with `dualViewport: true`
+- **Config schema fields:** `title`, `imageDescription`, `questions` (JSON array)
+
+See `INTERACTION_LIBRARY_COMPLETE.md` for full JSON schema and question format documentation.
 
 ---
 

@@ -65,6 +65,8 @@ import { Hub } from './entities/hub.entity';
 import { HubMember } from './entities/hub-member.entity';
 import { HubContentLink } from './entities/hub-content-link.entity';
 import { HubsModule } from './modules/hubs/hubs.module';
+import { AdventureModule } from './modules/adventure/adventure.module';
+import { AdventureSession } from './entities/adventure-session.entity';
 
 @Module({
   imports: [
@@ -82,7 +84,7 @@ import { HubsModule } from './modules/hubs/hubs.module';
         username: configService.get('database.username'),
         password: configService.get('database.password'),
         database: configService.get('database.database'),
-        entities: [User, Lesson, InteractionType, Workflow, Usage, ContentSource, LessonDataLink, ProcessedContentOutput, ScriptBlock, Course, LlmGenerationLog, StudentTopicScore, StudentMistake, LlmProvider, AiPrompt, InteractionResult, InteractionAverage, InteractionInstanceData, UserInteractionProgress, UserPublicProfile, LessonDraft, GeneratedImage, UserPersonalization, PersonalizationOption, LessonEngagementTranscription, Notification, MessageDeliverySettings, Feedback, FeedbackReply, LessonGroup, GroupMember, Assignment, AssignmentSubmission, UserLessonDeadline, CourseGroupLessonVisibility, Hub, HubMember, HubContentLink, ProcessedContentCache],
+        entities: [User, Lesson, InteractionType, Workflow, Usage, ContentSource, LessonDataLink, ProcessedContentOutput, ScriptBlock, Course, LlmGenerationLog, StudentTopicScore, StudentMistake, LlmProvider, AiPrompt, InteractionResult, InteractionAverage, InteractionInstanceData, UserInteractionProgress, UserPublicProfile, LessonDraft, GeneratedImage, UserPersonalization, PersonalizationOption, LessonEngagementTranscription, Notification, MessageDeliverySettings, Feedback, FeedbackReply, LessonGroup, GroupMember, Assignment, AssignmentSubmission, UserLessonDeadline, CourseGroupLessonVisibility, Hub, HubMember, HubContentLink, ProcessedContentCache, AdventureSession],
         synchronize: configService.get('database.synchronize'),
         logging: configService.get('database.logging'),
       }),
@@ -113,6 +115,7 @@ import { HubsModule } from './modules/hubs/hubs.module';
     LessonGroupsModule,
     CoursesModule,
     HubsModule,
+    AdventureModule,
   ],
   controllers: [AppController],
   providers: [AppService],

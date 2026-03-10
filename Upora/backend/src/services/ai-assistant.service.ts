@@ -141,6 +141,17 @@ export class AiAssistantService {
       // 3. Build Grok request with system prompt + conversation history + current user message
       // Replace placeholders in prompt content for teacher assistant
       let systemPromptContent = prompt.content;
+
+      // Character persona override: replace system prompt entirely with character's prompt
+      const personaOverride = request.context?.personaOverride;
+      if (personaOverride?.systemPrompt && request.assistantId === 'teacher') {
+        this.logger.log(`[teacher] Using character persona override: ${personaOverride.name || 'unnamed'}`);
+        systemPromptContent = personaOverride.systemPrompt;
+        if (personaOverride.knowledgeConstraints?.length) {
+          systemPromptContent += `\n\nKNOWLEDGE CONSTRAINTS: Only discuss topics related to: ${personaOverride.knowledgeConstraints.join(', ')}`;
+        }
+      }
+
       if (request.assistantId === 'teacher' && request.context?.lessonId) {
         // Replace placeholders in the prompt
         systemPromptContent = systemPromptContent

@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 
 export type SfxName = 'correct' | 'incorrect' | 'complete' | 'click' | 'whoosh' | 'pop' | 'tick' | 'levelup';
-export type BgMusicStyle = 'calm' | 'upbeat' | 'focus' | 'ambient';
+export type BgMusicStyle = 'calm' | 'upbeat' | 'focus' | 'ambient' | 'retro';
 
 export interface BgMusicLoopConfig {
   loopStart?: number;   // seconds – default 0
@@ -191,6 +191,7 @@ export class AudioService {
   private bgPausedFileLoopCfg: Required<BgMusicLoopConfig> | null = null;
 
   get isBgMusicPaused(): boolean { return this.bgPaused; }
+  get isBgMusicPlaying(): boolean { return (this.bgRunning || this.bgFileRunning) && !this.bgPaused; }
 
   pauseBgMusic(): void {
     if (!this.bgRunning && !this.bgFileRunning) return;
@@ -477,6 +478,25 @@ export class AudioService {
           arpWave: 'triangle',
           padWave: 'sine',
           skipChance: 0.1,
+        };
+      case 'retro':
+        return {
+          bpm: 70,
+          noteLength: 0.5,
+          chords: [
+            [164.81, 196.00, 246.94],          // E3 G3 B3 (Em)
+            [146.83, 196.00, 220.00],          // D3 G3 A3
+            [130.81, 164.81, 196.00],          // C3 E3 G3
+            [146.83, 174.61, 220.00],          // D3 F3 A3 (Dm)
+          ],
+          padVolume: 0.15,
+          arpVolume: 0.6,
+          arpOctaveShift: 4,
+          delayTime: 0.214,
+          delayFeedback: 0.15,
+          arpWave: 'square',
+          padWave: 'sawtooth',
+          skipChance: 0.05,
         };
     }
   }

@@ -9,7 +9,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-let BACKEND_VERSION = '0.8.52'; // SDK recovery: cross-interaction/lesson nav handler support
+let BACKEND_VERSION = '0.8.84'; // Storyteller onboarding wizard, three default adventure scenes
 console.log(`🔍 [VERSION DEBUG] __dirname: ${__dirname}`);
 console.log(`🔍 [VERSION DEBUG] process.cwd(): ${process.cwd()}`);
 

@@ -4947,6 +4947,7 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
       interactionData.fragments = (sampleData as any).fragments;
     }
     
+    configDefaults.isPreview = true;
     const sampleDataJson = JSON.stringify(interactionData);
     const configJson = JSON.stringify(configDefaults);
     
@@ -5225,7 +5226,7 @@ export class InteractionBuilderComponent implements OnInit, OnDestroy {
         }
       });
     }
-    const configJson = JSON.stringify({ ...configDefaults, iframeUrl });
+    const configJson = JSON.stringify({ ...configDefaults, iframeUrl, isPreview: true });
     
     // Escape code for template literal injection
     const escapedHtml = htmlCode ? htmlCode.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${') : '';
@@ -5508,7 +5509,7 @@ ${escapedJs ? escapedJs.split('\n').map(line => '            ' + line).join('\n'
         }
       });
     }
-    const configJson = JSON.stringify({ ...configDefaults, ...mediaConfig });
+    const configJson = JSON.stringify({ ...configDefaults, ...mediaConfig, isPreview: true });
     
     // For string concatenation, we don't need to escape for template literals
     // But we do need to escape HTML special characters for safe insertion
@@ -5993,7 +5994,7 @@ overlayContent + '\n' +
 '  <script type="text/javascript">\n' +
 '    // Inject interaction data and config\n' +
 '    window.interactionData = ' + sampleDataJson + ';\n' +
-'    window.interactionConfig = ' + JSON.stringify(videoUrlConfig) + ';\n' +
+'    window.interactionConfig = ' + JSON.stringify({ ...videoUrlConfig, isPreview: true }) + ';\n' +
 '    \n' +
 '    // Mock SDK for preview\n' +
 '    window.aiSDK = {\n' +

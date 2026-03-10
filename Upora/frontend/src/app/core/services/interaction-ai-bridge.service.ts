@@ -560,6 +560,32 @@ export class InteractionAIBridgeService {
         });
         break;
 
+      // ── Interaction Pool: Switch Interaction ──────────────────────
+      case 'ai-sdk-switch-interaction':
+        this.aiSDK.switchInteraction(message.interactionId, message.extraConfig);
+        this.sendToIframe(sourceWindow, {
+          type: 'ai-sdk-switch-interaction-ack',
+          requestId: message.requestId,
+        });
+        break;
+
+      // ── Teacher Persona ─────────────────────────────────────────────
+      case 'ai-sdk-set-teacher-persona':
+        this.aiSDK.setTeacherPersona(message.persona);
+        this.sendToIframe(sourceWindow, {
+          type: 'ai-sdk-set-teacher-persona-ack',
+          requestId: message.requestId,
+        });
+        break;
+
+      case 'ai-sdk-clear-teacher-persona':
+        this.aiSDK.clearTeacherPersona();
+        this.sendToIframe(sourceWindow, {
+          type: 'ai-sdk-clear-teacher-persona-ack',
+          requestId: message.requestId,
+        });
+        break;
+
       // ── Cross-Lesson Navigation & Data ────────────────────────────
       case 'ai-sdk-navigate-to-lesson':
         this.aiSDK.navigateToLesson(message.lessonId, message.options || {});

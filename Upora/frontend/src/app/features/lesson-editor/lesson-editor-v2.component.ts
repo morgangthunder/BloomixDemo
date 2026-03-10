@@ -8120,9 +8120,10 @@ export class LessonEditorV2Component implements OnInit, OnDestroy {
       return this.domSanitizer.bypassSecurityTrustResourceUrl('');
     }
 
+    config.isPreview = true;
     const outputDataJson = JSON.stringify(outputData);
     const configJson = JSON.stringify(config);
-    
+
     // Debug: Log the full config JSON to see what's being injected
     console.log('[LessonEditor] 🔍 Full config JSON:', configJson);
     console.log('[LessonEditor] 🔍 Config iframeGuideWebpageUrl in JSON:', JSON.parse(configJson).iframeGuideWebpageUrl);

@@ -65,6 +65,32 @@ export interface ImageGenerationResponse {
 export class ImageGeneratorService {
   private readonly logger = new Logger(ImageGeneratorService.name);
 
+  /**
+   * When dualViewport is requested and the cached image has a paired mobile variant,
+   * load and attach it to the response so the frontend can switch on mobile devices.
+   */
+  private async attachMobileVariant(
+    cachedImage: GeneratedImage,
+    response: ImageGenerationResponse,
+    dualViewport?: boolean,
+  ): Promise<ImageGenerationResponse> {
+    if (!dualViewport || !cachedImage.pairedImageId) return response;
+    try {
+      const mobileImg = await this.generatedImageRepository.findOne({ where: { id: cachedImage.pairedImageId } });
+      if (mobileImg) {
+        const mobileUrl = await this.getSignedUrlSafe(mobileImg.imageUrl);
+        response.mobileVariant = {
+          imageUrl: mobileUrl,
+          imageId: mobileImg.id,
+          componentMap: mobileImg.componentMap || undefined,
+        };
+      }
+    } catch (err: any) {
+      this.logger.warn(`[ImageGenerator] Failed to load mobile variant for ${cachedImage.id}: ${err.message}`);
+    }
+    return response;
+  }
+
   constructor(
     @InjectRepository(AiPrompt)
     private aiPromptRepository: Repository<AiPrompt>,
@@ -184,13 +210,14 @@ export class ImageGeneratorService {
         if (dictHit) {
           this.logger.log(`[ImageGenerator] DICTIONARY CACHE HIT for "${request.prompt.trim()}" → ${dictHit.id}`);
           const signedUrl = await this.getSignedUrlSafe(dictHit.imageUrl);
-          return {
+          const dictResult: ImageGenerationResponse = {
             success: true,
             imageUrl: signedUrl,
             imageId: dictHit.id,
             cached: true,
             componentMap: dictHit.componentMap || undefined,
           };
+          return this.attachMobileVariant(dictHit, dictResult, request.dualViewport);
         }
       }
     }
@@ -220,13 +247,46 @@ export class ImageGeneratorService {
           }
         }
 
-        return {
+        const cacheResult: ImageGenerationResponse = {
           success: true,
           imageUrl: signedUrl,
           imageId: cached.id,
           cached: true,
           componentMap: cached.componentMap || undefined,
         };
+        return this.attachMobileVariant(cached, cacheResult, request.dualViewport);
+      }
+
+      // Fallback: try dictionary labels if param hash missed (e.g. dimensions changed).
+      // Only use this when no explicit userInput is provided (auto-personalisation mode),
+      // or when the userInput matches the cached image's userInput.
+      // Match orientation (landscape vs portrait) to avoid returning a desktop image for a mobile request.
+      const dictLabels = (request.dictionaryLabels || [])
+        .map(l => l.trim().toLowerCase().replace(/\s+/g, '-'))
+        .filter(l => l.length > 0);
+      const requestIsLandscape = (request.width || 1024) >= (request.height || 768);
+      if (dictLabels.length > 0) {
+        for (const label of dictLabels) {
+          const qb = this.generatedImageRepository.createQueryBuilder('img')
+            .where(':label = ANY(img.dictionaryLabels)', { label })
+            .andWhere(requestIsLandscape ? 'img.width >= img.height' : 'img.width < img.height');
+          if (request.userInput) {
+            qb.andWhere('img.userInput = :userInput', { userInput: request.userInput });
+          }
+          const labelHit = await qb.orderBy('img.createdAt', 'DESC').getOne();
+          if (labelHit) {
+            this.logger.log(`[ImageGenerator] DICTIONARY LABEL FALLBACK → ${labelHit.id} (label: "${label}", userInput: "${labelHit.userInput || 'none'}")`);
+            const signedUrl = await this.getSignedUrlSafe(labelHit.imageUrl);
+            const labelResult: ImageGenerationResponse = {
+              success: true,
+              imageUrl: signedUrl,
+              imageId: labelHit.id,
+              cached: true,
+              componentMap: labelHit.componentMap || undefined,
+            };
+            return this.attachMobileVariant(labelHit, labelResult, request.dualViewport);
+          }
+        }
       }
     }
 
@@ -1213,7 +1273,7 @@ export class ImageGeneratorService {
         .andWhere('img.width >= img.height'); // desktop = landscape
 
       if (interactionId) {
-        qb.andWhere('img.interactionId = :interactionId', { interactionId });
+        qb.andWhere('(img.interactionId = :interactionId OR img.interactionId IS NULL)', { interactionId });
       }
 
       // Try matching interests first
@@ -1254,11 +1314,16 @@ export class ImageGeneratorService {
     }
   }
 
-  private async buildImagePairResponse(desktopImage: GeneratedImage): Promise<{ desktop: any; mobile: any } | null> {
-    if (!desktopImage.pairedImageId) return null;
+  private async buildImagePairResponse(imageA: GeneratedImage): Promise<{ desktop: any; mobile: any } | null> {
+    if (!imageA.pairedImageId) return null;
 
-    const mobileImage = await this.generatedImageRepository.findOne({ where: { id: desktopImage.pairedImageId } });
-    if (!mobileImage) return null;
+    const imageB = await this.generatedImageRepository.findOne({ where: { id: imageA.pairedImageId } });
+    if (!imageB) return null;
+
+    // Assign desktop/mobile based on aspect ratio: wider image = desktop, taller = mobile
+    const ratioA = (imageA.width || 1) / (imageA.height || 1);
+    const ratioB = (imageB.width || 1) / (imageB.height || 1);
+    const [desktopImage, mobileImage] = ratioA >= ratioB ? [imageA, imageB] : [imageB, imageA];
 
     const [desktopUrl, mobileUrl] = await Promise.all([
       this.fileStorageService.getSignedUrl(desktopImage.imageUrl, 7 * 24 * 60 * 60),
@@ -1271,11 +1336,15 @@ export class ImageGeneratorService {
         imageUrl: desktopUrl || desktopImage.imageUrl,
         componentMap: desktopImage.componentMap,
         userInput: desktopImage.userInput,
+        width: desktopImage.width,
+        height: desktopImage.height,
       },
       mobile: {
         imageId: mobileImage.id,
         imageUrl: mobileUrl || mobileImage.imageUrl,
         componentMap: mobileImage.componentMap,
+        width: mobileImage.width,
+        height: mobileImage.height,
       },
     };
   }

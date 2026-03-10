@@ -79,9 +79,6 @@ export interface PublicProfile {
   sharePreferences: boolean;
 }
 
-@Injectable({
-  providedIn: 'root',
-})
 export interface LessonStructureSubstage {
   id: string | number;
   title?: string;
@@ -104,6 +101,9 @@ export interface PrefetchResult {
   completedAt?: number;
 }
 
+@Injectable({
+  providedIn: 'root',
+})
 export class InteractionAISDK {
   private snackService = inject(SnackMessageService);
   private audioService = inject(AudioService);
@@ -1353,6 +1353,79 @@ export class InteractionAISDK {
     this.sharedLessonData.clear();
     this.prefetchResults.clear();
     console.log('[InteractionAISDK] ✅ All lesson state reset');
+  }
+
+  // ========================================
+  // Interaction Pool: Switch Interaction Within Substage
+  // ========================================
+
+  /**
+   * Switch to a different interaction within the current substage's interaction pool.
+   * Dispatches event for lesson-view to handle (does NOT trigger completion/progress tracking).
+   */
+  switchInteraction(interactionId: string, extraConfig?: Record<string, any>): void {
+    window.dispatchEvent(new CustomEvent('interaction-switch-interaction', {
+      detail: { interactionId, extraConfig }
+    }));
+    console.log('[InteractionAISDK] ✅ Switch interaction requested:', interactionId);
+    this.transcriptEvent$.next({
+      type: 'switch_interaction',
+      content: `Switch to interaction: ${interactionId}`,
+      metadata: { interactionId, extraConfig },
+    });
+  }
+
+  // ========================================
+  // Teacher Persona (Character-as-AI-Teacher)
+  // ========================================
+
+  private activePersona: {
+    characterId: string;
+    name: string;
+    systemPrompt: string;
+    avatarUrl?: string;
+    greeting?: string;
+    knowledgeConstraints?: string[];
+  } | null = null;
+
+  /**
+   * Switch the AI Teacher to a character persona.
+   * The chat panel will use the character's system prompt and avatar.
+   */
+  setTeacherPersona(persona: {
+    characterId: string;
+    name: string;
+    systemPrompt: string;
+    avatarUrl?: string;
+    greeting?: string;
+    knowledgeConstraints?: string[];
+  }): void {
+    this.activePersona = persona;
+    window.dispatchEvent(new CustomEvent('interaction-set-teacher-persona', {
+      detail: persona
+    }));
+    console.log('[InteractionAISDK] ✅ Teacher persona set:', persona.name);
+    this.transcriptEvent$.next({
+      type: 'persona_switch',
+      content: `AI Teacher persona set to: ${persona.name}`,
+      metadata: { characterId: persona.characterId, name: persona.name },
+    });
+  }
+
+  /**
+   * Clear the AI Teacher persona and revert to default.
+   */
+  clearTeacherPersona(): void {
+    this.activePersona = null;
+    window.dispatchEvent(new CustomEvent('interaction-clear-teacher-persona'));
+    console.log('[InteractionAISDK] ✅ Teacher persona cleared');
+  }
+
+  /**
+   * Get the currently active teacher persona (or null for default).
+   */
+  getActivePersona(): typeof this.activePersona {
+    return this.activePersona;
   }
 
   // ========================================

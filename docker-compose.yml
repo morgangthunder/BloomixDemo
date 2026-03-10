@@ -205,7 +205,8 @@ services:
       - QUERY_DEFAULTS_LIMIT=25
       - DEFAULT_VECTORIZER_MODULE=none
       - ENABLE_MODULES=text2vec-openai,text2vec-cohere,text2vec-huggingface
-      - CLUSTER_HOSTNAME=weaviate
+      - CLUSTER_HOSTNAME=node1
+      - RAFT_BOOTSTRAP_EXPECT=1
     volumes:
       - weaviate-data:/var/lib/weaviate
     networks:

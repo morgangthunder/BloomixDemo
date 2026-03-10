@@ -229,10 +229,10 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
             class="fullscreen-toggle"
             (click)="toggleFullscreen()"
             [title]="isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'">
-            <svg *ngIf="!isFullscreen" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <svg *ngIf="!isFullscreen" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/>
             </svg>
-            <svg *ngIf="isFullscreen" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <svg *ngIf="isFullscreen" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 4H4v4M16 4h4v4M8 20H4v-4M16 20h4v-4"/>
             </svg>
           </button>
@@ -497,19 +497,20 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
               <button 
                 class="control-bar-btn playback-btn"
                 (click)="toggleScriptPlay()"
-                [class.active]="isScriptPlaying"
-                [title]="isScriptPlaying ? 'Pause' : 'Play'">
-                <svg *ngIf="!isScriptPlaying" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                [class.active]="isLessonPlaying"
+                [disabled]="interactionControlsBlocked"
+                [title]="isLessonPlaying ? 'Pause' : 'Play'">
+                <svg *ngIf="!isLessonPlaying" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M8 5v14l11-7z"/>
                 </svg>
-                <svg *ngIf="isScriptPlaying" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <svg *ngIf="isLessonPlaying" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
                 </svg>
               </button>
               <button 
                 class="control-bar-btn playback-btn"
                 (click)="skipScript()"
-                [disabled]="!currentTeacherScript"
+                [disabled]="!currentTeacherScript || interactionControlsBlocked"
                 title="Skip">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M6 4l10 8-10 8V4zm10 0v16h2V4h-2z"/>
@@ -945,48 +946,43 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
     }
 
     .fullscreen-toggle {
-      position: fixed; /* Fixed so it doesn't scroll */
-      bottom: calc(60px + 1.5rem); /* Same as before - above control bar */
-      left: 1.5rem; /* Default left */
-      width: 44px;
-      height: 44px;
-      background: rgba(0, 0, 0, 0.7);
-      border: 1px solid #333333;
-      border-radius: 8px;
-      color: #ffffff;
+      position: fixed;
+      top: 6rem;
+      right: 0.75rem;
+      width: 32px;
+      height: 32px;
+      background: rgba(15, 15, 35, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      color: rgba(255, 255, 255, 0.6);
       cursor: pointer;
-      transition: left 0.3s ease; /* Transition left only */
+      transition: background 0.2s, color 0.2s, opacity 0.2s;
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 100; /* Below sidebar */
+      z-index: 100;
+      opacity: 0.7;
     }
-    
-    /* Desktop: when sidebar is visible (not width 0) AND not fullscreen, move toggle right */
-    @media (min-width: 768px) {
-      .lesson-view-wrapper:not(.fullscreen-active):has(.sidebar:not([style*="width: 0px"])) .fullscreen-toggle {
-        left: calc(280px + 1.5rem) !important; /* Move right when sidebar open */
-      }
+
+    .fullscreen-toggle:hover {
+      background: rgba(255, 59, 63, 0.85);
+      border-color: rgba(255, 59, 63, 0.6);
+      color: #fff;
+      opacity: 1;
     }
-    
+
     /* Mobile: hide when nav is open */
     @media (max-width: 767px) {
       .lesson-view-wrapper:has(.sidebar.translate-x-0) .fullscreen-toggle {
         display: none;
       }
     }
-    
-    /* When fullscreen - move above the control bar */
-    .main-fullscreen .fullscreen-toggle {
-      bottom: calc(60px + 1rem) !important;
-      left: 1.5rem !important;
-      z-index: 10000 !important;
-    }
 
-    .fullscreen-toggle:hover {
-      background: #ff3b3f;
-      border-color: #ff3b3f;
-      transform: scale(1.1);
+    /* When fullscreen - keep top-right but adjust for no header */
+    .main-fullscreen .fullscreen-toggle {
+      top: 0.75rem !important;
+      right: 0.75rem !important;
+      z-index: 10000 !important;
     }
 
     /* No-scroll interaction layout — the entire flex chain must propagate
@@ -1018,6 +1014,7 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
       min-height: 0;
       position: relative;
       overflow: hidden;
+      background: #0f0f23;
     }
 
     .noscroll-iframe-wrapper .interaction-iframe {
@@ -1026,6 +1023,8 @@ import { VideoUrlPlayerComponent } from '../../shared/components/video-url-playe
       left: 0;
       width: 100%;
       height: 100%;
+      border: none;
+      background: #0f0f23;
     }
 
     .noscroll-too-small-overlay {
@@ -1518,9 +1517,16 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   currentTeacherScript: ScriptBlock | null = null;
   private teacherScriptTimeout: any = null;
   isScriptPlaying = false;
+  get isLessonPlaying(): boolean { return this.isScriptPlaying || this.audioService.isBgMusicPlaying; }
   teacherWidgetHidden = true; // Start hidden, show on first script or manual open
   private autoAdvanceTimeout: any = null;
   interactionEnded = false; // Track if current interaction has ended (for showing Next button)
+  interactionControlsBlocked = false;
+  
+  // Interaction Pool (Storyteller adventure system)
+  private activeInteractionPool: Array<{ id: string; interactionTypeId: string; config?: any; condition?: string }> = [];
+  private activePoolInteractionId: string | null = null;
+  activeTeacherPersona: any = null;
   
   // Fullscreen
   isFullscreen = false;
@@ -1625,6 +1631,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   showNextLessonUpgrade = false;
 
   private destroy$ = new Subject<void>();
+  private _escHandler: ((e: KeyboardEvent) => void) | null = null;
   private processedOutputsCache = new Map<string, any[]>();
 
   /** Phase 6: lesson engagement transcript capture (stored in MinIO via API) */
@@ -1768,6 +1775,34 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       }
     }) as EventListener);
 
+    // Interaction pool: switch interaction within the same substage
+    window.addEventListener('interaction-switch-interaction', ((e: CustomEvent) => {
+      const { interactionId, extraConfig } = e.detail || {};
+      if (interactionId) {
+        console.log('[LessonView] Interaction pool switch to:', interactionId);
+        this.ngZone.run(() => this.switchToPoolInteraction(interactionId, extraConfig));
+      }
+    }) as EventListener);
+
+    // Teacher persona: swap AI Teacher persona for character dialogue
+    window.addEventListener('interaction-set-teacher-persona', ((e: CustomEvent) => {
+      const persona = e.detail;
+      if (persona) {
+        console.log('[LessonView] Setting teacher persona:', persona.name);
+        this.activeTeacherPersona = persona;
+        if (persona.greeting && this.teacherWidget) {
+          this.ngZone.run(() => {
+            this.interactionAISDK.postToChat(persona.greeting, 'assistant', true);
+          });
+        }
+      }
+    }) as EventListener);
+
+    window.addEventListener('interaction-clear-teacher-persona', (() => {
+      console.log('[LessonView] Clearing teacher persona');
+      this.activeTeacherPersona = null;
+    }) as EventListener);
+
     // Cross-lesson navigation: jump to another lesson
     window.addEventListener('interaction-navigate-to-lesson', ((e: CustomEvent) => {
       const { lessonId } = e.detail || {};
@@ -1837,6 +1872,11 @@ export class LessonViewComponent implements OnInit, OnDestroy {
         case 'ai-sdk-update-state':
           this.interactionAISDK.updateState(message.key, message.value);
           console.log('[LessonView] ✅ Updated state from SDK message');
+          break;
+        case 'ai-sdk-block-controls':
+          this.interactionControlsBlocked = !!message.blocked;
+          console.log('[LessonView] 🎮 Controls blocked:', this.interactionControlsBlocked);
+          this.cdr.detectChanges();
           break;
         case 'ai-sdk-get-state':
           // This one needs a callback, but SDK test doesn't use it with callback
@@ -2088,6 +2128,20 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     window.addEventListener('interaction-request-fullscreen', this.handleInteractionFullscreenRequest.bind(this) as EventListener);
     // Listen for widget show requests from interactions
     window.addEventListener('interaction-request-show-widget', this.handleInteractionShowWidgetRequest.bind(this) as EventListener);
+
+    // ESC key exits fullscreen, Space toggles play/pause
+    this._escHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isFullscreen) {
+        this.ngZone.run(() => this.toggleFullscreen());
+      }
+      if (e.key === ' ' || e.code === 'Space') {
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target as HTMLElement)?.isContentEditable) return;
+        e.preventDefault();
+        this.ngZone.run(() => this.toggleScriptPlay());
+      }
+    };
+    window.addEventListener('keydown', this._escHandler);
   }
   
   /**
@@ -2558,9 +2612,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
           }
         }
 
-        // Auto-prefetch for Image Explorer (process-explorer) when testMode is off
-        if (interactionTypeId === 'process-explorer' && config.testMode === false) {
-          this.prefetchImageExplorer(String(ss.id), String(stage.id), config);
+        // Auto-prefetch for image-generating interactions when testMode is off
+        if ((interactionTypeId === 'process-explorer' || interactionTypeId === 'image-with-questions' || interactionTypeId === 'orbital-excavation') && config.testMode === false) {
+          this.prefetchImageExplorer(String(ss.id), String(stage.id), config, interactionTypeId);
         }
       }
     }
@@ -2573,14 +2627,17 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       let result: any;
       switch (task.type) {
         case 'generateImage':
-          result = await firstValueFrom(this.api.post('/images/generate', { prompt: '', ...task.options } as any));
+          result = await firstValueFrom(this.api.post('/image-generator/generate', { prompt: '', ...task.options } as any));
           break;
         case 'selectBestTheme':
-          result = await firstValueFrom(this.api.post('/images/select-theme', { contentItems: [], ...task.options } as any));
+          result = await firstValueFrom(this.api.post('/image-generator/select-theme', { contentItems: [], ...task.options } as any));
           break;
-        case 'findImagePair':
-          result = await firstValueFrom(this.api.post('/images/find-pair', task.options || {}));
+        case 'findImagePair': {
+          const opts = task.options || {} as any;
+          const pairLessonId = opts.lessonId || this.lesson?.id?.toString() || '';
+          result = await firstValueFrom(this.api.post(`/image-generator/lesson/${pairLessonId}/find-pair`, opts));
           break;
+        }
         case 'imageExplorerPreload':
           await this.prefetchImageExplorer(substageId, stageId, config);
           return;
@@ -2595,13 +2652,15 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     }
   }
 
-  private async prefetchImageExplorer(substageId: string, _stageId: string, config: any): Promise<void> {
-    console.log('[LessonView] Prefetching Image Explorer for substage:', substageId);
+  private async prefetchImageExplorer(substageId: string, _stageId: string, config: any, interactionTypeId?: string): Promise<void> {
+    console.log('[LessonView] Prefetching image interaction for substage:', substageId);
     try {
-      // Step 1: Check for cached image pair
       const lessonId = this.lesson?.id?.toString() || '';
+      const title = config['processTitle'] || config['title'] || '';
+      // Step 1: Check for cached image pair
+      const dictionaryLabel = title.toLowerCase().replace(/\s+/g, '-');
       const pairResult = await firstValueFrom(
-        this.api.post('/images/find-pair', { lessonId, substageId, processTitle: config['processTitle'] || '' })
+        this.api.post(`/image-generator/lesson/${lessonId}/find-pair`, { substageId, dictionaryLabel })
       );
       if ((pairResult as any)?.found) {
         this.interactionAISDK.storePrefetchResult(substageId, 'personalisedImage', { status: 'ready', data: pairResult, startedAt: Date.now(), completedAt: Date.now() });
@@ -2610,21 +2669,23 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       }
 
       // Step 2: Select best theme using personalisation
+      const contentItems = config['processSteps'] || config['questions']?.map?.((q: any) => q.question) || [];
       const themeResult = await firstValueFrom(
-        this.api.post('/images/select-theme', {
-          contentItems: config['processSteps'] || [],
+        this.api.post('/image-generator/select-theme', {
+          contentItems,
           contentType: config['contentType'] || 'educational',
         })
       );
 
       // Step 3: Generate image with selected theme
-      const prompt = (themeResult as any)?.adjustedPrompt || config['processTitle'] || 'educational content';
+      const prompt = (themeResult as any)?.adjustedPrompt || title || 'educational content';
       const imgResult = await firstValueFrom(
-        this.api.post('/images/generate', {
+        this.api.post('/image-generator/generate', {
           prompt,
           width: 1024,
-          height: 768,
+          height: interactionTypeId === 'image-with-questions' ? 576 : 768,
           dualViewport: true,
+          dictionaryLabels: dictionaryLabel ? [dictionaryLabel] : [],
           lessonId,
           substageId,
         })
@@ -2633,7 +2694,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       this.interactionAISDK.storePrefetchResult(substageId, 'personalisedImage', { status: 'ready', data: { theme: themeResult, image: imgResult }, startedAt: Date.now(), completedAt: Date.now() });
       console.log('[LessonView] Prefetch: image generated for', substageId);
     } catch (err) {
-      console.error('[LessonView] Prefetch Image Explorer error:', substageId, err);
+      console.error('[LessonView] Prefetch image interaction error:', substageId, err);
       this.interactionAISDK.storePrefetchResult(substageId, 'personalisedImage', { status: 'error', error: String(err), startedAt: Date.now(), completedAt: Date.now() });
     }
   }
@@ -2773,6 +2834,7 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     window.removeEventListener('mousemove', this.handleMouseMove.bind(this));
     window.removeEventListener('mouseup', this.handleMouseUp.bind(this));
     window.removeEventListener('interaction-request-fullscreen', this.handleInteractionFullscreenRequest.bind(this) as EventListener);
+    if (this._escHandler) window.removeEventListener('keydown', this._escHandler);
     window.removeEventListener('interaction-request-show-widget', this.handleInteractionShowWidgetRequest.bind(this) as EventListener);
     window.removeEventListener('interaction-request-show-widget', this.handleInteractionShowWidgetRequest.bind(this) as EventListener);
   }
@@ -2816,7 +2878,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     // Pause script playback - defer to avoid change detection error
     setTimeout(() => {
       this.isScriptPlaying = false;
-      this.interactionEnded = false; // Reset interaction ended flag
+      this.interactionEnded = false;
+      this.interactionControlsBlocked = false;
       this.cdr.detectChanges();
     }, 0);
     
@@ -3368,6 +3431,18 @@ export class LessonViewComponent implements OnInit, OnDestroy {
       console.warn('[LessonView] No active sub-stage to load interaction data for');
       return;
     }
+
+    // Check for interaction pool (Storyteller adventure system)
+    const poolInteractions = (subStage as any).interactions;
+    if (Array.isArray(poolInteractions) && poolInteractions.length > 0) {
+      this.activeInteractionPool = poolInteractions;
+      const defaultId = (subStage as any).defaultInteractionId || poolInteractions[0].id;
+      console.log('[LessonView] Interaction pool detected:', poolInteractions.length, 'interactions, default:', defaultId);
+      this.switchToPoolInteraction(defaultId);
+      return;
+    }
+    this.activeInteractionPool = [];
+    this.activePoolInteractionId = null;
 
     // Get interaction type from sub-stage
     const interaction = subStage.interaction || (subStage as any).interactionType;
@@ -4286,6 +4361,66 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   }
   
   /**
+   * Switch to a specific interaction within the current substage's interaction pool.
+   * Used by the Storyteller adventure system for branching without changing substage.
+   */
+  private switchToPoolInteraction(interactionId: string, extraConfig?: Record<string, any>): void {
+    const poolEntry = this.activeInteractionPool.find(p => p.id === interactionId);
+    if (!poolEntry) {
+      console.warn('[LessonView] Pool interaction not found:', interactionId, 'Available:', this.activeInteractionPool.map(p => p.id));
+      return;
+    }
+
+    console.log('[LessonView] Switching to pool interaction:', interactionId, '→ type:', poolEntry.interactionTypeId);
+    this.activePoolInteractionId = interactionId;
+
+    // Clear teacher persona on interaction switch
+    this.activeTeacherPersona = null;
+
+    // Merge extra config from the switch call with the pool entry's config
+    const mergedConfig = { ...(poolEntry.config || {}), ...(extraConfig || {}) };
+
+    // Store the merged config as shared data so the interaction can read it
+    this.interactionAISDK.setSharedData('__poolInteractionConfig', mergedConfig);
+    this.interactionAISDK.setSharedData('__poolInteractionId', interactionId);
+
+    // Load the interaction type directly (bypass normal substage loading)
+    this.loadPoolInteraction(poolEntry.interactionTypeId, mergedConfig);
+  }
+
+  /**
+   * Load an interaction type by ID for the interaction pool system.
+   */
+  private loadPoolInteraction(interactionTypeId: string, config: Record<string, any>): void {
+    this.isLoadingInteraction = true;
+    this.interactionBuild = null;
+    this.interactionBlobUrl = null;
+    this.interactionError = null;
+    this.mediaPlayerData = null;
+    this.videoUrlPlayerData = null;
+    this.cachedVideoUrlSectionHtml = null;
+
+    const cacheBuster = `?t=${Date.now()}&v=${Math.random()}`;
+    this.http.get(`${environment.apiUrl}/interaction-types/${interactionTypeId}${cacheBuster}`)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (build: any) => {
+          console.log('[LessonView] Pool interaction loaded:', build.id, 'Category:', build.interactionTypeCategory);
+          // Inject pool config into the build for the iframe
+          if (config && Object.keys(config).length > 0) {
+            build._poolConfig = config;
+          }
+          this.loadPixiJSHTMLIframeInteraction(build, this.activeSubStage!);
+        },
+        error: (error: any) => {
+          console.error('[LessonView] Failed to load pool interaction:', error);
+          this.interactionError = `Failed to load interaction: ${error.message || 'Unknown error'}`;
+          this.isLoadingInteraction = false;
+        }
+      });
+  }
+
+  /**
    * Show end of lesson screen
    */
   showEndOfLesson() {
@@ -4777,6 +4912,20 @@ export class LessonViewComponent implements OnInit, OnDestroy {
   onNextButtonClick() {
     console.log('[LessonView] Next button clicked');
     this.interactionEnded = false;
+
+    // Check if there's a pool-directed next interaction (set by storyteller via SharedData)
+    const nextInteraction = this.interactionAISDK.getSharedData('__nextInteraction');
+    if (nextInteraction && this.activeInteractionPool.length > 0) {
+      this.interactionAISDK.setSharedData('__nextInteraction', null);
+      const poolEntry = this.activeInteractionPool.find(p => p.id === nextInteraction);
+      if (poolEntry) {
+        console.log('[LessonView] Pool routing to:', nextInteraction);
+        this.switchToPoolInteraction(nextInteraction);
+        return;
+      }
+      console.warn('[LessonView] __nextInteraction not found in pool:', nextInteraction);
+    }
+
     this.moveToNextSubStage();
   }
 
@@ -4828,6 +4977,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
     
     // Resume background music if it was paused
     this.audioService.resumeBgMusic();
+
+    // Send resume to interaction iframes
+    this.sendPauseResumeToIframes('resume');
   }
 
   onTeacherPause() {
@@ -4848,6 +5000,9 @@ export class LessonViewComponent implements OnInit, OnDestroy {
 
     // Pause background music
     this.audioService.pauseBgMusic();
+
+    // Send pause to interaction iframes
+    this.sendPauseResumeToIframes('pause');
   }
 
   onTeacherSkip() {
@@ -4901,8 +5056,8 @@ export class LessonViewComponent implements OnInit, OnDestroy {
    * Bottom Control Bar Methods
    */
   toggleScriptPlay() {
-    console.log('[LessonView] Toggle play/pause from control bar');
-    if (this.isScriptPlaying) {
+    console.log('[LessonView] Toggle play/pause from control bar, isLessonPlaying:', this.isLessonPlaying);
+    if (this.isLessonPlaying) {
       this.onTeacherPause();
       
       // Also pause video URL player if active
@@ -7754,7 +7909,7 @@ ${escapedCss}
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    html, body { margin: 0; padding: 0; height: auto; min-height: 100%; overflow-y: auto; overflow-x: hidden; }
+    html, body { margin: 0; padding: 0; height: auto; min-height: 100%; overflow-y: auto; overflow-x: hidden; background: #0f0f23; }
     body { width: 100%; }
     /* Dark scrollbar styling */
     ::-webkit-scrollbar {
@@ -9121,6 +9276,10 @@ ${escapedHtml}
    */
   onInteractionInfoAction(action: string): void {
     console.log('[LessonView] Interaction info action:', action);
+    this.sendPauseResumeToIframes(action);
+  }
+
+  private sendPauseResumeToIframes(action: string): void {
     const iframes = document.querySelectorAll('iframe.interaction-iframe');
     iframes.forEach((iframe) => {
       const htmlIframe = iframe as HTMLIFrameElement;

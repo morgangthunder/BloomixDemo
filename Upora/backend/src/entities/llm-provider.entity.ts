@@ -35,6 +35,9 @@ export class LlmProvider {
   @Column('boolean', { name: 'is_default', default: false })
   isDefault: boolean; // Currently selected provider
 
+  @Column('varchar', { default: 'default' })
+  role: string; // 'default' | 'validator' | 'embedding'
+
   @Column('jsonb', { nullable: true })
   config: any; // Provider-specific settings
 

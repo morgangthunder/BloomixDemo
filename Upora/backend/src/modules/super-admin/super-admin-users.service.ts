@@ -438,7 +438,7 @@ export class SuperAdminUsersService {
     }
 
     try {
-      // @ts-expect-error SDK may not be installed in local dev; runtime try/catch handles it
+      // @ts-ignore SDK may not be installed in local dev; runtime try/catch handles it
       const { CognitoIdentityProviderClient, AdminResetUserPasswordCommand } = await import('@aws-sdk/client-cognito-identity-provider');
       const client = new CognitoIdentityProviderClient({
         region: process.env.AWS_REGION || 'eu-west-2',

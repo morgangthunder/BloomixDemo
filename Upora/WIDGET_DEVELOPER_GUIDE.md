@@ -823,6 +823,28 @@ See the **Image Carousel** and **Timer** widgets in:
 
 ---
 
+## Reference Implementations
+
+### Image with Questions (`image-with-questions`)
+
+A fully featured HTML-category interaction demonstrating:
+
+- **AI SDK integration:** `selectBestTheme`, `generateImage`, `findImagePair`, `getPrefetchResult`
+- **Dual viewport images:** Desktop (16:9) and mobile (3:4) variants via `dualViewport: true`
+- **Multiple question types:** Multiple-choice and slider answer modes in a single quiz
+- **Custom slider scales:** Configurable `min`, `max`, `step`, `unit` per slider question
+- **Correct answer reveal:** Optional `correct` field shows accuracy feedback after submission
+- **Data persistence:** `saveInstanceData` / `getInstanceDataHistory` for cross-user slider averages
+- **Audio integration:** `playSfx`, `startBgMusic`, `stopBgMusic`
+- **Responsive layout:** Flex-based viewport-filling layout with no-scroll overflow reporting
+
+**Source files:**
+- JS: `Upora/backend/scripts/image-with-questions-full-code.js`
+- HTML/CSS/Config: `Upora/backend/scripts/update-image-with-questions-db.js`
+- Migration: `Upora/backend/src/migrations/1737100000000-CreateImageWithQuestionsInteraction.ts`
+
+---
+
 ## Next Steps
 
 1. Create your widget following this guide

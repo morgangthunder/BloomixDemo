@@ -37,12 +37,27 @@ export class GrokService {
 
   /**
    * Send chat completion request to Grok API
+   * @param request - The chat completion request
+   * @param options - Optional: { role: 'default' | 'validator' } to select provider by role
    */
-  async chatCompletion(request: GrokRequest): Promise<GrokResponse> {
-    // Get default LLM provider (same approach as Content Analyzer)
-    const provider = await this.llmProviderRepository.findOne({
-      where: { isDefault: true, isActive: true },
-    });
+  async chatCompletion(request: GrokRequest, options?: { role?: string }): Promise<GrokResponse> {
+    const role = options?.role || 'default';
+    let provider: LlmProvider | null = null;
+
+    if (role !== 'default') {
+      provider = await this.llmProviderRepository.findOne({
+        where: { role, isActive: true },
+      });
+      if (!provider) {
+        this.logger.warn(`No provider found for role "${role}", falling back to default`);
+      }
+    }
+
+    if (!provider) {
+      provider = await this.llmProviderRepository.findOne({
+        where: { isDefault: true, isActive: true },
+      });
+    }
 
     // Check if we should use mock mode (only if explicitly set AND no provider)
     // If a provider exists, always try to use it (even if API key might be invalid, let it fail naturally)

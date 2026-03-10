@@ -379,16 +379,43 @@
     setupParentActionListener();
     setupContainerDimensionsListener();
 
-    if (isTestMode) {
-      console.log("[ImageExplorer] Test mode enabled — showing manual input");
-      $("intro-start-btn").addEventListener("click", function () {
-        hide($("intro-section"));
-        show($("input-section"));
-        $("movie-input").focus();
-        checkContentOverflow();
-      });
-      show($("intro-section"));
+    var isPreview = config.isPreview === true;
+    var personalisation = config.personalisation !== false;
+
+    if (isPreview) {
+      console.log("[ImageExplorer] Preview mode — using placeholder image");
+      hide($("intro-section"));
       hide($("input-section"));
+      hide($("loading-section"));
+      var imgEl = $("explore-image");
+      imgEl.src = generatePreviewPlaceholder();
+      show($("explore-section"));
+      calculateFitZoom();
+      startQuiz();
+      checkContentOverflow();
+    } else if (isTestMode) {
+      if (!personalisation) {
+        console.log("[ImageExplorer] Test mode (personalisation OFF) — checking cache");
+        hide($("intro-section"));
+        show($("loading-section"));
+        $("loading-text").textContent = "Checking for existing image...";
+        tryUseCachedImage(function (found) {
+          if (found) return;
+          show($("input-section")); hide($("loading-section"));
+          $("movie-input").focus();
+          checkContentOverflow();
+        });
+      } else {
+        console.log("[ImageExplorer] Test mode enabled — showing manual input");
+        $("intro-start-btn").addEventListener("click", function () {
+          hide($("intro-section"));
+          show($("input-section"));
+          $("movie-input").focus();
+          checkContentOverflow();
+        });
+        show($("intro-section"));
+        hide($("input-section"));
+      }
     } else {
       console.log("[ImageExplorer] Production mode — using personalisation data");
       $("intro-start-btn").addEventListener("click", function () {
@@ -521,8 +548,49 @@
     }
   }
 
+  function generatePreviewPlaceholder() {
+    var c = document.createElement("canvas");
+    c.width = 800; c.height = 600;
+    var ctx = c.getContext("2d");
+    var grad = ctx.createRadialGradient(400, 300, 50, 400, 300, 400);
+    grad.addColorStop(0, "#3a1c71"); grad.addColorStop(0.5, "#d76d77"); grad.addColorStop(1, "#ffaf7b");
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, 800, 600);
+    ctx.fillStyle = "#ffffff"; ctx.font = "bold 48px 'Segoe UI',system-ui,sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.shadowColor = "rgba(0,0,0,0.5)"; ctx.shadowBlur = 10;
+    ctx.fillText("Preview Image", 400, 300);
+    ctx.font = "24px 'Segoe UI',system-ui,sans-serif"; ctx.shadowBlur = 5;
+    ctx.fillText("Configure in lesson builder", 400, 360);
+    return c.toDataURL("image/png");
+  }
+
+  function tryUseCachedImage(cb) {
+    var label = getCacheLabel();
+    aiSDK.findImagePair({ dictionaryLabel: label, interests: [] }, function (r) {
+      if (r && r.found && r.pair) { useCachedImagePair(r.pair); cb(true); return; }
+      aiSDK.getLessonImages(function (images) {
+        var match = (images || []).filter(function (img) { return img.dictionaryLabels && img.dictionaryLabels.indexOf(label) !== -1; });
+        if (match.length > 0) { useCachedImage(match[0]); cb(true); return; }
+        cb(false);
+      });
+    });
+  }
+
+  function contentFingerprint() {
+    var str = steps.join(",") + "|" + (contentType || "");
+    var hash = 0;
+    for (var i = 0; i < str.length; i++) {
+      hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+    }
+    return Math.abs(hash).toString(36);
+  }
+
+  function getCacheLabel() {
+    return processTitle.toLowerCase().replace(/\s+/g, "-") + "-" + contentFingerprint();
+  }
+
   function runPersonalisationPipeline() {
-    var interactionLabel = processTitle.toLowerCase().replace(/\s+/g, "-");
+    var interactionLabel = getCacheLabel();
 
     // Step 1: Try to find an existing image pair via the dedicated pair-lookup API
     aiSDK.findImagePair(
@@ -772,7 +840,7 @@
       customInstructions: customInstr,
       includeComponentMap: true,
       componentPromptContent: componentPrompt,
-      dictionaryLabels: [processTitle.toLowerCase().replace(/\s+/g, "-")],
+      dictionaryLabels: [getCacheLabel()],
       width: 1440,
       height: 810,
       dualViewport: true,

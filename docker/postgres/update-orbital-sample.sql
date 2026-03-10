@@ -1,0 +1,1 @@
+UPDATE interaction_types SET sample_data = '{"portals":[{"label":"A Red Dragon","correct":false},{"label":"A Volcanic Crater","correct":false},{"label":"A Strawberry","correct":true},{"label":"A Microscopic Virus","correct":false}],"triggerHint":"Look at the colour and the tiny dots on the surface..."}' WHERE id = 'orbital-excavation';

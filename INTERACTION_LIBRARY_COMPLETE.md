@@ -838,6 +838,76 @@
 
 ---
 
+## HTML-Category Interactions (Iframe-Based)
+
+The following interactions render entirely inside an iframe using the Interaction AI SDK bridge. They are registered in the `interaction_types` table with `interaction_type_category = 'html'`.
+
+### Image with Questions
+- **ID:** `image-with-questions`
+- **Category:** absorb-show
+- **Cognitive Load:** Low–Medium
+- **Duration:** 2–5 min
+
+**Description:** Generates a themed banner image (personalised to student preferences) with Who Wants to be a Millionaire-style quiz questions below. Supports two question types that can be freely mixed:
+
+- **Multiple-choice** — 4 options (1 correct, 3 wrong), WWTBAM styling with answer reveal
+- **Slider** — configurable numeric scale with optional correct answer, community average display
+
+**Input Data (config_schema / sample_data):**
+```json
+{
+  "title": "The Solar System",
+  "imageDescription": "A panoramic view of the solar system...",
+  "questions": [
+    {
+      "question": "Which planet is the Red Planet?",
+      "correct": "Mars",
+      "wrong": ["Venus", "Jupiter", "Mercury"]
+    },
+    {
+      "question": "What is the average distance from the Sun to Earth?",
+      "type": "slider",
+      "min": 50,
+      "max": 300,
+      "step": 1,
+      "unit": "million km",
+      "correct": 150,
+      "labels": { "low": "50 million km", "high": "300 million km" }
+    }
+  ]
+}
+```
+
+**Question Types:**
+
+| Field | MC (default) | Slider |
+|-------|-------------|--------|
+| `question` | Required | Required |
+| `type` | omit or `"multiple-choice"` | `"slider"` |
+| `correct` | Correct answer string | Optional numeric value |
+| `wrong` | Array of 3 wrong answers | N/A |
+| `min` / `max` | N/A | Scale endpoints (default 0–100) |
+| `step` | N/A | Increment (default 1) |
+| `unit` | N/A | Display unit (default `"%"`) |
+| `labels.low` / `labels.high` | N/A | Endpoint labels |
+
+**Slider Behaviour:**
+- If `correct` is provided: after submit, a feedback banner shows the correct answer vs the user's answer, colour-coded by accuracy (green ≤5%, orange ≤20%, red >20% of range)
+- On completion, `saveInstanceData` persists slider answers; `getInstanceDataHistory` retrieves all past submissions to compute and display community averages in the completion modal
+- If `correct` is provided, the correct answer is shown alongside the average
+
+**Image Generation:**
+- Uses `selectBestTheme` → `generateImage` with `dualViewport: true` (16:9 desktop, 3:4 mobile)
+- Caches images by dictionary label and style for instant reload
+- Supports prefetch pipeline for zero-wait loading
+
+**LLM Can Generate:** ✅ Questions, ✅ Image (via AI generation), ✅ Theme selection
+**Score:** MC questions: correct/total ratio. Slider questions: no score (opinion-based or accuracy feedback)
+**Mobile:** Single-column answer layout on narrow screens. Slider thumb optimised for touch.
+**Assets:** None required (AI-generated image, all UI in iframe)
+
+---
+
 ## Next Steps
 
 See companion documents:

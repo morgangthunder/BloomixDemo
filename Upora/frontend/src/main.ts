@@ -424,7 +424,7 @@ if (authConfig?.enabled && authConfig?.userPoolId && authConfig?.userPoolClientI
 // ========================================
 // Version is read from package.json at build time
 // This will be replaced by the build process or read dynamically
-const FRONTEND_VERSION = '0.8.68'; // SDK recovery: cross-interaction/lesson nav, prefetch, full parity all 5 SDKs
+const FRONTEND_VERSION = '0.9.3'; // Storyteller onboarding wizard, rich default scenes
 const CACHE_BUST_ID = `v${FRONTEND_VERSION}-${Math.random().toString(36).substr(2, 9)}`;
 console.log('');
 console.log('═══════════════════════════════════════════════════════════');

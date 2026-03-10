@@ -150,10 +150,11 @@ export class OnboardingContainerComponent implements OnInit {
   private cdr = inject(ChangeDetectorRef);
 
   steps = ONBOARDING_STEPS;
-  currentIndex = 0;
+  private _authAtInit = inject(AuthService).isAuthenticated();
+  currentIndex = this._authAtInit ? 1 : 0;
   loading = signal(false);
   /** True while checking if authenticated user has completed onboarding (prevents Sign In flash). Start true when authenticated so first paint never shows welcome. */
-  checkingAuth = signal(inject(AuthService).isAuthenticated());
+  checkingAuth = signal(this._authAtInit);
   /** True when user has already completed onboarding (editing preferences). Starts at first content step, shows Save instead of Continue. */
   isReturningUser = false;
   formData: Partial<UserPersonalization> = {

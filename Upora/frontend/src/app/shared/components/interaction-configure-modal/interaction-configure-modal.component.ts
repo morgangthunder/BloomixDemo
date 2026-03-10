@@ -1642,6 +1642,7 @@ export class InteractionConfigureModalComponent implements OnChanges {
       }
     }
 
+    normalizedConfig.isPreview = true;
     const sampleDataJson = this.sampleData ? JSON.stringify(this.sampleData) : '{}';
     const configJson = JSON.stringify(normalizedConfig);
 
